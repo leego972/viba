@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "BridgeAI"
+version = "1.0.0"
+id = "artifacts/bridge-ai"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 5173
+
+[services.development]
+run = "pnpm --filter @workspace/bridge-ai run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/bridge-ai", "run", "build" ]
+publicDir = "artifacts/bridge-ai/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "5173"
+BASE_PATH = "/"

@@ -3,13 +3,17 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: BridgeAI API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: sessions
+    description: Bridge session management
+  - name: settings
+    description: Application settings
 paths:
   /healthz:
     get:
@@ -24,6 +28,377 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /sessions:
+    get:
+      operationId: listSessions
+      tags: [sessions]
+      summary: List all sessions
+      responses:
+        "200":
+          description: List of sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Session"
+    post:
+      operationId: createSession
+      tags: [sessions]
+      summary: Create a new bridge session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSessionBody"
+      responses:
+        "201":
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sessions/{id}:
+    get:
+      operationId: getSession
+      tags: [sessions]
+      summary: Get session by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionDetail"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sessions/{id}/run-next:
+    post:
+      operationId: runNextStep
+      tags: [sessions]
+      summary: Run next agent step
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Step result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunStepResult"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sessions/{id}/run-full:
+    post:
+      operationId: runFullWorkflow
+      tags: [sessions]
+      summary: Run full supervised workflow (up to 8 turns)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Workflow result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunStepResult"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sessions/{id}/message:
+    post:
+      operationId: sendMessage
+      tags: [sessions]
+      summary: User sends instruction to session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendMessageBody"
+      responses:
+        "201":
+          description: Message created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sessions/{id}/approve:
+    post:
+      operationId: approveAction
+      tags: [sessions]
+      summary: Approve a pending action
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApproveActionBody"
+      responses:
+        "200":
+          description: Approval recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Approval"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sessions/{id}/stop:
+    post:
+      operationId: stopSession
+      tags: [sessions]
+      summary: Stop an active session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Session stopped
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sessions/{id}/agents:
+    get:
+      operationId: listAgents
+      tags: [sessions]
+      summary: List agents in a session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of agents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Agent"
+
+  /sessions/{id}/tasks:
+    get:
+      operationId: listTasks
+      tags: [sessions]
+      summary: List tasks in a session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Task"
+
+  /sessions/{id}/messages:
+    get:
+      operationId: listMessages
+      tags: [sessions]
+      summary: List messages in a session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Message"
+
+  /sessions/{id}/memory:
+    get:
+      operationId: getMemory
+      tags: [sessions]
+      summary: Get shared memory for a session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Memory object
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Memory"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sessions/{id}/audit-logs:
+    get:
+      operationId: listAuditLogs
+      tags: [sessions]
+      summary: List audit logs for a session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Audit logs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AuditLog"
+
+  /sessions/{id}/approvals:
+    get:
+      operationId: listApprovals
+      tags: [sessions]
+      summary: List approvals for a session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Approvals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Approval"
+
+  /settings:
+    get:
+      operationId: getSettings
+      tags: [settings]
+      summary: Get all settings
+      responses:
+        "200":
+          description: Settings list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Setting"
+    post:
+      operationId: saveSettings
+      tags: [settings]
+      summary: Save settings (upsert)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveSettingsBody"
+      responses:
+        "200":
+          description: Settings saved
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Setting"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +409,384 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    Session:
+      type: object
+      properties:
+        id:
+          type: integer
+        goal:
+          type: string
+        status:
+          type: string
+        autonomyMode:
+          type: string
+        estimatedCost:
+          type: ["number", "null"]
+        finalOutput:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - goal
+        - status
+        - autonomyMode
+        - estimatedCost
+        - finalOutput
+        - createdAt
+        - updatedAt
+
+    SessionDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        goal:
+          type: string
+        status:
+          type: string
+        autonomyMode:
+          type: string
+        estimatedCost:
+          type: ["number", "null"]
+        finalOutput:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        agents:
+          type: array
+          items:
+            $ref: "#/components/schemas/Agent"
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Task"
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
+        memory:
+          nullable: true
+          oneOf:
+            - $ref: "#/components/schemas/Memory"
+            - type: "null"
+        approvals:
+          type: array
+          items:
+            $ref: "#/components/schemas/Approval"
+      required:
+        - id
+        - goal
+        - status
+        - autonomyMode
+        - estimatedCost
+        - finalOutput
+        - createdAt
+        - updatedAt
+        - agents
+        - tasks
+        - messages
+        - memory
+        - approvals
+
+    CreateSessionBody:
+      type: object
+      properties:
+        goal:
+          type: string
+        autonomyMode:
+          type: string
+        agents:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentInput"
+      required:
+        - goal
+        - autonomyMode
+        - agents
+
+    AgentInput:
+      type: object
+      properties:
+        name:
+          type: string
+        provider:
+          type: string
+        role:
+          type: string
+        isMock:
+          type: boolean
+      required:
+        - name
+        - provider
+        - role
+        - isMock
+
+    Agent:
+      type: object
+      properties:
+        id:
+          type: integer
+        sessionId:
+          type: integer
+        name:
+          type: string
+        provider:
+          type: string
+        role:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        isMock:
+          type: boolean
+      required:
+        - id
+        - sessionId
+        - name
+        - provider
+        - role
+        - capabilities
+        - isMock
+
+    Task:
+      type: object
+      properties:
+        id:
+          type: integer
+        sessionId:
+          type: integer
+        title:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+        assignedAgentId:
+          type: ["integer", "null"]
+        costEstimate:
+          type: ["number", "null"]
+        dependencyTaskId:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - sessionId
+        - title
+        - description
+        - type
+        - status
+        - assignedAgentId
+        - costEstimate
+        - dependencyTaskId
+        - createdAt
+        - updatedAt
+
+    Message:
+      type: object
+      properties:
+        id:
+          type: integer
+        sessionId:
+          type: integer
+        agentId:
+          type: ["integer", "null"]
+        role:
+          type: string
+        provider:
+          type: ["string", "null"]
+        content:
+          type: string
+        taskId:
+          type: ["integer", "null"]
+        agentName:
+          type: ["string", "null"]
+        agentRole:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - sessionId
+        - agentId
+        - role
+        - provider
+        - content
+        - taskId
+        - agentName
+        - agentRole
+        - createdAt
+
+    Memory:
+      type: object
+      properties:
+        id:
+          type: integer
+        sessionId:
+          type: integer
+        summary:
+          type: string
+        decisions:
+          type: array
+          items:
+            type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - sessionId
+        - summary
+        - decisions
+        - updatedAt
+
+    Approval:
+      type: object
+      properties:
+        id:
+          type: integer
+        sessionId:
+          type: integer
+        type:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+        createdAt:
+          type: string
+        approvedAt:
+          type: ["string", "null"]
+      required:
+        - id
+        - sessionId
+        - type
+        - description
+        - status
+        - createdAt
+        - approvedAt
+
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        sessionId:
+          type: integer
+        eventType:
+          type: string
+        description:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+      required:
+        - id
+        - sessionId
+        - eventType
+        - description
+        - metadata
+        - createdAt
+
+    Setting:
+      type: object
+      properties:
+        id:
+          type: integer
+        key:
+          type: string
+        value:
+          type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - key
+        - value
+        - createdAt
+        - updatedAt
+
+    SaveSettingsBody:
+      type: object
+      properties:
+        settings:
+          type: array
+          items:
+            type: object
+            properties:
+              key:
+                type: string
+              value:
+                type: string
+            required:
+              - key
+              - value
+      required:
+        - settings
+
+    SendMessageBody:
+      type: object
+      properties:
+        content:
+          type: string
+      required:
+        - content
+
+    ApproveActionBody:
+      type: object
+      properties:
+        approvalId:
+          type: integer
+      required:
+        - approvalId
+
+    RunStepResult:
+      type: object
+      properties:
+        session:
+          $ref: "#/components/schemas/Session"
+        newMessages:
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
+        updatedTasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Task"
+        approvalRequired:
+          type: boolean
+        approval:
+          nullable: true
+          oneOf:
+            - $ref: "#/components/schemas/Approval"
+            - type: "null"
+        stepsRun:
+          type: integer
+      required:
+        - session
+        - newMessages
+        - updatedTasks
+        - approvalRequired
+        - approval
+        - stepsRun
