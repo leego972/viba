@@ -11,7 +11,7 @@
 
 import { ReplitConnectors } from "@replit/connectors-sdk";
 import { execSync } from "child_process";
-import { readFileSync, existsSync, statSync, openSync, readSync, closeSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, statSync, openSync, readSync, closeSync } from "fs";
 import { join } from "path";
 
 const connectors = new ReplitConnectors();
@@ -206,6 +206,7 @@ async function main() {
   const treeItems = await buildTreeItems(fileModes);
 
   if (treeItems.length === 0) {
+    writeSyncStatus({ status: "success", commitSha: ghHeadSha.slice(0, 7), fileCount: 0 });
     return;
   }
 
@@ -241,22 +242,88 @@ async function main() {
     body: JSON.stringify({ sha: newCommit.sha, force: false }),
   });
 
+  const successSha = newCommit.sha.slice(0, 7);
   console.log(
-    `[sync-github] Done. GitHub ${BRANCH} → ${newCommit.sha.slice(0, 7)} (${treeItems.length} file(s))`,
+    `[sync-github] Done. GitHub ${BRANCH} → ${successSha} (${treeItems.length} file(s))`,
   );
+
+  writeSyncStatus({ status: "success", commitSha: successSha, fileCount: treeItems.length });
 }
 
-main().catch((err) => {
-  // Print a prominent banner so sync failures are impossible to miss in post-merge logs,
-  // while still exiting 0 so the overall post-merge setup remains non-blocking.
-  const msg = (err as Error).message;
-  console.error("");
-  console.error("╔══════════════════════════════════════════════════════╗");
-  console.error("║  GITHUB SYNC FAILED — repo may be out of date       ║");
-  console.error("╚══════════════════════════════════════════════════════╝");
-  console.error(`  Error: ${msg}`);
-  console.error(`  Repo:  https://github.com/${OWNER}/${REPO}`);
-  console.error(`  Fix:   run  pnpm --filter @workspace/scripts run sync-github`);
-  console.error("");
-  process.exit(0);
-});
+type SyncStatus =
+  | { status: "success"; commitSha: string; fileCount: number }
+  | { status: "failed"; error: string };
+
+function writeSyncStatus(status: SyncStatus): void {
+  const statusPath = join(GIT_ROOT, "sync-status.json");
+  const payload = { ...status, timestamp: new Date().toISOString() };
+  try {
+    writeFileSync(statusPath, JSON.stringify(payload, null, 2) + "\n", "utf8");
+  } catch (writeErr) {
+    console.warn(`[sync-github] Could not write sync-status.json: ${(writeErr as Error).message}`);
+  }
+}
+
+async function reportFailureAsGitHubIssue(errorMessage: string): Promise<void> {
+  const localSha = (() => {
+    try {
+      return exec("git rev-parse --short HEAD");
+    } catch {
+      return "unknown";
+    }
+  })();
+
+  const title = `[Replit sync] GitHub sync failed after merge (${localSha})`;
+  const body = [
+    `The automatic GitHub sync failed during post-merge setup.`,
+    ``,
+    `**Error:**`,
+    "```",
+    errorMessage,
+    "```",
+    ``,
+    `**Commit:** \`${localSha}\``,
+    `**Repo:** https://github.com/${OWNER}/${REPO}`,
+    ``,
+    `**To retry manually:**`,
+    "```bash",
+    `pnpm --filter @workspace/scripts run sync-github`,
+    "```",
+  ].join("\n");
+
+  try {
+    await githubApi(`/repos/${OWNER}/${REPO}/issues`, {
+      method: "POST",
+      body: JSON.stringify({ title, body, labels: ["sync-failure"] }),
+    });
+    console.error(`[sync-github] Filed GitHub issue: ${title}`);
+  } catch (issueErr) {
+    console.error(
+      `[sync-github] Could not file GitHub issue: ${(issueErr as Error).message}`,
+    );
+  }
+}
+
+main()
+  .then(() => {
+    process.exit(0);
+  })
+  .catch(async (err) => {
+    // Print a prominent banner so sync failures are impossible to miss in post-merge logs,
+    // while still exiting 0 so the overall post-merge setup remains non-blocking.
+    const msg = (err as Error).message;
+    console.error("");
+    console.error("╔══════════════════════════════════════════════════════╗");
+    console.error("║  GITHUB SYNC FAILED — repo may be out of date       ║");
+    console.error("╚══════════════════════════════════════════════════════╝");
+    console.error(`  Error: ${msg}`);
+    console.error(`  Repo:  https://github.com/${OWNER}/${REPO}`);
+    console.error(`  Fix:   run  pnpm --filter @workspace/scripts run sync-github`);
+    console.error("");
+
+    writeSyncStatus({ status: "failed", error: msg });
+
+    await reportFailureAsGitHubIssue(msg);
+
+    process.exit(0);
+  });
