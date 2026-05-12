@@ -8,10 +8,10 @@ const router: IRouter = Router();
 // GET /settings
 router.get("/settings", async (_req, res): Promise<void> => {
   const settings = await db.select().from(settingsTable);
-  // Never return the actual value of sensitive keys
+  // Never return the actual value of sensitive keys (case-insensitive match)
   const safeSettings = settings.map((s) => ({
     ...s,
-    value: s.key.includes("api_key") && s.value ? "***SET***" : s.value,
+    value: s.key.toLowerCase().includes("api_key") && s.value ? "***SET***" : s.value,
   }));
   res.json(GetSettingsResponse.parse(safeSettings));
 });
@@ -46,7 +46,7 @@ router.post("/settings", async (req, res): Promise<void> => {
   const allSettings = await db.select().from(settingsTable);
   const safeSettings = allSettings.map((s) => ({
     ...s,
-    value: s.key.includes("api_key") && s.value ? "***SET***" : s.value,
+    value: s.key.toLowerCase().includes("api_key") && s.value ? "***SET***" : s.value,
   }));
   res.json(SaveSettingsResponse.parse(safeSettings));
 });
