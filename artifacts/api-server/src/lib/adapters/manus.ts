@@ -1,0 +1,93 @@
+import type { AgentAdapter, AgentTaskInput, AgentTaskResult } from "./interface";
+import { logger } from "../logger";
+
+export class ManusAdapter implements AgentAdapter {
+  id: string;
+  name: string;
+  provider = "manus";
+  capabilities = ["research", "execution", "data_gathering", "analysis"];
+  role: string;
+  isMock = false;
+
+  private apiKey: string;
+  private model: string;
+
+  constructor(id: string, name: string, role: string, apiKey: string, model?: string) {
+    this.id = id;
+    this.name = name;
+    this.role = role;
+    this.apiKey = apiKey;
+    this.model = model ?? process.env.MANUS_MODEL ?? "manus-deep-research-1";
+  }
+
+  async runTask(input: AgentTaskInput): Promise<AgentTaskResult> {
+    const systemPrompt = `You are ${this.name}, an AI agent with the role of ${this.role} in a multi-agent collaboration platform called BridgeAI.
+
+Project Goal: ${input.projectGoal}
+
+Shared Memory Summary: ${input.memorySummary || "No previous context."}
+
+Your task: ${input.taskInstruction}
+
+Respond in character as your role. Be specific, actionable, and concise. At the end of your response, include a JSON block (surrounded by \`\`\`json ... \`\`\`) with this structure:
+{
+  "suggestedNextTasks": ["string"],
+  "completionStatus": "in_progress" | "complete" | "needs_review" | "approval_required",
+  "confidence": 0.0-1.0
+}`;
+
+    const messages = input.previousMessages.map((m) => ({
+      role: (m.role === "user" ? "user" : "assistant") as "user" | "assistant",
+      content: m.agentName ? `[${m.agentName}]: ${m.content}` : m.content,
+    }));
+
+    messages.push({ role: "user", content: input.taskInstruction });
+
+    try {
+      const { default: OpenAI } = await import("openai");
+      const client = new OpenAI({
+        apiKey: this.apiKey,
+        baseURL: "https://api.manus.im/v1",
+      });
+
+      const response = await client.chat.completions.create({
+        model: this.model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...messages.slice(-10),
+        ],
+        max_tokens: 800,
+        temperature: 0.7,
+      });
+
+      const text = response.choices[0]?.message?.content ?? "";
+      const usage = response.usage;
+      const inputCost = ((usage?.prompt_tokens ?? 0) / 1_000_000) * 0.50;
+      const outputCost = ((usage?.completion_tokens ?? 0) / 1_000_000) * 2.00;
+      const cost = inputCost + outputCost;
+
+      let suggestedNextTasks: string[] = [];
+      let completionStatus: AgentTaskResult["completionStatus"] = "in_progress";
+      let confidence = 0.7;
+      let messageText = text;
+
+      const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/);
+      if (jsonMatch) {
+        try {
+          const parsed = JSON.parse(jsonMatch[1]);
+          suggestedNextTasks = parsed.suggestedNextTasks ?? [];
+          completionStatus = parsed.completionStatus ?? "in_progress";
+          confidence = parsed.confidence ?? 0.7;
+          messageText = text.replace(/```json\n[\s\S]*?\n```/, "").trim();
+        } catch {
+          // ignore parse errors
+        }
+      }
+
+      return { messageText, suggestedNextTasks, completionStatus, confidence, estimatedCost: cost };
+    } catch (err) {
+      logger.error({ err }, "Manus API call failed");
+      throw err;
+    }
+  }
+}
