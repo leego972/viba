@@ -1,25 +1,28 @@
 import type { Agent, Task } from "@workspace/db";
 
 const TASK_TYPE_CAPABILITY_MAP: Record<string, string[]> = {
-  planning: ["planning", "strategy"],
-  research: ["research", "research_summary", "data_gathering"],
-  creative_direction: ["creative_direction", "creative"],
-  copywriting: ["writing", "creative"],
-  build: ["build", "code", "implementation"],
-  code_review: ["code_review", "logic_critique"],
-  ux_review: ["ux_review", "multimodal"],
-  final_qa: ["final_qa", "planning"],
-  deployment_approval: ["deployment", "planning"],
+  planning: ["planning", "strategy", "reasoning"],
+  research: ["research", "research_summary", "data_gathering", "fact_checking"],
+  creative_direction: ["creative_direction", "creative", "summarization"],
+  copywriting: ["writing", "creative", "creative_direction"],
+  build: ["build", "code", "implementation", "deployment"],
+  code_review: ["code_review", "logic_critique", "writing"],
+  ux_review: ["ux_review", "multimodal", "contextual_analysis"],
+  final_qa: ["final_qa", "planning", "reasoning", "code_review"],
+  deployment_approval: ["deployment", "planning", "build"],
 };
 
+/** role affinity — normalised to lowercase to match DB values */
 const ROLE_TASK_AFFINITY: Record<string, string[]> = {
-  Strategist: ["planning"],
-  "Creative Director": ["creative_direction", "copywriting"],
-  Researcher: ["research"],
-  Builder: ["build", "code_review"],
-  "Code Reviewer": ["code_review", "ux_review"],
-  "UX Reviewer": ["ux_review"],
-  "Final QA": ["final_qa", "deployment_approval"],
+  strategist: ["planning", "creative_direction", "final_qa"],
+  "creative director": ["creative_direction", "copywriting"],
+  researcher: ["research", "ux_review"],
+  builder: ["build", "deployment_approval"],
+  reviewer: ["code_review", "ux_review", "final_qa"],
+  "code reviewer": ["code_review", "ux_review"],
+  "ux reviewer": ["ux_review"],
+  "final qa": ["final_qa", "deployment_approval"],
+  qa: ["final_qa", "code_review"],
 };
 
 export function routeTask(task: Task, agents: Agent[]): Agent | null {
@@ -28,27 +31,33 @@ export function routeTask(task: Task, agents: Agent[]): Agent | null {
   const taskType = task.type;
   const requiredCapabilities = TASK_TYPE_CAPABILITY_MAP[taskType] ?? [];
 
-  // Score each agent by affinity
   const scored = agents.map((agent) => {
     let score = 0;
     const agentCaps = agent.capabilities ?? [];
+    const agentRole = (agent.role ?? "").toLowerCase();
 
-    // Capability match
+    // Capability match (+2 per hit)
     for (const cap of requiredCapabilities) {
       if (agentCaps.includes(cap)) score += 2;
     }
 
-    // Role affinity
-    const roleAffinity = ROLE_TASK_AFFINITY[agent.role] ?? [];
+    // Role affinity (+3 if this role owns this task type) — normalised lowercase
+    const roleAffinity = ROLE_TASK_AFFINITY[agentRole] ?? [];
     if (roleAffinity.includes(taskType)) score += 3;
-
-    // Prefer mock agents for non-critical tasks
-    if (agent.isMock) score += 1;
 
     return { agent, score };
   });
 
   scored.sort((a, b) => b.score - a.score);
+
+  // If no one has a capability match, assign by round-robin on task id
+  // so different task indices go to different agents
+  const topScore = scored[0]?.score ?? 0;
+  if (topScore === 0) {
+    const idx = (task.id ?? 0) % agents.length;
+    return agents[idx] ?? agents[0];
+  }
+
   return scored[0]?.agent ?? agents[0];
 }
 
@@ -82,29 +91,27 @@ export function determineTaskSequence(projectGoal: string): Array<{ title: strin
     {
       title: "Final QA",
       type: "final_qa",
-      description: `Final quality assurance and output validation for: ${projectGoal}`,
+      description: `Final quality assurance and sign-off for: ${projectGoal}`,
     },
   ];
 }
 
 export function autoAssignRoles(agentProviders: string[]): Record<string, string> {
   const roleQueue = [
-    "Strategist",
-    "Researcher",
-    "Creative Director",
-    "Builder",
-    "Code Reviewer",
-    "UX Reviewer",
-    "Final QA",
+    "strategist",
+    "researcher",
+    "builder",
+    "reviewer",
+    "qa",
   ];
 
   const providerRoleHints: Record<string, string> = {
-    openai: "Strategist",
-    anthropic: "Code Reviewer",
-    manus: "Researcher",
-    replit: "Builder",
-    google: "UX Reviewer",
-    perplexity: "Researcher",
+    openai: "strategist",
+    anthropic: "reviewer",
+    manus: "researcher",
+    replit: "builder",
+    google: "reviewer",
+    perplexity: "researcher",
   };
 
   const assignments: Record<string, string> = {};
@@ -116,13 +123,12 @@ export function autoAssignRoles(agentProviders: string[]): Record<string, string
       assignments[provider] = hint;
       usedRoles.add(hint);
     } else {
-      // find next unused role
       const next = roleQueue.find((r) => !usedRoles.has(r));
       if (next) {
         assignments[provider] = next;
         usedRoles.add(next);
       } else {
-        assignments[provider] = "Final QA";
+        assignments[provider] = "qa";
       }
     }
   }

@@ -5,7 +5,7 @@ import { buildAdapter } from "./agentFactory";
 import { routeTask } from "./taskRouter";
 import { logger } from "./logger";
 
-const APPROVAL_TASK_TYPES = new Set(["deployment_approval", "final_qa"]);
+const APPROVAL_TASK_TYPES = new Set(["final_qa"]);
 const MAX_TURNS = 8;
 
 async function logAudit(sessionId: number, eventType: string, description: string, metadata?: Record<string, unknown>) {
@@ -17,22 +17,30 @@ async function logAudit(sessionId: number, eventType: string, description: strin
   });
 }
 
-async function updateMemory(sessionId: number, newMessages: Message[]) {
+async function updateMemory(sessionId: number, newMessages: Message[], agentName: string, taskTitle: string) {
   const [mem] = await db.select().from(memoryTable).where(eq(memoryTable.sessionId, sessionId));
-  const summary =
-    newMessages
-      .slice(-5)
-      .map((m) => `[${m.agentName ?? "User"}] ${m.content.substring(0, 200)}`)
-      .join("\n") + "\n\n" + (mem?.summary ?? "");
+
+  // Build a clean bullet-list summary — one line per completed task, max 10 entries
+  const newEntry = `• [${agentName}] completed "${taskTitle}"`;
+
+  const existingLines = (mem?.summary ?? "")
+    .split("\n")
+    .filter((l) => l.trim().startsWith("•"))
+    .slice(0, 9); // keep last 9, we'll prepend the new one
+
+  const summary = [newEntry, ...existingLines].join("\n");
+
+  // Update decisions array with key agent outputs
+  const existingDecisions = mem?.decisions ?? [];
+  const lastContent = newMessages[0]?.content?.substring(0, 120) ?? "";
+  const newDecisions = existingDecisions.length < 12
+    ? [...existingDecisions, `${agentName}: ${lastContent}...`]
+    : existingDecisions;
 
   if (mem) {
-    await db.update(memoryTable).set({ summary: summary.substring(0, 2000) }).where(eq(memoryTable.id, mem.id));
+    await db.update(memoryTable).set({ summary, decisions: newDecisions }).where(eq(memoryTable.id, mem.id));
   } else {
-    await db.insert(memoryTable).values({
-      sessionId,
-      summary: summary.substring(0, 2000),
-      decisions: [],
-    });
+    await db.insert(memoryTable).values({ sessionId, summary, decisions: newDecisions });
   }
 }
 
@@ -52,23 +60,27 @@ export async function runNextAgentStep(sessionId: number): Promise<{
     return { newMessages: [], updatedTasks: [], approvalRequired: false, approval: null };
   }
 
-  // Get next incomplete task
+  // Only pick tasks that are still in "planned" state — prevents re-running the same task
   const allTasks = await db
     .select()
     .from(tasksTable)
     .where(eq(tasksTable.sessionId, sessionId))
     .orderBy(asc(tasksTable.id));
 
-  const nextTask = allTasks.find((t) => t.status === "planned" || t.status === "in_progress");
+  const nextTask = allTasks.find((t) => t.status === "planned");
+
   if (!nextTask) {
     // All tasks done — mark session complete
-    await db.update(sessionsTable).set({ status: "completed" }).where(eq(sessionsTable.id, sessionId));
-    await logAudit(sessionId, "session_completed", "All tasks completed, session marked complete");
+    const hasActiveTasks = allTasks.some((t) => t.status === "in_progress");
+    if (!hasActiveTasks) {
+      await db.update(sessionsTable).set({ status: "completed" }).where(eq(sessionsTable.id, sessionId));
+      await logAudit(sessionId, "session_completed", "All tasks completed, session marked complete");
+    }
     return { newMessages: [], updatedTasks: [], approvalRequired: false, approval: null };
   }
 
-  // Check if approval required before this task
-  if (APPROVAL_TASK_TYPES.has(nextTask.type)) {
+  // Check if approval required before this task (only for supervised sessions)
+  if (APPROVAL_TASK_TYPES.has(nextTask.type) && session.autonomyMode === "Supervised") {
     const [existingApproval] = await db
       .select()
       .from(approvalsTable)
@@ -80,7 +92,7 @@ export async function runNextAgentStep(sessionId: number): Promise<{
         .values({
           sessionId,
           type: nextTask.type,
-          description: `Approval required before running: ${nextTask.title}`,
+          description: `Approve final QA sign-off before completing the project: ${nextTask.title}`,
           status: "pending",
         })
         .returning();
@@ -99,40 +111,37 @@ export async function runNextAgentStep(sessionId: number): Promise<{
     }
   }
 
-  // Assign agent via task router
-  const assignedAgent = nextTask.assignedAgentId
-    ? agents.find((a) => a.id === nextTask.assignedAgentId) ?? routeTask(nextTask, agents)
-    : routeTask(nextTask, agents);
-
+  // Route to the best-fit agent
+  const assignedAgent = routeTask(nextTask, agents);
   if (!assignedAgent) {
     return { newMessages: [], updatedTasks: [], approvalRequired: false, approval: null };
   }
 
-  // Update task to in_progress
+  // Mark task in_progress
   await db.update(tasksTable).set({ status: "in_progress", assignedAgentId: assignedAgent.id }).where(eq(tasksTable.id, nextTask.id));
   await logAudit(sessionId, "task_assigned", `Task "${nextTask.title}" assigned to ${assignedAgent.name}`, {
     taskId: nextTask.id,
     agentId: assignedAgent.id,
   });
 
-  // Get conversation history
+  // Get last 6 messages as conversation context (keep prompt lean)
   const previousMessages = await db
     .select()
     .from(messagesTable)
     .where(eq(messagesTable.sessionId, sessionId))
     .orderBy(asc(messagesTable.id));
 
+  const recentMessages = previousMessages.slice(-6);
   const [memory] = await db.select().from(memoryTable).where(eq(memoryTable.sessionId, sessionId));
 
   // Build adapter and run task
   const adapter = await buildAdapter(assignedAgent);
-
   const result = await adapter.runTask({
     systemRole: assignedAgent.role,
     projectGoal: session.goal,
     memorySummary: memory?.summary ?? "",
     taskInstruction: nextTask.description || nextTask.title,
-    previousMessages: previousMessages.map((m) => ({
+    previousMessages: recentMessages.map((m) => ({
       role: m.role,
       content: m.content,
       agentName: m.agentName ?? undefined,
@@ -155,16 +164,25 @@ export async function runNextAgentStep(sessionId: number): Promise<{
     })
     .returning();
 
-  await logAudit(sessionId, "agent_message_generated", `${assignedAgent.name} responded to task: ${nextTask.title}`, {
+  if (!newMsg) {
+    return { newMessages: [], updatedTasks: [], approvalRequired: false, approval: null };
+  }
+
+  await logAudit(sessionId, "agent_message_generated", `${assignedAgent.name} completed task: ${nextTask.title}`, {
     taskId: nextTask.id,
     agentId: assignedAgent.id,
-    completionStatus: result.completionStatus,
   });
 
-  // Update task status
-  let newTaskStatus = "in_progress";
-  if (result.completionStatus === "complete") newTaskStatus = "complete";
-  else if (result.completionStatus === "needs_review") newTaskStatus = "review";
+  // Each agent completes a task in one step — map completionStatus to final task state
+  let newTaskStatus: string;
+  if (result.completionStatus === "complete") {
+    newTaskStatus = "complete";
+  } else if (result.completionStatus === "needs_review") {
+    newTaskStatus = "review";
+  } else {
+    // "in_progress" or anything else → mark review so it doesn't get re-run
+    newTaskStatus = "review";
+  }
 
   const [updatedTask] = await db
     .update(tasksTable)
@@ -176,20 +194,9 @@ export async function runNextAgentStep(sessionId: number): Promise<{
   const updatedCost = (session.estimatedCost ?? 0) + result.estimatedCost;
   await db.update(sessionsTable).set({ estimatedCost: updatedCost }).where(eq(sessionsTable.id, sessionId));
 
-  // Update memory
-  await updateMemory(sessionId, [newMsg]);
-  await logAudit(sessionId, "memory_updated", "Shared memory updated after agent response");
-
-  // Add suggested next tasks
-  for (const suggestion of result.suggestedNextTasks.slice(0, 2)) {
-    await db.insert(tasksTable).values({
-      sessionId,
-      title: suggestion,
-      description: suggestion,
-      type: "planning",
-      status: "planned",
-    });
-  }
+  // Update memory cleanly
+  await updateMemory(sessionId, [newMsg], assignedAgent.name, nextTask.title);
+  await logAudit(sessionId, "memory_updated", "Shared memory updated");
 
   return {
     newMessages: [newMsg],
@@ -224,11 +231,12 @@ export async function runFullWorkflow(sessionId: number): Promise<{
       break;
     }
 
+    // No progress — no more planned tasks
     if (result.newMessages.length === 0 && result.updatedTasks.length === 0) {
       break;
     }
 
-    // Check if session is complete
+    // Check if session completed
     const [session] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, sessionId));
     if (session?.status !== "active") break;
   }

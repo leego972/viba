@@ -180,6 +180,25 @@ router.get("/sessions/:id", async (req, res): Promise<void> => {
   }));
 });
 
+// DELETE /sessions/:id
+router.delete("/sessions/:id", async (req, res): Promise<void> => {
+  const params = GetSessionParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const sessionId = params.data.id;
+  // Cascade-delete all related data
+  await db.delete(auditLogsTable).where(eq(auditLogsTable.sessionId, sessionId));
+  await db.delete(approvalsTable).where(eq(approvalsTable.sessionId, sessionId));
+  await db.delete(memoryTable).where(eq(memoryTable.sessionId, sessionId));
+  await db.delete(messagesTable).where(eq(messagesTable.sessionId, sessionId));
+  await db.delete(tasksTable).where(eq(tasksTable.sessionId, sessionId));
+  await db.delete(agentsTable).where(eq(agentsTable.sessionId, sessionId));
+  await db.delete(sessionsTable).where(eq(sessionsTable.id, sessionId));
+  res.status(204).end();
+});
+
 // POST /sessions/:id/run-next
 router.post("/sessions/:id/run-next", async (req, res): Promise<void> => {
   const params = RunNextStepParams.safeParse(req.params);

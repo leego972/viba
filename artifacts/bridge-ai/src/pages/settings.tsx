@@ -83,6 +83,7 @@ export default function Settings() {
             <CardDescription>Enter the API keys for the providers you want to use.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} id="settings-form">
             {isLoading ? (
               <div className="space-y-4">
                 {[1, 2, 3, 4, 5].map(i => (
@@ -159,9 +160,10 @@ export default function Settings() {
                 </div>
               </>
             )}
+            </form>
           </CardContent>
           <CardFooter>
-            <Button onClick={handleSave} disabled={saveSettings.isPending || isLoading}>
+            <Button type="submit" form="settings-form" disabled={saveSettings.isPending || isLoading}>
               {saveSettings.isPending ? "Saving..." : "Save Settings"}
             </Button>
           </CardFooter>
