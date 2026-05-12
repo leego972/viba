@@ -164,6 +164,9 @@ export default function SessionWorkspace() {
     complete: tasks.filter(t => t.status === "complete")
   };
 
+  const liveAgentCount = agents.filter(a => !a.isMock).length;
+  const simAgentCount = agents.filter(a => a.isMock).length;
+
   if (sessionLoading || !session) {
     return (
       <AppLayout>
@@ -190,10 +193,24 @@ export default function SessionWorkspace() {
 
         {/* Header Bar */}
         <div className="flex items-center justify-between bg-card border rounded-lg p-4 shadow-sm shrink-0">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-wrap">
             <h1 className="font-bold text-lg truncate max-w-[300px]" title={session.goal}>{session.goal}</h1>
             <Badge variant="outline" className="capitalize">{session.status}</Badge>
             <Badge variant="secondary">{session.autonomyMode}</Badge>
+            {agents.length > 0 && (
+              <div className="flex items-center gap-1.5">
+                {liveAgentCount > 0 && (
+                  <Badge className="text-[11px] h-5 px-2 gap-1 bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20">
+                    <Zap className="h-3 w-3" /> {liveAgentCount} Live
+                  </Badge>
+                )}
+                {simAgentCount > 0 && (
+                  <Badge variant="outline" className="text-[11px] h-5 px-2 gap-1 text-muted-foreground">
+                    <FlaskConical className="h-3 w-3" /> {simAgentCount} Sim
+                  </Badge>
+                )}
+              </div>
+            )}
             <div className="text-sm text-muted-foreground flex items-center gap-1">
               <Clock className="w-4 h-4" /> 
               Est. Cost: ${session.estimatedCost?.toFixed(4) || "0.0000"}
@@ -363,11 +380,25 @@ export default function SessionWorkspace() {
                     {columnTasks.map(task => (
                       <div key={task.id} className="bg-card border rounded p-2 text-sm shadow-sm">
                         <div className="font-medium line-clamp-2 leading-tight">{task.title}</div>
-                        {task.assignedAgentId && (
-                          <div className="text-[10px] text-muted-foreground mt-2 pt-2 border-t flex justify-between items-center">
-                            <span>Assigned to: {agents.find(a => a.id === task.assignedAgentId)?.name || 'Unknown'}</span>
-                          </div>
-                        )}
+                        {task.assignedAgentId && (() => {
+                          const assignedAgent = agents.find(a => a.id === task.assignedAgentId);
+                          return (
+                            <div className="text-[10px] text-muted-foreground mt-2 pt-2 border-t flex justify-between items-center">
+                              <span>Assigned to: {assignedAgent?.name || 'Unknown'}</span>
+                              {assignedAgent && (
+                                assignedAgent.isMock ? (
+                                  <Badge variant="outline" className="text-[9px] h-3.5 px-1 gap-0.5 text-muted-foreground">
+                                    <FlaskConical className="h-2 w-2" /> Sim
+                                  </Badge>
+                                ) : (
+                                  <Badge className="text-[9px] h-3.5 px-1 gap-0.5 bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20">
+                                    <Zap className="h-2 w-2" /> Live
+                                  </Badge>
+                                )
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     ))}
                     {columnTasks.length === 0 && status === 'planned' && (
