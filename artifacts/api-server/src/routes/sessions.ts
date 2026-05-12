@@ -11,7 +11,6 @@ import {
   auditLogsTable,
 } from "@workspace/db";
 import {
-  ListSessionsResponse,
   CreateSessionBody,
   GetSessionParams,
   RunNextStepParams,
@@ -32,6 +31,20 @@ import { runNextAgentStep, runFullWorkflow } from "../lib/agentLoop";
 import { determineTaskSequence, autoAssignRoles } from "../lib/taskRouter";
 
 const router: IRouter = Router();
+
+/** Recursively converts Date objects to ISO strings for JSON serialization */
+function serialize<T>(val: T): T {
+  if (val instanceof Date) return val.toISOString() as unknown as T;
+  if (Array.isArray(val)) return val.map(serialize) as unknown as T;
+  if (val !== null && typeof val === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(val as Record<string, unknown>)) {
+      out[k] = serialize(v);
+    }
+    return out as T;
+  }
+  return val;
+}
 
 const PROVIDER_CAPABILITIES: Record<string, string[]> = {
   openai: ["planning", "reasoning", "creative_direction", "code_review", "final_qa"],
@@ -57,8 +70,8 @@ async function logAudit(sessionId: number, eventType: string, description: strin
 
 // GET /sessions
 router.get("/sessions", async (req, res): Promise<void> => {
-  const sessions = await db.select().from(sessionsTable).orderBy(eq(sessionsTable.id, sessionsTable.id));
-  res.json(ListSessionsResponse.parse(sessions));
+  const sessions = await db.select().from(sessionsTable).orderBy(asc(sessionsTable.id));
+  res.json(serialize(sessions));
 });
 
 // POST /sessions
@@ -71,7 +84,6 @@ router.post("/sessions", async (req, res): Promise<void> => {
 
   const { goal, autonomyMode, agents } = parsed.data;
 
-  // Create session
   const [session] = await db
     .insert(sessionsTable)
     .values({ goal, autonomyMode, status: "active" })
@@ -84,11 +96,9 @@ router.post("/sessions", async (req, res): Promise<void> => {
 
   await logAudit(session.id, "session_created", `Session created with goal: ${goal}`, { autonomyMode });
 
-  // Determine roles if not manually set
   const providerList = agents.map((a) => a.provider);
   const autoRoles = autoAssignRoles(providerList);
 
-  // Create agents
   const createdAgents = [];
   for (const agentInput of agents) {
     const role = agentInput.role || autoRoles[agentInput.provider] || "Strategist";
@@ -112,7 +122,6 @@ router.post("/sessions", async (req, res): Promise<void> => {
     }
   }
 
-  // Create initial task plan
   const taskSequence = determineTaskSequence(goal);
   for (let i = 0; i < taskSequence.length; i++) {
     const taskDef = taskSequence[i];
@@ -132,14 +141,13 @@ router.post("/sessions", async (req, res): Promise<void> => {
     }
   }
 
-  // Initialize memory
   await db.insert(memoryTable).values({
     sessionId: session.id,
     summary: `Project started: ${goal}. Agents: ${createdAgents.map((a) => `${a.name} (${a.role})`).join(", ")}.`,
     decisions: [`Project goal defined: ${goal}`, `Autonomy mode: ${autonomyMode}`],
   });
 
-  res.status(201).json(session);
+  res.status(201).json(serialize(session));
 });
 
 // GET /sessions/:id
@@ -162,14 +170,14 @@ router.get("/sessions/:id", async (req, res): Promise<void> => {
   const [memory] = await db.select().from(memoryTable).where(eq(memoryTable.sessionId, session.id));
   const approvals = await db.select().from(approvalsTable).where(eq(approvalsTable.sessionId, session.id));
 
-  res.json({
+  res.json(serialize({
     ...session,
     agents,
     tasks,
     messages,
     memory: memory ?? null,
     approvals,
-  });
+  }));
 });
 
 // POST /sessions/:id/run-next
@@ -189,14 +197,14 @@ router.post("/sessions/:id/run-next", async (req, res): Promise<void> => {
   const result = await runNextAgentStep(params.data.id);
   const [updatedSession] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, params.data.id));
 
-  res.json({
+  res.json(serialize({
     session: updatedSession,
     newMessages: result.newMessages,
     updatedTasks: result.updatedTasks,
     approvalRequired: result.approvalRequired,
     approval: result.approval,
     stepsRun: 1,
-  });
+  }));
 });
 
 // POST /sessions/:id/run-full
@@ -216,14 +224,14 @@ router.post("/sessions/:id/run-full", async (req, res): Promise<void> => {
   const result = await runFullWorkflow(params.data.id);
   const [updatedSession] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, params.data.id));
 
-  res.json({
+  res.json(serialize({
     session: updatedSession,
     newMessages: result.newMessages,
     updatedTasks: result.updatedTasks,
     approvalRequired: result.approvalRequired,
     approval: result.approval,
     stepsRun: result.stepsRun,
-  });
+  }));
 });
 
 // POST /sessions/:id/message
@@ -260,7 +268,7 @@ router.post("/sessions/:id/message", async (req, res): Promise<void> => {
     })
     .returning();
 
-  res.status(201).json(message);
+  res.status(201).json(serialize(message));
 });
 
 // POST /sessions/:id/approve
@@ -294,7 +302,7 @@ router.post("/sessions/:id/approve", async (req, res): Promise<void> => {
     type: approval.type,
   });
 
-  res.json(updated);
+  res.json(serialize(updated));
 });
 
 // POST /sessions/:id/stop
@@ -319,7 +327,7 @@ router.post("/sessions/:id/stop", async (req, res): Promise<void> => {
 
   await logAudit(params.data.id, "session_stopped", "Session stopped by user");
 
-  res.json(updated);
+  res.json(serialize(updated));
 });
 
 // GET /sessions/:id/agents
@@ -330,7 +338,7 @@ router.get("/sessions/:id/agents", async (req, res): Promise<void> => {
     return;
   }
   const agents = await db.select().from(agentsTable).where(eq(agentsTable.sessionId, params.data.id));
-  res.json(agents);
+  res.json(serialize(agents));
 });
 
 // GET /sessions/:id/tasks
@@ -341,7 +349,7 @@ router.get("/sessions/:id/tasks", async (req, res): Promise<void> => {
     return;
   }
   const tasks = await db.select().from(tasksTable).where(eq(tasksTable.sessionId, params.data.id)).orderBy(asc(tasksTable.id));
-  res.json(tasks);
+  res.json(serialize(tasks));
 });
 
 // GET /sessions/:id/messages
@@ -352,7 +360,7 @@ router.get("/sessions/:id/messages", async (req, res): Promise<void> => {
     return;
   }
   const messages = await db.select().from(messagesTable).where(eq(messagesTable.sessionId, params.data.id)).orderBy(asc(messagesTable.id));
-  res.json(messages);
+  res.json(serialize(messages));
 });
 
 // GET /sessions/:id/memory
@@ -367,7 +375,7 @@ router.get("/sessions/:id/memory", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Memory not found" });
     return;
   }
-  res.json(memory);
+  res.json(serialize(memory));
 });
 
 // GET /sessions/:id/audit-logs
@@ -378,7 +386,7 @@ router.get("/sessions/:id/audit-logs", async (req, res): Promise<void> => {
     return;
   }
   const logs = await db.select().from(auditLogsTable).where(eq(auditLogsTable.sessionId, params.data.id)).orderBy(asc(auditLogsTable.id));
-  res.json(logs);
+  res.json(serialize(logs));
 });
 
 // GET /sessions/:id/approvals
@@ -389,7 +397,7 @@ router.get("/sessions/:id/approvals", async (req, res): Promise<void> => {
     return;
   }
   const approvals = await db.select().from(approvalsTable).where(eq(approvalsTable.sessionId, params.data.id));
-  res.json(approvals);
+  res.json(serialize(approvals));
 });
 
 export default router;
