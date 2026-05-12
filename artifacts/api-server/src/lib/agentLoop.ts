@@ -8,6 +8,7 @@ import type { AgentTaskResult } from "./adapters/interface";
 
 const APPROVAL_TASK_TYPES = new Set(["final_qa"]);
 const MAX_TURNS = 8;
+const RETRY_DELAY_MS = 800;
 
 async function logAudit(sessionId: number, eventType: string, description: string, metadata?: Record<string, unknown>) {
   await db.insert(auditLogsTable).values({
@@ -135,7 +136,7 @@ export async function runNextAgentStep(sessionId: number): Promise<{
   const recentMessages = previousMessages.slice(-6);
   const [memory] = await db.select().from(memoryTable).where(eq(memoryTable.sessionId, sessionId));
 
-  // Build adapter and run task — fall back to simulation if anything fails
+  // Build adapter and run task — retry once before falling back to simulation
   const taskInput = {
     systemRole: assignedAgent.role,
     projectGoal: session.goal,
@@ -149,22 +150,45 @@ export async function runNextAgentStep(sessionId: number): Promise<{
     taskType: nextTask.type,
   };
 
-  let result: AgentTaskResult;
+  let result: AgentTaskResult | null = null;
   let usedFallback = false;
+  let lastLiveError: unknown = null;
 
-  try {
-    const adapter = await buildAdapter(assignedAgent);
-    result = await adapter.runTask(taskInput);
-  } catch (err) {
+  // Attempt live adapter up to 2 times before falling back to simulation
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const adapter = await buildAdapter(assignedAgent);
+      result = await adapter.runTask(taskInput);
+      lastLiveError = null;
+      break;
+    } catch (err) {
+      lastLiveError = err;
+      if (attempt === 1) {
+        logger.warn(
+          { err, agentId: assignedAgent.id, provider: assignedAgent.provider, attempt },
+          "Live adapter failed on attempt 1 — retrying after delay"
+        );
+        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+      }
+    }
+  }
+
+  if (lastLiveError !== null || result === null) {
     logger.error(
-      { err, agentId: assignedAgent.id, provider: assignedAgent.provider, taskId: nextTask.id },
-      "Live adapter failed — falling back to simulation"
+      { err: lastLiveError, agentId: assignedAgent.id, provider: assignedAgent.provider, taskId: nextTask.id },
+      "Live adapter failed after retry — falling back to simulation"
     );
-    await logAudit(sessionId, "adapter_fallback", `Live ${assignedAgent.provider} call failed; falling back to simulation for task "${nextTask.title}"`, {
-      taskId: nextTask.id,
-      agentId: assignedAgent.id,
-      error: err instanceof Error ? err.message : String(err),
-    });
+    await logAudit(
+      sessionId,
+      "adapter_fallback",
+      `Live ${assignedAgent.provider} call failed after retry; falling back to simulation for task "${nextTask.title}"`,
+      {
+        taskId: nextTask.id,
+        agentId: assignedAgent.id,
+        provider: assignedAgent.provider,
+        error: lastLiveError instanceof Error ? lastLiveError.message : String(lastLiveError),
+      }
+    );
     const mockAdapter = buildMockAdapter(assignedAgent);
     result = await mockAdapter.runTask(taskInput);
     usedFallback = true;

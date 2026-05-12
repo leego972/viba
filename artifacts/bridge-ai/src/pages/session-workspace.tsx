@@ -23,12 +23,14 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { Play, FastForward, Square, Send, CheckCircle2, Clock, User, Bot, AlertTriangle, Crosshair, LineChart } from "lucide-react";
+import {
+  Play, FastForward, Square, Send, CheckCircle2, Clock, User, Bot,
+  AlertTriangle, Crosshair, LineChart, Zap, FlaskConical, RotateCcw,
+} from "lucide-react";
 
 const AGENT_COLORS: Record<string, string> = {
   "openai": "bg-green-500/10 text-green-400 border-green-500/20",
@@ -39,6 +41,8 @@ const AGENT_COLORS: Record<string, string> = {
   "perplexity": "bg-amber-500/10 text-amber-400 border-amber-500/20",
   "user": "bg-primary/10 text-primary border-primary/20",
 };
+
+const SIMULATED_PREFIX = "⚠️ [Simulated";
 
 export default function SessionWorkspace() {
   const { id } = useParams();
@@ -80,6 +84,9 @@ export default function SessionWorkspace() {
   const approve = useApproveAction();
 
   const isSessionActive = session?.status === "active";
+
+  // Detect if any messages used simulation fallback
+  const hasFallbackMessages = messages.some(m => m.content?.startsWith(SIMULATED_PREFIX));
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -170,6 +177,17 @@ export default function SessionWorkspace() {
   return (
     <AppLayout>
       <div className="flex flex-col h-[calc(100vh-8rem)] gap-4">
+        {/* Simulation fallback banner */}
+        {hasFallbackMessages && (
+          <div className="flex items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-300 shrink-0">
+            <RotateCcw className="h-4 w-4 shrink-0 text-amber-400" />
+            <span>
+              <span className="font-semibold">One or more agents fell back to simulation</span> — a live API call
+              failed and was automatically retried before switching to simulation mode. Check your API keys in Settings.
+            </span>
+          </div>
+        )}
+
         {/* Header Bar */}
         <div className="flex items-center justify-between bg-card border rounded-lg p-4 shadow-sm shrink-0">
           <div className="flex items-center gap-4">
@@ -227,15 +245,29 @@ export default function SessionWorkspace() {
               </CardHeader>
               <CardContent className="p-4 pt-0 overflow-y-auto">
                 <div className="flex flex-col gap-2">
-                  {agents.map(agent => (
-                    <div key={agent.id} className="flex flex-col p-2 rounded border bg-muted/30">
-                      <div className="font-semibold text-sm">{agent.name}</div>
-                      <div className="flex justify-between items-center mt-1">
-                        <Badge variant="outline" className="text-[10px] h-4">{agent.provider}</Badge>
-                        <span className="text-xs text-muted-foreground">{agent.role}</span>
+                  {agents.map(agent => {
+                    const isLive = !agent.isMock;
+                    return (
+                      <div key={agent.id} className="flex flex-col p-2 rounded border bg-muted/30">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="font-semibold text-sm truncate">{agent.name}</span>
+                          {isLive ? (
+                            <Badge className="text-[10px] h-4 px-1.5 gap-0.5 bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20 shrink-0">
+                              <Zap className="h-2.5 w-2.5" /> Live
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] h-4 px-1.5 gap-0.5 text-muted-foreground shrink-0">
+                              <FlaskConical className="h-2.5 w-2.5" /> Sim
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex justify-between items-center mt-1">
+                          <Badge variant="outline" className="text-[10px] h-4">{agent.provider}</Badge>
+                          <span className="text-xs text-muted-foreground">{agent.role}</span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>
@@ -256,16 +288,31 @@ export default function SessionWorkspace() {
               ) : (
                 messages.map(msg => {
                   const isUser = msg.role === "user";
-                  const colorClass = isUser ? AGENT_COLORS["User"] : (msg.provider ? AGENT_COLORS[msg.provider] : "bg-muted text-foreground border-border");
-                  
+                  const isSimulated = !isUser && msg.content?.startsWith(SIMULATED_PREFIX);
+                  const colorClass = isUser
+                    ? AGENT_COLORS["user"]
+                    : isSimulated
+                      ? "bg-amber-500/10 text-amber-200 border-amber-500/30"
+                      : (msg.provider ? AGENT_COLORS[msg.provider] : "bg-muted text-foreground border-border");
+
+                  // Strip the simulated prefix for display — we show a badge instead
+                  const displayContent = isSimulated
+                    ? msg.content.replace(/^⚠️ \[Simulated — live \S+ API unavailable\] /, "")
+                    : msg.content;
+
                   return (
                     <div key={msg.id} className={`flex flex-col max-w-[85%] rounded-lg border p-3 ${colorClass} ${isUser ? "self-end" : "self-start"}`}>
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className="font-semibold text-xs">{isUser ? "You" : msg.agentName || "System"}</span>
                         {!isUser && msg.agentRole && <span className="text-[10px] opacity-70">| {msg.agentRole}</span>}
+                        {isSimulated && (
+                          <Badge variant="outline" className="text-[10px] h-4 px-1.5 gap-0.5 text-amber-400 border-amber-500/40">
+                            <FlaskConical className="h-2.5 w-2.5" /> Simulated
+                          </Badge>
+                        )}
                         <span className="text-[10px] opacity-50 ml-auto">{format(new Date(msg.createdAt), "HH:mm:ss")}</span>
                       </div>
-                      <div className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</div>
+                      <div className="text-sm whitespace-pre-wrap leading-relaxed">{displayContent}</div>
                     </div>
                   );
                 })
@@ -305,7 +352,7 @@ export default function SessionWorkspace() {
             <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-4">
               {(['planned', 'in_progress', 'review', 'complete'] as const).map(status => {
                 const columnTasks = tasksByStatus[status];
-                if (columnTasks.length === 0 && status !== 'planned') return null; // Hide empty columns except planned
+                if (columnTasks.length === 0 && status !== 'planned') return null;
                 
                 return (
                   <div key={status} className="flex flex-col gap-2">
