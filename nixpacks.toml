@@ -1,5 +1,5 @@
 [phases.install]
-    cmds = ["echo build-v3 && pnpm install --no-frozen-lockfile"]
+    cmds = ["pnpm install --no-frozen-lockfile"]
 
     [phases.build]
     cmds = ["NODE_ENV=production BASE_PATH=/ PORT=8080 pnpm --filter @workspace/bridge-ai run build && pnpm --filter @workspace/api-server run build"]
