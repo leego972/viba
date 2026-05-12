@@ -1,12 +1,12 @@
 import { Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { useListSessions } from "@workspace/api-client-react";
+import { useListSessions, type AgentModeSummary } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Activity, Clock, DollarSign, Layers, Zap, RotateCcw } from "lucide-react";
+import { Plus, Activity, Clock, DollarSign, Layers, Zap, RotateCcw, Wifi, WifiOff } from "lucide-react";
 import { format } from "date-fns";
 
 interface BridgeStats {
@@ -27,6 +27,41 @@ function useStats() {
     refetchInterval: 10_000,
     retry: false,
   });
+}
+
+function getSessionMode(agentModes: AgentModeSummary[]): "live" | "simulation" | "mixed" | "unknown" {
+  if (agentModes.length === 0) return "unknown";
+  const liveCount = agentModes.filter((a) => !a.isMock).length;
+  if (liveCount === agentModes.length) return "live";
+  if (liveCount === 0) return "simulation";
+  return "mixed";
+}
+
+function SessionModeBadge({ agentModes }: { agentModes: AgentModeSummary[] }) {
+  const mode = getSessionMode(agentModes);
+  if (mode === "unknown") return null;
+  if (mode === "live") {
+    return (
+      <Badge variant="outline" className="gap-1 text-xs border-emerald-500/40 text-emerald-400 bg-emerald-500/10">
+        <Wifi className="h-3 w-3" />
+        Live
+      </Badge>
+    );
+  }
+  if (mode === "simulation") {
+    return (
+      <Badge variant="outline" className="gap-1 text-xs border-slate-500/40 text-slate-400 bg-slate-500/10">
+        <WifiOff className="h-3 w-3" />
+        Simulation
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="gap-1 text-xs border-amber-500/40 text-amber-400 bg-amber-500/10">
+      <Wifi className="h-3 w-3" />
+      Mixed
+    </Badge>
+  );
 }
 
 export default function Dashboard() {
@@ -157,10 +192,13 @@ export default function Dashboard() {
               <Link key={session.id} href={`/sessions/${session.id}`}>
                 <Card className="hover-elevate cursor-pointer transition-all hover:border-primary/50 h-full flex flex-col">
                   <CardHeader className="pb-3">
-                    <div className="flex justify-between items-start gap-4">
-                      <Badge variant={getStatusColor(session.status) as any} className="capitalize">
-                        {session.status}
-                      </Badge>
+                    <div className="flex flex-wrap justify-between items-start gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge variant={getStatusColor(session.status) as any} className="capitalize">
+                          {session.status}
+                        </Badge>
+                        <SessionModeBadge agentModes={session.agentModes} />
+                      </div>
                       <Badge variant="outline" className="text-xs font-normal">
                         {session.autonomyMode}
                       </Badge>
