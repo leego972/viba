@@ -1,0 +1,461 @@
+Build a production-ready MVP called BridgeAI.
+
+BridgeAI is a standalone plug-and-play AI-to-AI integration tool. It lets users connect different AI providers, assign a project, and let the connected AIs communicate in one shared conversation, divide tasks, add input when needed, and collaborate autonomously.
+
+The product is NOT a chatbot platform and NOT a project management tool. It is an integration bridge between AI systems.
+
+Core product promise:
+“Plug in your AIs. Give them a project. BridgeAI lets them work together.”
+
+Build this as a full-stack web app.
+
+Use:
+- Next.js
+- TypeScript
+- Tailwind CSS
+- Node API routes
+- SQLite for local MVP storage
+- Prisma ORM
+- OpenAI API integration as the first working provider
+- Mock adapters for Claude, Manus, Replit, Gemini until real API keys are added
+- Clean modular architecture so real providers can be added later
+
+Main user flow:
+1. User opens BridgeAI.
+2. User creates a new collaboration session.
+3. User enters a project goal.
+4. User selects which AI agents to include.
+5. User assigns roles or lets BridgeAI auto-assign roles.
+6. BridgeAI creates a task plan.
+7. Agents communicate in one shared conversation.
+8. Each agent adds input based on its role.
+9. BridgeAI routes tasks to the best-fit agent.
+10. BridgeAI shows task status, agent messages, costs estimate, and final output.
+11. User can approve final action.
+
+Build the following pages:
+
+1. Landing page
+- Hero:
+  “BridgeAI”
+  “Plug in your AIs. Let them work together.”
+- Subtext:
+  “BridgeAI connects your AI tools so they can communicate, delegate tasks, share context, and complete projects together.”
+- CTA button:
+  “Start a Bridge Session”
+- Sections:
+  - How it works
+  - Why BridgeAI saves cost
+  - Supported agents
+  - Safety and approvals
+  - MVP disclaimer
+
+2. Dashboard page
+- Show list of bridge sessions
+- Button to create new session
+- Session cards showing:
+  - project goal
+  - status
+  - agents involved
+  - created date
+
+3. New session page
+Fields:
+- Project goal textarea
+- Autonomy mode:
+  - Manual
+  - Supervised
+  - Autonomous
+- Agent selection checkboxes:
+  - ChatGPT / OpenAI
+  - Claude
+  - Manus
+  - Replit
+  - Gemini
+  - Perplexity
+- Role assignment:
+  - Auto-assign roles button
+  - Manual role dropdown for each selected agent
+Roles:
+  - Strategist
+  - Creative Director
+  - Researcher
+  - Builder
+  - Code Reviewer
+  - UX Reviewer
+  - Final QA
+- Start Bridge Session button
+
+4. Session workspace page
+This is the main product screen.
+
+Layout:
+- Left column:
+  - Project goal
+  - Connected agents
+  - Autonomy mode
+  - Current status
+  - Estimated cost
+  - Approval required indicator
+
+- Center:
+  Shared AI conversation thread.
+  All agent messages appear in one thread.
+  Messages show:
+  - agent name
+  - role
+  - provider
+  - timestamp
+  - message content
+  - task linked to message
+
+- Right column:
+  Task board:
+  - Planned
+  - In Progress
+  - Review
+  - Complete
+
+Task cards show:
+  - task title
+  - assigned AI
+  - status
+  - cost estimate
+  - dependency if any
+
+Bottom input:
+- User can add an instruction to the active session:
+  Example: “Ask Replit to simplify the layout and ask ChatGPT to review the visual hierarchy.”
+
+Buttons:
+- Run next step
+- Run full supervised workflow
+- Request final review
+- Approve final output
+- Stop session
+
+5. Settings page
+Fields:
+- OpenAI API key
+- Anthropic API key placeholder
+- Gemini API key placeholder
+- Manus API key placeholder
+- Replit API key placeholder
+- Save settings
+
+Important:
+- Store API keys only locally in the MVP database.
+- Clearly label this as local MVP storage and not production-grade secret management.
+- Use environment variables where possible.
+- Do not expose API keys in frontend logs.
+
+Core backend features:
+
+1. Agent adapter interface
+
+Create a reusable TypeScript interface:
+
+interface AgentAdapter {
+  id: string;
+  name: string;
+  provider: string;
+  capabilities: string[];
+  runTask(input: AgentTaskInput): Promise<AgentTaskResult>;
+}
+
+2. Implement OpenAI adapter
+
+Use OpenAI Responses API.
+Model should default to a low-cost model like gpt-4.1-mini or current equivalent configurable through env.
+The OpenAI adapter should accept:
+- system role
+- project goal
+- shared memory summary
+- task instruction
+- previous messages
+
+Return:
+- message text
+- suggested next tasks
+- completion status
+- confidence
+
+3. Implement mock adapters
+
+For Claude, Manus, Replit, Gemini, and Perplexity, create mock adapters that generate realistic placeholder responses without API calls.
+
+Each mock adapter should behave based on role:
+- Manus mock: research/execution style output
+- Replit mock: builder/coding/deployment style output
+- Claude mock: reviewer/writing/logic critique
+- Gemini mock: multimodal/contextual analysis
+- Perplexity mock: research summary
+
+This lets the product work immediately without needing all real APIs.
+
+4. Task router
+
+Build a task router that chooses the best agent based on:
+- selected agents
+- agent role
+- task type
+- capabilities
+- cost preference
+- current task status
+
+Task types:
+- planning
+- research
+- creative_direction
+- copywriting
+- build
+- code_review
+- ux_review
+- final_qa
+- deployment_approval
+
+5. Cost-aware routing
+
+Implement a simple cost-aware router.
+
+Rules:
+- Use mock/free agents when available for low-risk tasks
+- Use OpenAI for reasoning, planning, creative direction, and final review
+- Use Replit adapter for build tasks
+- Use Manus or Perplexity adapter for research
+- Use Claude adapter for review if selected
+- Add estimated cost per task
+- Show total estimated cost in UI
+
+6. Shared memory
+
+For each session maintain:
+- project goal
+- selected agents
+- autonomy mode
+- current summary
+- decisions made
+- tasks
+- messages
+- final output
+
+After each agent response, update shared memory summary.
+
+7. Agent conversation loop
+
+Create a controlled multi-agent loop:
+- Step 1: BridgeAI creates project plan
+- Step 2: Router assigns tasks
+- Step 3: Assigned agent responds
+- Step 4: BridgeAI updates memory
+- Step 5: Reviewer agent reviews if needed
+- Step 6: Builder agent revises if needed
+- Step 7: Final QA produces final result
+- Step 8: User approval required before deployment/publishing
+
+Prevent infinite loops:
+- max 8 agent turns per “run full supervised workflow”
+- max 2 retries per task
+- stop if final QA says complete
+- stop if approval required
+
+8. Approval layer
+
+Approval should be required for:
+- deployment
+- publishing
+- sending emails
+- deleting files
+- purchases
+- external communications
+- use of sensitive credentials
+
+For MVP, show approval modal and log approval action.
+
+9. Audit log
+
+Every action should be logged:
+- session created
+- task created
+- task assigned
+- agent message generated
+- memory updated
+- approval requested
+- approval granted
+- session completed
+- session stopped
+
+10. Database schema
+
+Use Prisma with SQLite.
+
+Models:
+- Session
+- Agent
+- Task
+- Message
+- Memory
+- Approval
+- AuditLog
+- Setting
+
+Session:
+- id
+- goal
+- status
+- autonomyMode
+- estimatedCost
+- finalOutput
+- createdAt
+- updatedAt
+
+Agent:
+- id
+- sessionId
+- name
+- provider
+- role
+- capabilities json
+- isMock
+
+Task:
+- id
+- sessionId
+- title
+- description
+- type
+- status
+- assignedAgentId
+- costEstimate
+- dependencyTaskId
+- createdAt
+- updatedAt
+
+Message:
+- id
+- sessionId
+- agentId nullable
+- role
+- provider
+- content
+- taskId nullable
+- createdAt
+
+Memory:
+- id
+- sessionId
+- summary
+- decisions json
+- updatedAt
+
+Approval:
+- id
+- sessionId
+- type
+- description
+- status
+- createdAt
+- approvedAt
+
+AuditLog:
+- id
+- sessionId
+- eventType
+- description
+- metadata json
+- createdAt
+
+Setting:
+- id
+- key
+- value
+- createdAt
+- updatedAt
+
+11. API routes
+
+Create API routes:
+- GET /api/sessions
+- POST /api/sessions
+- GET /api/sessions/:id
+- POST /api/sessions/:id/run-next
+- POST /api/sessions/:id/run-full
+- POST /api/sessions/:id/message
+- POST /api/sessions/:id/approve
+- POST /api/sessions/:id/stop
+- GET /api/settings
+- POST /api/settings
+
+12. UI quality
+
+Make UI polished:
+- modern SaaS look
+- dark/light neutral styling
+- clean cards
+- clear agent badges
+- status pills
+- task board columns
+- readable message thread
+- responsive layout
+- no broken links
+- no placeholder pages except clearly labelled future integrations
+
+13. Seed/demo data
+
+Include a demo session:
+Goal:
+“Build a premium landing page for a high-ticket fitness coach.”
+
+Agents:
+- ChatGPT as Creative Director
+- Manus as Researcher
+- Replit as Builder
+- Claude as Reviewer
+
+Demo should show:
+- planning
+- research message
+- creative direction message
+- build instruction
+- review
+- final QA
+
+14. README
+
+Create a complete README with:
+- what BridgeAI is
+- how to run locally
+- how to add OpenAI API key
+- how to use mock agents
+- how to replace mock adapters with real APIs
+- architecture overview
+- environment variables
+- Replit setup
+- future roadmap
+
+15. Environment variables
+
+Create .env.example:
+DATABASE_URL="file:./dev.db"
+OPENAI_API_KEY=""
+OPENAI_MODEL="gpt-4.1-mini"
+
+16. Build quality
+
+Make sure:
+- npm install works
+- npm run dev works
+- Prisma migration works
+- app starts without errors
+- all pages load
+- demo mode works even without OpenAI key
+- OpenAI mode works if key is added
+- TypeScript has no major errors
+- code is modular and easy to extend
+- do not overbuild authentication yet
+- do not add paid services
+- do not use external databases
+- keep it cheap and self-contained
+
+Final deliverable:
+A working Replit-ready BridgeAI MVP web app that demonstrates plug-and-play AI-to-AI collaboration using one real OpenAI adapter and mock adapters for other AI providers.
