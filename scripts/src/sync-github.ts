@@ -11,7 +11,7 @@
 
 import { ReplitConnectors } from "@replit/connectors-sdk";
 import { execSync } from "child_process";
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, existsSync, statSync, openSync, readSync, closeSync } from "fs";
 import { join } from "path";
 
 const connectors = new ReplitConnectors();
@@ -19,6 +19,31 @@ const connectors = new ReplitConnectors();
 const OWNER = "leego972";
 const REPO = "bridge-ai";
 const BRANCH = "main";
+
+/**
+ * Binary files larger than this will be skipped with a warning instead of
+ * being uploaded. Override via the SYNC_MAX_BINARY_BYTES env var.
+ * Default: 10 MB.
+ */
+const MAX_BINARY_FILE_BYTES =
+  parseInt(process.env["SYNC_MAX_BINARY_BYTES"] ?? "", 10) || 10 * 1024 * 1024;
+
+/**
+ * Returns true if the first bytes of a file look like binary content.
+ * Uses the same heuristic as git: check for a NUL byte in the first 8 000 bytes.
+ * Reads only a small chunk so it is safe to call on very large files.
+ */
+function isBinaryFile(absPath: string): boolean {
+  const SAMPLE = 8000;
+  const buf = Buffer.allocUnsafe(SAMPLE);
+  const fd = openSync(absPath, "r");
+  try {
+    const bytesRead = readSync(fd, buf, 0, SAMPLE, 0);
+    return buf.subarray(0, bytesRead).includes(0);
+  } finally {
+    closeSync(fd);
+  }
+}
 
 async function githubApi(path: string, options: RequestInit = {}): Promise<unknown> {
   const response = await connectors.proxy("github", path, {
@@ -133,6 +158,19 @@ async function buildTreeItems(fileModes: Map<string, string>): Promise<TreeItem[
     const mode = fileModes.get(file) ?? "100644";
     const type = mode === "120000" ? "blob" : "blob"; // symlinks are still blobs
 
+    // Skip binary files that exceed the size threshold to avoid silent failures.
+    // isBinaryFile reads only the first 8 KB so this is cheap even for large files.
+    const fileSize = statSync(absPath).size;
+    if (fileSize > MAX_BINARY_FILE_BYTES && isBinaryFile(absPath)) {
+      const limitMb = (MAX_BINARY_FILE_BYTES / (1024 * 1024)).toFixed(0);
+      const sizeMb = (fileSize / (1024 * 1024)).toFixed(1);
+      console.warn(
+        `[sync-github]   ! skipped binary file exceeding ${limitMb} MB limit (${sizeMb} MB): ${file}`,
+      );
+      continue;
+    }
+
+    // Read once and reuse the buffer for the blob upload below.
     const content = readFileSync(absPath);
     const blob = (await githubApi(`/repos/${OWNER}/${REPO}/git/blobs`, {
       method: "POST",
