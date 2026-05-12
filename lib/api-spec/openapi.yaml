@@ -417,6 +417,20 @@ components:
       required:
         - error
 
+    AgentModeSummary:
+      type: object
+      properties:
+        name:
+          type: string
+        provider:
+          type: string
+        isMock:
+          type: boolean
+      required:
+        - name
+        - provider
+        - isMock
+
     Session:
       type: object
       properties:
@@ -436,6 +450,10 @@ components:
           type: string
         updatedAt:
           type: string
+        agentModes:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentModeSummary"
       required:
         - id
         - goal
@@ -445,6 +463,7 @@ components:
         - finalOutput
         - createdAt
         - updatedAt
+        - agentModes
 
     SessionDetail:
       type: object

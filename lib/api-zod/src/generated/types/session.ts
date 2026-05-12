@@ -5,6 +5,7 @@
  * BridgeAI API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { AgentModeSummary } from "./agentModeSummary";
 
 export interface Session {
   id: number;
@@ -17,4 +18,5 @@ export interface Session {
   finalOutput: string | null;
   createdAt: string;
   updatedAt: string;
+  agentModes: AgentModeSummary[];
 }

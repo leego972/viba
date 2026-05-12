@@ -1,15 +1,72 @@
 import { Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { useListSessions, getListSessionsQueryKey } from "@workspace/api-client-react";
+import { useListSessions, type AgentModeSummary } from "@workspace/api-client-react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Activity, Clock, DollarSign } from "lucide-react";
+import { Plus, Activity, Clock, DollarSign, Layers, Zap, RotateCcw, Wifi, WifiOff } from "lucide-react";
 import { format } from "date-fns";
+
+interface BridgeStats {
+  totalSessions: number;
+  activeSessions: number;
+  completedSessions: number;
+  fallbackEvents: number;
+}
+
+function useStats() {
+  return useQuery<BridgeStats>({
+    queryKey: ["bridge-stats"],
+    queryFn: async () => {
+      const res = await fetch("/api/stats");
+      if (!res.ok) throw new Error("stats unavailable");
+      return res.json();
+    },
+    refetchInterval: 10_000,
+    retry: false,
+  });
+}
+
+function getSessionMode(agentModes: AgentModeSummary[]): "live" | "simulation" | "mixed" | "unknown" {
+  if (agentModes.length === 0) return "unknown";
+  const liveCount = agentModes.filter((a) => !a.isMock).length;
+  if (liveCount === agentModes.length) return "live";
+  if (liveCount === 0) return "simulation";
+  return "mixed";
+}
+
+function SessionModeBadge({ agentModes }: { agentModes: AgentModeSummary[] }) {
+  const mode = getSessionMode(agentModes);
+  if (mode === "unknown") return null;
+  if (mode === "live") {
+    return (
+      <Badge variant="outline" className="gap-1 text-xs border-emerald-500/40 text-emerald-400 bg-emerald-500/10">
+        <Wifi className="h-3 w-3" />
+        Live
+      </Badge>
+    );
+  }
+  if (mode === "simulation") {
+    return (
+      <Badge variant="outline" className="gap-1 text-xs border-slate-500/40 text-slate-400 bg-slate-500/10">
+        <WifiOff className="h-3 w-3" />
+        Simulation
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="gap-1 text-xs border-amber-500/40 text-amber-400 bg-amber-500/10">
+      <Wifi className="h-3 w-3" />
+      Mixed
+    </Badge>
+  );
+}
 
 export default function Dashboard() {
   const { data: sessions, isLoading, isError } = useListSessions();
+  const { data: stats } = useStats();
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -21,6 +78,29 @@ export default function Dashboard() {
       default: return "outline";
     }
   };
+
+  const statCards = [
+    {
+      label: "Total Sessions",
+      value: stats?.totalSessions ?? "—",
+      icon: Layers,
+      desc: "All-time bridge sessions",
+    },
+    {
+      label: "Active Now",
+      value: stats?.activeSessions ?? "—",
+      icon: Zap,
+      desc: "Sessions currently running",
+      highlight: (stats?.activeSessions ?? 0) > 0,
+    },
+    {
+      label: "API Fallbacks",
+      value: stats?.fallbackEvents ?? "—",
+      icon: RotateCcw,
+      desc: "Times a live call fell back to simulation",
+      warn: (stats?.fallbackEvents ?? 0) > 0,
+    },
+  ];
 
   return (
     <AppLayout>
@@ -36,6 +116,41 @@ export default function Dashboard() {
               New Session
             </Button>
           </Link>
+        </div>
+
+        {/* Stats row */}
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+          {statCards.map(({ label, value, icon: Icon, desc, highlight, warn }) => (
+            <Card
+              key={label}
+              className={
+                highlight
+                  ? "border-emerald-500/30 bg-emerald-500/5"
+                  : warn && value !== "—" && Number(value) > 0
+                    ? "border-amber-500/30 bg-amber-500/5"
+                    : ""
+              }
+            >
+              <CardContent className="pt-5 pb-4 flex items-center gap-4">
+                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${
+                  highlight ? "bg-emerald-500/10 border-emerald-500/20" :
+                  warn && Number(value) > 0 ? "bg-amber-500/10 border-amber-500/20" :
+                  "bg-muted border-border"
+                }`}>
+                  <Icon className={`h-5 w-5 ${
+                    highlight ? "text-emerald-400" :
+                    warn && Number(value) > 0 ? "text-amber-400" :
+                    "text-muted-foreground"
+                  }`} />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold leading-none">{value}</div>
+                  <div className="text-xs font-medium mt-1">{label}</div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5">{desc}</div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
 
         {isLoading ? (
@@ -77,10 +192,13 @@ export default function Dashboard() {
               <Link key={session.id} href={`/sessions/${session.id}`}>
                 <Card className="hover-elevate cursor-pointer transition-all hover:border-primary/50 h-full flex flex-col">
                   <CardHeader className="pb-3">
-                    <div className="flex justify-between items-start gap-4">
-                      <Badge variant={getStatusColor(session.status) as any} className="capitalize">
-                        {session.status}
-                      </Badge>
+                    <div className="flex flex-wrap justify-between items-start gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge variant={getStatusColor(session.status) as any} className="capitalize">
+                          {session.status}
+                        </Badge>
+                        <SessionModeBadge agentModes={session.agentModes} />
+                      </div>
                       <Badge variant="outline" className="text-xs font-normal">
                         {session.autonomyMode}
                       </Badge>

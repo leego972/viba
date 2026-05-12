@@ -13,6 +13,12 @@ export interface ErrorResponse {
   error: string;
 }
 
+export interface AgentModeSummary {
+  name: string;
+  provider: string;
+  isMock: boolean;
+}
+
 export interface Session {
   id: number;
   goal: string;
@@ -24,6 +30,7 @@ export interface Session {
   finalOutput: string | null;
   createdAt: string;
   updatedAt: string;
+  agentModes: AgentModeSummary[];
 }
 
 export interface Agent {

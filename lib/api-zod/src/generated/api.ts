@@ -27,6 +27,13 @@ export const ListSessionsResponseItem = zod.object({
   finalOutput: zod.string().nullable(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
+  agentModes: zod.array(
+    zod.object({
+      name: zod.string(),
+      provider: zod.string(),
+      isMock: zod.boolean(),
+    }),
+  ),
 });
 export const ListSessionsResponse = zod.array(ListSessionsResponseItem);
 
@@ -144,6 +151,13 @@ export const RunNextStepResponse = zod.object({
     finalOutput: zod.string().nullable(),
     createdAt: zod.string(),
     updatedAt: zod.string(),
+    agentModes: zod.array(
+      zod.object({
+        name: zod.string(),
+        provider: zod.string(),
+        isMock: zod.boolean(),
+      }),
+    ),
   }),
   newMessages: zod.array(
     zod.object({
@@ -209,6 +223,13 @@ export const RunFullWorkflowResponse = zod.object({
     finalOutput: zod.string().nullable(),
     createdAt: zod.string(),
     updatedAt: zod.string(),
+    agentModes: zod.array(
+      zod.object({
+        name: zod.string(),
+        provider: zod.string(),
+        isMock: zod.boolean(),
+      }),
+    ),
   }),
   newMessages: zod.array(
     zod.object({
@@ -305,6 +326,13 @@ export const StopSessionResponse = zod.object({
   finalOutput: zod.string().nullable(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
+  agentModes: zod.array(
+    zod.object({
+      name: zod.string(),
+      provider: zod.string(),
+      isMock: zod.boolean(),
+    }),
+  ),
 });
 
 /**

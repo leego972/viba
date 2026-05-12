@@ -68,10 +68,36 @@ async function logAudit(sessionId: number, eventType: string, description: strin
   });
 }
 
+/** Enriches a session row with the agentModes array required by the Session schema */
+async function withAgentModes<T extends { id: number }>(session: T) {
+  const agents = await db.select().from(agentsTable).where(eq(agentsTable.sessionId, session.id));
+  return {
+    ...session,
+    agentModes: agents.map((a) => ({ name: a.name, provider: a.provider, isMock: a.isMock })),
+  };
+}
+
 // GET /sessions
 router.get("/sessions", async (req, res): Promise<void> => {
   const sessions = await db.select().from(sessionsTable).orderBy(asc(sessionsTable.id));
-  res.json(serialize(sessions));
+  const agents = await db.select().from(agentsTable);
+
+  const agentsBySession = agents.reduce<Record<number, typeof agents>>((acc, agent) => {
+    if (!acc[agent.sessionId]) acc[agent.sessionId] = [];
+    acc[agent.sessionId]!.push(agent);
+    return acc;
+  }, {});
+
+  const result = sessions.map((session) => ({
+    ...session,
+    agentModes: (agentsBySession[session.id] ?? []).map((a) => ({
+      name: a.name,
+      provider: a.provider,
+      isMock: a.isMock,
+    })),
+  }));
+
+  res.json(serialize(result));
 });
 
 // POST /sessions
@@ -147,7 +173,7 @@ router.post("/sessions", async (req, res): Promise<void> => {
     decisions: [`Project goal defined: ${goal}`, `Autonomy mode: ${autonomyMode}`],
   });
 
-  res.status(201).json(serialize(session));
+  res.status(201).json(serialize(await withAgentModes(session)));
 });
 
 // GET /sessions/:id
@@ -217,7 +243,7 @@ router.post("/sessions/:id/run-next", async (req, res): Promise<void> => {
   const [updatedSession] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, params.data.id));
 
   res.json(serialize({
-    session: updatedSession,
+    session: updatedSession ? await withAgentModes(updatedSession) : updatedSession,
     newMessages: result.newMessages,
     updatedTasks: result.updatedTasks,
     approvalRequired: result.approvalRequired,
@@ -244,7 +270,7 @@ router.post("/sessions/:id/run-full", async (req, res): Promise<void> => {
   const [updatedSession] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, params.data.id));
 
   res.json(serialize({
-    session: updatedSession,
+    session: updatedSession ? await withAgentModes(updatedSession) : updatedSession,
     newMessages: result.newMessages,
     updatedTasks: result.updatedTasks,
     approvalRequired: result.approvalRequired,
@@ -346,7 +372,7 @@ router.post("/sessions/:id/stop", async (req, res): Promise<void> => {
 
   await logAudit(params.data.id, "session_stopped", "Session stopped by user");
 
-  res.json(serialize(updated));
+  res.json(serialize(updated ? await withAgentModes(updated) : updated));
 });
 
 // GET /sessions/:id/agents
