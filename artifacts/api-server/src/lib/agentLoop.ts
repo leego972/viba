@@ -1,9 +1,10 @@
 import { db, sessionsTable, agentsTable, tasksTable, messagesTable, memoryTable, approvalsTable, auditLogsTable } from "@workspace/db";
 import type { Session, Agent, Task, Message } from "@workspace/db";
 import { eq, and, asc } from "drizzle-orm";
-import { buildAdapter } from "./agentFactory";
+import { buildAdapter, buildMockAdapter } from "./agentFactory";
 import { routeTask } from "./taskRouter";
 import { logger } from "./logger";
+import type { AgentTaskResult } from "./adapters/interface";
 
 const APPROVAL_TASK_TYPES = new Set(["final_qa"]);
 const MAX_TURNS = 8;
@@ -134,9 +135,8 @@ export async function runNextAgentStep(sessionId: number): Promise<{
   const recentMessages = previousMessages.slice(-6);
   const [memory] = await db.select().from(memoryTable).where(eq(memoryTable.sessionId, sessionId));
 
-  // Build adapter and run task
-  const adapter = await buildAdapter(assignedAgent);
-  const result = await adapter.runTask({
+  // Build adapter and run task — fall back to simulation if anything fails
+  const taskInput = {
     systemRole: assignedAgent.role,
     projectGoal: session.goal,
     memorySummary: memory?.summary ?? "",
@@ -147,7 +147,35 @@ export async function runNextAgentStep(sessionId: number): Promise<{
       agentName: m.agentName ?? undefined,
     })),
     taskType: nextTask.type,
-  });
+  };
+
+  let result: AgentTaskResult;
+  let usedFallback = false;
+
+  try {
+    const adapter = await buildAdapter(assignedAgent);
+    result = await adapter.runTask(taskInput);
+  } catch (err) {
+    logger.error(
+      { err, agentId: assignedAgent.id, provider: assignedAgent.provider, taskId: nextTask.id },
+      "Live adapter failed — falling back to simulation"
+    );
+    await logAudit(sessionId, "adapter_fallback", `Live ${assignedAgent.provider} call failed; falling back to simulation for task "${nextTask.title}"`, {
+      taskId: nextTask.id,
+      agentId: assignedAgent.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    const mockAdapter = buildMockAdapter(assignedAgent);
+    result = await mockAdapter.runTask(taskInput);
+    usedFallback = true;
+  }
+
+  if (usedFallback) {
+    result = {
+      ...result,
+      messageText: `⚠️ [Simulated — live ${assignedAgent.provider} API unavailable] ${result.messageText}`,
+    };
+  }
 
   // Save message
   const [newMsg] = await db
