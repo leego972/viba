@@ -59,7 +59,8 @@ export async function buildAdapter(agent: Agent): Promise<AgentAdapter> {
   if (provider === "openai") {
     const apiKey = await getSetting("OPENAI_API_KEY") ?? process.env.OPENAI_API_KEY ?? "";
     if (isValidKey(apiKey)) {
-      return new OpenAIAdapter(String(agent.id), agent.name, agent.role, apiKey);
+      const model = await getSetting("OPENAI_MODEL") ?? undefined;
+      return new OpenAIAdapter(String(agent.id), agent.name, agent.role, apiKey, model);
     }
     return new ChatGPTMockAdapter(String(agent.id), agent.name, agent.role);
   }
@@ -67,7 +68,8 @@ export async function buildAdapter(agent: Agent): Promise<AgentAdapter> {
   if (provider === "anthropic") {
     const apiKey = await getSetting("ANTHROPIC_API_KEY") ?? process.env.ANTHROPIC_API_KEY ?? "";
     if (isValidKey(apiKey)) {
-      return new AnthropicAdapter(String(agent.id), agent.name, agent.role, apiKey);
+      const model = await getSetting("ANTHROPIC_MODEL") ?? undefined;
+      return new AnthropicAdapter(String(agent.id), agent.name, agent.role, apiKey, model);
     }
     return new ClaudeMockAdapter(String(agent.id), agent.name, agent.role);
   }
@@ -75,7 +77,8 @@ export async function buildAdapter(agent: Agent): Promise<AgentAdapter> {
   if (provider === "google") {
     const apiKey = await getSetting("GEMINI_API_KEY") ?? process.env.GEMINI_API_KEY ?? "";
     if (isValidKey(apiKey)) {
-      return new GeminiAdapter(String(agent.id), agent.name, agent.role, apiKey);
+      const model = await getSetting("GEMINI_MODEL") ?? undefined;
+      return new GeminiAdapter(String(agent.id), agent.name, agent.role, apiKey, model);
     }
     return new GeminiMockAdapter(String(agent.id), agent.name, agent.role);
   }
@@ -83,7 +86,8 @@ export async function buildAdapter(agent: Agent): Promise<AgentAdapter> {
   if (provider === "perplexity") {
     const apiKey = await getSetting("PERPLEXITY_API_KEY") ?? process.env.PERPLEXITY_API_KEY ?? "";
     if (isValidKey(apiKey)) {
-      return new PerplexityAdapter(String(agent.id), agent.name, agent.role, apiKey);
+      const model = await getSetting("PERPLEXITY_MODEL") ?? undefined;
+      return new PerplexityAdapter(String(agent.id), agent.name, agent.role, apiKey, model);
     }
     return new PerplexityMockAdapter(String(agent.id), agent.name, agent.role);
   }
