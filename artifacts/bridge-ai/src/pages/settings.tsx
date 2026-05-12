@@ -7,33 +7,87 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Key, ShieldCheck, Zap } from "lucide-react";
 
-const PROVIDERS = [
+type ModelOption = { value: string; label: string };
+
+type ProviderConfig = {
+  key: string;
+  label: string;
+  placeholder: string;
+  hint: string;
+  modelKey?: string;
+  defaultModel?: string;
+  models?: ModelOption[];
+};
+
+const PROVIDERS: ProviderConfig[] = [
   {
     key: "OPENAI_API_KEY",
     label: "OpenAI API Key (ChatGPT)",
     placeholder: "sk-...",
-    hint: "Powers ChatGPT agents — gpt-4.1-mini by default.",
+    hint: "Powers ChatGPT agents.",
+    modelKey: "OPENAI_MODEL",
+    defaultModel: "gpt-4.1-mini",
+    models: [
+      { value: "gpt-4.1-mini", label: "GPT-4.1 Mini (default)" },
+      { value: "gpt-4.1", label: "GPT-4.1" },
+      { value: "gpt-4o", label: "GPT-4o" },
+      { value: "gpt-4o-mini", label: "GPT-4o Mini" },
+      { value: "o3-mini", label: "o3-mini" },
+      { value: "o1-mini", label: "o1-mini" },
+    ],
   },
   {
     key: "ANTHROPIC_API_KEY",
     label: "Anthropic API Key (Claude)",
     placeholder: "sk-ant-...",
-    hint: "Powers Claude agents — claude-3-5-haiku by default.",
+    hint: "Powers Claude agents.",
+    modelKey: "ANTHROPIC_MODEL",
+    defaultModel: "claude-3-5-haiku-20241022",
+    models: [
+      { value: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku (default)" },
+      { value: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet" },
+      { value: "claude-3-opus-20240229", label: "Claude 3 Opus" },
+      { value: "claude-3-haiku-20240307", label: "Claude 3 Haiku" },
+    ],
   },
   {
     key: "GEMINI_API_KEY",
     label: "Google Gemini API Key",
     placeholder: "AIza...",
-    hint: "Powers Gemini agents — gemini-2.0-flash by default.",
+    hint: "Powers Gemini agents.",
+    modelKey: "GEMINI_MODEL",
+    defaultModel: "gemini-2.0-flash",
+    models: [
+      { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash (default)" },
+      { value: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite" },
+      { value: "gemini-2.5-pro-preview-05-06", label: "Gemini 2.5 Pro" },
+      { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro" },
+      { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash" },
+    ],
   },
   {
     key: "PERPLEXITY_API_KEY",
     label: "Perplexity API Key",
     placeholder: "pplx-...",
-    hint: "Powers Perplexity research agents — sonar model.",
+    hint: "Powers Perplexity research agents.",
+    modelKey: "PERPLEXITY_MODEL",
+    defaultModel: "sonar",
+    models: [
+      { value: "sonar", label: "Sonar (default)" },
+      { value: "sonar-pro", label: "Sonar Pro" },
+      { value: "sonar-reasoning", label: "Sonar Reasoning" },
+      { value: "sonar-reasoning-pro", label: "Sonar Reasoning Pro" },
+    ],
   },
   {
     key: "REPLIT_API_KEY",
@@ -49,6 +103,10 @@ const PROVIDERS = [
   },
 ];
 
+const ALL_SETTING_KEYS = PROVIDERS.flatMap((p) =>
+  p.modelKey ? [p.key, p.modelKey] : [p.key]
+);
+
 type KeyState = Record<string, string>;
 
 export default function Settings() {
@@ -57,13 +115,13 @@ export default function Settings() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const [keys, setKeys] = useState<KeyState>(() =>
-    Object.fromEntries(PROVIDERS.map((p) => [p.key, ""]))
+  const [values, setValues] = useState<KeyState>(() =>
+    Object.fromEntries(ALL_SETTING_KEYS.map((k) => [k, ""]))
   );
 
   useEffect(() => {
     if (settings) {
-      setKeys((prev) => {
+      setValues((prev) => {
         const next = { ...prev };
         settings.forEach((s) => {
           if (s.key in next) next[s.key] = s.value ?? "";
@@ -73,12 +131,16 @@ export default function Settings() {
     }
   }, [settings]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setKeys((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+  const handleKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setValues((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+  };
+
+  const handleModelChange = (modelKey: string, value: string) => {
+    setValues((prev) => ({ ...prev, [modelKey]: value }));
   };
 
   const handleSave = () => {
-    const settingsToSave = Object.entries(keys)
+    const settingsToSave = Object.entries(values)
       .filter(([_, value]) => value !== "")
       .map(([key, value]) => ({ key, value }));
 
@@ -86,7 +148,7 @@ export default function Settings() {
       { data: { settings: settingsToSave } },
       {
         onSuccess: () => {
-          toast({ title: "Settings saved", description: "Your API keys have been updated." });
+          toast({ title: "Settings saved", description: "Your settings have been updated." });
           queryClient.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
         },
         onError: () => {
@@ -101,7 +163,7 @@ export default function Settings() {
       <div className="flex flex-col space-y-6 max-w-3xl mx-auto">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-          <p className="text-muted-foreground">Manage your AI provider API keys</p>
+          <p className="text-muted-foreground">Manage your AI provider API keys and models</p>
         </div>
 
         <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 flex gap-4">
@@ -119,27 +181,27 @@ export default function Settings() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Key className="h-5 w-5" /> API Keys
+              <Key className="h-5 w-5" /> API Keys &amp; Models
             </CardTitle>
             <CardDescription>
-              Enter keys for the providers you want to use. Sessions with a valid key call the{" "}
+              Enter keys for the providers you want to use, and optionally pick a model. Sessions with a valid key call the{" "}
               <span className="inline-flex items-center gap-1 font-medium text-green-600 dark:text-green-400">
                 <Zap className="h-3 w-3" /> live
               </span>{" "}
               model; others run a simulation.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-5">
+          <CardContent className="space-y-6">
             <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} id="settings-form">
               {isLoading ? (
                 <div className="space-y-4">
                   {[1, 2, 3, 4, 5, 6].map((i) => (
-                    <div key={i} className="h-16 bg-muted rounded animate-pulse" />
+                    <div key={i} className="h-20 bg-muted rounded animate-pulse" />
                   ))}
                 </div>
               ) : (
-                PROVIDERS.map(({ key, label, placeholder, hint }) => (
-                  <div key={key} className="space-y-1.5">
+                PROVIDERS.map(({ key, label, placeholder, hint, modelKey, defaultModel, models }) => (
+                  <div key={key} className="space-y-2">
                     <div className="flex items-center gap-2">
                       <Label htmlFor={key}>{label}</Label>
                       <Badge variant="outline" className="text-green-600 border-green-500/40 bg-green-500/10 gap-1 px-1.5 py-0 text-[10px]">
@@ -151,9 +213,31 @@ export default function Settings() {
                       id={key}
                       name={key}
                       placeholder={placeholder}
-                      value={keys[key] ?? ""}
-                      onChange={handleChange}
+                      value={values[key] ?? ""}
+                      onChange={handleKeyChange}
                     />
+                    {modelKey && models && (
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor={modelKey} className="text-xs text-muted-foreground whitespace-nowrap">
+                          Model
+                        </Label>
+                        <Select
+                          value={values[modelKey] || defaultModel}
+                          onValueChange={(v) => handleModelChange(modelKey, v)}
+                        >
+                          <SelectTrigger id={modelKey} className="h-8 text-xs">
+                            <SelectValue placeholder={`Default: ${defaultModel}`} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {models.map((m) => (
+                              <SelectItem key={m.value} value={m.value} className="text-xs">
+                                {m.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                     <p className="text-xs text-muted-foreground">{hint}</p>
                   </div>
                 ))
