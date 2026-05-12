@@ -31,6 +31,28 @@ function isValidKey(key: string | null): key is string {
   return typeof key === "string" && key.length > 10;
 }
 
+export function buildMockAdapter(agent: Agent): AgentAdapter {
+  const provider = agent.provider.toLowerCase();
+
+  if (provider === "anthropic") {
+    return new ClaudeMockAdapter(String(agent.id), agent.name, agent.role);
+  }
+  if (provider === "google") {
+    return new GeminiMockAdapter(String(agent.id), agent.name, agent.role);
+  }
+  if (provider === "perplexity") {
+    return new PerplexityMockAdapter(String(agent.id), agent.name, agent.role);
+  }
+  if (provider === "replit") {
+    return new ReplitMockAdapter(String(agent.id), agent.name, agent.role);
+  }
+  if (provider === "manus") {
+    return new ManusMockAdapter(String(agent.id), agent.name, agent.role);
+  }
+
+  return new ChatGPTMockAdapter(String(agent.id), agent.name, agent.role);
+}
+
 export async function buildAdapter(agent: Agent): Promise<AgentAdapter> {
   const provider = agent.provider.toLowerCase();
 
