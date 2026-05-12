@@ -17,8 +17,15 @@ localPort = 5173
 [services.development]
 run = "pnpm --filter @workspace/bridge-ai run dev"
 
+[services.production.build]
+args = ["pnpm", "--filter", "@workspace/bridge-ai", "run", "build"]
+
+[services.production.build.env]
+PORT = "5173"
+BASE_PATH = "/"
+NODE_ENV = "production"
+
 [services.production]
-build = [ "pnpm", "--filter", "@workspace/bridge-ai", "run", "build" ]
 publicDir = "artifacts/bridge-ai/dist/public"
 serve = "static"
 
