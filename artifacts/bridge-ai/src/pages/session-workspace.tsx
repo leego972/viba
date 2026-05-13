@@ -104,25 +104,28 @@ export default function SessionWorkspace() {
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [pendingApproval, setPendingApproval] = useState<any>(null);
 
-  // Banner dismissal — stores the count of fallback messages seen at dismissal time.
-  // If new fallback messages arrive after dismissal, banner re-appears automatically.
+  // Banner dismissal — stores the ISO timestamp at which the user dismissed the banner.
+  // If new simulated messages arrive after that timestamp, the banner re-appears automatically.
   const storageKey = `bridge_fallback_banner_${sessionId}`;
-  const [dismissedAtCount, setDismissedAtCount] = useState<number>(() => {
+  const [dismissedAt, setDismissedAt] = useState<string | null>(() => {
     try {
-      const v = localStorage.getItem(storageKey);
-      return v ? parseInt(v, 10) : 0;
+      const stored = localStorage.getItem(storageKey);
+      // Legacy guard: old count-based values were plain integers — treat as "not dismissed"
+      if (stored !== null && isNaN(Date.parse(stored))) return null;
+      return stored;
     } catch {
-      return 0;
+      return null;
     }
   });
 
   // Prune stale keys from localStorage once on mount (#47)
   useEffect(() => { pruneStaleLocalStorageKeys(); }, []);
 
-  const dismissFallbackBanner = (currentFallbackCount: number) => {
-    setDismissedAtCount(currentFallbackCount);
+  const dismissFallbackBanner = () => {
+    const now = new Date().toISOString();
+    setDismissedAt(now);
     try {
-      localStorage.setItem(storageKey, String(currentFallbackCount));
+      localStorage.setItem(storageKey, now);
     } catch {}
   };
 
@@ -164,12 +167,18 @@ export default function SessionWorkspace() {
 
   // Detect fallback messages
   const fallbackMessages = messages.filter(m => m.content?.startsWith(SIMULATED_PREFIX));
-  const currentFallbackCount = fallbackMessages.length;
-  const hasFallbackMessages = currentFallbackCount > 0;
+  const hasFallbackMessages = fallbackMessages.length > 0;
   const fallbackAgentNames = [...new Set(fallbackMessages.map(m => m.agentName).filter(Boolean))];
   const fallbackAgentCount = fallbackAgentNames.length;
-  // Re-show banner automatically if new fallbacks arrive after user dismissed (#46)
-  const showFallbackBanner = hasFallbackMessages && currentFallbackCount > dismissedAtCount;
+  // Latest simulated message timestamp — used to detect new fallbacks after dismissal (#46)
+  const latestFallbackTimestamp = fallbackMessages.reduce<string | null>((latest, m) => {
+    if (!m.createdAt) return latest;
+    return latest === null || m.createdAt > latest ? m.createdAt : latest;
+  }, null);
+  // Re-show banner if a simulated message arrived after the user last dismissed it
+  const showFallbackBanner = hasFallbackMessages && (
+    dismissedAt === null || (latestFallbackTimestamp !== null && latestFallbackTimestamp > dismissedAt)
+  );
 
   // Spike alert from stats API — shown in workspace too (#54)
   const recentSpikeProviders = stats?.recentSpikeProviders ?? [];
@@ -338,7 +347,7 @@ export default function SessionWorkspace() {
               badge. Check your API keys if you expected a live response.
             </span>
             <button
-              onClick={() => dismissFallbackBanner(currentFallbackCount)}
+              onClick={() => dismissFallbackBanner()}
               className="shrink-0 rounded p-0.5 hover:bg-amber-500/20 transition-colors"
               aria-label="Dismiss banner"
             >
