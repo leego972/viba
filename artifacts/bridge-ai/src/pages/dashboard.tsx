@@ -344,10 +344,20 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent className="pt-0">
               <div className="flex flex-wrap gap-2">
-                {modelUsage.map(({ model, count }) => (
+                {modelUsage.map(({ model, count, liveCount, simulatedCount }) => (
                   <div key={model} className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-1.5">
                     <span className="text-xs font-mono">{model}</span>
                     <Badge variant="secondary" className="text-[10px] px-1.5 h-4">{count} msg{count !== 1 ? "s" : ""}</Badge>
+                    {liveCount > 0 && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-emerald-500/40 text-emerald-400 bg-emerald-500/10">
+                        {liveCount} live
+                      </Badge>
+                    )}
+                    {simulatedCount > 0 && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-amber-500/40 text-amber-400 bg-amber-500/10">
+                        {simulatedCount} sim
+                      </Badge>
+                    )}
                   </div>
                 ))}
               </div>

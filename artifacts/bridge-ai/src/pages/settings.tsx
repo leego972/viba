@@ -235,25 +235,40 @@ export default function Settings() {
                 <Cpu className="h-4 w-4 text-muted-foreground" />
                 Model Usage
               </CardTitle>
-              <CardDescription>Messages generated per model across all sessions</CardDescription>
+              <CardDescription>Messages generated per model across all sessions — live vs. simulated</CardDescription>
             </CardHeader>
             <CardContent className="pt-0">
-              <div className="space-y-2">
-                {modelUsage.map(({ model, count }) => {
+              <div className="space-y-3">
+                {modelUsage.map(({ model, count, liveCount, simulatedCount }) => {
                   const total = modelUsage.reduce((s, m) => s + m.count, 0);
                   const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                  const livePct = count > 0 ? Math.round((liveCount / count) * 100) : 0;
                   return (
-                    <div key={model} className="flex items-center gap-3">
-                      <span className="text-xs font-mono w-44 truncate shrink-0">{model}</span>
-                      <div className="flex-1 bg-muted rounded-full h-1.5 overflow-hidden">
-                        <div
-                          className="h-full bg-primary rounded-full transition-all"
-                          style={{ width: `${pct}%` }}
-                        />
+                    <div key={model} className="space-y-1">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-mono w-44 truncate shrink-0">{model}</span>
+                        <div className="flex-1 bg-muted rounded-full h-1.5 overflow-hidden">
+                          <div
+                            className="h-full bg-primary rounded-full transition-all"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-muted-foreground w-16 text-right shrink-0">
+                          {count} msg{count !== 1 ? "s" : ""} ({pct}%)
+                        </span>
                       </div>
-                      <span className="text-xs text-muted-foreground w-16 text-right shrink-0">
-                        {count} msg{count !== 1 ? "s" : ""} ({pct}%)
-                      </span>
+                      <div className="flex items-center gap-2 pl-44 ml-0">
+                        {liveCount > 0 && (
+                          <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-emerald-500/40 text-emerald-400 bg-emerald-500/10">
+                            {liveCount} live ({livePct}%)
+                          </Badge>
+                        )}
+                        {simulatedCount > 0 && (
+                          <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-amber-500/40 text-amber-400 bg-amber-500/10">
+                            {simulatedCount} sim ({100 - livePct}%)
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                   );
                 })}

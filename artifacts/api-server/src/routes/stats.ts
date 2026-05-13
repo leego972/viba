@@ -75,6 +75,8 @@ router.get("/stats", async (req, res): Promise<void> => {
     .select({
       model: messagesTable.model,
       count: sql<number>`count(*)::int`,
+      simulatedCount: sql<number>`sum(case when ${messagesTable.content} like '⚠️ [Simulated%' then 1 else 0 end)::int`,
+      liveCount: sql<number>`sum(case when ${messagesTable.content} not like '⚠️ [Simulated%' then 1 else 0 end)::int`,
     })
     .from(messagesTable)
     .where(sql`${messagesTable.model} IS NOT NULL AND ${messagesTable.model} <> ''`)
@@ -137,7 +139,12 @@ router.get("/stats", async (req, res): Promise<void> => {
     fallbackEvents: fallbacks?.total ?? 0,
     fallbacksByProvider: byProvider,
     fallbackTrend: trend,
-    modelUsage: modelUsage.map((m) => ({ model: m.model ?? "unknown", count: m.count })),
+    modelUsage: modelUsage.map((m) => ({
+      model: m.model ?? "unknown",
+      count: m.count,
+      liveCount: m.liveCount ?? 0,
+      simulatedCount: m.simulatedCount ?? 0,
+    })),
     modelUsageBreakdown: classifyModelRows(modelUsageRaw),
     spikeProviders,
     recentSpikeProviders,
