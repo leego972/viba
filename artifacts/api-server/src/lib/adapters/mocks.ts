@@ -16,6 +16,7 @@ abstract class MockAdapter implements AgentAdapter {
   abstract id: string;
   abstract name: string;
   abstract provider: string;
+  abstract model: string;
   abstract capabilities: string[];
   abstract role: string;
   isMock = true;
@@ -42,7 +43,7 @@ abstract class MockAdapter implements AgentAdapter {
 
 // ── ChatGPT / OpenAI ──────────────────────────────────────────────────────────
 export class ChatGPTMockAdapter extends MockAdapter {
-  id: string; name: string; provider = "openai"; role: string;
+  id: string; name: string; provider = "openai"; model = "gpt-4.1-mini (sim)"; role: string;
   capabilities = ["planning", "reasoning", "creative_direction", "code_review", "final_qa"];
 
   constructor(id: string, name: string, role: string) { super(); this.id = id; this.name = name; this.role = role; }
@@ -76,7 +77,7 @@ export class ChatGPTMockAdapter extends MockAdapter {
 
 // ── Claude / Anthropic ────────────────────────────────────────────────────────
 export class ClaudeMockAdapter extends MockAdapter {
-  id: string; name: string; provider = "anthropic"; role: string;
+  id: string; name: string; provider = "anthropic"; model = "claude-3-5-haiku-20241022 (sim)"; role: string;
   capabilities = ["code_review", "writing", "logic_critique", "ux_review"];
 
   constructor(id: string, name: string, role: string) { super(); this.id = id; this.name = name; this.role = role; }
@@ -108,7 +109,7 @@ export class ClaudeMockAdapter extends MockAdapter {
 
 // ── Manus ─────────────────────────────────────────────────────────────────────
 export class ManusMockAdapter extends MockAdapter {
-  id: string; name: string; provider = "manus"; role: string;
+  id: string; name: string; provider = "manus"; model = "manus-deep-research-1 (sim)"; role: string;
   capabilities = ["research", "execution", "data_gathering", "analysis"];
 
   constructor(id: string, name: string, role: string) { super(); this.id = id; this.name = name; this.role = role; }
@@ -137,7 +138,7 @@ export class ManusMockAdapter extends MockAdapter {
 
 // ── Replit ────────────────────────────────────────────────────────────────────
 export class ReplitMockAdapter extends MockAdapter {
-  id: string; name: string; provider = "replit"; role: string;
+  id: string; name: string; provider = "replit"; model = "replit-code-v1-3b (sim)"; role: string;
   capabilities = ["build", "code", "deployment", "implementation"];
 
   constructor(id: string, name: string, role: string) { super(); this.id = id; this.name = name; this.role = role; }
@@ -166,7 +167,7 @@ export class ReplitMockAdapter extends MockAdapter {
 
 // ── Gemini / Google ───────────────────────────────────────────────────────────
 export class GeminiMockAdapter extends MockAdapter {
-  id: string; name: string; provider = "google"; role: string;
+  id: string; name: string; provider = "google"; model = "gemini-2.0-flash (sim)"; role: string;
   capabilities = ["multimodal", "contextual_analysis", "summarization", "creative"];
 
   constructor(id: string, name: string, role: string) { super(); this.id = id; this.name = name; this.role = role; }
@@ -198,7 +199,7 @@ export class GeminiMockAdapter extends MockAdapter {
 
 // ── Perplexity ────────────────────────────────────────────────────────────────
 export class PerplexityMockAdapter extends MockAdapter {
-  id: string; name: string; provider = "perplexity"; role: string;
+  id: string; name: string; provider = "perplexity"; model = "sonar (sim)"; role: string;
   capabilities = ["research_summary", "fact_checking", "citation", "web_search"];
 
   constructor(id: string, name: string, role: string) { super(); this.id = id; this.name = name; this.role = role; }

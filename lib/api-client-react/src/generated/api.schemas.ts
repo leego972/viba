@@ -81,6 +81,8 @@ export interface Message {
   role: string;
   /** @nullable */
   provider: string | null;
+  /** @nullable */
+  model: string | null;
   content: string;
   /** @nullable */
   taskId: number | null;
