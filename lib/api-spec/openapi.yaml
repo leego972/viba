@@ -14,6 +14,8 @@ tags:
     description: Bridge session management
   - name: settings
     description: Application settings
+  - name: stats
+    description: Aggregated usage statistics
 paths:
   /healthz:
     get:
@@ -399,6 +401,20 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /stats:
+    get:
+      operationId: getStats
+      tags: [stats]
+      summary: Get aggregated usage statistics
+      description: Returns session counts and fallback event counts grouped by provider
+      responses:
+        "200":
+          description: Aggregated stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BridgeStats"
+
 components:
   schemas:
     HealthStatus:
@@ -408,6 +424,39 @@ components:
           type: string
       required:
         - status
+
+    ProviderFallbackCount:
+      type: object
+      properties:
+        provider:
+          type: string
+        count:
+          type: integer
+      required:
+        - provider
+        - count
+
+    BridgeStats:
+      type: object
+      properties:
+        totalSessions:
+          type: integer
+        activeSessions:
+          type: integer
+        completedSessions:
+          type: integer
+        fallbackEvents:
+          type: integer
+        fallbacksByProvider:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProviderFallbackCount"
+      required:
+        - totalSessions
+        - activeSessions
+        - completedSessions
+        - fallbackEvents
+        - fallbacksByProvider
 
     ErrorResponse:
       type: object

@@ -9,6 +9,19 @@ export interface HealthStatus {
   status: string;
 }
 
+export interface ProviderFallbackCount {
+  provider: string;
+  count: number;
+}
+
+export interface BridgeStats {
+  totalSessions: number;
+  activeSessions: number;
+  completedSessions: number;
+  fallbackEvents: number;
+  fallbacksByProvider: ProviderFallbackCount[];
+}
+
 export interface ErrorResponse {
   error: string;
 }
