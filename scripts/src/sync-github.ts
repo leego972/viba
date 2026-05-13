@@ -330,6 +330,56 @@ async function reportFailureAsGitHubIssue(errorMessage: string): Promise<void> {
     }
   })();
 
+  // Check whether an open sync-failure issue already exists to avoid duplicates.
+  type Issue = { number: number; title: string };
+  let existingIssues: Issue[] = [];
+  try {
+    existingIssues = (await githubApi(
+      `/repos/${OWNER}/${REPO}/issues?labels=sync-failure&state=open&per_page=1`,
+    )) as Issue[];
+  } catch (err) {
+    console.warn(
+      `[sync-github] Could not check for existing sync-failure issues: ${(err as Error).message}`,
+    );
+  }
+
+  if (existingIssues.length > 0) {
+    // An open issue already exists — add a comment instead of opening a new one.
+    const existing = existingIssues[0]!;
+    const comment = [
+      `The GitHub sync failed again during post-merge setup.`,
+      ``,
+      `**Error:**`,
+      "```",
+      errorMessage,
+      "```",
+      ``,
+      `**Commit:** \`${localSha}\``,
+      `**Repo:** https://github.com/${OWNER}/${REPO}`,
+      ``,
+      `**To retry manually:**`,
+      "```bash",
+      `pnpm --filter @workspace/scripts run sync-github`,
+      "```",
+    ].join("\n");
+
+    try {
+      await githubApi(`/repos/${OWNER}/${REPO}/issues/${existing.number}/comments`, {
+        method: "POST",
+        body: JSON.stringify({ body: comment }),
+      });
+      console.error(
+        `[sync-github] Added comment to existing sync-failure issue #${existing.number}: ${existing.title}`,
+      );
+    } catch (commentErr) {
+      console.error(
+        `[sync-github] Could not comment on existing issue #${existing.number}: ${(commentErr as Error).message}`,
+      );
+    }
+    return;
+  }
+
+  // No open sync-failure issue found — open a new one.
   const title = `[Replit sync] GitHub sync failed after merge (${localSha})`;
   const body = [
     `The automatic GitHub sync failed during post-merge setup.`,
