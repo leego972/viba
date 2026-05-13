@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, auditLogsTable, sessionsTable, messagesTable, settingsTable } from "@workspace/db";
 import { eq, sql, desc } from "drizzle-orm";
-import { detectSpikeProviders } from "../lib/spikeDetect";
+import { detectSpikeProviders, type ProviderCount } from "../lib/spikeDetect";
 import { sendSpikeNotifications } from "../lib/spikeNotify";
 
 const router: IRouter = Router();
@@ -11,6 +11,26 @@ const ALERT_WINDOW_HOURS = 1;
 const LEGACY_SPIKE_THRESHOLD = 3;
 
 const SIMULATED_PREFIX = "⚠️ [Simulated";
+
+export function resolveAlertSettings(settingsMap: Map<string, string>): {
+  alertEnabled: boolean;
+  alertThreshold: number;
+} {
+  const rawThreshold = settingsMap.get("FALLBACK_ALERT_THRESHOLD");
+  const alertThreshold = rawThreshold
+    ? Math.max(1, parseInt(rawThreshold, 10) || DEFAULT_ALERT_THRESHOLD)
+    : DEFAULT_ALERT_THRESHOLD;
+  const alertEnabled = settingsMap.get("FALLBACK_ALERT_ENABLED") !== "false";
+  return { alertEnabled, alertThreshold };
+}
+
+export function computeRecentSpike(
+  recentByProvider: ProviderCount[],
+  alertEnabled: boolean,
+  alertThreshold: number
+): string[] {
+  return alertEnabled ? detectSpikeProviders(recentByProvider, alertThreshold) : [];
+}
 
 export function classifyModelRows(
   rows: Array<{ model: string | null; provider: string | null; simulated: boolean; count: number }>
@@ -108,9 +128,7 @@ router.get("/stats", async (req, res): Promise<void> => {
     );
 
   const alertSettingsMap = new Map(alertSettings.map((s) => [s.key, s.value]));
-  const rawThreshold = alertSettingsMap.get("FALLBACK_ALERT_THRESHOLD");
-  const alertThreshold = rawThreshold ? Math.max(1, parseInt(rawThreshold, 10) || DEFAULT_ALERT_THRESHOLD) : DEFAULT_ALERT_THRESHOLD;
-  const alertEnabled = alertSettingsMap.get("FALLBACK_ALERT_ENABLED") !== "false";
+  const { alertEnabled, alertThreshold } = resolveAlertSettings(alertSettingsMap);
 
   const recentByProvider = await db
     .select({
@@ -127,9 +145,7 @@ router.get("/stats", async (req, res): Promise<void> => {
     .groupBy(sql`metadata->>'provider'`)
     .orderBy(desc(sql`count(*)`));
 
-  const recentSpikeProviders = alertEnabled
-    ? detectSpikeProviders(recentByProvider, alertThreshold)
-    : [];
+  const recentSpikeProviders = computeRecentSpike(recentByProvider, alertEnabled, alertThreshold);
 
   if (recentSpikeProviders.length > 0) {
     const webhookUrl = alertSettingsMap.get("NOTIFICATION_WEBHOOK_URL") ?? null;
