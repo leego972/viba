@@ -1,8 +1,12 @@
 import { Router, type IRouter } from "express";
-import { db, auditLogsTable, sessionsTable, messagesTable } from "@workspace/db";
+import { db, auditLogsTable, sessionsTable, messagesTable, settingsTable } from "@workspace/db";
 import { eq, sql, desc } from "drizzle-orm";
 
 const router: IRouter = Router();
+
+const DEFAULT_ALERT_THRESHOLD = 5;
+const ALERT_WINDOW_HOURS = 1;
+const LEGACY_SPIKE_THRESHOLD = 3;
 
 router.get("/stats", async (req, res): Promise<void> => {
   const [totals] = await db
@@ -61,9 +65,39 @@ router.get("/stats", async (req, res): Promise<void> => {
     .groupBy(messagesTable.model)
     .orderBy(desc(sql`count(*)`));
 
-  const SPIKE_THRESHOLD = 3;
+  const alertSettings = await db
+    .select({ key: settingsTable.key, value: settingsTable.value })
+    .from(settingsTable)
+    .where(
+      sql`${settingsTable.key} IN ('FALLBACK_ALERT_THRESHOLD', 'FALLBACK_ALERT_ENABLED')`
+    );
+
+  const alertSettingsMap = new Map(alertSettings.map((s) => [s.key, s.value]));
+  const rawThreshold = alertSettingsMap.get("FALLBACK_ALERT_THRESHOLD");
+  const alertThreshold = rawThreshold ? Math.max(1, parseInt(rawThreshold, 10) || DEFAULT_ALERT_THRESHOLD) : DEFAULT_ALERT_THRESHOLD;
+  const alertEnabled = alertSettingsMap.get("FALLBACK_ALERT_ENABLED") !== "false";
+
+  const recentByProvider = await db
+    .select({
+      provider: sql<string>`metadata->>'provider'`,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(auditLogsTable)
+    .where(
+      sql`${auditLogsTable.eventType} = 'adapter_fallback'
+        AND metadata->>'provider' IS NOT NULL
+        AND metadata->>'provider' <> ''
+        AND ${auditLogsTable.createdAt} >= NOW() - (${ALERT_WINDOW_HOURS} * INTERVAL '1 hour')`
+    )
+    .groupBy(sql`metadata->>'provider'`)
+    .orderBy(desc(sql`count(*)`));
+
+  const recentSpikeProviders = alertEnabled
+    ? recentByProvider.filter((p) => p.count >= alertThreshold).map((p) => p.provider)
+    : [];
+
   const spikeProviders = byProvider
-    .filter((p) => p.count >= SPIKE_THRESHOLD)
+    .filter((p) => p.count >= LEGACY_SPIKE_THRESHOLD)
     .map((p) => p.provider);
 
   res.json({
@@ -75,6 +109,9 @@ router.get("/stats", async (req, res): Promise<void> => {
     fallbackTrend: trend,
     modelUsage: modelUsage.map((m) => ({ model: m.model ?? "unknown", count: m.count })),
     spikeProviders,
+    recentSpikeProviders,
+    recentSpikeThreshold: alertThreshold,
+    alertEnabled,
   });
 });
 

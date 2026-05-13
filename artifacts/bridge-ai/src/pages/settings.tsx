@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -15,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Key, ShieldCheck, Zap, RotateCcw, BarChart2, Cpu } from "lucide-react";
+import { Key, ShieldCheck, Zap, RotateCcw, BarChart2, Cpu, Bell } from "lucide-react";
 
 type ModelOption = { value: string; label: string };
 
@@ -110,9 +111,12 @@ const PROVIDERS: ProviderConfig[] = [
   },
 ];
 
-const ALL_SETTING_KEYS = PROVIDERS.flatMap((p) =>
-  p.modelKey ? [p.key, p.modelKey] : [p.key]
-);
+const ALERT_KEYS = ["FALLBACK_ALERT_ENABLED", "FALLBACK_ALERT_THRESHOLD"] as const;
+
+const ALL_SETTING_KEYS = [
+  ...PROVIDERS.flatMap((p) => (p.modelKey ? [p.key, p.modelKey] : [p.key])),
+  ...ALERT_KEYS,
+];
 
 type KeyState = Record<string, string>;
 
@@ -174,6 +178,18 @@ export default function Settings() {
   const totalFallbacks = stats?.fallbackEvents ?? 0;
   const modelUsage = stats?.modelUsage ?? [];
   const spikeProviders = new Set(stats?.spikeProviders ?? []);
+
+  const alertEnabled = values["FALLBACK_ALERT_ENABLED"] !== "false";
+  const alertThreshold = values["FALLBACK_ALERT_THRESHOLD"] || "5";
+
+  const handleAlertEnabledChange = (checked: boolean) => {
+    setValues((prev) => ({ ...prev, FALLBACK_ALERT_ENABLED: checked ? "true" : "false" }));
+  };
+
+  const handleAlertThresholdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value.replace(/\D/g, "");
+    setValues((prev) => ({ ...prev, FALLBACK_ALERT_THRESHOLD: v }));
+  };
 
   return (
     <AppLayout>
@@ -245,6 +261,61 @@ export default function Settings() {
             </CardContent>
           </Card>
         )}
+
+        {/* Alert configuration */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Bell className="h-4 w-4" /> Fallback Spike Alerts
+            </CardTitle>
+            <CardDescription>
+              Get an alert on the dashboard when a provider exceeds the fallback threshold within the last hour.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label htmlFor="alert-enabled" className="font-medium">Enable spike alerts</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Show a prominent banner when a provider's fallback rate spikes.
+                </p>
+              </div>
+              <Switch
+                id="alert-enabled"
+                checked={alertEnabled}
+                onCheckedChange={handleAlertEnabledChange}
+              />
+            </div>
+            <div className={`space-y-1.5 transition-opacity ${alertEnabled ? "" : "opacity-40 pointer-events-none"}`}>
+              <Label htmlFor="alert-threshold">Alert threshold (fallbacks per hour)</Label>
+              <div className="flex items-center gap-3">
+                <Input
+                  id="alert-threshold"
+                  type="number"
+                  min={1}
+                  max={100}
+                  className="w-24"
+                  value={alertThreshold}
+                  onChange={handleAlertThresholdChange}
+                  disabled={!alertEnabled}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Alert fires when a provider hits this many fallbacks within the last hour.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+          <CardFooter>
+            <Button
+              onClick={handleSave}
+              disabled={saveSettings.isPending || isLoading}
+              variant="outline"
+              size="sm"
+            >
+              {saveSettings.isPending ? "Saving..." : "Save Alert Settings"}
+            </Button>
+          </CardFooter>
+        </Card>
 
         <Card>
           <CardHeader>

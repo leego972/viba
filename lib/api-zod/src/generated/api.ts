@@ -518,4 +518,15 @@ export const GetStatsResponse = zod.object({
     }),
   ),
   spikeProviders: zod.array(zod.string()),
+  recentSpikeProviders: zod
+    .array(zod.string())
+    .describe(
+      "Providers that exceeded the alert threshold in the rolling window",
+    ),
+  recentSpikeThreshold: zod
+    .number()
+    .describe("Configured fallback alert threshold"),
+  alertEnabled: zod
+    .boolean()
+    .describe("Whether fallback spike alerts are enabled"),
 });

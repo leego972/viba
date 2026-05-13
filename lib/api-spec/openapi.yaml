@@ -485,6 +485,17 @@ components:
           type: array
           items:
             type: string
+        recentSpikeProviders:
+          type: array
+          items:
+            type: string
+          description: Providers that exceeded the alert threshold in the rolling window
+        recentSpikeThreshold:
+          type: integer
+          description: Configured fallback alert threshold
+        alertEnabled:
+          type: boolean
+          description: Whether fallback spike alerts are enabled
       required:
         - totalSessions
         - activeSessions
@@ -494,6 +505,9 @@ components:
         - fallbackTrend
         - modelUsage
         - spikeProviders
+        - recentSpikeProviders
+        - recentSpikeThreshold
+        - alertEnabled
 
     ErrorResponse:
       type: object
