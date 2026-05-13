@@ -81,6 +81,12 @@ export const GetSessionResponse = zod.object({
       capabilities: zod.array(zod.string()),
       isMock: zod.boolean(),
       lastUsedModel: zod.string().nullable(),
+      activeModel: zod
+        .string()
+        .nullish()
+        .describe(
+          "Model name derived at query time from the agent's most recent message",
+        ),
     }),
   ),
   tasks: zod.array(
@@ -360,6 +366,12 @@ export const ListAgentsResponseItem = zod.object({
   capabilities: zod.array(zod.string()),
   isMock: zod.boolean(),
   lastUsedModel: zod.string().nullable(),
+  activeModel: zod
+    .string()
+    .nullish()
+    .describe(
+      "Model name derived at query time from the agent's most recent message",
+    ),
 });
 export const ListAgentsResponse = zod.array(ListAgentsResponseItem);
 
