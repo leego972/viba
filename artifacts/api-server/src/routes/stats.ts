@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, auditLogsTable, sessionsTable, messagesTable, settingsTable } from "@workspace/db";
 import { eq, sql, desc } from "drizzle-orm";
+import { detectSpikeProviders } from "../lib/spikeDetect";
 
 const router: IRouter = Router();
 
@@ -93,12 +94,10 @@ router.get("/stats", async (req, res): Promise<void> => {
     .orderBy(desc(sql`count(*)`));
 
   const recentSpikeProviders = alertEnabled
-    ? recentByProvider.filter((p) => p.count >= alertThreshold).map((p) => p.provider)
+    ? detectSpikeProviders(recentByProvider, alertThreshold)
     : [];
 
-  const spikeProviders = byProvider
-    .filter((p) => p.count >= LEGACY_SPIKE_THRESHOLD)
-    .map((p) => p.provider);
+  const spikeProviders = detectSpikeProviders(byProvider, LEGACY_SPIKE_THRESHOLD);
 
   res.json({
     totalSessions: totals?.total ?? 0,
