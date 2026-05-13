@@ -111,7 +111,7 @@ const PROVIDERS: ProviderConfig[] = [
   },
 ];
 
-const ALERT_KEYS = ["FALLBACK_ALERT_ENABLED", "FALLBACK_ALERT_THRESHOLD"] as const;
+const ALERT_KEYS = ["FALLBACK_ALERT_ENABLED", "FALLBACK_ALERT_THRESHOLD", "NOTIFICATION_WEBHOOK_URL"] as const;
 
 const ALL_SETTING_KEYS = [
   ...PROVIDERS.flatMap((p) => (p.modelKey ? [p.key, p.modelKey] : [p.key])),
@@ -181,6 +181,7 @@ export default function Settings() {
 
   const alertEnabled = values["FALLBACK_ALERT_ENABLED"] !== "false";
   const alertThreshold = values["FALLBACK_ALERT_THRESHOLD"] || "5";
+  const notificationWebhookUrl = values["NOTIFICATION_WEBHOOK_URL"] || "";
 
   const handleAlertEnabledChange = (checked: boolean) => {
     setValues((prev) => ({ ...prev, FALLBACK_ALERT_ENABLED: checked ? "true" : "false" }));
@@ -189,6 +190,10 @@ export default function Settings() {
   const handleAlertThresholdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = e.target.value.replace(/\D/g, "");
     setValues((prev) => ({ ...prev, FALLBACK_ALERT_THRESHOLD: v }));
+  };
+
+  const handleWebhookUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setValues((prev) => ({ ...prev, NOTIFICATION_WEBHOOK_URL: e.target.value }));
   };
 
   return (
@@ -316,6 +321,23 @@ export default function Settings() {
                 />
                 <p className="text-xs text-muted-foreground">
                   Alert fires when a provider hits this many fallbacks within the last hour.
+                </p>
+              </div>
+            </div>
+            <div className={`space-y-4 border-t pt-4 transition-opacity ${alertEnabled ? "" : "opacity-40 pointer-events-none"}`}>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Out-of-band notifications</p>
+              <div className="space-y-1.5">
+                <Label htmlFor="notification-webhook">Webhook URL</Label>
+                <Input
+                  id="notification-webhook"
+                  type="url"
+                  placeholder="https://hooks.example.com/notify"
+                  value={notificationWebhookUrl}
+                  onChange={handleWebhookUrlChange}
+                  disabled={!alertEnabled}
+                />
+                <p className="text-xs text-muted-foreground">
+                  When a spike is detected, a POST request with JSON details (provider name, fallback count, settings link) is sent to this URL. Works with Slack incoming webhooks, PagerDuty, Make, Zapier, and any HTTP endpoint.
                 </p>
               </div>
             </div>
