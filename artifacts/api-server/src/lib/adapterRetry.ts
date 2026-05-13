@@ -21,11 +21,65 @@ export interface AdapterRetryResult {
   usedFallback: boolean;
   usedModel: string;
   successAttempt: number | null;
+  circuitOpen?: boolean;
 }
+
+// ── Circuit breaker ────────────────────────────────────────────────────────────
+// Per-provider in-process state. Opens after CIRCUIT_OPEN_THRESHOLD consecutive
+// failures and stays open for CIRCUIT_TIMEOUT_MS before allowing one probe attempt.
+
+const CIRCUIT_OPEN_THRESHOLD = 5;
+const CIRCUIT_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+
+interface CircuitState {
+  consecutiveFailures: number;
+  openedAt: number | null;
+}
+
+const circuitMap = new Map<string, CircuitState>();
+
+function getCircuit(provider: string): CircuitState {
+  let state = circuitMap.get(provider);
+  if (!state) {
+    state = { consecutiveFailures: 0, openedAt: null };
+    circuitMap.set(provider, state);
+  }
+  return state;
+}
+
+export function isCircuitOpen(provider: string, now = Date.now()): boolean {
+  const state = getCircuit(provider);
+  if (state.openedAt === null) return false;
+  return now - state.openedAt < CIRCUIT_TIMEOUT_MS;
+}
+
+function recordSuccess(provider: string): void {
+  const state = getCircuit(provider);
+  state.consecutiveFailures = 0;
+  state.openedAt = null;
+}
+
+function recordFailure(provider: string, now = Date.now()): void {
+  const state = getCircuit(provider);
+  state.consecutiveFailures += 1;
+  if (state.consecutiveFailures >= CIRCUIT_OPEN_THRESHOLD && state.openedAt === null) {
+    state.openedAt = now;
+    logger.warn({ provider, failures: state.consecutiveFailures }, "Circuit breaker opened for provider");
+  }
+}
+
+/** Exposed for tests only — resets all circuit state. */
+export function resetAllCircuits(): void {
+  circuitMap.clear();
+}
+
+// ── Main retry function ────────────────────────────────────────────────────────
 
 /**
  * Attempts to run the task using the live adapter up to 2 times.
  * Permanent errors (401/403/invalid API key) skip the retry immediately.
+ * If the provider's circuit breaker is open (5+ consecutive failures in 5 min),
+ * the live call is bypassed entirely and simulation is used straight away.
  * If all live attempts fail, falls back to the mock adapter.
  *
  * Accepts injectable factory functions and an audit-log callback so the
@@ -42,6 +96,34 @@ export async function runAdapterWithRetry(params: {
   const { buildLiveAdapter, buildFallbackAdapter, taskInput, retryDelayMs, logAudit, context } =
     params;
 
+  // Circuit breaker short-circuit — skip live call entirely when open
+  if (isCircuitOpen(context.provider)) {
+    logger.warn(
+      { provider: context.provider, agentId: context.agentId },
+      "Circuit breaker open — skipping live adapter, falling back to simulation"
+    );
+    await logAudit(
+      "adapter_fallback",
+      `Circuit open for ${context.provider} — skipping live call, falling back to simulation for task "${context.taskTitle}"`,
+      {
+        taskId: context.taskId,
+        agentId: context.agentId,
+        provider: context.provider,
+        permanent: false,
+        circuitOpen: true,
+      }
+    );
+    const fallback = buildFallbackAdapter();
+    const result = await fallback.runTask(taskInput);
+    return {
+      result,
+      usedFallback: true,
+      usedModel: fallback.model,
+      successAttempt: null,
+      circuitOpen: true,
+    };
+  }
+
   let result: AgentTaskResult | null = null;
   let usedFallback = false;
   let lastLiveError: unknown = null;
@@ -55,6 +137,7 @@ export async function runAdapterWithRetry(params: {
       result = await adapter.runTask(taskInput);
       lastLiveError = null;
       successAttempt = attempt;
+      recordSuccess(context.provider);
       break;
     } catch (err) {
       lastLiveError = err;
@@ -90,6 +173,7 @@ export async function runAdapterWithRetry(params: {
 
   if (lastLiveError !== null || result === null) {
     const permanent = isPermanentError(lastLiveError);
+    recordFailure(context.provider);
     logger.error(
       {
         err: lastLiveError,

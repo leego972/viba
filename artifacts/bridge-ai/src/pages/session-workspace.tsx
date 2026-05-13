@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "wouter";
+import { useParams, Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import {
   useGetSession,
@@ -13,6 +13,7 @@ import {
   useApproveAction,
   useListApprovals,
   useListAuditLogs,
+  useGetStats,
   getGetSessionQueryKey,
   getListMessagesQueryKey,
   getListTasksQueryKey,
@@ -29,10 +30,29 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import {
-  Play, FastForward, Square, Send, CheckCircle2, Clock, User, Bot,
-  AlertTriangle, Crosshair, LineChart, Zap, FlaskConical, RotateCcw, X,
-  RefreshCw, History, ShieldCheck,
+  Play, FastForward, Square, Send, CheckCircle2, Clock, Bot,
+  Crosshair, LineChart, Zap, FlaskConical, RotateCcw, X,
+  RefreshCw, History, ShieldCheck, TrendingDown, AlertTriangle,
 } from "lucide-react";
+
+const MAX_BANNER_STORAGE_KEYS = 20;
+
+function pruneStaleLocalStorageKeys() {
+  try {
+    const prefix = "bridge_fallback_banner_";
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k?.startsWith(prefix)) keys.push(k);
+    }
+    if (keys.length > MAX_BANNER_STORAGE_KEYS) {
+      const sorted = keys.sort();
+      sorted.slice(0, keys.length - MAX_BANNER_STORAGE_KEYS).forEach((k) =>
+        localStorage.removeItem(k)
+      );
+    }
+  } catch {}
+}
 
 const AGENT_COLORS: Record<string, string> = {
   "openai": "bg-green-500/10 text-green-400 border-green-500/20",
@@ -84,23 +104,31 @@ export default function SessionWorkspace() {
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [pendingApproval, setPendingApproval] = useState<any>(null);
 
-  // Banner dismissal persisted to localStorage so it survives page revisits
-  const [fallbackBannerDismissed, setFallbackBannerDismissed] = useState(() => {
+  // Banner dismissal — stores the count of fallback messages seen at dismissal time.
+  // If new fallback messages arrive after dismissal, banner re-appears automatically.
+  const storageKey = `bridge_fallback_banner_${sessionId}`;
+  const [dismissedAtCount, setDismissedAtCount] = useState<number>(() => {
     try {
-      return localStorage.getItem(`bridge_fallback_banner_${sessionId}`) === "true";
+      const v = localStorage.getItem(storageKey);
+      return v ? parseInt(v, 10) : 0;
     } catch {
-      return false;
+      return 0;
     }
   });
 
-  const dismissFallbackBanner = () => {
-    setFallbackBannerDismissed(true);
+  // Prune stale keys from localStorage once on mount (#47)
+  useEffect(() => { pruneStaleLocalStorageKeys(); }, []);
+
+  const dismissFallbackBanner = (currentFallbackCount: number) => {
+    setDismissedAtCount(currentFallbackCount);
     try {
-      localStorage.setItem(`bridge_fallback_banner_${sessionId}`, "true");
+      localStorage.setItem(storageKey, String(currentFallbackCount));
     } catch {}
   };
 
   // Queries
+  const { data: stats } = useGetStats();
+
   const { data: session, isLoading: sessionLoading } = useGetSession(sessionId, {
     query: { enabled: !!sessionId, queryKey: getGetSessionQueryKey(sessionId), refetchInterval: 2000 }
   });
@@ -136,10 +164,41 @@ export default function SessionWorkspace() {
 
   // Detect fallback messages
   const fallbackMessages = messages.filter(m => m.content?.startsWith(SIMULATED_PREFIX));
-  const hasFallbackMessages = fallbackMessages.length > 0;
+  const currentFallbackCount = fallbackMessages.length;
+  const hasFallbackMessages = currentFallbackCount > 0;
   const fallbackAgentNames = [...new Set(fallbackMessages.map(m => m.agentName).filter(Boolean))];
   const fallbackAgentCount = fallbackAgentNames.length;
-  const showFallbackBanner = hasFallbackMessages && !fallbackBannerDismissed;
+  // Re-show banner automatically if new fallbacks arrive after user dismissed (#46)
+  const showFallbackBanner = hasFallbackMessages && currentFallbackCount > dismissedAtCount;
+
+  // Spike alert from stats API — shown in workspace too (#54)
+  const recentSpikeProviders = stats?.recentSpikeProviders ?? [];
+  const recentSpikeThreshold = stats?.recentSpikeThreshold ?? 5;
+  const alertEnabled = stats?.alertEnabled ?? true;
+  const showSpikeAlert = alertEnabled && recentSpikeProviders.length > 0;
+
+  // Browser notification when a spike is detected (#52)
+  const prevSpikeRef = useRef<string[]>([]);
+  useEffect(() => {
+    if (!showSpikeAlert) { prevSpikeRef.current = []; return; }
+    const newProviders = recentSpikeProviders.filter(p => !prevSpikeRef.current.includes(p));
+    if (newProviders.length > 0) {
+      prevSpikeRef.current = recentSpikeProviders;
+      if ("Notification" in window) {
+        const fire = () => {
+          new Notification("BridgeAI — Fallback Spike", {
+            body: `${newProviders.join(", ")} hit ${recentSpikeThreshold}+ fallbacks in the last hour. Check your API keys.`,
+            icon: "/favicon.ico",
+          });
+        };
+        if (Notification.permission === "granted") {
+          fire();
+        } else if (Notification.permission !== "denied") {
+          Notification.requestPermission().then(perm => { if (perm === "granted") fire(); });
+        }
+      }
+    }
+  }, [showSpikeAlert, recentSpikeProviders.join(",")]);
 
   // Activity log: show notable events (retry, fallback, success, completed)
   const activityEvents = [...auditLogs]
@@ -245,7 +304,25 @@ export default function SessionWorkspace() {
   return (
     <AppLayout>
       <div className="flex flex-col h-[calc(100vh-8rem)] gap-4">
-        {/* Simulation fallback banner — persists dismissal in localStorage */}
+        {/* Spike alert — shown in workspace when a provider hits the threshold in the last hour (#54) */}
+        {showSpikeAlert && (
+          <div className="flex items-start gap-3 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm text-red-300 shrink-0">
+            <TrendingDown className="h-4 w-4 shrink-0 mt-0.5 text-red-400" />
+            <div className="flex-1">
+              <span className="font-semibold">Fallback spike alert — </span>
+              {recentSpikeProviders.length === 1
+                ? `The ${recentSpikeProviders[0]} provider`
+                : `Providers ${recentSpikeProviders.join(", ")}`}{" "}
+              {recentSpikeProviders.length === 1 ? "has" : "have"} hit {recentSpikeThreshold}+ fallbacks in the last hour.{" "}
+              <Link href="/settings" className="underline underline-offset-2 hover:text-red-200">
+                Check your API keys
+              </Link>
+              .
+            </div>
+          </div>
+        )}
+
+        {/* Simulation fallback banner — re-shows if new fallbacks arrive after dismissal (#46) */}
         {showFallbackBanner && (
           <div className="flex items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-300 shrink-0">
             <RotateCcw className="h-4 w-4 shrink-0 text-amber-400" />
@@ -261,7 +338,7 @@ export default function SessionWorkspace() {
               badge. Check your API keys if you expected a live response.
             </span>
             <button
-              onClick={dismissFallbackBanner}
+              onClick={() => dismissFallbackBanner(currentFallbackCount)}
               className="shrink-0 rounded p-0.5 hover:bg-amber-500/20 transition-colors"
               aria-label="Dismiss banner"
             >
