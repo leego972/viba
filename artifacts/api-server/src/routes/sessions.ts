@@ -110,9 +110,13 @@ router.post("/sessions", async (req, res): Promise<void> => {
 
   const { goal, autonomyMode, agents } = parsed.data;
 
+  const allMock = agents.every((a) => a.isMock);
+  const noneMock = agents.every((a) => !a.isMock);
+  const mode: "live" | "simulation" | "mixed" = allMock ? "simulation" : noneMock ? "live" : "mixed";
+
   const [session] = await db
     .insert(sessionsTable)
-    .values({ goal, autonomyMode, status: "active" })
+    .values({ goal, autonomyMode, status: "active", mode })
     .returning();
 
   if (!session) {

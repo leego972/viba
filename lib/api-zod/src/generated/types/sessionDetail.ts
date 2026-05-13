@@ -9,6 +9,7 @@ import type { Agent } from "./agent";
 import type { Approval } from "./approval";
 import type { Memory } from "./memory";
 import type { Message } from "./message";
+import type { SessionDetailMode } from "./sessionDetailMode";
 import type { Task } from "./task";
 
 export interface SessionDetail {
@@ -16,6 +17,7 @@ export interface SessionDetail {
   goal: string;
   status: string;
   autonomyMode: string;
+  mode: SessionDetailMode;
   /** @nullable */
   estimatedCost: number | null;
   /** @nullable */

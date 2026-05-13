@@ -6,12 +6,14 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { AgentModeSummary } from "./agentModeSummary";
+import type { SessionMode } from "./sessionMode";
 
 export interface Session {
   id: number;
   goal: string;
   status: string;
   autonomyMode: string;
+  mode: SessionMode;
   /** @nullable */
   estimatedCost: number | null;
   /** @nullable */
