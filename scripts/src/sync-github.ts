@@ -207,6 +207,7 @@ async function main() {
 
   if (treeItems.length === 0) {
     writeSyncStatus({ status: "success", commitSha: ghHeadSha.slice(0, 7), fileCount: 0 });
+    await closeOpenSyncFailureIssues(ghHeadSha.slice(0, 7));
     return;
   }
 
@@ -248,6 +249,7 @@ async function main() {
   );
 
   writeSyncStatus({ status: "success", commitSha: successSha, fileCount: treeItems.length });
+  await closeOpenSyncFailureIssues(successSha);
 }
 
 type SyncStatus =
@@ -261,6 +263,61 @@ function writeSyncStatus(status: SyncStatus): void {
     writeFileSync(statusPath, JSON.stringify(payload, null, 2) + "\n", "utf8");
   } catch (writeErr) {
     console.warn(`[sync-github] Could not write sync-status.json: ${(writeErr as Error).message}`);
+  }
+}
+
+async function closeOpenSyncFailureIssues(commitSha: string): Promise<void> {
+  type Issue = { number: number; title: string };
+  let issues: Issue[];
+  try {
+    issues = (await githubApi(
+      `/repos/${OWNER}/${REPO}/issues?labels=sync-failure&state=open&per_page=100`,
+    )) as Issue[];
+  } catch (err) {
+    console.warn(
+      `[sync-github] Could not search for open sync-failure issues: ${(err as Error).message}`,
+    );
+    return;
+  }
+
+  if (issues.length === 0) {
+    console.log("[sync-github] No open sync-failure issues to close.");
+    return;
+  }
+
+  if (issues.length === 100) {
+    console.warn(
+      "[sync-github] Fetched exactly 100 open sync-failure issues — there may be more beyond the first page.",
+    );
+  }
+
+  console.log(`[sync-github] Found ${issues.length} open sync-failure issue(s) to close.`);
+
+  const comment = [
+    `The GitHub sync has recovered successfully.`,
+    ``,
+    `**Commit:** \`${commitSha}\``,
+    `**Repo:** https://github.com/${OWNER}/${REPO}`,
+    ``,
+    `Closing this issue automatically.`,
+  ].join("\n");
+
+  for (const issue of issues) {
+    try {
+      await githubApi(`/repos/${OWNER}/${REPO}/issues/${issue.number}/comments`, {
+        method: "POST",
+        body: JSON.stringify({ body: comment }),
+      });
+      await githubApi(`/repos/${OWNER}/${REPO}/issues/${issue.number}`, {
+        method: "PATCH",
+        body: JSON.stringify({ state: "closed" }),
+      });
+      console.log(`[sync-github] Closed sync-failure issue #${issue.number}: ${issue.title}`);
+    } catch (err) {
+      console.warn(
+        `[sync-github] Could not close issue #${issue.number}: ${(err as Error).message}`,
+      );
+    }
   }
 }
 
