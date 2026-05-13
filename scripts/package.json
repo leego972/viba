@@ -6,13 +6,16 @@
   "scripts": {
     "hello": "tsx ./src/hello.ts",
     "sync-github": "tsx ./src/sync-github.ts",
+    "backfill-session-mode": "tsx ./src/backfill-session-mode.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "@types/pg": "^8.18.0",
     "tsx": "catalog:"
   },
   "dependencies": {
-    "@replit/connectors-sdk": "^0.4.0"
+    "@replit/connectors-sdk": "^0.4.0",
+    "pg": "^8.20.0"
   }
 }

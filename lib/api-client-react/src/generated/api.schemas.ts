@@ -45,11 +45,20 @@ export interface AgentModeSummary {
   isMock: boolean;
 }
 
+export type SessionMode = (typeof SessionMode)[keyof typeof SessionMode];
+
+export const SessionMode = {
+  live: "live",
+  simulation: "simulation",
+  mixed: "mixed",
+} as const;
+
 export interface Session {
   id: number;
   goal: string;
   status: string;
   autonomyMode: string;
+  mode: SessionMode;
   /** @nullable */
   estimatedCost: number | null;
   /** @nullable */
@@ -58,6 +67,15 @@ export interface Session {
   updatedAt: string;
   agentModes: AgentModeSummary[];
 }
+
+export type SessionDetailMode =
+  (typeof SessionDetailMode)[keyof typeof SessionDetailMode];
+
+export const SessionDetailMode = {
+  live: "live",
+  simulation: "simulation",
+  mixed: "mixed",
+} as const;
 
 export interface Agent {
   id: number;
@@ -132,6 +150,7 @@ export interface SessionDetail {
   goal: string;
   status: string;
   autonomyMode: string;
+  mode: SessionDetailMode;
   /** @nullable */
   estimatedCost: number | null;
   /** @nullable */

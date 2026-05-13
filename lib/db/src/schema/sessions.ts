@@ -7,6 +7,7 @@ export const sessionsTable = pgTable("sessions", {
   goal: text("goal").notNull(),
   status: text("status").notNull().default("active"),
   autonomyMode: text("autonomy_mode").notNull().default("supervised"),
+  mode: text("mode").notNull().default("simulation"),
   estimatedCost: real("estimated_cost"),
   finalOutput: text("final_output"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
