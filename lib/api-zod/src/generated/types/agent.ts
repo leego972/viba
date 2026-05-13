@@ -16,4 +16,9 @@ export interface Agent {
   isMock: boolean;
   /** @nullable */
   lastUsedModel: string | null;
+  /**
+   * Model name derived at query time from the agent's most recent message
+   * @nullable
+   */
+  activeModel?: string | null;
 }

@@ -438,10 +438,10 @@ export default function SessionWorkspace() {
                           <Badge variant="outline" className="text-[10px] h-4">{agent.provider}</Badge>
                           <span className="text-xs text-muted-foreground">{agent.role}</span>
                         </div>
-                        {agent.lastUsedModel && (
+                        {agent.activeModel && (
                           <div className="mt-1.5 pt-1.5 border-t border-border/50">
                             <span className="text-[10px] text-muted-foreground font-mono bg-muted/60 rounded px-1.5 py-0.5">
-                              {agent.lastUsedModel}
+                              {agent.activeModel}
                             </span>
                           </div>
                         )}

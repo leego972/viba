@@ -682,6 +682,9 @@ components:
           type: boolean
         lastUsedModel:
           type: ["string", "null"]
+        activeModel:
+          type: ["string", "null"]
+          description: Model name derived at query time from the agent's most recent message
       required:
         - id
         - sessionId

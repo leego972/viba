@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, desc, inArray } from "drizzle-orm";
 import {
   db,
   sessionsTable,
@@ -66,6 +66,44 @@ async function logAudit(sessionId: number, eventType: string, description: strin
     description,
     metadata: metadata ?? {},
   });
+}
+
+/**
+ * Derives activeModel for each agent from the most recent message that has a
+ * non-null model value. Uses a single query for all agents to avoid N+1.
+ */
+async function withActiveModels<T extends { id: number; lastUsedModel: string | null }>(
+  agents: T[]
+): Promise<(T & { activeModel: string | null })[]> {
+  if (agents.length === 0) return agents.map((a) => ({ ...a, activeModel: null }));
+
+  const agentIds = agents.map((a) => a.id);
+
+  // Fetch all messages for the given agents in one query, newest first.
+  // Non-null model selection is applied in-memory on the returned rows.
+  const agentFilter =
+    agentIds.length === 1
+      ? eq(messagesTable.agentId, agentIds[0]!)
+      : inArray(messagesTable.agentId, agentIds);
+
+  const rows = await db
+    .select({ agentId: messagesTable.agentId, model: messagesTable.model })
+    .from(messagesTable)
+    .where(agentFilter)
+    .orderBy(desc(messagesTable.id));
+
+  // Take the first non-null model seen per agent (rows are ordered newest-first)
+  const latestModelByAgent = new Map<number, string>();
+  for (const row of rows) {
+    if (row.agentId !== null && row.model !== null && !latestModelByAgent.has(row.agentId)) {
+      latestModelByAgent.set(row.agentId, row.model);
+    }
+  }
+
+  return agents.map((a) => ({
+    ...a,
+    activeModel: latestModelByAgent.get(a.id) ?? null,
+  }));
 }
 
 /** Enriches a session row with the agentModes array required by the Session schema */
@@ -194,7 +232,8 @@ router.get("/sessions/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  const agents = await db.select().from(agentsTable).where(eq(agentsTable.sessionId, session.id));
+  const agentRows = await db.select().from(agentsTable).where(eq(agentsTable.sessionId, session.id));
+  const agents = await withActiveModels(agentRows);
   const tasks = await db.select().from(tasksTable).where(eq(tasksTable.sessionId, session.id)).orderBy(asc(tasksTable.id));
   const messages = await db.select().from(messagesTable).where(eq(messagesTable.sessionId, session.id)).orderBy(asc(messagesTable.id));
   const [memory] = await db.select().from(memoryTable).where(eq(memoryTable.sessionId, session.id));
@@ -386,7 +425,8 @@ router.get("/sessions/:id/agents", async (req, res): Promise<void> => {
     res.status(400).json({ error: params.error.message });
     return;
   }
-  const agents = await db.select().from(agentsTable).where(eq(agentsTable.sessionId, params.data.id));
+  const agentRows = await db.select().from(agentsTable).where(eq(agentsTable.sessionId, params.data.id));
+  const agents = await withActiveModels(agentRows);
   res.json(serialize(agents));
 });
 
