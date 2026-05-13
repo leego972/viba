@@ -97,6 +97,9 @@ export default function Dashboard() {
   const hasFallbacks = (stats?.fallbackEvents ?? 0) > 0;
   const fallbacksByProvider = stats?.fallbacksByProvider ?? [];
   const spikeProviders = stats?.spikeProviders ?? [];
+  const recentSpikeProviders = stats?.recentSpikeProviders ?? [];
+  const recentSpikeThreshold = stats?.recentSpikeThreshold ?? 5;
+  const alertEnabled = stats?.alertEnabled ?? true;
   const trendData = buildTrendData(stats?.fallbackTrend ?? []);
   const hasTrendData = (stats?.fallbackTrend ?? []).length > 0;
   const modelUsage = stats?.modelUsage ?? [];
@@ -117,19 +120,40 @@ export default function Dashboard() {
           </Link>
         </div>
 
-        {/* Spike Alert — shown when a provider has 3+ fallbacks */}
-        {spikeProviders.length > 0 && (
+        {/* Rolling-window spike alert — shown when a provider crosses the configured threshold in the last hour */}
+        {alertEnabled && recentSpikeProviders.length > 0 && (
           <div className="flex items-start gap-3 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
             <TrendingDown className="h-5 w-5 shrink-0 mt-0.5 text-red-400" />
             <div className="flex-1">
-              <p className="font-semibold text-red-300 mb-1">High fallback rate detected</p>
+              <p className="font-semibold text-red-300 mb-1">Fallback spike alert</p>
               <p className="text-red-300/80">
+                {recentSpikeProviders.length === 1
+                  ? `The ${recentSpikeProviders[0]} provider`
+                  : `Providers ${recentSpikeProviders.join(", ")}`}{" "}
+                {recentSpikeProviders.length === 1 ? "has" : "have"} hit {recentSpikeThreshold}+ fallbacks in the last hour.
+                Live API calls are failing — check your API keys in{" "}
+                <Link href="/settings" className="underline underline-offset-2 hover:text-red-200">
+                  Settings
+                </Link>
+                .
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Legacy all-time spike alert — shown when alerts are enabled but no recent spike, and a provider has 3+ total fallbacks */}
+        {alertEnabled && recentSpikeProviders.length === 0 && spikeProviders.length > 0 && (
+          <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+            <TrendingDown className="h-5 w-5 shrink-0 mt-0.5 text-amber-400" />
+            <div className="flex-1">
+              <p className="font-semibold text-amber-300 mb-1">High fallback rate detected</p>
+              <p className="text-amber-300/80">
                 {spikeProviders.length === 1
                   ? `The ${spikeProviders[0]} provider`
                   : `Providers ${spikeProviders.join(", ")}`}{" "}
                 {spikeProviders.length === 1 ? "has" : "have"} triggered 3 or more simulation fallbacks.
                 Live API calls are failing — check your API keys in{" "}
-                <Link href="/settings" className="underline underline-offset-2 hover:text-red-200">
+                <Link href="/settings" className="underline underline-offset-2 hover:text-amber-200">
                   Settings
                 </Link>
                 .

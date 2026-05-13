@@ -18,4 +18,10 @@ export interface BridgeStats {
   fallbackTrend: FallbackTrendPoint[];
   modelUsage: ModelUsageCount[];
   spikeProviders: string[];
+  /** Providers that exceeded the alert threshold in the rolling window */
+  recentSpikeProviders: string[];
+  /** Configured fallback alert threshold */
+  recentSpikeThreshold: number;
+  /** Whether fallback spike alerts are enabled */
+  alertEnabled: boolean;
 }
