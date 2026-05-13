@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Key, ShieldCheck, Zap, RotateCcw, BarChart2 } from "lucide-react";
+import { Key, ShieldCheck, Zap, RotateCcw, BarChart2, Cpu } from "lucide-react";
 
 type ModelOption = { value: string; label: string };
 
@@ -172,6 +172,8 @@ export default function Settings() {
       .map(({ provider, count }) => [provider.toLowerCase(), count])
   );
   const totalFallbacks = stats?.fallbackEvents ?? 0;
+  const modelUsage = stats?.modelUsage ?? [];
+  const spikeProviders = new Set(stats?.spikeProviders ?? []);
 
   return (
     <AppLayout>
@@ -209,6 +211,41 @@ export default function Settings() {
           </Card>
         )}
 
+        {/* Model usage breakdown */}
+        {modelUsage.length > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <Cpu className="h-4 w-4 text-muted-foreground" />
+                Model Usage
+              </CardTitle>
+              <CardDescription>Messages generated per model across all sessions</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="space-y-2">
+                {modelUsage.map(({ model, count }) => {
+                  const total = modelUsage.reduce((s, m) => s + m.count, 0);
+                  const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                  return (
+                    <div key={model} className="flex items-center gap-3">
+                      <span className="text-xs font-mono w-44 truncate shrink-0">{model}</span>
+                      <div className="flex-1 bg-muted rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className="h-full bg-primary rounded-full transition-all"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <span className="text-xs text-muted-foreground w-16 text-right shrink-0">
+                        {count} msg{count !== 1 ? "s" : ""} ({pct}%)
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -233,14 +270,29 @@ export default function Settings() {
               ) : (
                 PROVIDERS.map(({ key, label, placeholder, hint, providerName, modelKey, defaultModel, models }) => {
                   const fallbackCount = fallbackMap.get(providerName) ?? 0;
+                  const isSpike = spikeProviders.has(providerName);
                   return (
-                    <div key={key} className={`space-y-2 rounded-lg p-3 -mx-3 ${fallbackCount > 0 ? "bg-amber-500/5 border border-amber-500/20" : ""}`}>
+                    <div
+                      key={key}
+                      className={`space-y-2 rounded-lg p-3 -mx-3 ${
+                        isSpike
+                          ? "bg-red-500/5 border border-red-500/20"
+                          : fallbackCount > 0
+                            ? "bg-amber-500/5 border border-amber-500/20"
+                            : ""
+                      }`}
+                    >
                       <div className="flex items-center gap-2 flex-wrap">
                         <Label htmlFor={key}>{label}</Label>
                         <Badge variant="outline" className="text-green-600 border-green-500/40 bg-green-500/10 gap-1 px-1.5 py-0 text-[10px]">
                           <Zap className="h-2.5 w-2.5" /> Live
                         </Badge>
-                        {fallbackCount > 0 && (
+                        {isSpike && (
+                          <Badge variant="outline" className="text-red-400 border-red-500/40 bg-red-500/10 gap-1 px-1.5 py-0 text-[10px]">
+                            ⚠ Spike: {fallbackCount} fallbacks
+                          </Badge>
+                        )}
+                        {!isSpike && fallbackCount > 0 && (
                           <Badge variant="outline" className="text-amber-500 border-amber-500/40 bg-amber-500/10 gap-1 px-1.5 py-0 text-[10px]">
                             <RotateCcw className="h-2.5 w-2.5" />
                             {fallbackCount} {fallbackCount === 1 ? "fallback" : "fallbacks"}

@@ -14,4 +14,6 @@ export interface Agent {
   role: string;
   capabilities: string[];
   isMock: boolean;
+  /** @nullable */
+  lastUsedModel: string | null;
 }

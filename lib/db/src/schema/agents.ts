@@ -11,6 +11,7 @@ export const agentsTable = pgTable("agents", {
   role: text("role").notNull(),
   capabilities: text("capabilities").array().notNull().default([]),
   isMock: boolean("is_mock").notNull().default(true),
+  lastUsedModel: text("last_used_model"),
 });
 
 export const insertAgentSchema = createInsertSchema(agentsTable).omit({ id: true });

@@ -78,6 +78,7 @@ export const GetSessionResponse = zod.object({
       role: zod.string(),
       capabilities: zod.array(zod.string()),
       isMock: zod.boolean(),
+      lastUsedModel: zod.string().nullable(),
     }),
   ),
   tasks: zod.array(
@@ -353,6 +354,7 @@ export const ListAgentsResponseItem = zod.object({
   role: zod.string(),
   capabilities: zod.array(zod.string()),
   isMock: zod.boolean(),
+  lastUsedModel: zod.string().nullable(),
 });
 export const ListAgentsResponse = zod.array(ListAgentsResponseItem);
 
@@ -498,4 +500,17 @@ export const GetStatsResponse = zod.object({
       count: zod.number(),
     }),
   ),
+  fallbackTrend: zod.array(
+    zod.object({
+      day: zod.string(),
+      count: zod.number(),
+    }),
+  ),
+  modelUsage: zod.array(
+    zod.object({
+      model: zod.string(),
+      count: zod.number(),
+    }),
+  ),
+  spikeProviders: zod.array(zod.string()),
 });

@@ -1,21 +1,23 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { 
-  useGetSession, 
-  useListMessages, 
-  useListTasks, 
-  useListAgents, 
-  useRunNextStep, 
-  useRunFullWorkflow, 
-  useSendMessage, 
-  useStopSession, 
-  useApproveAction, 
+import {
+  useGetSession,
+  useListMessages,
+  useListTasks,
+  useListAgents,
+  useRunNextStep,
+  useRunFullWorkflow,
+  useSendMessage,
+  useStopSession,
+  useApproveAction,
   useListApprovals,
+  useListAuditLogs,
   getGetSessionQueryKey,
   getListMessagesQueryKey,
   getListTasksQueryKey,
-  getListApprovalsQueryKey
+  getListApprovalsQueryKey,
+  getListAuditLogsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -23,13 +25,13 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import {
   Play, FastForward, Square, Send, CheckCircle2, Clock, User, Bot,
   AlertTriangle, Crosshair, LineChart, Zap, FlaskConical, RotateCcw, X,
+  RefreshCw, History, ShieldCheck,
 } from "lucide-react";
 
 const AGENT_COLORS: Record<string, string> = {
@@ -44,37 +46,83 @@ const AGENT_COLORS: Record<string, string> = {
 
 const SIMULATED_PREFIX = "⚠️ [Simulated";
 
+function getActivityDisplay(eventType: string, description: string, meta: Record<string, unknown>) {
+  if (eventType === "adapter_success" && typeof meta.attempt === "number" && meta.attempt > 1) {
+    return { icon: RefreshCw, color: "text-blue-400", label: `Live call succeeded on retry (attempt ${meta.attempt})` };
+  }
+  if (eventType === "adapter_success") {
+    return { icon: Zap, color: "text-emerald-400", label: description };
+  }
+  if (eventType === "adapter_fallback") {
+    const perm = meta.permanent === true;
+    return {
+      icon: FlaskConical,
+      color: "text-amber-400",
+      label: perm ? "Permanent auth error — skipped retry, fell back to simulation" : "Fell back to simulation after retry",
+    };
+  }
+  if (eventType === "session_completed") {
+    return { icon: CheckCircle2, color: "text-emerald-400", label: "Session completed" };
+  }
+  if (eventType === "approval_requested") {
+    return { icon: ShieldCheck, color: "text-blue-400", label: "Approval requested" };
+  }
+  if (eventType === "task_assigned") {
+    return { icon: Clock, color: "text-muted-foreground", label: description };
+  }
+  return { icon: History, color: "text-muted-foreground", label: description };
+}
+
 export default function SessionWorkspace() {
   const { id } = useParams();
   const sessionId = parseInt(id || "0", 10);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const scrollRef = useRef<HTMLDivElement>(null);
-  
+
   const [userInstruction, setUserInstruction] = useState("");
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [pendingApproval, setPendingApproval] = useState<any>(null);
-  const [fallbackBannerDismissed, setFallbackBannerDismissed] = useState(false);
+
+  // Banner dismissal persisted to localStorage so it survives page revisits
+  const [fallbackBannerDismissed, setFallbackBannerDismissed] = useState(() => {
+    try {
+      return localStorage.getItem(`bridge_fallback_banner_${sessionId}`) === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  const dismissFallbackBanner = () => {
+    setFallbackBannerDismissed(true);
+    try {
+      localStorage.setItem(`bridge_fallback_banner_${sessionId}`, "true");
+    } catch {}
+  };
 
   // Queries
   const { data: session, isLoading: sessionLoading } = useGetSession(sessionId, {
     query: { enabled: !!sessionId, queryKey: getGetSessionQueryKey(sessionId), refetchInterval: 2000 }
   });
-  
+
   const { data: messages = [] } = useListMessages(sessionId, {
     query: { enabled: !!sessionId, queryKey: getListMessagesQueryKey(sessionId), refetchInterval: 2000 }
   });
-  
+
   const { data: tasks = [] } = useListTasks(sessionId, {
     query: { enabled: !!sessionId, queryKey: getListTasksQueryKey(sessionId), refetchInterval: 2000 }
   });
-  
+
   const { data: agents = [] } = useListAgents(sessionId, {
-    query: { enabled: !!sessionId, queryKey: ["sessions", sessionId, "agents"] as const }
+    query: { enabled: !!sessionId, queryKey: ["sessions", sessionId, "agents"] as const, refetchInterval: 3000 }
   });
 
   const { data: approvals = [] } = useListApprovals(sessionId, {
     query: { enabled: !!sessionId, queryKey: getListApprovalsQueryKey(sessionId), refetchInterval: 2000 }
+  });
+
+  const { data: auditLogs = [] } = useListAuditLogs(sessionId, {
+    query: { enabled: !!sessionId, queryKey: getListAuditLogsQueryKey(sessionId), refetchInterval: 4000 }
   });
 
   // Mutations
@@ -86,13 +134,23 @@ export default function SessionWorkspace() {
 
   const isSessionActive = session?.status === "active";
 
-  // Detect if any messages used simulation fallback
+  // Detect fallback messages
   const fallbackMessages = messages.filter(m => m.content?.startsWith(SIMULATED_PREFIX));
   const hasFallbackMessages = fallbackMessages.length > 0;
   const fallbackAgentNames = [...new Set(fallbackMessages.map(m => m.agentName).filter(Boolean))];
   const fallbackAgentCount = fallbackAgentNames.length;
-
   const showFallbackBanner = hasFallbackMessages && !fallbackBannerDismissed;
+
+  // Activity log: show notable events (retry, fallback, success, completed)
+  const activityEvents = [...auditLogs]
+    .reverse()
+    .filter(log =>
+      log.eventType === "adapter_fallback" ||
+      log.eventType === "adapter_success" ||
+      log.eventType === "session_completed" ||
+      log.eventType === "approval_requested"
+    )
+    .slice(0, 15);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -161,6 +219,7 @@ export default function SessionWorkspace() {
     queryClient.invalidateQueries({ queryKey: getListMessagesQueryKey(sessionId) });
     queryClient.invalidateQueries({ queryKey: getListTasksQueryKey(sessionId) });
     queryClient.invalidateQueries({ queryKey: getListApprovalsQueryKey(sessionId) });
+    queryClient.invalidateQueries({ queryKey: getListAuditLogsQueryKey(sessionId) });
   };
 
   const tasksByStatus = {
@@ -186,7 +245,7 @@ export default function SessionWorkspace() {
   return (
     <AppLayout>
       <div className="flex flex-col h-[calc(100vh-8rem)] gap-4">
-        {/* Simulation fallback banner */}
+        {/* Simulation fallback banner — persists dismissal in localStorage */}
         {showFallbackBanner && (
           <div className="flex items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-300 shrink-0">
             <RotateCcw className="h-4 w-4 shrink-0 text-amber-400" />
@@ -194,7 +253,7 @@ export default function SessionWorkspace() {
               <span className="font-semibold">
                 {fallbackAgentCount <= 1 ? "An agent" : `${fallbackAgentCount} agents`} switched to simulation mid-run
               </span>{" "}
-              — the live API call failed and was automatically retried before falling back to simulation mode.
+              — the live API call was retried before falling back to simulation.
               Simulated messages are marked with a{" "}
               <span className="inline-flex items-center gap-0.5 font-medium text-amber-400">
                 <FlaskConical className="h-3 w-3" /> Simulated
@@ -202,7 +261,7 @@ export default function SessionWorkspace() {
               badge. Check your API keys if you expected a live response.
             </span>
             <button
-              onClick={() => setFallbackBannerDismissed(true)}
+              onClick={dismissFallbackBanner}
               className="shrink-0 rounded p-0.5 hover:bg-amber-500/20 transition-colors"
               aria-label="Dismiss banner"
             >
@@ -232,7 +291,7 @@ export default function SessionWorkspace() {
               </div>
             )}
             <div className="text-sm text-muted-foreground flex items-center gap-1">
-              <Clock className="w-4 h-4" /> 
+              <Clock className="w-4 h-4" />
               Est. Cost: ${session.estimatedCost?.toFixed(4) || "0.0000"}
             </div>
           </div>
@@ -253,14 +312,14 @@ export default function SessionWorkspace() {
               </>
             )}
             {!isSessionActive && session.status !== "completed" && (
-               <Badge variant="secondary">Session {session.status}</Badge>
+              <Badge variant="secondary">Session {session.status}</Badge>
             )}
           </div>
         </div>
 
         {/* 3 Column Layout */}
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 min-h-0">
-          
+
           {/* Left: Info & Agents (3 cols) */}
           <div className="lg:col-span-3 flex flex-col gap-4 overflow-y-auto pr-1">
             <Card className="shrink-0">
@@ -302,6 +361,13 @@ export default function SessionWorkspace() {
                           <Badge variant="outline" className="text-[10px] h-4">{agent.provider}</Badge>
                           <span className="text-xs text-muted-foreground">{agent.role}</span>
                         </div>
+                        {agent.lastUsedModel && (
+                          <div className="mt-1.5 pt-1.5 border-t border-border/50">
+                            <span className="text-[10px] text-muted-foreground font-mono bg-muted/60 rounded px-1.5 py-0.5">
+                              {agent.lastUsedModel}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -332,7 +398,6 @@ export default function SessionWorkspace() {
                       ? "bg-amber-500/10 text-amber-200 border-amber-500/30"
                       : (msg.provider ? AGENT_COLORS[msg.provider] : "bg-muted text-foreground border-border");
 
-                  // Strip the simulated prefix for display — we show a badge instead
                   const displayContent = isSimulated
                     ? msg.content.replace(/^⚠️ \[Simulated — live \S+ API unavailable\] /, "")
                     : msg.content;
@@ -358,17 +423,17 @@ export default function SessionWorkspace() {
                 })
               )}
             </div>
-            
+
             {/* Input Area */}
             <div className="p-4 border-t shrink-0 bg-muted/10">
               <div className="flex gap-2">
-                <Textarea 
-                  placeholder="Send an instruction or provide feedback to the agents..." 
+                <Textarea
+                  placeholder="Send an instruction or provide feedback to the agents..."
                   className="min-h-[60px] resize-none"
                   value={userInstruction}
                   onChange={(e) => setUserInstruction(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
+                    if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
                       handleSend();
                     }
@@ -382,58 +447,88 @@ export default function SessionWorkspace() {
             </div>
           </Card>
 
-          {/* Right: Task Board (3 cols) */}
-          <Card className="lg:col-span-3 flex flex-col min-h-0 bg-muted/20 border-l-0 lg:border-l lg:border-l-border">
-            <CardHeader className="p-4 border-b shrink-0 bg-card">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4" /> Task Board
-              </CardTitle>
-            </CardHeader>
-            <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-4">
-              {(['planned', 'in_progress', 'review', 'complete'] as const).map(status => {
-                const columnTasks = tasksByStatus[status];
-                if (columnTasks.length === 0 && status !== 'planned') return null;
-                
-                return (
-                  <div key={status} className="flex flex-col gap-2">
-                    <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1 flex items-center gap-2">
-                      {status.replace('_', ' ')}
-                      <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">{columnTasks.length}</Badge>
+          {/* Right: Task Board + Activity Log (3 cols) */}
+          <div className="lg:col-span-3 flex flex-col gap-4 min-h-0">
+            <Card className="flex-1 flex flex-col min-h-0 bg-muted/20">
+              <CardHeader className="p-4 border-b shrink-0 bg-card">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4" /> Task Board
+                </CardTitle>
+              </CardHeader>
+              <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-4">
+                {(['planned', 'in_progress', 'review', 'complete'] as const).map(status => {
+                  const columnTasks = tasksByStatus[status];
+                  if (columnTasks.length === 0 && status !== 'planned') return null;
+
+                  return (
+                    <div key={status} className="flex flex-col gap-2">
+                      <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1 flex items-center gap-2">
+                        {status.replace('_', ' ')}
+                        <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">{columnTasks.length}</Badge>
+                      </div>
+                      {columnTasks.map(task => (
+                        <div key={task.id} className="bg-card border rounded p-2 text-sm shadow-sm">
+                          <div className="font-medium line-clamp-2 leading-tight">{task.title}</div>
+                          {task.assignedAgentId && (() => {
+                            const assignedAgent = agents.find(a => a.id === task.assignedAgentId);
+                            return (
+                              <div className="text-[10px] text-muted-foreground mt-2 pt-2 border-t flex justify-between items-center">
+                                <span>Assigned to: {assignedAgent?.name || 'Unknown'}</span>
+                                {assignedAgent && (
+                                  assignedAgent.isMock ? (
+                                    <Badge variant="outline" className="text-[9px] h-3.5 px-1 gap-0.5 text-muted-foreground">
+                                      <FlaskConical className="h-2 w-2" /> Sim
+                                    </Badge>
+                                  ) : (
+                                    <Badge className="text-[9px] h-3.5 px-1 gap-0.5 bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20">
+                                      <Zap className="h-2 w-2" /> Live
+                                    </Badge>
+                                  )
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      ))}
+                      {columnTasks.length === 0 && status === 'planned' && (
+                        <div className="border border-dashed rounded p-3 text-center text-xs text-muted-foreground">
+                          No tasks planned yet
+                        </div>
+                      )}
                     </div>
-                    {columnTasks.map(task => (
-                      <div key={task.id} className="bg-card border rounded p-2 text-sm shadow-sm">
-                        <div className="font-medium line-clamp-2 leading-tight">{task.title}</div>
-                        {task.assignedAgentId && (() => {
-                          const assignedAgent = agents.find(a => a.id === task.assignedAgentId);
-                          return (
-                            <div className="text-[10px] text-muted-foreground mt-2 pt-2 border-t flex justify-between items-center">
-                              <span>Assigned to: {assignedAgent?.name || 'Unknown'}</span>
-                              {assignedAgent && (
-                                assignedAgent.isMock ? (
-                                  <Badge variant="outline" className="text-[9px] h-3.5 px-1 gap-0.5 text-muted-foreground">
-                                    <FlaskConical className="h-2 w-2" /> Sim
-                                  </Badge>
-                                ) : (
-                                  <Badge className="text-[9px] h-3.5 px-1 gap-0.5 bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20">
-                                    <Zap className="h-2 w-2" /> Live
-                                  </Badge>
-                                )
-                              )}
-                            </div>
-                          );
-                        })()}
+                  );
+                })}
+              </div>
+            </Card>
+
+            {/* Activity Log */}
+            {activityEvents.length > 0 && (
+              <Card className="shrink-0 bg-muted/10">
+                <CardHeader className="p-3 pb-2 border-b">
+                  <CardTitle className="text-xs flex items-center gap-2 text-muted-foreground">
+                    <History className="w-3.5 h-3.5" /> Activity Log
+                  </CardTitle>
+                </CardHeader>
+                <div className="p-2 flex flex-col gap-1 max-h-48 overflow-y-auto">
+                  {activityEvents.map(log => {
+                    const meta = (log.metadata ?? {}) as Record<string, unknown>;
+                    const { icon: Icon, color, label } = getActivityDisplay(log.eventType, log.description, meta);
+                    return (
+                      <div key={log.id} className="flex items-start gap-2 px-1 py-0.5">
+                        <Icon className={`h-3 w-3 mt-0.5 shrink-0 ${color}`} />
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-[10px] leading-tight ${color}`}>{label}</p>
+                          <p className="text-[9px] text-muted-foreground/60 mt-0.5">
+                            {format(new Date(log.createdAt), "HH:mm:ss")}
+                          </p>
+                        </div>
                       </div>
-                    ))}
-                    {columnTasks.length === 0 && status === 'planned' && (
-                      <div className="border border-dashed rounded p-3 text-center text-xs text-muted-foreground">
-                        No tasks planned yet
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
+                    );
+                  })}
+                </div>
+              </Card>
+            )}
+          </div>
         </div>
       </div>
 
