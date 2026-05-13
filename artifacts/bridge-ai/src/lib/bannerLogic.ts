@@ -22,11 +22,18 @@ export function computeShowFallbackBanner(
 
 /**
  * Pure function — returns the keys that should be removed to keep storage
- * under the given limit (#47). Removes the lexicographically oldest keys.
+ * under the given limit (#47). Removes entries with the lowest numeric session
+ * ID suffix so that the most recent sessions are always retained.
+ * Numeric sort is essential: lexicographic order breaks for IDs with varying
+ * digit lengths (e.g. "..._100" < "..._99" as strings but 100 > 99 as numbers).
  */
-export function getKeysToPrune(keys: string[], limit: number): string[] {
+export function getKeysToPrune(keys: string[], limit: number, prefix = BANNER_STORAGE_PREFIX): string[] {
   if (keys.length <= limit) return [];
-  const sorted = [...keys].sort();
+  const sorted = [...keys].sort((a, b) => {
+    const idA = parseInt(a.slice(prefix.length), 10);
+    const idB = parseInt(b.slice(prefix.length), 10);
+    return idA - idB;
+  });
   return sorted.slice(0, keys.length - limit);
 }
 
