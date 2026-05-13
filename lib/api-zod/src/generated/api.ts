@@ -529,6 +529,18 @@ export const GetStatsResponse = zod.object({
       count: zod.number(),
     }),
   ),
+  modelUsageBreakdown: zod
+    .array(
+      zod.object({
+        model: zod.string(),
+        provider: zod.string(),
+        mode: zod.enum(["live", "simulated"]),
+        count: zod.number(),
+      }),
+    )
+    .describe(
+      "Per-model message counts split by live vs. simulated, grouped by provider",
+    ),
   spikeProviders: zod.array(zod.string()),
   recentSpikeProviders: zod
     .array(zod.string())

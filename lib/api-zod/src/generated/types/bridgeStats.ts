@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { FallbackTrendPoint } from "./fallbackTrendPoint";
+import type { ModelUsageBreakdown } from "./modelUsageBreakdown";
 import type { ModelUsageCount } from "./modelUsageCount";
 import type { ProviderFallbackCount } from "./providerFallbackCount";
 
@@ -17,6 +18,8 @@ export interface BridgeStats {
   fallbacksByProvider: ProviderFallbackCount[];
   fallbackTrend: FallbackTrendPoint[];
   modelUsage: ModelUsageCount[];
+  /** Per-model message counts split by live vs. simulated, grouped by provider */
+  modelUsageBreakdown: ModelUsageBreakdown[];
   spikeProviders: string[];
   /** Providers that exceeded the alert threshold in the rolling window */
   recentSpikeProviders: string[];

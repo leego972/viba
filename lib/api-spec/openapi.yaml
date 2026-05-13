@@ -458,6 +458,24 @@ components:
         - model
         - count
 
+    ModelUsageBreakdown:
+      type: object
+      properties:
+        model:
+          type: string
+        provider:
+          type: string
+        mode:
+          type: string
+          enum: [live, simulated]
+        count:
+          type: integer
+      required:
+        - model
+        - provider
+        - mode
+        - count
+
     BridgeStats:
       type: object
       properties:
@@ -481,6 +499,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ModelUsageCount"
+        modelUsageBreakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModelUsageBreakdown"
+          description: Per-model message counts split by live vs. simulated, grouped by provider
         spikeProviders:
           type: array
           items:
@@ -504,6 +527,7 @@ components:
         - fallbacksByProvider
         - fallbackTrend
         - modelUsage
+        - modelUsageBreakdown
         - spikeProviders
         - recentSpikeProviders
         - recentSpikeThreshold
