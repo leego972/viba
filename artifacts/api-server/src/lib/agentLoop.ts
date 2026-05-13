@@ -5,7 +5,7 @@ import { buildAdapter, buildMockAdapter } from "./agentFactory";
 import { routeTask } from "./taskRouter";
 import { logger } from "./logger";
 import type { AgentTaskResult } from "./adapters/interface";
-import { isPermanentError } from "./adapters/errors";
+import { runAdapterWithRetry } from "./adapterRetry";
 
 const APPROVAL_TASK_TYPES = new Set(["final_qa"]);
 const MAX_TURNS = 8;
@@ -151,80 +151,25 @@ export async function runNextAgentStep(sessionId: number): Promise<{
     taskType: nextTask.type,
   };
 
-  let result: AgentTaskResult | null = null;
-  let usedFallback = false;
-  let lastLiveError: unknown = null;
-  let successAttempt: number | null = null;
-  let usedModel: string | null = null;
-
-  // Attempt live adapter up to 2 times before falling back to simulation.
-  // Permanent errors (401/403/invalid API key) skip the retry immediately.
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    try {
-      const adapter = await buildAdapter(assignedAgent);
-      usedModel = adapter.model;
-      result = await adapter.runTask(taskInput);
-      lastLiveError = null;
-      successAttempt = attempt;
-      break;
-    } catch (err) {
-      lastLiveError = err;
-      if (isPermanentError(err)) {
-        logger.warn(
-          { err, agentId: assignedAgent.id, provider: assignedAgent.provider, attempt },
-          "Live adapter failed with permanent error — skipping retry"
-        );
-        break;
-      }
-      if (attempt === 1) {
-        logger.warn(
-          { err, agentId: assignedAgent.id, provider: assignedAgent.provider, attempt },
-          "Live adapter failed on attempt 1 — retrying after delay"
-        );
-        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
-      }
-    }
-  }
-
-  if (successAttempt !== null && result !== null) {
-    await logAudit(
+  const retryOutcome = await runAdapterWithRetry({
+    buildLiveAdapter: () => buildAdapter(assignedAgent),
+    buildFallbackAdapter: () => buildMockAdapter(assignedAgent),
+    taskInput,
+    retryDelayMs: RETRY_DELAY_MS,
+    logAudit: (eventType, description, metadata) =>
+      logAudit(sessionId, eventType, description, metadata),
+    context: {
       sessionId,
-      "adapter_success",
-      `Live ${assignedAgent.provider} call succeeded on attempt ${successAttempt} for task "${nextTask.title}"`,
-      {
-        taskId: nextTask.id,
-        agentId: assignedAgent.id,
-        provider: assignedAgent.provider,
-        attempt: successAttempt,
-      }
-    );
-  }
+      agentId: assignedAgent.id,
+      provider: assignedAgent.provider,
+      taskId: nextTask.id,
+      taskTitle: nextTask.title,
+    },
+  });
 
-  if (lastLiveError !== null || result === null) {
-    const permanent = isPermanentError(lastLiveError);
-    logger.error(
-      { err: lastLiveError, agentId: assignedAgent.id, provider: assignedAgent.provider, taskId: nextTask.id, permanent },
-      permanent
-        ? "Live adapter failed with permanent error — falling back to simulation without retry"
-        : "Live adapter failed after retry — falling back to simulation"
-    );
-    await logAudit(
-      sessionId,
-      "adapter_fallback",
-      `Live ${assignedAgent.provider} call failed${permanent ? " (permanent error, no retry)" : " after retry"}; falling back to simulation for task "${nextTask.title}"`,
-      {
-        taskId: nextTask.id,
-        agentId: assignedAgent.id,
-        provider: assignedAgent.provider,
-        permanent,
-        error: lastLiveError instanceof Error ? lastLiveError.message : String(lastLiveError),
-      }
-    );
-    const mockAdapter = buildMockAdapter(assignedAgent);
-    usedModel = mockAdapter.model;
-    result = await mockAdapter.runTask(taskInput);
-    usedFallback = true;
-  }
+  let result: AgentTaskResult = retryOutcome.result;
+  const usedFallback = retryOutcome.usedFallback;
+  let usedModel: string | null = retryOutcome.usedModel || null;
 
   if (usedFallback) {
     result = {
