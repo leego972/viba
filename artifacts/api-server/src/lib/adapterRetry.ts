@@ -62,9 +62,19 @@ function recordSuccess(provider: string): void {
 function recordFailure(provider: string, now = Date.now()): void {
   const state = getCircuit(provider);
   state.consecutiveFailures += 1;
-  if (state.consecutiveFailures >= CIRCUIT_OPEN_THRESHOLD && state.openedAt === null) {
-    state.openedAt = now;
-    logger.warn({ provider, failures: state.consecutiveFailures }, "Circuit breaker opened for provider");
+  if (state.consecutiveFailures >= CIRCUIT_OPEN_THRESHOLD) {
+    const alreadyOpen =
+      state.openedAt !== null && now - state.openedAt < CIRCUIT_TIMEOUT_MS;
+    if (!alreadyOpen) {
+      const isReopen = state.openedAt !== null;
+      state.openedAt = now;
+      logger.warn(
+        { provider, failures: state.consecutiveFailures },
+        isReopen
+          ? "Circuit breaker re-opened after failed half-open probe"
+          : "Circuit breaker opened for provider"
+      );
+    }
   }
 }
 
