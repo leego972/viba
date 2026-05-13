@@ -681,6 +681,8 @@ components:
           type: string
         provider:
           type: ["string", "null"]
+        model:
+          type: ["string", "null"]
         content:
           type: string
         taskId:
@@ -697,6 +699,7 @@ components:
         - agentId
         - role
         - provider
+        - model
         - content
         - taskId
         - agentName

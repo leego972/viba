@@ -9,6 +9,7 @@ export const messagesTable = pgTable("messages", {
   agentId: integer("agent_id"),
   role: text("role").notNull().default("assistant"),
   provider: text("provider"),
+  model: text("model"),
   content: text("content").notNull(),
   taskId: integer("task_id"),
   agentName: text("agent_name"),

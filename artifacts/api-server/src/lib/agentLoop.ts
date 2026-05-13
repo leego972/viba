@@ -155,12 +155,14 @@ export async function runNextAgentStep(sessionId: number): Promise<{
   let usedFallback = false;
   let lastLiveError: unknown = null;
   let successAttempt: number | null = null;
+  let usedModel: string | null = null;
 
   // Attempt live adapter up to 2 times before falling back to simulation.
   // Permanent errors (401/403/invalid API key) skip the retry immediately.
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
       const adapter = await buildAdapter(assignedAgent);
+      usedModel = adapter.model;
       result = await adapter.runTask(taskInput);
       lastLiveError = null;
       successAttempt = attempt;
@@ -219,6 +221,7 @@ export async function runNextAgentStep(sessionId: number): Promise<{
       }
     );
     const mockAdapter = buildMockAdapter(assignedAgent);
+    usedModel = mockAdapter.model;
     result = await mockAdapter.runTask(taskInput);
     usedFallback = true;
   }
@@ -238,6 +241,7 @@ export async function runNextAgentStep(sessionId: number): Promise<{
       agentId: assignedAgent.id,
       role: "assistant",
       provider: assignedAgent.provider,
+      model: usedModel ?? undefined,
       content: result.messageText,
       taskId: nextTask.id,
       agentName: assignedAgent.name,

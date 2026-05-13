@@ -342,6 +342,9 @@ export default function SessionWorkspace() {
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className="font-semibold text-xs">{isUser ? "You" : msg.agentName || "System"}</span>
                         {!isUser && msg.agentRole && <span className="text-[10px] opacity-70">| {msg.agentRole}</span>}
+                        {!isUser && msg.model && (
+                          <span className="text-[10px] opacity-60 font-mono bg-black/10 rounded px-1">{msg.model}</span>
+                        )}
                         {isSimulated && (
                           <Badge variant="outline" className="text-[10px] h-4 px-1.5 gap-0.5 text-amber-400 border-amber-500/40">
                             <FlaskConical className="h-2.5 w-2.5" /> Simulated

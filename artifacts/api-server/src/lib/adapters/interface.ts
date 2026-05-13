@@ -19,6 +19,7 @@ export interface AgentAdapter {
   id: string;
   name: string;
   provider: string;
+  model: string;
   capabilities: string[];
   role: string;
   isMock: boolean;

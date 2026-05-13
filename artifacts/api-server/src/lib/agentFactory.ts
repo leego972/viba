@@ -21,7 +21,7 @@ class AnthropicAdapter implements AgentAdapter {
   role: string;
   isMock = false;
   private apiKey: string;
-  private model: string;
+  model: string;
   constructor(id: string, name: string, role: string, apiKey: string, model?: string) {
     this.id = id;
     this.name = name;
@@ -80,7 +80,7 @@ class GeminiAdapter implements AgentAdapter {
   role: string;
   isMock = false;
   private apiKey: string;
-  private model: string;
+  model: string;
   constructor(id: string, name: string, role: string, apiKey: string, model?: string) {
     this.id = id;
     this.name = name;
@@ -137,7 +137,7 @@ class PerplexityAdapter implements AgentAdapter {
   role: string;
   isMock = false;
   private apiKey: string;
-  private model: string;
+  model: string;
   constructor(id: string, name: string, role: string, apiKey: string, model?: string) {
     this.id = id;
     this.name = name;
@@ -194,7 +194,7 @@ class ReplitAdapter implements AgentAdapter {
   role: string;
   isMock = false;
   private apiKey: string;
-  private model: string;
+  model: string;
   constructor(id: string, name: string, role: string, apiKey: string, model?: string) {
     this.id = id;
     this.name = name;
@@ -251,7 +251,7 @@ class ManusAdapter implements AgentAdapter {
   role: string;
   isMock = false;
   private apiKey: string;
-  private model: string;
+  model: string;
   constructor(id: string, name: string, role: string, apiKey: string, model?: string) {
     this.id = id;
     this.name = name;

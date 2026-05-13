@@ -10,7 +10,7 @@ export class ReplitAdapter implements AgentAdapter {
   isMock = false;
 
   private apiKey: string;
-  private model: string;
+  model: string;
 
   constructor(id: string, name: string, role: string, apiKey: string, model?: string) {
     this.id = id;
