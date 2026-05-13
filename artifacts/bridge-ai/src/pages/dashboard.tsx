@@ -103,6 +103,15 @@ export default function Dashboard() {
   const trendData = buildTrendData(stats?.fallbackTrend ?? []);
   const hasTrendData = (stats?.fallbackTrend ?? []).length > 0;
   const modelUsage = stats?.modelUsage ?? [];
+  const modelUsageBreakdown = stats?.modelUsageBreakdown ?? [];
+
+  const breakdownByProvider = modelUsageBreakdown.reduce<
+    Record<string, { live: Array<{ model: string; count: number }>; simulated: Array<{ model: string; count: number }> }>
+  >((acc, row) => {
+    if (!acc[row.provider]) acc[row.provider] = { live: [], simulated: [] };
+    acc[row.provider][row.mode].push({ model: row.model, count: row.count });
+    return acc;
+  }, {});
 
   return (
     <AppLayout>
@@ -290,8 +299,42 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {/* Model usage breakdown */}
-        {modelUsage.length > 0 && (
+        {/* Model usage breakdown by provider — live vs simulated */}
+        {modelUsageBreakdown.length > 0 ? (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Zap className="h-4 w-4 text-emerald-400" />
+                Model Usage
+                <span className="ml-auto text-[11px] font-normal text-muted-foreground flex items-center gap-3">
+                  <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />Live</span>
+                  <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-amber-400" />Simulated</span>
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0 space-y-4">
+              {Object.entries(breakdownByProvider).map(([provider, { live, simulated }]) => (
+                <div key={provider}>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">{provider}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {live.map(({ model, count }) => (
+                      <div key={`${model}-live`} className="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5">
+                        <span className="text-xs font-mono">{model}</span>
+                        <Badge variant="secondary" className="text-[10px] px-1.5 h-4 bg-emerald-500/20 text-emerald-300 border-0">{count} live</Badge>
+                      </div>
+                    ))}
+                    {simulated.map(({ model, count }) => (
+                      <div key={`${model}-sim`} className="flex items-center gap-2 rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-1.5">
+                        <span className="text-xs font-mono">{model}</span>
+                        <Badge variant="secondary" className="text-[10px] px-1.5 h-4 bg-amber-400/20 text-amber-300 border-0">{count} sim</Badge>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        ) : modelUsage.length > 0 && (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">

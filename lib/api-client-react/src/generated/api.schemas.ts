@@ -24,6 +24,21 @@ export interface ModelUsageCount {
   count: number;
 }
 
+export type ModelUsageBreakdownMode =
+  (typeof ModelUsageBreakdownMode)[keyof typeof ModelUsageBreakdownMode];
+
+export const ModelUsageBreakdownMode = {
+  live: "live",
+  simulated: "simulated",
+} as const;
+
+export interface ModelUsageBreakdown {
+  model: string;
+  provider: string;
+  mode: ModelUsageBreakdownMode;
+  count: number;
+}
+
 export interface BridgeStats {
   totalSessions: number;
   activeSessions: number;
@@ -32,6 +47,8 @@ export interface BridgeStats {
   fallbacksByProvider: ProviderFallbackCount[];
   fallbackTrend: FallbackTrendPoint[];
   modelUsage: ModelUsageCount[];
+  /** Per-model message counts split by live vs. simulated, grouped by provider */
+  modelUsageBreakdown: ModelUsageBreakdown[];
   spikeProviders: string[];
   /** Providers that exceeded the alert threshold in the rolling window */
   recentSpikeProviders: string[];

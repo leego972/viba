@@ -9,6 +9,21 @@ const DEFAULT_ALERT_THRESHOLD = 5;
 const ALERT_WINDOW_HOURS = 1;
 const LEGACY_SPIKE_THRESHOLD = 3;
 
+const SIMULATED_PREFIX = "⚠️ [Simulated";
+
+export function classifyModelRows(
+  rows: Array<{ model: string | null; provider: string | null; simulated: boolean; count: number }>
+): Array<{ model: string; provider: string; mode: "live" | "simulated"; count: number }> {
+  return rows
+    .filter((r) => r.model && r.provider)
+    .map((r) => ({
+      model: r.model!,
+      provider: r.provider!,
+      mode: r.simulated ? "simulated" : "live",
+      count: r.count,
+    }));
+}
+
 router.get("/stats", async (req, res): Promise<void> => {
   const [totals] = await db
     .select({ total: sql<number>`count(*)::int` })
@@ -66,6 +81,22 @@ router.get("/stats", async (req, res): Promise<void> => {
     .groupBy(messagesTable.model)
     .orderBy(desc(sql`count(*)`));
 
+  const modelUsageRaw = await db
+    .select({
+      model: messagesTable.model,
+      provider: messagesTable.provider,
+      simulated: sql<boolean>`(${messagesTable.content} LIKE ${SIMULATED_PREFIX + "%"})`,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(messagesTable)
+    .where(sql`${messagesTable.model} IS NOT NULL AND ${messagesTable.model} <> ''`)
+    .groupBy(
+      messagesTable.model,
+      messagesTable.provider,
+      sql`(${messagesTable.content} LIKE ${SIMULATED_PREFIX + "%"})`
+    )
+    .orderBy(desc(sql`count(*)`));
+
   const alertSettings = await db
     .select({ key: settingsTable.key, value: settingsTable.value })
     .from(settingsTable)
@@ -107,6 +138,7 @@ router.get("/stats", async (req, res): Promise<void> => {
     fallbacksByProvider: byProvider,
     fallbackTrend: trend,
     modelUsage: modelUsage.map((m) => ({ model: m.model ?? "unknown", count: m.count })),
+    modelUsageBreakdown: classifyModelRows(modelUsageRaw),
     spikeProviders,
     recentSpikeProviders,
     recentSpikeThreshold: alertThreshold,
