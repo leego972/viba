@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, auditLogsTable, sessionsTable } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, isNotNull, ne, desc } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -26,12 +26,17 @@ router.get("/stats", async (req, res): Promise<void> => {
 
   const byProvider = await db
     .select({
-      provider: sql<string>`metadata->>'agentId'`,
+      provider: sql<string>`metadata->>'provider'`,
       count: sql<number>`count(*)::int`,
     })
     .from(auditLogsTable)
-    .where(eq(auditLogsTable.eventType, "adapter_fallback"))
-    .groupBy(sql`metadata->>'agentId'`);
+    .where(
+      sql`${auditLogsTable.eventType} = 'adapter_fallback'
+        AND metadata->>'provider' IS NOT NULL
+        AND metadata->>'provider' <> ''`
+    )
+    .groupBy(sql`metadata->>'provider'`)
+    .orderBy(desc(sql`count(*)`));
 
   res.json({
     totalSessions: totals?.total ?? 0,

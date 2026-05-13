@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { useGetSettings, useSaveSettings, getGetSettingsQueryKey } from "@workspace/api-client-react";
+import { useGetSettings, useSaveSettings, useGetStats, getGetSettingsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Key, ShieldCheck, Zap } from "lucide-react";
+import { Key, ShieldCheck, Zap, RotateCcw, BarChart2 } from "lucide-react";
 
 type ModelOption = { value: string; label: string };
 
@@ -24,6 +24,7 @@ type ProviderConfig = {
   label: string;
   placeholder: string;
   hint: string;
+  providerName: string;
   modelKey?: string;
   defaultModel?: string;
   models?: ModelOption[];
@@ -35,6 +36,7 @@ const PROVIDERS: ProviderConfig[] = [
     label: "OpenAI API Key (ChatGPT)",
     placeholder: "sk-...",
     hint: "Powers ChatGPT agents.",
+    providerName: "openai",
     modelKey: "OPENAI_MODEL",
     defaultModel: "gpt-4.1-mini",
     models: [
@@ -51,6 +53,7 @@ const PROVIDERS: ProviderConfig[] = [
     label: "Anthropic API Key (Claude)",
     placeholder: "sk-ant-...",
     hint: "Powers Claude agents.",
+    providerName: "anthropic",
     modelKey: "ANTHROPIC_MODEL",
     defaultModel: "claude-3-5-haiku-20241022",
     models: [
@@ -65,6 +68,7 @@ const PROVIDERS: ProviderConfig[] = [
     label: "Google Gemini API Key",
     placeholder: "AIza...",
     hint: "Powers Gemini agents.",
+    providerName: "gemini",
     modelKey: "GEMINI_MODEL",
     defaultModel: "gemini-2.0-flash",
     models: [
@@ -80,6 +84,7 @@ const PROVIDERS: ProviderConfig[] = [
     label: "Perplexity API Key",
     placeholder: "pplx-...",
     hint: "Powers Perplexity research agents.",
+    providerName: "perplexity",
     modelKey: "PERPLEXITY_MODEL",
     defaultModel: "sonar",
     models: [
@@ -94,12 +99,14 @@ const PROVIDERS: ProviderConfig[] = [
     label: "Replit Agent API Key",
     placeholder: "replit-...",
     hint: "Powers Replit code agents. Obtain your key from replit.com/account.",
+    providerName: "replit",
   },
   {
     key: "MANUS_API_KEY",
     label: "Manus API Key",
     placeholder: "manus-...",
     hint: "Powers Manus research agents. Obtain your key from manus.im.",
+    providerName: "manus",
   },
 ];
 
@@ -111,6 +118,7 @@ type KeyState = Record<string, string>;
 
 export default function Settings() {
   const { data: settings, isLoading } = useGetSettings();
+  const { data: stats } = useGetStats();
   const saveSettings = useSaveSettings();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -158,6 +166,13 @@ export default function Settings() {
     );
   };
 
+  const fallbackMap = new Map(
+    (stats?.fallbacksByProvider ?? [])
+      .filter(({ provider }) => provider)
+      .map(({ provider, count }) => [provider.toLowerCase(), count])
+  );
+  const totalFallbacks = stats?.fallbackEvents ?? 0;
+
   return (
     <AppLayout>
       <div className="flex flex-col space-y-6 max-w-3xl mx-auto">
@@ -177,6 +192,22 @@ export default function Settings() {
             </p>
           </div>
         </div>
+
+        {/* Fallback stats summary */}
+        {totalFallbacks > 0 && (
+          <Card className="border-amber-500/30 bg-amber-500/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-base text-amber-400">
+                <BarChart2 className="h-4 w-4" />
+                Fallback Activity
+              </CardTitle>
+              <CardDescription>
+                {totalFallbacks} live API {totalFallbacks === 1 ? "call has" : "calls have"} fallen back to simulation.
+                Providers with issues are highlighted below.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        )}
 
         <Card>
           <CardHeader>
@@ -200,47 +231,56 @@ export default function Settings() {
                   ))}
                 </div>
               ) : (
-                PROVIDERS.map(({ key, label, placeholder, hint, modelKey, defaultModel, models }) => (
-                  <div key={key} className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Label htmlFor={key}>{label}</Label>
-                      <Badge variant="outline" className="text-green-600 border-green-500/40 bg-green-500/10 gap-1 px-1.5 py-0 text-[10px]">
-                        <Zap className="h-2.5 w-2.5" /> Live
-                      </Badge>
-                    </div>
-                    <Input
-                      type="password"
-                      id={key}
-                      name={key}
-                      placeholder={placeholder}
-                      value={values[key] ?? ""}
-                      onChange={handleKeyChange}
-                    />
-                    {modelKey && models && (
-                      <div className="flex items-center gap-2">
-                        <Label htmlFor={modelKey} className="text-xs text-muted-foreground whitespace-nowrap">
-                          Model
-                        </Label>
-                        <Select
-                          value={values[modelKey] || defaultModel}
-                          onValueChange={(v) => handleModelChange(modelKey, v)}
-                        >
-                          <SelectTrigger id={modelKey} className="h-8 text-xs">
-                            <SelectValue placeholder={`Default: ${defaultModel}`} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {models.map((m) => (
-                              <SelectItem key={m.value} value={m.value} className="text-xs">
-                                {m.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                PROVIDERS.map(({ key, label, placeholder, hint, providerName, modelKey, defaultModel, models }) => {
+                  const fallbackCount = fallbackMap.get(providerName) ?? 0;
+                  return (
+                    <div key={key} className={`space-y-2 rounded-lg p-3 -mx-3 ${fallbackCount > 0 ? "bg-amber-500/5 border border-amber-500/20" : ""}`}>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Label htmlFor={key}>{label}</Label>
+                        <Badge variant="outline" className="text-green-600 border-green-500/40 bg-green-500/10 gap-1 px-1.5 py-0 text-[10px]">
+                          <Zap className="h-2.5 w-2.5" /> Live
+                        </Badge>
+                        {fallbackCount > 0 && (
+                          <Badge variant="outline" className="text-amber-500 border-amber-500/40 bg-amber-500/10 gap-1 px-1.5 py-0 text-[10px]">
+                            <RotateCcw className="h-2.5 w-2.5" />
+                            {fallbackCount} {fallbackCount === 1 ? "fallback" : "fallbacks"}
+                          </Badge>
+                        )}
                       </div>
-                    )}
-                    <p className="text-xs text-muted-foreground">{hint}</p>
-                  </div>
-                ))
+                      <Input
+                        type="password"
+                        id={key}
+                        name={key}
+                        placeholder={placeholder}
+                        value={values[key] ?? ""}
+                        onChange={handleKeyChange}
+                      />
+                      {modelKey && models && (
+                        <div className="flex items-center gap-2">
+                          <Label htmlFor={modelKey} className="text-xs text-muted-foreground whitespace-nowrap">
+                            Model
+                          </Label>
+                          <Select
+                            value={values[modelKey] || defaultModel}
+                            onValueChange={(v) => handleModelChange(modelKey, v)}
+                          >
+                            <SelectTrigger id={modelKey} className="h-8 text-xs">
+                              <SelectValue placeholder={`Default: ${defaultModel}`} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {models.map((m) => (
+                                <SelectItem key={m.value} value={m.value} className="text-xs">
+                                  {m.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">{hint}</p>
+                    </div>
+                  );
+                })
               )}
             </form>
           </CardContent>

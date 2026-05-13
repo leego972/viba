@@ -478,3 +478,20 @@ export const SaveSettingsResponseItem = zod.object({
   updatedAt: zod.string(),
 });
 export const SaveSettingsResponse = zod.array(SaveSettingsResponseItem);
+
+/**
+ * Returns session counts and fallback event counts grouped by provider
+ * @summary Get aggregated usage statistics
+ */
+export const GetStatsResponse = zod.object({
+  totalSessions: zod.number(),
+  activeSessions: zod.number(),
+  completedSessions: zod.number(),
+  fallbackEvents: zod.number(),
+  fallbacksByProvider: zod.array(
+    zod.object({
+      provider: zod.string(),
+      count: zod.number(),
+    }),
+  ),
+});

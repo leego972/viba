@@ -1,33 +1,12 @@
 import { Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { useListSessions, type AgentModeSummary } from "@workspace/api-client-react";
-import { useQuery } from "@tanstack/react-query";
+import { useListSessions, useGetStats, type AgentModeSummary } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Activity, Clock, DollarSign, Layers, Zap, RotateCcw, Wifi, WifiOff } from "lucide-react";
+import { Plus, Activity, Clock, DollarSign, Layers, Zap, RotateCcw, Wifi, WifiOff, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
-
-interface BridgeStats {
-  totalSessions: number;
-  activeSessions: number;
-  completedSessions: number;
-  fallbackEvents: number;
-}
-
-function useStats() {
-  return useQuery<BridgeStats>({
-    queryKey: ["bridge-stats"],
-    queryFn: async () => {
-      const res = await fetch("/api/stats");
-      if (!res.ok) throw new Error("stats unavailable");
-      return res.json();
-    },
-    refetchInterval: 10_000,
-    retry: false,
-  });
-}
 
 function getSessionMode(agentModes: AgentModeSummary[]): "live" | "simulation" | "mixed" | "unknown" {
   if (agentModes.length === 0) return "unknown";
@@ -66,7 +45,7 @@ function SessionModeBadge({ agentModes }: { agentModes: AgentModeSummary[] }) {
 
 export default function Dashboard() {
   const { data: sessions, isLoading, isError } = useListSessions();
-  const { data: stats } = useStats();
+  const { data: stats } = useGetStats();
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -101,6 +80,9 @@ export default function Dashboard() {
       warn: (stats?.fallbackEvents ?? 0) > 0,
     },
   ];
+
+  const hasFallbacks = (stats?.fallbackEvents ?? 0) > 0;
+  const fallbacksByProvider = stats?.fallbacksByProvider ?? [];
 
   return (
     <AppLayout>
@@ -153,6 +135,41 @@ export default function Dashboard() {
           ))}
         </div>
 
+        {/* Per-provider fallback breakdown */}
+        {hasFallbacks && fallbacksByProvider.length > 0 && (
+          <Card className="border-amber-500/30 bg-amber-500/5">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base text-amber-400">
+                <AlertTriangle className="h-4 w-4" />
+                Fallbacks by Provider
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="flex flex-wrap gap-3">
+                {fallbacksByProvider.map(({ provider, count }) => (
+                  <div
+                    key={provider}
+                    className="flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2"
+                  >
+                    <WifiOff className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                    <span className="text-sm font-medium capitalize">{provider}</span>
+                    <Badge variant="outline" className="text-amber-400 border-amber-500/30 bg-amber-500/10 text-xs px-1.5 py-0 h-5">
+                      {count} {count === 1 ? "fallback" : "fallbacks"}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-3">
+                These providers had live API calls fail and fall back to simulation. Check your API keys in{" "}
+                <Link href="/settings" className="underline underline-offset-2 hover:text-foreground">
+                  Settings
+                </Link>
+                .
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
         {isLoading ? (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {[...Array(3)].map((_, i) => (
@@ -203,9 +220,9 @@ export default function Dashboard() {
                         {session.autonomyMode}
                       </Badge>
                     </div>
-                    <CardTitle className="line-clamp-2 mt-2 text-lg">
+                    <div className="line-clamp-2 mt-2 text-lg font-semibold">
                       {session.goal || "Untitled Session"}
-                    </CardTitle>
+                    </div>
                   </CardHeader>
                   <CardContent className="pb-3 flex-1">
                     <div className="flex flex-col space-y-2 text-sm text-muted-foreground">
@@ -219,11 +236,11 @@ export default function Dashboard() {
                       </div>
                     </div>
                   </CardContent>
-                  <CardFooter className="pt-0">
+                  <div className="px-6 pb-4 pt-0">
                     <Button variant="ghost" className="w-full text-primary hover:text-primary">
                       Open Workspace
                     </Button>
-                  </CardFooter>
+                  </div>
                 </Card>
               </Link>
             ))}
