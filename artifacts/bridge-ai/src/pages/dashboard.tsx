@@ -5,8 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Activity, Clock, DollarSign, Layers, Zap, RotateCcw, Wifi, WifiOff, AlertTriangle } from "lucide-react";
-import { format } from "date-fns";
+import { Plus, Activity, Clock, DollarSign, Layers, Zap, RotateCcw, Wifi, WifiOff, AlertTriangle, TrendingDown } from "lucide-react";
+import { format, subDays } from "date-fns";
+import {
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+} from "recharts";
 
 function getSessionMode(agentModes: AgentModeSummary[]): "live" | "simulation" | "mixed" | "unknown" {
   if (agentModes.length === 0) return "unknown";
@@ -41,6 +44,16 @@ function SessionModeBadge({ agentModes }: { agentModes: AgentModeSummary[] }) {
       Mixed
     </Badge>
   );
+}
+
+function buildTrendData(trend: { day: string; count: number }[]) {
+  const today = new Date();
+  return Array.from({ length: 14 }, (_, i) => {
+    const d = subDays(today, 13 - i);
+    const dayStr = d.toISOString().slice(0, 10);
+    const found = trend.find(t => t.day.startsWith(dayStr));
+    return { day: format(d, "MMM d"), count: found?.count ?? 0 };
+  });
 }
 
 export default function Dashboard() {
@@ -83,6 +96,10 @@ export default function Dashboard() {
 
   const hasFallbacks = (stats?.fallbackEvents ?? 0) > 0;
   const fallbacksByProvider = stats?.fallbacksByProvider ?? [];
+  const spikeProviders = stats?.spikeProviders ?? [];
+  const trendData = buildTrendData(stats?.fallbackTrend ?? []);
+  const hasTrendData = (stats?.fallbackTrend ?? []).length > 0;
+  const modelUsage = stats?.modelUsage ?? [];
 
   return (
     <AppLayout>
@@ -99,6 +116,27 @@ export default function Dashboard() {
             </Button>
           </Link>
         </div>
+
+        {/* Spike Alert — shown when a provider has 3+ fallbacks */}
+        {spikeProviders.length > 0 && (
+          <div className="flex items-start gap-3 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+            <TrendingDown className="h-5 w-5 shrink-0 mt-0.5 text-red-400" />
+            <div className="flex-1">
+              <p className="font-semibold text-red-300 mb-1">High fallback rate detected</p>
+              <p className="text-red-300/80">
+                {spikeProviders.length === 1
+                  ? `The ${spikeProviders[0]} provider`
+                  : `Providers ${spikeProviders.join(", ")}`}{" "}
+                {spikeProviders.length === 1 ? "has" : "have"} triggered 3 or more simulation fallbacks.
+                Live API calls are failing — check your API keys in{" "}
+                <Link href="/settings" className="underline underline-offset-2 hover:text-red-200">
+                  Settings
+                </Link>
+                .
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Stats row */}
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
@@ -166,6 +204,86 @@ export default function Dashboard() {
                 </Link>
                 .
               </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Fallback trend chart */}
+        {hasTrendData && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <RotateCcw className="h-4 w-4 text-amber-400" />
+                Fallback Trend — Last 14 Days
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <ResponsiveContainer width="100%" height={160}>
+                <AreaChart data={trendData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="fallbackGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                  <XAxis
+                    dataKey="day"
+                    tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                    tickLine={false}
+                    axisLine={false}
+                    interval={3}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                    tickLine={false}
+                    axisLine={false}
+                    allowDecimals={false}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      background: "hsl(var(--card))",
+                      border: "1px solid hsl(var(--border))",
+                      borderRadius: "6px",
+                      fontSize: "12px",
+                    }}
+                    labelStyle={{ color: "hsl(var(--foreground))" }}
+                    itemStyle={{ color: "#f59e0b" }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="count"
+                    name="Fallbacks"
+                    stroke="#f59e0b"
+                    strokeWidth={2}
+                    fill="url(#fallbackGrad)"
+                    dot={false}
+                    activeDot={{ r: 4, fill: "#f59e0b" }}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Model usage breakdown */}
+        {modelUsage.length > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Zap className="h-4 w-4 text-emerald-400" />
+                Model Usage
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="flex flex-wrap gap-2">
+                {modelUsage.map(({ model, count }) => (
+                  <div key={model} className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-1.5">
+                    <span className="text-xs font-mono">{model}</span>
+                    <Badge variant="secondary" className="text-[10px] px-1.5 h-4">{count} msg{count !== 1 ? "s" : ""}</Badge>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
         )}

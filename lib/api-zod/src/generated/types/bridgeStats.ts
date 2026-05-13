@@ -5,6 +5,8 @@
  * BridgeAI API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { FallbackTrendPoint } from "./fallbackTrendPoint";
+import type { ModelUsageCount } from "./modelUsageCount";
 import type { ProviderFallbackCount } from "./providerFallbackCount";
 
 export interface BridgeStats {
@@ -13,4 +15,7 @@ export interface BridgeStats {
   completedSessions: number;
   fallbackEvents: number;
   fallbacksByProvider: ProviderFallbackCount[];
+  fallbackTrend: FallbackTrendPoint[];
+  modelUsage: ModelUsageCount[];
+  spikeProviders: string[];
 }

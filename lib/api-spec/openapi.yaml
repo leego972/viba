@@ -436,6 +436,28 @@ components:
         - provider
         - count
 
+    FallbackTrendPoint:
+      type: object
+      properties:
+        day:
+          type: string
+        count:
+          type: integer
+      required:
+        - day
+        - count
+
+    ModelUsageCount:
+      type: object
+      properties:
+        model:
+          type: string
+        count:
+          type: integer
+      required:
+        - model
+        - count
+
     BridgeStats:
       type: object
       properties:
@@ -451,12 +473,27 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ProviderFallbackCount"
+        fallbackTrend:
+          type: array
+          items:
+            $ref: "#/components/schemas/FallbackTrendPoint"
+        modelUsage:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModelUsageCount"
+        spikeProviders:
+          type: array
+          items:
+            type: string
       required:
         - totalSessions
         - activeSessions
         - completedSessions
         - fallbackEvents
         - fallbacksByProvider
+        - fallbackTrend
+        - modelUsage
+        - spikeProviders
 
     ErrorResponse:
       type: object
@@ -621,6 +658,8 @@ components:
             type: string
         isMock:
           type: boolean
+        lastUsedModel:
+          type: ["string", "null"]
       required:
         - id
         - sessionId
@@ -629,6 +668,7 @@ components:
         - role
         - capabilities
         - isMock
+        - lastUsedModel
 
     Task:
       type: object

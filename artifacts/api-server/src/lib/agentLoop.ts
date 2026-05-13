@@ -233,6 +233,11 @@ export async function runNextAgentStep(sessionId: number): Promise<{
     };
   }
 
+  // Persist the model that was actually used onto the agent record
+  if (usedModel) {
+    await db.update(agentsTable).set({ lastUsedModel: usedModel }).where(eq(agentsTable.id, assignedAgent.id));
+  }
+
   // Save message
   const [newMsg] = await db
     .insert(messagesTable)

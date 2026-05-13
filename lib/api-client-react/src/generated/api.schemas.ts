@@ -14,12 +14,25 @@ export interface ProviderFallbackCount {
   count: number;
 }
 
+export interface FallbackTrendPoint {
+  day: string;
+  count: number;
+}
+
+export interface ModelUsageCount {
+  model: string;
+  count: number;
+}
+
 export interface BridgeStats {
   totalSessions: number;
   activeSessions: number;
   completedSessions: number;
   fallbackEvents: number;
   fallbacksByProvider: ProviderFallbackCount[];
+  fallbackTrend: FallbackTrendPoint[];
+  modelUsage: ModelUsageCount[];
+  spikeProviders: string[];
 }
 
 export interface ErrorResponse {
@@ -54,6 +67,8 @@ export interface Agent {
   role: string;
   capabilities: string[];
   isMock: boolean;
+  /** @nullable */
+  lastUsedModel: string | null;
 }
 
 export interface Task {
