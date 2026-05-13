@@ -87,7 +87,7 @@ router.get("/stats", async (req, res): Promise<void> => {
     .select({
       model: messagesTable.model,
       provider: messagesTable.provider,
-      simulated: sql<boolean>`(${messagesTable.content} LIKE ${SIMULATED_PREFIX + "%"})`,
+      simulated: sql<boolean>`(${messagesTable.content} LIKE '⚠️ [Simulated%')`,
       count: sql<number>`count(*)::int`,
     })
     .from(messagesTable)
@@ -95,7 +95,7 @@ router.get("/stats", async (req, res): Promise<void> => {
     .groupBy(
       messagesTable.model,
       messagesTable.provider,
-      sql`(${messagesTable.content} LIKE ${SIMULATED_PREFIX + "%"})`
+      sql`(${messagesTable.content} LIKE '⚠️ [Simulated%')`
     )
     .orderBy(desc(sql`count(*)`));
 

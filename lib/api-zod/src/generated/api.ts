@@ -145,6 +145,13 @@ export const GetSessionResponse = zod.object({
 });
 
 /**
+ * @summary Delete a session and all its data
+ */
+export const DeleteSessionParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
  * @summary Run next agent step
  */
 export const RunNextStepParams = zod.object({

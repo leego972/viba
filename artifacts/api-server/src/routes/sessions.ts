@@ -418,6 +418,78 @@ router.post("/sessions/:id/stop", async (req, res): Promise<void> => {
   res.json(serialize(updated ? await withAgentModes(updated) : updated));
 });
 
+// GET /sessions/:id/stream — Server-Sent Events for real-time workspace updates
+router.get("/sessions/:id/stream", async (req, res): Promise<void> => {
+  const params = GetSessionParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const sessionId = params.data.id;
+  const [initial] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, sessionId));
+  if (!initial) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const sendSnapshot = async () => {
+    try {
+      const [sess] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, sessionId));
+      if (!sess) return;
+
+      const agentRows = await db.select().from(agentsTable).where(eq(agentsTable.sessionId, sessionId));
+      const agents = await withActiveModels(agentRows);
+      const messages = await db
+        .select().from(messagesTable)
+        .where(eq(messagesTable.sessionId, sessionId))
+        .orderBy(asc(messagesTable.id));
+      const tasks = await db
+        .select().from(tasksTable)
+        .where(eq(tasksTable.sessionId, sessionId))
+        .orderBy(asc(tasksTable.id));
+      const approvals = await db
+        .select().from(approvalsTable)
+        .where(eq(approvalsTable.sessionId, sessionId));
+      const auditLogs = await db
+        .select().from(auditLogsTable)
+        .where(eq(auditLogsTable.sessionId, sessionId))
+        .orderBy(asc(auditLogsTable.id));
+      const [memory] = await db
+        .select().from(memoryTable)
+        .where(eq(memoryTable.sessionId, sessionId));
+
+      const payload = serialize({
+        session: { ...sess, memory: memory ?? null },
+        agents,
+        messages,
+        tasks,
+        approvals,
+        auditLogs,
+      });
+
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    } catch {
+      // ignore snapshot errors — EventSource auto-reconnects
+    }
+  };
+
+  await sendSnapshot();
+  const interval = setInterval(sendSnapshot, 800);
+  const keepAlive = setInterval(() => res.write(": ping\n\n"), 20_000);
+
+  req.on("close", () => {
+    clearInterval(interval);
+    clearInterval(keepAlive);
+  });
+});
+
 // GET /sessions/:id/agents
 router.get("/sessions/:id/agents", async (req, res): Promise<void> => {
   const params = ListAgentsParams.safeParse(req.params);

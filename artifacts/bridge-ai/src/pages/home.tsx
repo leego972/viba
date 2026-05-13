@@ -11,6 +11,9 @@ export default function Home() {
           <span className="font-bold text-lg tracking-tight">BridgeAI</span>
         </Link>
         <nav className="ml-auto flex gap-4 sm:gap-6">
+          <Link href="/settings">
+            <Button variant="ghost" size="sm">Settings</Button>
+          </Link>
           <Link href="/dashboard">
             <Button variant="outline" size="sm">Dashboard</Button>
           </Link>
@@ -97,7 +100,7 @@ export default function Home() {
           <div className="container px-4 md:px-6">
             <div className="grid gap-10 sm:px-10 md:gap-16 lg:grid-cols-2">
               <div className="space-y-4">
-                <div className="inline-block rounded-lg bg-muted px-3 py-1 text-sm">Safety First</div>
+                <div className="inline-block rounded-lg bg-muted px-3 py-1 text-sm">Security First</div>
                 <h2 className="lg:leading-tighter text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl xl:text-[3.4rem] 2xl:text-[3.75rem]">
                   Supervised execution.
                 </h2>
@@ -120,9 +123,9 @@ export default function Home() {
                 </div>
                 <div className="rounded-xl border bg-card text-card-foreground shadow border-primary/20">
                   <div className="p-6 space-y-4">
-                    <h3 className="font-semibold text-lg">MVP Disclaimer</h3>
+                    <h3 className="font-semibold text-lg">Server-Side Security</h3>
                     <p className="text-sm text-muted-foreground">
-                      API keys are stored entirely in your browser's local storage. This is a local-first MVP designed for developers who want to control their own inference costs.
+                      API keys are stored securely in the database and never exposed to the browser. All provider calls go through BridgeAI's API layer — giving you full cost visibility and control without client-side leaks.
                     </p>
                   </div>
                 </div>
