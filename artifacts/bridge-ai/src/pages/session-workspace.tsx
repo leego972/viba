@@ -29,7 +29,7 @@ import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import {
   Play, FastForward, Square, Send, CheckCircle2, Clock, User, Bot,
-  AlertTriangle, Crosshair, LineChart, Zap, FlaskConical, RotateCcw,
+  AlertTriangle, Crosshair, LineChart, Zap, FlaskConical, RotateCcw, X,
 } from "lucide-react";
 
 const AGENT_COLORS: Record<string, string> = {
@@ -54,6 +54,7 @@ export default function SessionWorkspace() {
   const [userInstruction, setUserInstruction] = useState("");
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [pendingApproval, setPendingApproval] = useState<any>(null);
+  const [fallbackBannerDismissed, setFallbackBannerDismissed] = useState(false);
 
   // Queries
   const { data: session, isLoading: sessionLoading } = useGetSession(sessionId, {
@@ -86,7 +87,12 @@ export default function SessionWorkspace() {
   const isSessionActive = session?.status === "active";
 
   // Detect if any messages used simulation fallback
-  const hasFallbackMessages = messages.some(m => m.content?.startsWith(SIMULATED_PREFIX));
+  const fallbackMessages = messages.filter(m => m.content?.startsWith(SIMULATED_PREFIX));
+  const hasFallbackMessages = fallbackMessages.length > 0;
+  const fallbackAgentNames = [...new Set(fallbackMessages.map(m => m.agentName).filter(Boolean))];
+  const fallbackAgentCount = fallbackAgentNames.length;
+
+  const showFallbackBanner = hasFallbackMessages && !fallbackBannerDismissed;
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -181,13 +187,27 @@ export default function SessionWorkspace() {
     <AppLayout>
       <div className="flex flex-col h-[calc(100vh-8rem)] gap-4">
         {/* Simulation fallback banner */}
-        {hasFallbackMessages && (
+        {showFallbackBanner && (
           <div className="flex items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-300 shrink-0">
             <RotateCcw className="h-4 w-4 shrink-0 text-amber-400" />
-            <span>
-              <span className="font-semibold">One or more agents fell back to simulation</span> — a live API call
-              failed and was automatically retried before switching to simulation mode. Check your API keys in Settings.
+            <span className="flex-1">
+              <span className="font-semibold">
+                {fallbackAgentCount <= 1 ? "An agent" : `${fallbackAgentCount} agents`} switched to simulation mid-run
+              </span>{" "}
+              — the live API call failed and was automatically retried before falling back to simulation mode.
+              Simulated messages are marked with a{" "}
+              <span className="inline-flex items-center gap-0.5 font-medium text-amber-400">
+                <FlaskConical className="h-3 w-3" /> Simulated
+              </span>{" "}
+              badge. Check your API keys if you expected a live response.
             </span>
+            <button
+              onClick={() => setFallbackBannerDismissed(true)}
+              className="shrink-0 rounded p-0.5 hover:bg-amber-500/20 transition-colors"
+              aria-label="Dismiss banner"
+            >
+              <X className="h-4 w-4 text-amber-400" />
+            </button>
           </div>
         )}
 
