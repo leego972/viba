@@ -23,6 +23,7 @@ import type {
   AuditLog,
   BannerDismissal,
   BridgeStats,
+  CircuitBreakerEntry,
   CreateSessionBody,
   DismissBannerBody,
   ErrorResponse,
@@ -1792,6 +1793,82 @@ export function useGetStats<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetStatsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns the current open/half-open/closed state for every provider tracked by the circuit breaker
+ * @summary Get per-provider circuit breaker status
+ */
+export const getGetCircuitStatusUrl = () => {
+  return `/api/circuit-status`;
+};
+
+export const getCircuitStatus = async (
+  options?: RequestInit,
+): Promise<CircuitBreakerEntry[]> => {
+  return customFetch<CircuitBreakerEntry[]>(getGetCircuitStatusUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetCircuitStatusQueryKey = () => {
+  return [`/api/circuit-status`] as const;
+};
+
+export const getGetCircuitStatusQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCircuitStatus>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getCircuitStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetCircuitStatusQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getCircuitStatus>>
+  > = ({ signal }) => getCircuitStatus({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCircuitStatus>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetCircuitStatusQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCircuitStatus>>
+>;
+export type GetCircuitStatusQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get per-provider circuit breaker status
+ */
+
+export function useGetCircuitStatus<
+  TData = Awaited<ReturnType<typeof getCircuitStatus>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getCircuitStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCircuitStatusQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

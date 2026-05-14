@@ -4,9 +4,12 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import {
   useListSessions,
   useGetStats,
+  useGetCircuitStatus,
   useDeleteSession,
   getListSessionsQueryKey,
+  getGetCircuitStatusQueryKey,
   type AgentModeSummary,
+  type CircuitBreakerEntry,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -17,12 +20,91 @@ import { Input } from "@/components/ui/input";
 import {
   Plus, Activity, Clock, DollarSign, Layers, Zap, RotateCcw,
   Wifi, WifiOff, AlertTriangle, TrendingDown, Search, Trash2,
+  ShieldCheck, ShieldAlert, ShieldOff, RefreshCw,
 } from "lucide-react";
 import { format, subDays } from "date-fns";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
 import { useToast } from "@/hooks/use-toast";
+
+function formatMsRemaining(ms: number | null): string {
+  if (ms === null || ms <= 0) return "now";
+  const secs = Math.ceil(ms / 1000);
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.floor(secs / 60);
+  const remainSecs = secs % 60;
+  return remainSecs > 0 ? `${mins}m ${remainSecs}s` : `${mins}m`;
+}
+
+function CircuitStateBadge({ state }: { state: CircuitBreakerEntry["state"] }) {
+  if (state === "open") {
+    return (
+      <Badge variant="outline" className="gap-1 text-xs border-red-500/40 text-red-400 bg-red-500/10">
+        <ShieldOff className="h-3 w-3" />
+        Open
+      </Badge>
+    );
+  }
+  if (state === "half-open") {
+    return (
+      <Badge variant="outline" className="gap-1 text-xs border-amber-500/40 text-amber-400 bg-amber-500/10">
+        <ShieldAlert className="h-3 w-3" />
+        Half-open
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="gap-1 text-xs border-emerald-500/40 text-emerald-400 bg-emerald-500/10">
+      <ShieldCheck className="h-3 w-3" />
+      Closed
+    </Badge>
+  );
+}
+
+function ProviderHealthPanel({ entries }: { entries: CircuitBreakerEntry[] }) {
+  if (entries.length === 0) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        No providers have triggered the circuit breaker yet.
+      </p>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      {entries.map((entry) => (
+        <div
+          key={entry.provider}
+          className={`flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3 ${
+            entry.state === "open"
+              ? "border-red-500/30 bg-red-500/5"
+              : entry.state === "half-open"
+              ? "border-amber-500/30 bg-amber-500/5"
+              : "border-emerald-500/20 bg-emerald-500/5"
+          }`}
+        >
+          <span className="text-sm font-medium capitalize flex-1 min-w-[80px]">
+            {entry.provider}
+          </span>
+          <CircuitStateBadge state={entry.state} />
+          <span className="text-xs text-muted-foreground">
+            {entry.consecutiveFailures} failure{entry.consecutiveFailures !== 1 ? "s" : ""}
+          </span>
+          {entry.state === "open" && entry.msUntilReset !== null && (
+            <span className="text-xs text-red-400/80">
+              resets in {formatMsRemaining(entry.msUntilReset)}
+            </span>
+          )}
+          {entry.state === "half-open" && (
+            <span className="text-xs text-amber-400/80">
+              probe next call
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function getSessionMode(agentModes: AgentModeSummary[]): "live" | "simulation" | "mixed" | "unknown" {
   if (agentModes.length === 0) return "unknown";
@@ -75,6 +157,9 @@ type StatusFilter = typeof STATUS_FILTERS[number];
 export default function Dashboard() {
   const { data: sessions, isLoading, isError } = useListSessions();
   const { data: stats } = useGetStats();
+  const { data: circuitEntries = [], dataUpdatedAt: circuitUpdatedAt } = useGetCircuitStatus({
+    query: { queryKey: getGetCircuitStatusQueryKey(), refetchInterval: 10_000 },
+  });
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -244,6 +329,30 @@ export default function Dashboard() {
             </Card>
           ))}
         </div>
+
+        {/* Provider Health — circuit breaker status */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ShieldCheck className="h-4 w-4 text-emerald-400" />
+              Provider Health
+              <span className="ml-auto text-[11px] font-normal text-muted-foreground flex items-center gap-1">
+                <RefreshCw className="h-3 w-3" />
+                {circuitUpdatedAt
+                  ? `Updated ${format(new Date(circuitUpdatedAt), "HH:mm:ss")}`
+                  : "Auto-refreshes every 10s"}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <ProviderHealthPanel entries={circuitEntries} />
+            <p className="text-[11px] text-muted-foreground mt-3">
+              <span className="font-medium text-red-400">Open</span> — provider is blocked (cooldown active).{" "}
+              <span className="font-medium text-amber-400">Half-open</span> — cooldown elapsed, next call is a probe.{" "}
+              <span className="font-medium text-emerald-400">Closed</span> — provider is healthy.
+            </p>
+          </CardContent>
+        </Card>
 
         {/* Per-provider fallback breakdown */}
         {hasFallbacks && fallbacksByProvider.length > 0 && (

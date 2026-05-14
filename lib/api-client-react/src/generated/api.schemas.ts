@@ -74,6 +74,31 @@ export interface BridgeStats {
   alertEnabled: boolean;
 }
 
+export type CircuitBreakerEntryState =
+  (typeof CircuitBreakerEntryState)[keyof typeof CircuitBreakerEntryState];
+
+export const CircuitBreakerEntryState = {
+  open: "open",
+  "half-open": "half-open",
+  closed: "closed",
+} as const;
+
+export interface CircuitBreakerEntry {
+  provider: string;
+  state: CircuitBreakerEntryState;
+  consecutiveFailures: number;
+  /**
+   * Unix ms timestamp when the circuit opened, or null if closed
+   * @nullable
+   */
+  openedAt: number | null;
+  /**
+   * Milliseconds remaining until the circuit allows a probe, or null if closed
+   * @nullable
+   */
+  msUntilReset: number | null;
+}
+
 export interface ErrorResponse {
   error: string;
 }

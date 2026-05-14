@@ -488,6 +488,22 @@ paths:
               schema:
                 $ref: "#/components/schemas/BridgeStats"
 
+  /circuit-status:
+    get:
+      operationId: getCircuitStatus
+      tags: [stats]
+      summary: Get per-provider circuit breaker status
+      description: Returns the current open/half-open/closed state for every provider tracked by the circuit breaker
+      responses:
+        "200":
+          description: Circuit breaker status per provider
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CircuitBreakerEntry"
+
 components:
   schemas:
     HealthStatus:
@@ -636,6 +652,29 @@ components:
         - recentSpikeProviders
         - recentSpikeThreshold
         - alertEnabled
+
+    CircuitBreakerEntry:
+      type: object
+      properties:
+        provider:
+          type: string
+        state:
+          type: string
+          enum: [open, half-open, closed]
+        consecutiveFailures:
+          type: integer
+        openedAt:
+          type: ["integer", "null"]
+          description: Unix ms timestamp when the circuit opened, or null if closed
+        msUntilReset:
+          type: ["integer", "null"]
+          description: Milliseconds remaining until the circuit allows a probe, or null if closed
+      required:
+        - provider
+        - state
+        - consecutiveFailures
+        - openedAt
+        - msUntilReset
 
     ErrorResponse:
       type: object
