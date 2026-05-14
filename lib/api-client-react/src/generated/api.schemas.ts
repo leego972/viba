@@ -9,6 +9,18 @@ export interface HealthStatus {
   status: string;
 }
 
+export interface BannerDismissal {
+  sessionId: number;
+  /** @nullable */
+  dismissedAt: string | null;
+}
+
+export interface DismissBannerBody {
+  /** Optional ISO 8601 timestamp to use as the dismissal time. When omitted the server uses the current time. Pass the original localStorage timestamp during migration so the banner re-show logic (based on timestamp comparison) is preserved correctly.
+   */
+  dismissedAt?: string;
+}
+
 export interface ProviderFallbackCount {
   provider: string;
   count: number;

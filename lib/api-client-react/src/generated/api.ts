@@ -21,8 +21,10 @@ import type {
   Approval,
   ApproveActionBody,
   AuditLog,
+  BannerDismissal,
   BridgeStats,
   CreateSessionBody,
+  DismissBannerBody,
   ErrorResponse,
   HealthStatus,
   Memory,
@@ -1396,6 +1398,180 @@ export function useListApprovals<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Get banner dismissal timestamp for a session
+ */
+export const getGetBannerDismissalUrl = (id: number) => {
+  return `/api/sessions/${id}/banner-dismissal`;
+};
+
+export const getBannerDismissal = async (
+  id: number,
+  options?: RequestInit,
+): Promise<BannerDismissal> => {
+  return customFetch<BannerDismissal>(getGetBannerDismissalUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetBannerDismissalQueryKey = (id: number) => {
+  return [`/api/sessions/${id}/banner-dismissal`] as const;
+};
+
+export const getGetBannerDismissalQueryOptions = <
+  TData = Awaited<ReturnType<typeof getBannerDismissal>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getBannerDismissal>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetBannerDismissalQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getBannerDismissal>>
+  > = ({ signal }) => getBannerDismissal(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getBannerDismissal>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetBannerDismissalQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getBannerDismissal>>
+>;
+export type GetBannerDismissalQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get banner dismissal timestamp for a session
+ */
+
+export function useGetBannerDismissal<
+  TData = Awaited<ReturnType<typeof getBannerDismissal>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getBannerDismissal>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetBannerDismissalQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Record that the user dismissed the banner for this session
+ */
+export const getDismissBannerUrl = (id: number) => {
+  return `/api/sessions/${id}/banner-dismissal`;
+};
+
+export const dismissBanner = async (
+  id: number,
+  dismissBannerBody?: DismissBannerBody,
+  options?: RequestInit,
+): Promise<BannerDismissal> => {
+  return customFetch<BannerDismissal>(getDismissBannerUrl(id), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(dismissBannerBody),
+  });
+};
+
+export const getDismissBannerMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof dismissBanner>>,
+    TError,
+    { id: number; data: BodyType<DismissBannerBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof dismissBanner>>,
+  TError,
+  { id: number; data: BodyType<DismissBannerBody> },
+  TContext
+> => {
+  const mutationKey = ["dismissBanner"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof dismissBanner>>,
+    { id: number; data: BodyType<DismissBannerBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return dismissBanner(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DismissBannerMutationResult = NonNullable<
+  Awaited<ReturnType<typeof dismissBanner>>
+>;
+export type DismissBannerMutationBody = BodyType<DismissBannerBody>;
+export type DismissBannerMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Record that the user dismissed the banner for this session
+ */
+export const useDismissBanner = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof dismissBanner>>,
+    TError,
+    { id: number; data: BodyType<DismissBannerBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof dismissBanner>>,
+  TError,
+  { id: number; data: BodyType<DismissBannerBody> },
+  TContext
+> => {
+  return useMutation(getDismissBannerMutationOptions(options));
+};
 
 /**
  * @summary Get all settings

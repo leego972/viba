@@ -14,11 +14,14 @@ import {
   useListApprovals,
   useListAuditLogs,
   useGetStats,
+  useGetBannerDismissal,
+  useDismissBanner,
   getGetSessionQueryKey,
   getListMessagesQueryKey,
   getListTasksQueryKey,
   getListApprovalsQueryKey,
   getListAuditLogsQueryKey,
+  getGetBannerDismissalQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -90,28 +93,59 @@ export default function SessionWorkspace() {
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [pendingApproval, setPendingApproval] = useState<any>(null);
 
-  // Banner dismissal — stores the ISO timestamp at which the user dismissed the banner.
-  // If new simulated messages arrive after that timestamp, the banner re-appears automatically.
-  const storageKey = `bridge_fallback_banner_${sessionId}`;
-  const [dismissedAt, setDismissedAt] = useState<string | null>(() => {
-    try {
-      const stored = localStorage.getItem(storageKey);
-      if (stored !== null && isNaN(Date.parse(stored))) return null;
-      return stored;
-    } catch {
-      return null;
-    }
-  });
-
   // Prune stale keys from localStorage once on mount (#47)
   useEffect(() => { pruneStaleLocalStorageKeys(); }, []);
 
-  const dismissFallbackBanner = () => {
-    const now = new Date().toISOString();
-    setDismissedAt(now);
+  // Banner dismissal — persisted server-side so it works across devices.
+  // On first load we migrate any existing localStorage value to the server.
+  const bannerQueryKey = getGetBannerDismissalQueryKey(sessionId);
+  const dismissBannerMutation = useDismissBanner({
+    mutation: {
+      onSuccess: (data) => {
+        // Immediately sync the cache so the banner hides without a round-trip refetch.
+        queryClient.setQueryData(bannerQueryKey, data);
+      },
+    },
+  });
+  const { data: bannerDismissalData } = useGetBannerDismissal(sessionId, {
+    query: {
+      enabled: !!sessionId,
+      queryKey: bannerQueryKey,
+    },
+  });
+
+  // Migrate existing localStorage dismissal to the server (runs once when the
+  // server reports no dismissal for this session).
+  useEffect(() => {
+    if (!sessionId) return;
+    if (bannerDismissalData === undefined) return;
+    if (bannerDismissalData.dismissedAt !== null) return;
+    const storageKey = `bridge_fallback_banner_${sessionId}`;
     try {
-      localStorage.setItem(storageKey, now);
-    } catch {}
+      const stored = localStorage.getItem(storageKey);
+      if (stored && !isNaN(Date.parse(stored))) {
+        // Pass the original timestamp so the banner re-show comparison
+        // (latestFallbackTimestamp > dismissedAt) is preserved correctly.
+        dismissBannerMutation.mutate(
+          { id: sessionId, data: { dismissedAt: stored } },
+          {
+            onSuccess: () => {
+              // Remove the now-migrated legacy key so it doesn't linger.
+              try { localStorage.removeItem(storageKey); } catch {}
+            },
+          },
+        );
+      }
+    } catch {
+      // localStorage unavailable — nothing to migrate
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, bannerDismissalData?.dismissedAt]);
+
+  const dismissedAt = bannerDismissalData?.dismissedAt ?? null;
+
+  const dismissFallbackBanner = () => {
+    dismissBannerMutation.mutate({ id: sessionId, data: {} });
   };
 
   // Real-time SSE stream — pushes all session data updates at ~800 ms intervals,

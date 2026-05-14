@@ -477,6 +477,39 @@ export const ListApprovalsResponseItem = zod.object({
 export const ListApprovalsResponse = zod.array(ListApprovalsResponseItem);
 
 /**
+ * @summary Get banner dismissal timestamp for a session
+ */
+export const GetBannerDismissalParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetBannerDismissalResponse = zod.object({
+  sessionId: zod.number(),
+  dismissedAt: zod.string().nullable(),
+});
+
+/**
+ * @summary Record that the user dismissed the banner for this session
+ */
+export const DismissBannerParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DismissBannerBody = zod.object({
+  dismissedAt: zod
+    .string()
+    .optional()
+    .describe(
+      "Optional ISO 8601 timestamp to use as the dismissal time. When omitted the server uses the current time. Pass the original localStorage timestamp during migration so the banner re-show logic (based on timestamp comparison) is preserved correctly.\n",
+    ),
+});
+
+export const DismissBannerResponse = zod.object({
+  sessionId: zod.number(),
+  dismissedAt: zod.string().nullable(),
+});
+
+/**
  * @summary Get all settings
  */
 export const GetSettingsResponseItem = zod.object({

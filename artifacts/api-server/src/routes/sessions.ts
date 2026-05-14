@@ -9,6 +9,7 @@ import {
   memoryTable,
   approvalsTable,
   auditLogsTable,
+  bannerDismissalsTable,
 } from "@workspace/db";
 import {
   CreateSessionBody,
@@ -559,6 +560,59 @@ router.get("/sessions/:id/approvals", async (req, res): Promise<void> => {
   }
   const approvals = await db.select().from(approvalsTable).where(eq(approvalsTable.sessionId, params.data.id));
   res.json(serialize(approvals));
+});
+
+// GET /sessions/:id/banner-dismissal
+router.get("/sessions/:id/banner-dismissal", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id ?? "", 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid session id" });
+    return;
+  }
+  const [session] = await db.select({ id: sessionsTable.id }).from(sessionsTable).where(eq(sessionsTable.id, id));
+  if (!session) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+  const [row] = await db.select().from(bannerDismissalsTable).where(eq(bannerDismissalsTable.sessionId, id));
+  res.json({ sessionId: id, dismissedAt: row ? serialize(row.dismissedAt) : null });
+});
+
+// PUT /sessions/:id/banner-dismissal
+// Accepts an optional JSON body: { dismissedAt?: string } (ISO 8601).
+// Pass the original dismissal timestamp during migration so the banner
+// re-show comparison (latestFallbackTimestamp > dismissedAt) is preserved.
+// When no timestamp is provided, the server records the current time.
+// NOTE: This app has no user authentication system (single-tenant); dismissal
+// is keyed by sessionId only. If multi-user auth is added, this should be
+// updated to key by (userId, sessionId) to isolate per-user state.
+router.put("/sessions/:id/banner-dismissal", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id ?? "", 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid session id" });
+    return;
+  }
+  const [session] = await db.select({ id: sessionsTable.id }).from(sessionsTable).where(eq(sessionsTable.id, id));
+  if (!session) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+  let dismissedAt: Date;
+  const bodyTs = req.body?.dismissedAt;
+  if (bodyTs !== undefined) {
+    if (typeof bodyTs !== "string" || isNaN(Date.parse(bodyTs))) {
+      res.status(400).json({ error: "dismissedAt must be a valid ISO 8601 timestamp string" });
+      return;
+    }
+    dismissedAt = new Date(bodyTs);
+  } else {
+    dismissedAt = new Date();
+  }
+  await db
+    .insert(bannerDismissalsTable)
+    .values({ sessionId: id, dismissedAt })
+    .onConflictDoUpdate({ target: bannerDismissalsTable.sessionId, set: { dismissedAt } });
+  res.json({ sessionId: id, dismissedAt: dismissedAt.toISOString() });
 });
 
 export default router;

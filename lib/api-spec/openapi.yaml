@@ -380,6 +380,60 @@ paths:
                 items:
                   $ref: "#/components/schemas/Approval"
 
+  /sessions/{id}/banner-dismissal:
+    get:
+      operationId: getBannerDismissal
+      tags: [sessions]
+      summary: Get banner dismissal timestamp for a session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Banner dismissal state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BannerDismissal"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: dismissBanner
+      tags: [sessions]
+      summary: Record that the user dismissed the banner for this session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DismissBannerBody"
+      responses:
+        "200":
+          description: Banner dismissal recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BannerDismissal"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /settings:
     get:
       operationId: getSettings
@@ -443,6 +497,29 @@ components:
           type: string
       required:
         - status
+
+    BannerDismissal:
+      type: object
+      properties:
+        sessionId:
+          type: integer
+        dismissedAt:
+          type: ["string", "null"]
+      required:
+        - sessionId
+        - dismissedAt
+
+    DismissBannerBody:
+      type: object
+      properties:
+        dismissedAt:
+          type: string
+          description: >
+            Optional ISO 8601 timestamp to use as the dismissal time.
+            When omitted the server uses the current time. Pass the
+            original localStorage timestamp during migration so the
+            banner re-show logic (based on timestamp comparison) is
+            preserved correctly.
 
     ProviderFallbackCount:
       type: object
