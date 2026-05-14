@@ -1,15 +1,110 @@
+import { useState } from "react";
 import { Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { useListSessions, useGetStats, type AgentModeSummary } from "@workspace/api-client-react";
+import {
+  useListSessions,
+  useGetStats,
+  useGetCircuitStatus,
+  useDeleteSession,
+  getListSessionsQueryKey,
+  getGetCircuitStatusQueryKey,
+  type AgentModeSummary,
+  type CircuitBreakerEntry,
+} from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Activity, Clock, DollarSign, Layers, Zap, RotateCcw, Wifi, WifiOff, AlertTriangle, TrendingDown } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import {
+  Plus, Activity, Clock, DollarSign, Layers, Zap, RotateCcw,
+  Wifi, WifiOff, AlertTriangle, TrendingDown, Search, Trash2,
+  ShieldCheck, ShieldAlert, ShieldOff, RefreshCw,
+} from "lucide-react";
 import { format, subDays } from "date-fns";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
+import { useToast } from "@/hooks/use-toast";
+
+function formatMsRemaining(ms: number | null): string {
+  if (ms === null || ms <= 0) return "now";
+  const secs = Math.ceil(ms / 1000);
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.floor(secs / 60);
+  const remainSecs = secs % 60;
+  return remainSecs > 0 ? `${mins}m ${remainSecs}s` : `${mins}m`;
+}
+
+function CircuitStateBadge({ state }: { state: CircuitBreakerEntry["state"] }) {
+  if (state === "open") {
+    return (
+      <Badge variant="outline" className="gap-1 text-xs border-red-500/40 text-red-400 bg-red-500/10">
+        <ShieldOff className="h-3 w-3" />
+        Open
+      </Badge>
+    );
+  }
+  if (state === "half-open") {
+    return (
+      <Badge variant="outline" className="gap-1 text-xs border-amber-500/40 text-amber-400 bg-amber-500/10">
+        <ShieldAlert className="h-3 w-3" />
+        Half-open
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="gap-1 text-xs border-emerald-500/40 text-emerald-400 bg-emerald-500/10">
+      <ShieldCheck className="h-3 w-3" />
+      Closed
+    </Badge>
+  );
+}
+
+function ProviderHealthPanel({ entries }: { entries: CircuitBreakerEntry[] }) {
+  if (entries.length === 0) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        No providers have triggered the circuit breaker yet.
+      </p>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      {entries.map((entry) => (
+        <div
+          key={entry.provider}
+          className={`flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3 ${
+            entry.state === "open"
+              ? "border-red-500/30 bg-red-500/5"
+              : entry.state === "half-open"
+              ? "border-amber-500/30 bg-amber-500/5"
+              : "border-emerald-500/20 bg-emerald-500/5"
+          }`}
+        >
+          <span className="text-sm font-medium capitalize flex-1 min-w-[80px]">
+            {entry.provider}
+          </span>
+          <CircuitStateBadge state={entry.state} />
+          <span className="text-xs text-muted-foreground">
+            {entry.consecutiveFailures} failure{entry.consecutiveFailures !== 1 ? "s" : ""}
+          </span>
+          {entry.state === "open" && entry.msUntilReset !== null && (
+            <span className="text-xs text-red-400/80">
+              resets in {formatMsRemaining(entry.msUntilReset)}
+            </span>
+          )}
+          {entry.state === "half-open" && (
+            <span className="text-xs text-amber-400/80">
+              probe next call
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function getSessionMode(agentModes: AgentModeSummary[]): "live" | "simulation" | "mixed" | "unknown" {
   if (agentModes.length === 0) return "unknown";
@@ -56,9 +151,32 @@ function buildTrendData(trend: { day: string; count: number }[]) {
   });
 }
 
+const STATUS_FILTERS = ["all", "active", "completed", "stopped", "paused"] as const;
+type StatusFilter = typeof STATUS_FILTERS[number];
+
 export default function Dashboard() {
   const { data: sessions, isLoading, isError } = useListSessions();
   const { data: stats } = useGetStats();
+  const { data: circuitEntries = [], dataUpdatedAt: circuitUpdatedAt } = useGetCircuitStatus({
+    query: { queryKey: getGetCircuitStatusQueryKey(), refetchInterval: 10_000 },
+  });
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+
+  const deleteSession = useDeleteSession({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
+        toast({ title: "Session deleted" });
+      },
+      onError: () => {
+        toast({ title: "Error", description: "Failed to delete session.", variant: "destructive" });
+      },
+    },
+  });
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -70,6 +188,12 @@ export default function Dashboard() {
       default: return "outline";
     }
   };
+
+  const filteredSessions = (sessions ?? []).filter(s => {
+    const matchesSearch = search.trim() === "" || s.goal?.toLowerCase().includes(search.toLowerCase());
+    const matchesStatus = statusFilter === "all" || s.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
 
   const statCards = [
     {
@@ -129,7 +253,7 @@ export default function Dashboard() {
           </Link>
         </div>
 
-        {/* Rolling-window spike alert — shown when a provider crosses the configured threshold in the last hour */}
+        {/* Rolling-window spike alert */}
         {alertEnabled && recentSpikeProviders.length > 0 && (
           <div className="flex items-start gap-3 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
             <TrendingDown className="h-5 w-5 shrink-0 mt-0.5 text-red-400" />
@@ -150,7 +274,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Legacy all-time spike alert — shown when alerts are enabled but no recent spike, and a provider has 3+ total fallbacks */}
+        {/* Legacy all-time spike alert */}
         {alertEnabled && recentSpikeProviders.length === 0 && spikeProviders.length > 0 && (
           <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
             <TrendingDown className="h-5 w-5 shrink-0 mt-0.5 text-amber-400" />
@@ -205,6 +329,30 @@ export default function Dashboard() {
             </Card>
           ))}
         </div>
+
+        {/* Provider Health — circuit breaker status */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ShieldCheck className="h-4 w-4 text-emerald-400" />
+              Provider Health
+              <span className="ml-auto text-[11px] font-normal text-muted-foreground flex items-center gap-1">
+                <RefreshCw className="h-3 w-3" />
+                {circuitUpdatedAt
+                  ? `Updated ${format(new Date(circuitUpdatedAt), "HH:mm:ss")}`
+                  : "Auto-refreshes every 10s"}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <ProviderHealthPanel entries={circuitEntries} />
+            <p className="text-[11px] text-muted-foreground mt-3">
+              <span className="font-medium text-red-400">Open</span> — provider is blocked (cooldown active).{" "}
+              <span className="font-medium text-amber-400">Half-open</span> — cooldown elapsed, next call is a probe.{" "}
+              <span className="font-medium text-emerald-400">Closed</span> — provider is healthy.
+            </p>
+          </CardContent>
+        </Card>
 
         {/* Per-provider fallback breakdown */}
         {hasFallbacks && fallbacksByProvider.length > 0 && (
@@ -299,7 +447,7 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {/* Model usage breakdown by provider — live vs simulated */}
+        {/* Model usage breakdown by provider */}
         {modelUsageBreakdown.length > 0 ? (
           <Card>
             <CardHeader className="pb-3">
@@ -365,6 +513,7 @@ export default function Dashboard() {
           </Card>
         )}
 
+        {/* Sessions list with search + filter */}
         {isLoading ? (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {[...Array(3)].map((_, i) => (
@@ -399,46 +548,100 @@ export default function Dashboard() {
             </div>
           </div>
         ) : (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {sessions.map((session) => (
-              <Link key={session.id} href={`/sessions/${session.id}`}>
-                <Card className="hover-elevate cursor-pointer transition-all hover:border-primary/50 h-full flex flex-col">
-                  <CardHeader className="pb-3">
-                    <div className="flex flex-wrap justify-between items-start gap-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Badge variant={getStatusColor(session.status) as any} className="capitalize">
-                          {session.status}
-                        </Badge>
-                        <SessionModeBadge agentModes={session.agentModes} />
+          <div className="space-y-4">
+            {/* Search + filter bar */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                <Input
+                  placeholder="Search sessions by goal..."
+                  className="pl-9"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                />
+              </div>
+              <div className="flex gap-1.5 flex-wrap">
+                {STATUS_FILTERS.map(f => (
+                  <Button
+                    key={f}
+                    size="sm"
+                    variant={statusFilter === f ? "default" : "outline"}
+                    className="capitalize h-9"
+                    onClick={() => setStatusFilter(f)}
+                  >
+                    {f}
+                    {f !== "all" && (
+                      <span className="ml-1.5 text-[10px] opacity-70">
+                        {(sessions ?? []).filter(s => s.status === f).length}
+                      </span>
+                    )}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {filteredSessions.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground text-sm">
+                No sessions match your search.
+              </div>
+            ) : (
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                {filteredSessions.map((session) => (
+                  <Link key={session.id} href={`/sessions/${session.id}`}>
+                    <Card className="hover-elevate cursor-pointer transition-all hover:border-primary/50 h-full flex flex-col">
+                      <CardHeader className="pb-3">
+                        <div className="flex flex-wrap justify-between items-start gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Badge variant={getStatusColor(session.status) as any} className="capitalize">
+                              {session.status}
+                            </Badge>
+                            <SessionModeBadge agentModes={session.agentModes} />
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Badge variant="outline" className="text-xs font-normal">
+                              {session.autonomyMode}
+                            </Badge>
+                            <button
+                              className="h-7 w-7 flex items-center justify-center rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                              title="Delete session"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (window.confirm(`Delete "${session.goal || "this session"}"? This cannot be undone.`)) {
+                                  deleteSession.mutate({ id: session.id });
+                                }
+                              }}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="line-clamp-2 mt-2 text-lg font-semibold">
+                          {session.goal || "Untitled Session"}
+                        </div>
+                      </CardHeader>
+                      <CardContent className="pb-3 flex-1">
+                        <div className="flex flex-col space-y-2 text-sm text-muted-foreground">
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-4 w-4" />
+                            <span>{format(new Date(session.createdAt), "MMM d, yyyy h:mm a")}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <DollarSign className="h-4 w-4" />
+                            <span>Est. Cost: ${session.estimatedCost?.toFixed(4) || "0.0000"}</span>
+                          </div>
+                        </div>
+                      </CardContent>
+                      <div className="px-6 pb-4 pt-0">
+                        <Button variant="ghost" className="w-full text-primary hover:text-primary">
+                          Open Workspace
+                        </Button>
                       </div>
-                      <Badge variant="outline" className="text-xs font-normal">
-                        {session.autonomyMode}
-                      </Badge>
-                    </div>
-                    <div className="line-clamp-2 mt-2 text-lg font-semibold">
-                      {session.goal || "Untitled Session"}
-                    </div>
-                  </CardHeader>
-                  <CardContent className="pb-3 flex-1">
-                    <div className="flex flex-col space-y-2 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4" />
-                        <span>{format(new Date(session.createdAt), "MMM d, yyyy h:mm a")}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <DollarSign className="h-4 w-4" />
-                        <span>Est. Cost: ${session.estimatedCost?.toFixed(4) || "0.0000"}</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                  <div className="px-6 pb-4 pt-0">
-                    <Button variant="ghost" className="w-full text-primary hover:text-primary">
-                      Open Workspace
-                    </Button>
-                  </div>
-                </Card>
-              </Link>
-            ))}
+                    </Card>
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

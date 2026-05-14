@@ -600,3 +600,24 @@ export const GetStatsResponse = zod.object({
     .boolean()
     .describe("Whether fallback spike alerts are enabled"),
 });
+
+/**
+ * Returns the current open/half-open/closed state for every provider tracked by the circuit breaker
+ * @summary Get per-provider circuit breaker status
+ */
+export const GetCircuitStatusResponseItem = zod.object({
+  provider: zod.string(),
+  state: zod.enum(["open", "half-open", "closed"]),
+  consecutiveFailures: zod.number(),
+  openedAt: zod
+    .number()
+    .nullable()
+    .describe("Unix ms timestamp when the circuit opened, or null if closed"),
+  msUntilReset: zod
+    .number()
+    .nullable()
+    .describe(
+      "Milliseconds remaining until the circuit allows a probe, or null if closed",
+    ),
+});
+export const GetCircuitStatusResponse = zod.array(GetCircuitStatusResponseItem);

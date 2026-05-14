@@ -83,6 +83,49 @@ export function resetAllCircuits(): void {
   circuitMap.clear();
 }
 
+export interface CircuitStatusEntry {
+  provider: string;
+  state: "open" | "half-open" | "closed";
+  consecutiveFailures: number;
+  openedAt: number | null;
+  msUntilReset: number | null;
+}
+
+/**
+ * Returns the current circuit breaker state for every provider that has ever
+ * been seen. Providers with no recorded failures are omitted.
+ */
+export function getCircuitStatus(now = Date.now()): CircuitStatusEntry[] {
+  const entries: CircuitStatusEntry[] = [];
+
+  for (const [provider, cs] of circuitMap.entries()) {
+    if (cs.consecutiveFailures === 0 && cs.openedAt === null) continue;
+
+    let state: "open" | "half-open" | "closed";
+    let msUntilReset: number | null = null;
+
+    if (cs.openedAt === null) {
+      state = "closed";
+    } else if (now - cs.openedAt < CIRCUIT_TIMEOUT_MS) {
+      state = "open";
+      msUntilReset = CIRCUIT_TIMEOUT_MS - (now - cs.openedAt);
+    } else {
+      state = "half-open";
+      msUntilReset = 0;
+    }
+
+    entries.push({
+      provider,
+      state,
+      consecutiveFailures: cs.consecutiveFailures,
+      openedAt: cs.openedAt,
+      msUntilReset,
+    });
+  }
+
+  return entries;
+}
+
 // ── Main retry function ────────────────────────────────────────────────────────
 
 /**
