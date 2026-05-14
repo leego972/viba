@@ -6,3 +6,4 @@ export * from "./memory";
 export * from "./approvals";
 export * from "./auditLogs";
 export * from "./settings";
+export * from "./bannerDismissals";

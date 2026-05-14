@@ -14,11 +14,14 @@ import {
   useListApprovals,
   useListAuditLogs,
   useGetStats,
+  useGetBannerDismissal,
+  useDismissBanner,
   getGetSessionQueryKey,
   getListMessagesQueryKey,
   getListTasksQueryKey,
   getListApprovalsQueryKey,
   getListAuditLogsQueryKey,
+  getGetBannerDismissalQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -33,26 +36,14 @@ import {
   Play, FastForward, Square, Send, CheckCircle2, Clock, Bot,
   Crosshair, LineChart, Zap, FlaskConical, RotateCcw, X,
   RefreshCw, History, ShieldCheck, TrendingDown, AlertTriangle,
+  Download, Brain,
 } from "lucide-react";
-
-const MAX_BANNER_STORAGE_KEYS = 20;
-
-function pruneStaleLocalStorageKeys() {
-  try {
-    const prefix = "bridge_fallback_banner_";
-    const keys: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k?.startsWith(prefix)) keys.push(k);
-    }
-    if (keys.length > MAX_BANNER_STORAGE_KEYS) {
-      const sorted = keys.sort();
-      sorted.slice(0, keys.length - MAX_BANNER_STORAGE_KEYS).forEach((k) =>
-        localStorage.removeItem(k)
-      );
-    }
-  } catch {}
-}
+import { useSessionStream } from "@/hooks/useSessionStream";
+import { MarkdownContent } from "@/components/MarkdownContent";
+import {
+  SIMULATED_PREFIX,
+  pruneStaleLocalStorageKeys,
+} from "@/lib/bannerLogic";
 
 const AGENT_COLORS: Record<string, string> = {
   "openai": "bg-green-500/10 text-green-400 border-green-500/20",
@@ -63,8 +54,6 @@ const AGENT_COLORS: Record<string, string> = {
   "perplexity": "bg-amber-500/10 text-amber-400 border-amber-500/20",
   "user": "bg-primary/10 text-primary border-primary/20",
 };
-
-const SIMULATED_PREFIX = "⚠️ [Simulated";
 
 function getActivityDisplay(eventType: string, description: string, meta: Record<string, unknown>) {
   if (eventType === "adapter_success" && typeof meta.attempt === "number" && meta.attempt > 1) {
@@ -104,56 +93,90 @@ export default function SessionWorkspace() {
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [pendingApproval, setPendingApproval] = useState<any>(null);
 
-  // Banner dismissal — stores the ISO timestamp at which the user dismissed the banner.
-  // If new simulated messages arrive after that timestamp, the banner re-appears automatically.
-  const storageKey = `bridge_fallback_banner_${sessionId}`;
-  const [dismissedAt, setDismissedAt] = useState<string | null>(() => {
-    try {
-      const stored = localStorage.getItem(storageKey);
-      // Legacy guard: old count-based values were plain integers — treat as "not dismissed"
-      if (stored !== null && isNaN(Date.parse(stored))) return null;
-      return stored;
-    } catch {
-      return null;
-    }
-  });
-
   // Prune stale keys from localStorage once on mount (#47)
   useEffect(() => { pruneStaleLocalStorageKeys(); }, []);
 
-  const dismissFallbackBanner = () => {
-    const now = new Date().toISOString();
-    setDismissedAt(now);
+  // Banner dismissal — persisted server-side so it works across devices.
+  // On first load we migrate any existing localStorage value to the server.
+  const bannerQueryKey = getGetBannerDismissalQueryKey(sessionId);
+  const dismissBannerMutation = useDismissBanner({
+    mutation: {
+      onSuccess: (data) => {
+        // Immediately sync the cache so the banner hides without a round-trip refetch.
+        queryClient.setQueryData(bannerQueryKey, data);
+      },
+    },
+  });
+  const { data: bannerDismissalData } = useGetBannerDismissal(sessionId, {
+    query: {
+      enabled: !!sessionId,
+      queryKey: bannerQueryKey,
+    },
+  });
+
+  // Migrate existing localStorage dismissal to the server (runs once when the
+  // server reports no dismissal for this session).
+  useEffect(() => {
+    if (!sessionId) return;
+    if (bannerDismissalData === undefined) return;
+    if (bannerDismissalData.dismissedAt !== null) return;
+    const storageKey = `bridge_fallback_banner_${sessionId}`;
     try {
-      localStorage.setItem(storageKey, now);
-    } catch {}
+      const stored = localStorage.getItem(storageKey);
+      if (stored && !isNaN(Date.parse(stored))) {
+        // Pass the original timestamp so the banner re-show comparison
+        // (latestFallbackTimestamp > dismissedAt) is preserved correctly.
+        dismissBannerMutation.mutate(
+          { id: sessionId, data: { dismissedAt: stored } },
+          {
+            onSuccess: () => {
+              // Remove the now-migrated legacy key so it doesn't linger.
+              try { localStorage.removeItem(storageKey); } catch {}
+            },
+          },
+        );
+      }
+    } catch {
+      // localStorage unavailable — nothing to migrate
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, bannerDismissalData?.dismissedAt]);
+
+  const dismissedAt = bannerDismissalData?.dismissedAt ?? null;
+
+  const dismissFallbackBanner = () => {
+    dismissBannerMutation.mutate({ id: sessionId, data: {} });
   };
 
-  // Queries
+  // Real-time SSE stream — pushes all session data updates at ~800 ms intervals,
+  // populating the React Query cache so all queries below stay fresh without polling.
+  useSessionStream(sessionId);
+
+  // Queries — no refetchInterval needed; SSE keeps the cache fresh
   const { data: stats } = useGetStats();
 
   const { data: session, isLoading: sessionLoading } = useGetSession(sessionId, {
-    query: { enabled: !!sessionId, queryKey: getGetSessionQueryKey(sessionId), refetchInterval: 2000 }
+    query: { enabled: !!sessionId, queryKey: getGetSessionQueryKey(sessionId) }
   });
 
   const { data: messages = [] } = useListMessages(sessionId, {
-    query: { enabled: !!sessionId, queryKey: getListMessagesQueryKey(sessionId), refetchInterval: 2000 }
+    query: { enabled: !!sessionId, queryKey: getListMessagesQueryKey(sessionId) }
   });
 
   const { data: tasks = [] } = useListTasks(sessionId, {
-    query: { enabled: !!sessionId, queryKey: getListTasksQueryKey(sessionId), refetchInterval: 2000 }
+    query: { enabled: !!sessionId, queryKey: getListTasksQueryKey(sessionId) }
   });
 
   const { data: agents = [] } = useListAgents(sessionId, {
-    query: { enabled: !!sessionId, queryKey: ["sessions", sessionId, "agents"] as const, refetchInterval: 3000 }
+    query: { enabled: !!sessionId, queryKey: ["sessions", sessionId, "agents"] as const }
   });
 
   const { data: approvals = [] } = useListApprovals(sessionId, {
-    query: { enabled: !!sessionId, queryKey: getListApprovalsQueryKey(sessionId), refetchInterval: 2000 }
+    query: { enabled: !!sessionId, queryKey: getListApprovalsQueryKey(sessionId) }
   });
 
   const { data: auditLogs = [] } = useListAuditLogs(sessionId, {
-    query: { enabled: !!sessionId, queryKey: getListAuditLogsQueryKey(sessionId), refetchInterval: 4000 }
+    query: { enabled: !!sessionId, queryKey: getListAuditLogsQueryKey(sessionId) }
   });
 
   // Mutations
@@ -164,29 +187,31 @@ export default function SessionWorkspace() {
   const approve = useApproveAction();
 
   const isSessionActive = session?.status === "active";
+  const isSessionComplete = session?.status === "completed";
+
+  // Memory from SSE-enriched session data
+  const sessionMemory = (session as any)?.memory as { summary: string; decisions: string[] } | null | undefined;
 
   // Detect fallback messages
   const fallbackMessages = messages.filter(m => m.content?.startsWith(SIMULATED_PREFIX));
   const hasFallbackMessages = fallbackMessages.length > 0;
   const fallbackAgentNames = [...new Set(fallbackMessages.map(m => m.agentName).filter(Boolean))];
   const fallbackAgentCount = fallbackAgentNames.length;
-  // Latest simulated message timestamp — used to detect new fallbacks after dismissal (#46)
   const latestFallbackTimestamp = fallbackMessages.reduce<string | null>((latest, m) => {
     if (!m.createdAt) return latest;
     return latest === null || m.createdAt > latest ? m.createdAt : latest;
   }, null);
-  // Re-show banner if a simulated message arrived after the user last dismissed it
   const showFallbackBanner = hasFallbackMessages && (
     dismissedAt === null || (latestFallbackTimestamp !== null && latestFallbackTimestamp > dismissedAt)
   );
 
-  // Spike alert from stats API — shown in workspace too (#54)
+  // Spike alert from stats API
   const recentSpikeProviders = stats?.recentSpikeProviders ?? [];
   const recentSpikeThreshold = stats?.recentSpikeThreshold ?? 5;
   const alertEnabled = stats?.alertEnabled ?? true;
   const showSpikeAlert = alertEnabled && recentSpikeProviders.length > 0;
 
-  // Browser notification when a spike is detected (#52)
+  // Browser notification when a spike is detected
   const prevSpikeRef = useRef<string[]>([]);
   useEffect(() => {
     if (!showSpikeAlert) { prevSpikeRef.current = []; return; }
@@ -209,7 +234,7 @@ export default function SessionWorkspace() {
     }
   }, [showSpikeAlert, recentSpikeProviders.join(",")]);
 
-  // Activity log: show notable events (retry, fallback, success, completed)
+  // Activity log
   const activityEvents = [...auditLogs]
     .reverse()
     .filter(log =>
@@ -282,6 +307,66 @@ export default function SessionWorkspace() {
     });
   };
 
+  const handleExport = () => {
+    if (!session) return;
+    const lines: string[] = [];
+    lines.push(`# ${session.goal}`);
+    lines.push(`**Status:** ${session.status} | **Mode:** ${session.autonomyMode} | **Estimated Cost:** $${session.estimatedCost?.toFixed(4) || "0.0000"}`);
+    lines.push(`**Created:** ${format(new Date(session.createdAt), "PPpp")}`);
+    lines.push("");
+    lines.push("## Agents");
+    agents.forEach(a => {
+      const live = !a.isMock ? " [Live]" : " [Simulated]";
+      const model = a.activeModel ? ` | ${a.activeModel}` : "";
+      lines.push(`- **${a.name}** (${a.provider}) — ${a.role}${model}${live}`);
+    });
+    lines.push("");
+    if (tasks.length > 0) {
+      lines.push("## Task Board");
+      tasks.forEach(t => {
+        const assignee = agents.find(a => a.id === t.assignedAgentId);
+        lines.push(`- [${t.status.toUpperCase()}] **${t.title}**${assignee ? ` — ${assignee.name}` : ""}`);
+        if (t.description) lines.push(`  ${t.description}`);
+      });
+      lines.push("");
+    }
+    if (sessionMemory) {
+      lines.push("## Session Memory");
+      if (sessionMemory.summary) lines.push(sessionMemory.summary);
+      if (sessionMemory.decisions?.length > 0) {
+        lines.push("");
+        lines.push("### Decisions");
+        sessionMemory.decisions.forEach(d => lines.push(`- ${d}`));
+      }
+      lines.push("");
+    }
+    lines.push("## Conversation");
+    messages.forEach(msg => {
+      const sender = msg.role === "user" ? "You" : msg.agentName || "System";
+      const time = format(new Date(msg.createdAt), "HH:mm:ss");
+      const displayContent = msg.content?.startsWith(SIMULATED_PREFIX)
+        ? msg.content.replace(/^⚠️ \[Simulated — live \S+ API unavailable\] /, "")
+        : msg.content;
+      lines.push(`### ${sender} [${time}]`);
+      if (msg.agentRole && msg.role !== "user") {
+        lines.push(`*${msg.agentRole}${msg.model ? ` | ${msg.model}` : ""}${(msg as any).agentId && !agents.find(a => a.id === (msg as any).agentId)?.isMock ? " | Live" : " | Simulated"}*`);
+      }
+      lines.push("");
+      lines.push(displayContent || "");
+      lines.push("");
+    });
+    const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `bridge-session-${sessionId}-${format(new Date(), "yyyy-MM-dd")}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast({ title: "Exported", description: "Session transcript downloaded." });
+  };
+
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(sessionId) });
     queryClient.invalidateQueries({ queryKey: getListMessagesQueryKey(sessionId) });
@@ -313,7 +398,7 @@ export default function SessionWorkspace() {
   return (
     <AppLayout>
       <div className="flex flex-col h-[calc(100vh-8rem)] gap-4">
-        {/* Spike alert — shown in workspace when a provider hits the threshold in the last hour (#54) */}
+        {/* Spike alert */}
         {showSpikeAlert && (
           <div className="flex items-start gap-3 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm text-red-300 shrink-0">
             <TrendingDown className="h-4 w-4 shrink-0 mt-0.5 text-red-400" />
@@ -331,7 +416,7 @@ export default function SessionWorkspace() {
           </div>
         )}
 
-        {/* Simulation fallback banner — re-shows if new fallbacks arrive after dismissal (#46) */}
+        {/* Simulation fallback banner */}
         {showFallbackBanner && (
           <div className="flex items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-300 shrink-0">
             <RotateCcw className="h-4 w-4 shrink-0 text-amber-400" />
@@ -382,6 +467,9 @@ export default function SessionWorkspace() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Button size="sm" variant="ghost" onClick={handleExport} title="Download session transcript as Markdown">
+              <Download className="w-4 h-4 mr-1.5" /> Export
+            </Button>
             {isSessionActive && (
               <>
                 <Button size="sm" variant="outline" onClick={handleRunNext} disabled={runNext.isPending || !!pendingApproval}>
@@ -403,10 +491,23 @@ export default function SessionWorkspace() {
           </div>
         </div>
 
+        {/* Completion summary banner */}
+        {isSessionComplete && (
+          <div className="flex items-start gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300 shrink-0">
+            <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-emerald-400" />
+            <div className="flex-1">
+              <span className="font-semibold">Session completed successfully.</span>
+              {sessionMemory?.summary && (
+                <p className="text-emerald-300/80 mt-1">{sessionMemory.summary}</p>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* 3 Column Layout */}
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 min-h-0">
 
-          {/* Left: Info & Agents (3 cols) */}
+          {/* Left: Info, Memory & Agents (3 cols) */}
           <div className="lg:col-span-3 flex flex-col gap-4 overflow-y-auto pr-1">
             <Card className="shrink-0">
               <CardHeader className="p-4 pb-2">
@@ -418,6 +519,37 @@ export default function SessionWorkspace() {
                 {session.goal}
               </CardContent>
             </Card>
+
+            {/* Memory panel — shows AI working memory and key decisions */}
+            {sessionMemory && (
+              <Card className="shrink-0 border-primary/20 bg-primary/5">
+                <CardHeader className="p-4 pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2 text-primary">
+                    <Brain className="w-4 h-4" /> Session Memory
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 pt-0">
+                  {sessionMemory.summary && (
+                    <p className="text-xs text-muted-foreground leading-relaxed mb-3">
+                      {sessionMemory.summary}
+                    </p>
+                  )}
+                  {sessionMemory.decisions && sessionMemory.decisions.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Key Decisions</p>
+                      <ul className="space-y-1">
+                        {sessionMemory.decisions.map((d, i) => (
+                          <li key={i} className="text-[11px] text-muted-foreground leading-tight flex gap-1.5">
+                            <span className="text-primary/60 shrink-0">•</span>
+                            <span>{d}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             <Card className="flex-1 min-h-0 flex flex-col">
               <CardHeader className="p-4 pb-2 shrink-0">
@@ -467,6 +599,7 @@ export default function SessionWorkspace() {
             <CardHeader className="p-4 border-b shrink-0">
               <CardTitle className="text-sm flex items-center gap-2">
                 <LineChart className="w-4 h-4" /> Live Collaboration
+                <span className="ml-auto text-[10px] font-normal text-muted-foreground">{messages.length} messages</span>
               </CardTitle>
             </CardHeader>
             <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4" ref={scrollRef as any}>
@@ -490,7 +623,7 @@ export default function SessionWorkspace() {
 
                   return (
                     <div key={msg.id} className={`flex flex-col max-w-[85%] rounded-lg border p-3 ${colorClass} ${isUser ? "self-end" : "self-start"}`}>
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
                         <span className="font-semibold text-xs">{isUser ? "You" : msg.agentName || "System"}</span>
                         {!isUser && msg.agentRole && <span className="text-[10px] opacity-70">| {msg.agentRole}</span>}
                         {!isUser && msg.model && (
@@ -503,7 +636,11 @@ export default function SessionWorkspace() {
                         )}
                         <span className="text-[10px] opacity-50 ml-auto">{format(new Date(msg.createdAt), "HH:mm:ss")}</span>
                       </div>
-                      <div className="text-sm whitespace-pre-wrap leading-relaxed">{displayContent}</div>
+                      {isUser ? (
+                        <div className="text-sm whitespace-pre-wrap leading-relaxed">{displayContent}</div>
+                      ) : (
+                        <MarkdownContent content={displayContent || ""} />
+                      )}
                     </div>
                   );
                 })
@@ -512,9 +649,14 @@ export default function SessionWorkspace() {
 
             {/* Input Area */}
             <div className="p-4 border-t shrink-0 bg-muted/10">
+              {!isSessionActive && (
+                <p className="text-xs text-muted-foreground text-center mb-2">
+                  {isSessionComplete ? "Session completed — export the transcript above." : `Session is ${session.status}.`}
+                </p>
+              )}
               <div className="flex gap-2">
                 <Textarea
-                  placeholder="Send an instruction or provide feedback to the agents..."
+                  placeholder={isSessionActive ? "Send an instruction or provide feedback to the agents..." : "Session is not active"}
                   className="min-h-[60px] resize-none"
                   value={userInstruction}
                   onChange={(e) => setUserInstruction(e.target.value)}
@@ -539,6 +681,9 @@ export default function SessionWorkspace() {
               <CardHeader className="p-4 border-b shrink-0 bg-card">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4" /> Task Board
+                  <span className="ml-auto text-[10px] font-normal text-muted-foreground">
+                    {tasksByStatus.complete.length}/{tasks.length} done
+                  </span>
                 </CardTitle>
               </CardHeader>
               <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-4">
