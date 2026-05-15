@@ -209,7 +209,41 @@ export default function SessionWorkspace() {
   const recentSpikeProviders = stats?.recentSpikeProviders ?? [];
   const recentSpikeThreshold = stats?.recentSpikeThreshold ?? 5;
   const alertEnabled = stats?.alertEnabled ?? true;
-  const showSpikeAlert = alertEnabled && recentSpikeProviders.length > 0;
+  // Spike alert dismiss — sessionStorage so it resets on next page load
+  const spikeStorageKey = `bridge_spike_dismissed_${sessionId}`;
+  const [dismissedSpikeProviders, setDismissedSpikeProviders] = useState<string[]>(() => {
+    try {
+      const raw = sessionStorage.getItem(spikeStorageKey);
+      return raw ? (JSON.parse(raw) as string[]) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Reload dismissal state from sessionStorage if sessionId changes without remount
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(spikeStorageKey);
+      setDismissedSpikeProviders(raw ? (JSON.parse(raw) as string[]) : []);
+    } catch {
+      setDismissedSpikeProviders([]);
+    }
+  }, [spikeStorageKey]);
+
+  const dismissSpikeAlert = () => {
+    setDismissedSpikeProviders(recentSpikeProviders);
+    try {
+      sessionStorage.setItem(spikeStorageKey, JSON.stringify(recentSpikeProviders));
+    } catch {
+      // Ignore
+    }
+  };
+
+  // Re-show if a new provider appears that wasn't dismissed
+  const undismissedSpikeProviders = recentSpikeProviders.filter(
+    p => !dismissedSpikeProviders.includes(p)
+  );
+  const showSpikeAlert = alertEnabled && undismissedSpikeProviders.length > 0;
 
   // Browser notification when a spike is detected
   const prevSpikeRef = useRef<string[]>([]);
@@ -404,15 +438,22 @@ export default function SessionWorkspace() {
             <TrendingDown className="h-4 w-4 shrink-0 mt-0.5 text-red-400" />
             <div className="flex-1">
               <span className="font-semibold">Fallback spike alert — </span>
-              {recentSpikeProviders.length === 1
-                ? `The ${recentSpikeProviders[0]} provider`
-                : `Providers ${recentSpikeProviders.join(", ")}`}{" "}
-              {recentSpikeProviders.length === 1 ? "has" : "have"} hit {recentSpikeThreshold}+ fallbacks in the last hour.{" "}
+              {undismissedSpikeProviders.length === 1
+                ? `The ${undismissedSpikeProviders[0]} provider`
+                : `Providers ${undismissedSpikeProviders.join(", ")}`}{" "}
+              {undismissedSpikeProviders.length === 1 ? "has" : "have"} hit {recentSpikeThreshold}+ fallbacks in the last hour.{" "}
               <Link href="/settings" className="underline underline-offset-2 hover:text-red-200">
                 Check your API keys
               </Link>
               .
             </div>
+            <button
+              onClick={dismissSpikeAlert}
+              aria-label="Dismiss spike alert"
+              className="shrink-0 mt-0.5 rounded p-0.5 text-red-400 hover:bg-red-500/20 hover:text-red-200 transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
         )}
 
