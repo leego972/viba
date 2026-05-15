@@ -30,8 +30,14 @@ export interface AdapterRetryResult {
 // revalidated from the DB if it is stale, which allows multiple API server
 // instances to share circuit state correctly.
 
-const CIRCUIT_OPEN_THRESHOLD = 5;
-const CIRCUIT_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+function parsePositiveInt(value: string | undefined, defaultValue: number): number {
+  if (value === undefined || value === "") return defaultValue;
+  const parsed = parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : defaultValue;
+}
+
+const CIRCUIT_OPEN_THRESHOLD = parsePositiveInt(process.env.CIRCUIT_OPEN_THRESHOLD, 5);
+const CIRCUIT_TIMEOUT_MS = parsePositiveInt(process.env.CIRCUIT_TIMEOUT_MS, 5 * 60 * 1000);
 const CACHE_TTL_MS = 30_000; // 30 seconds — max staleness across instances
 
 // Internal state kept in the map; cachedAt is not part of the public interface.
