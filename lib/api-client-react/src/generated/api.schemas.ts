@@ -74,6 +74,11 @@ export interface BridgeStats {
   alertEnabled: boolean;
 }
 
+export interface TestNotificationResult {
+  ok: boolean;
+  message: string;
+}
+
 export interface ResetCircuitResult {
   ok: boolean;
   provider: string;

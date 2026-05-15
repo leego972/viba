@@ -474,6 +474,26 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /stats/test-notification:
+    post:
+      operationId: sendTestNotification
+      tags: [stats]
+      summary: Send a test spike notification
+      description: Posts a test payload to the configured webhook URL (and logs for email) so the user can verify the notification channel works.
+      responses:
+        "200":
+          description: Test notification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestNotificationResult"
+        "400":
+          description: No webhook URL configured or URL invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /stats:
     get:
       operationId: getStats
@@ -679,6 +699,17 @@ components:
         - recentSpikeProviders
         - recentSpikeThreshold
         - alertEnabled
+
+    TestNotificationResult:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        message:
+          type: string
+      required:
+        - ok
+        - message
 
     ResetCircuitResult:
       type: object

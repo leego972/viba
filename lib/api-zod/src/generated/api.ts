@@ -543,6 +543,15 @@ export const SaveSettingsResponseItem = zod.object({
 export const SaveSettingsResponse = zod.array(SaveSettingsResponseItem);
 
 /**
+ * Posts a test payload to the configured webhook URL (and logs for email) so the user can verify the notification channel works.
+ * @summary Send a test spike notification
+ */
+export const SendTestNotificationResponse = zod.object({
+  ok: zod.boolean(),
+  message: zod.string(),
+});
+
+/**
  * Returns session counts and fallback event counts grouped by provider
  * @summary Get aggregated usage statistics
  */

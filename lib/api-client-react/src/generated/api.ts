@@ -38,6 +38,7 @@ import type {
   SessionDetail,
   Setting,
   Task,
+  TestNotificationResult,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -1734,6 +1735,88 @@ export const useSaveSettings = <
   TContext
 > => {
   return useMutation(getSaveSettingsMutationOptions(options));
+};
+
+/**
+ * Posts a test payload to the configured webhook URL (and logs for email) so the user can verify the notification channel works.
+ * @summary Send a test spike notification
+ */
+export const getSendTestNotificationUrl = () => {
+  return `/api/stats/test-notification`;
+};
+
+export const sendTestNotification = async (
+  options?: RequestInit,
+): Promise<TestNotificationResult> => {
+  return customFetch<TestNotificationResult>(getSendTestNotificationUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getSendTestNotificationMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sendTestNotification>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof sendTestNotification>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["sendTestNotification"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof sendTestNotification>>,
+    void
+  > = () => {
+    return sendTestNotification(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SendTestNotificationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof sendTestNotification>>
+>;
+
+export type SendTestNotificationMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Send a test spike notification
+ */
+export const useSendTestNotification = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sendTestNotification>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof sendTestNotification>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getSendTestNotificationMutationOptions(options));
 };
 
 /**
