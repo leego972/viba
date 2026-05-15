@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { isCircuitOpen, resetAllCircuits, runAdapterWithRetry } from "./adapterRetry";
+import {
+  isCircuitOpen,
+  resetAllCircuits,
+  resetProviderCircuit,
+  getCircuitStatus,
+  runAdapterWithRetry,
+} from "./adapterRetry";
 import type { AgentAdapter, AgentTaskInput, AgentTaskResult } from "./adapters/interface";
 
 vi.mock("@workspace/db", () => ({
@@ -75,6 +81,110 @@ async function openCircuit(provider = "openai") {
 }
 
 beforeEach(() => { resetAllCircuits(); });
+
+// ── getCircuitStatus tests (task #77) ──────────────────────────────────────
+
+describe("getCircuitStatus", () => {
+  it("returns an empty array when no provider has ever failed", () => {
+    expect(getCircuitStatus()).toEqual([]);
+  });
+
+  it("returns an entry with state=open after 5 consecutive failures", async () => {
+    await openCircuit("openai");
+    const entries = getCircuitStatus();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.provider).toBe("openai");
+    expect(entries[0]!.state).toBe("open");
+    expect(entries[0]!.consecutiveFailures).toBe(5);
+    expect(entries[0]!.openedAt).toBeTypeOf("number");
+    expect(entries[0]!.msUntilReset).toBeGreaterThan(0);
+  });
+
+  it("returns state=half-open after the timeout window elapses", async () => {
+    await openCircuit("openai");
+    const futureNow = Date.now() + 6 * 60 * 1000;
+    const entries = getCircuitStatus(futureNow);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.state).toBe("half-open");
+    expect(entries[0]!.msUntilReset).toBe(0);
+  });
+
+  it("omits providers that have 0 failures and no openedAt", () => {
+    const status = getCircuitStatus();
+    expect(status.find(e => e.provider === "unused-provider")).toBeUndefined();
+  });
+
+  it("tracks multiple providers independently", async () => {
+    await openCircuit("openai");
+    await openCircuit("anthropic");
+    const entries = getCircuitStatus();
+    const providers = entries.map(e => e.provider).sort();
+    expect(providers).toContain("openai");
+    expect(providers).toContain("anthropic");
+    entries.forEach(e => expect(e.state).toBe("open"));
+  });
+});
+
+// ── resetProviderCircuit tests (task #78 / #80) ───────────────────────────
+
+describe("resetProviderCircuit", () => {
+  it("clears an open circuit so isCircuitOpen returns false", async () => {
+    await openCircuit("openai");
+    expect(isCircuitOpen("openai")).toBe(true);
+
+    await resetProviderCircuit("openai");
+
+    expect(isCircuitOpen("openai")).toBe(false);
+  });
+
+  it("removes the provider from getCircuitStatus after reset", async () => {
+    await openCircuit("openai");
+    expect(getCircuitStatus().find(e => e.provider === "openai")).toBeDefined();
+
+    await resetProviderCircuit("openai");
+
+    const entries = getCircuitStatus();
+    expect(entries.find(e => e.provider === "openai")).toBeUndefined();
+  });
+
+  it("reset does not affect other providers", async () => {
+    await openCircuit("openai");
+    await openCircuit("anthropic");
+
+    await resetProviderCircuit("openai");
+
+    expect(isCircuitOpen("openai")).toBe(false);
+    expect(isCircuitOpen("anthropic")).toBe(true);
+  });
+
+  it("reset on an already-closed provider is a no-op (does not throw)", async () => {
+    await expect(resetProviderCircuit("never-seen-provider")).resolves.toBeUndefined();
+    expect(isCircuitOpen("never-seen-provider")).toBe(false);
+  });
+
+  it("live calls resume after a manual reset", async () => {
+    await openCircuit("openai");
+    await resetProviderCircuit("openai");
+
+    let liveCalled = false;
+    const out = await runAdapterWithRetry({
+      buildLiveAdapter: async () => ({
+        id: "live", name: "Live", provider: "openai", model: "gpt-4",
+        capabilities: [], role: "tester", isMock: false,
+        runTask: async () => { liveCalled = true; return MOCK_RESULT; },
+      }),
+      buildFallbackAdapter: () => makeMockAdapter(),
+      taskInput: TASK_INPUT,
+      retryDelayMs: 0,
+      logAudit: noop as any,
+      context: makeCtx("openai"),
+    });
+
+    expect(liveCalled).toBe(true);
+    expect(out.usedFallback).toBe(false);
+    expect(out.circuitOpen).toBeUndefined();
+  });
+});
 
 describe("isCircuitOpen", () => {
   it("is closed by default", () => {

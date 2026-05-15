@@ -74,6 +74,11 @@ export interface BridgeStats {
   alertEnabled: boolean;
 }
 
+export interface ResetCircuitResult {
+  ok: boolean;
+  provider: string;
+}
+
 export type CircuitBreakerEntryState =
   (typeof CircuitBreakerEntryState)[keyof typeof CircuitBreakerEntryState];
 

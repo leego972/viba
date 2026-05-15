@@ -30,6 +30,7 @@ import type {
   HealthStatus,
   Memory,
   Message,
+  ResetCircuitResult,
   RunStepResult,
   SaveSettingsBody,
   SendMessageBody,
@@ -1876,3 +1877,88 @@ export function useGetCircuitStatus<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Immediately clears an open or half-open circuit for a provider, allowing live calls to resume. The reset is persisted to the database so it survives restarts and is visible to all running instances.
+ * @summary Manually reset a provider's circuit breaker
+ */
+export const getResetCircuitUrl = (provider: string) => {
+  return `/api/circuit-breaker/reset/${provider}`;
+};
+
+export const resetCircuit = async (
+  provider: string,
+  options?: RequestInit,
+): Promise<ResetCircuitResult> => {
+  return customFetch<ResetCircuitResult>(getResetCircuitUrl(provider), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getResetCircuitMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resetCircuit>>,
+    TError,
+    { provider: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof resetCircuit>>,
+  TError,
+  { provider: string },
+  TContext
+> => {
+  const mutationKey = ["resetCircuit"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof resetCircuit>>,
+    { provider: string }
+  > = (props) => {
+    const { provider } = props ?? {};
+
+    return resetCircuit(provider, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ResetCircuitMutationResult = NonNullable<
+  Awaited<ReturnType<typeof resetCircuit>>
+>;
+
+export type ResetCircuitMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Manually reset a provider's circuit breaker
+ */
+export const useResetCircuit = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resetCircuit>>,
+    TError,
+    { provider: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof resetCircuit>>,
+  TError,
+  { provider: string },
+  TContext
+> => {
+  return useMutation(getResetCircuitMutationOptions(options));
+};

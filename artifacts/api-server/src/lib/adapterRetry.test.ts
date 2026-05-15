@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { runAdapterWithRetry, isCircuitOpen, resetAllCircuits } from "./adapterRetry";
+import {
+  runAdapterWithRetry,
+  isCircuitOpen,
+  resetAllCircuits,
+  loadCircuitStateFromDb,
+} from "./adapterRetry";
 import type { AgentAdapter, AgentTaskInput, AgentTaskResult } from "./adapters/interface";
 import type { LogAuditFn } from "./adapterRetry";
 
@@ -313,5 +318,77 @@ describe("runAdapterWithRetry", () => {
     // because the counter was reset to 0
     await driveToFailures(CIRCUIT_OPEN_THRESHOLD - 1);
     expect(isCircuitOpen(CONTEXT.provider)).toBe(false);
+  });
+});
+
+// ── Circuit state persistence / restart tests (task #79) ──────────────────
+
+describe("loadCircuitStateFromDb", () => {
+  beforeEach(() => {
+    resetAllCircuits();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    resetAllCircuits();
+  });
+
+  it("restores an open circuit from the database after a simulated restart", async () => {
+    const openedAt = new Date(Date.now() - 60_000); // opened 1 minute ago — still within window
+
+    // Configure the DB mock to return a persisted open circuit for "anthropic"
+    const { db: mockDb } = await import("@workspace/db");
+    vi.mocked(mockDb.select).mockReturnValueOnce({
+      from: vi.fn().mockResolvedValue([
+        { provider: "anthropic", consecutiveFailures: 5, openedAt, updatedAt: new Date() },
+      ]),
+    } as any);
+
+    // Before load, circuit is closed (fresh restart)
+    expect(isCircuitOpen("anthropic")).toBe(false);
+
+    await loadCircuitStateFromDb();
+
+    // After loading persisted state, circuit should be open again
+    expect(isCircuitOpen("anthropic")).toBe(true);
+  });
+
+  it("treats an expired openedAt as half-open — live probes are allowed", async () => {
+    const expiredAt = new Date(Date.now() - 10 * 60_000); // opened 10 min ago, past 5-min window
+
+    const { db: mockDb } = await import("@workspace/db");
+    vi.mocked(mockDb.select).mockReturnValueOnce({
+      from: vi.fn().mockResolvedValue([
+        { provider: "gemini", consecutiveFailures: 5, openedAt: expiredAt, updatedAt: new Date() },
+      ]),
+    } as any);
+
+    await loadCircuitStateFromDb();
+
+    // Window expired — circuit is half-open (not blocking)
+    expect(isCircuitOpen("gemini")).toBe(false);
+  });
+
+  it("handles an empty database gracefully — all circuits remain closed", async () => {
+    const { db: mockDb } = await import("@workspace/db");
+    vi.mocked(mockDb.select).mockReturnValueOnce({
+      from: vi.fn().mockResolvedValue([]),
+    } as any);
+
+    await loadCircuitStateFromDb();
+
+    expect(isCircuitOpen("openai")).toBe(false);
+    expect(isCircuitOpen("anthropic")).toBe(false);
+  });
+
+  it("continues with empty state when the database is unavailable", async () => {
+    const { db: mockDb } = await import("@workspace/db");
+    vi.mocked(mockDb.select).mockReturnValueOnce({
+      from: vi.fn().mockRejectedValue(new Error("DB connection refused")),
+    } as any);
+
+    // Should not throw
+    await expect(loadCircuitStateFromDb()).resolves.toBeUndefined();
+    expect(isCircuitOpen("openai")).toBe(false);
   });
 });
