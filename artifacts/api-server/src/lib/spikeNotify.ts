@@ -103,6 +103,34 @@ async function assertSafeUrl(rawUrl: string): Promise<void> {
   }
 }
 
+export async function sendTestWebhookNotification(
+  webhookUrl: string,
+  settingsUrl: string
+): Promise<void> {
+  await assertSafeUrl(webhookUrl);
+
+  const body = {
+    event: "test_notification",
+    message: "This is a test spike alert from BridgeAI. Your webhook is configured correctly.",
+    providers: [{ provider: "test", fallbackCount: 0, threshold: 0 }],
+    settingsUrl,
+    timestamp: new Date().toISOString(),
+  };
+
+  const res = await fetch(webhookUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Webhook returned status ${res.status}`);
+  }
+
+  logger.info({ url: webhookUrl }, "Test spike webhook delivered");
+}
+
 export async function sendSpikeNotifications(opts: SpikeNotifyOptions): Promise<void> {
   const { providers, threshold, webhookUrl, settingsUrl } = opts;
 

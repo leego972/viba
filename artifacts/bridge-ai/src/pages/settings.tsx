@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { useGetSettings, useSaveSettings, useGetStats, getGetSettingsQueryKey } from "@workspace/api-client-react";
+import { useGetSettings, useSaveSettings, useGetStats, useSendTestNotification, getGetSettingsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -129,6 +129,8 @@ export default function Settings() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  const sendTestNotification = useSendTestNotification();
+
   const [values, setValues] = useState<KeyState>(() =>
     Object.fromEntries(ALL_SETTING_KEYS.map((k) => [k, ""]))
   );
@@ -186,6 +188,11 @@ export default function Settings() {
   const notificationWebhookUrl = values["NOTIFICATION_WEBHOOK_URL"] || "";
   const notificationEmail = values["NOTIFICATION_EMAIL"] || "";
 
+  const savedWebhookUrl = settings
+    ? (settings.find((s) => s.key === "NOTIFICATION_WEBHOOK_URL")?.value ?? "")
+    : "";
+  const webhookUrlIsSaved = notificationWebhookUrl === savedWebhookUrl && !!notificationWebhookUrl;
+
   const handleAlertEnabledChange = (checked: boolean) => {
     setValues((prev) => ({ ...prev, FALLBACK_ALERT_ENABLED: checked ? "true" : "false" }));
   };
@@ -201,6 +208,18 @@ export default function Settings() {
 
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setValues((prev) => ({ ...prev, NOTIFICATION_EMAIL: e.target.value }));
+  };
+
+  const handleTestNotification = () => {
+    sendTestNotification.mutate(undefined, {
+      onSuccess: (data) => {
+        toast({ title: "Test sent", description: data.message });
+      },
+      onError: (err) => {
+        const message = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Failed to send test notification.";
+        toast({ title: "Test failed", description: message, variant: "destructive" });
+      },
+    });
   };
 
   return (
@@ -335,14 +354,29 @@ export default function Settings() {
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Out-of-band notifications</p>
               <div className="space-y-1.5">
                 <Label htmlFor="notification-webhook">Webhook URL</Label>
-                <Input
-                  id="notification-webhook"
-                  type="url"
-                  placeholder="https://hooks.example.com/notify"
-                  value={notificationWebhookUrl}
-                  onChange={handleWebhookUrlChange}
-                  disabled={!alertEnabled}
-                />
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="notification-webhook"
+                    type="url"
+                    placeholder="https://hooks.example.com/notify"
+                    value={notificationWebhookUrl}
+                    onChange={handleWebhookUrlChange}
+                    disabled={!alertEnabled}
+                    className="flex-1"
+                  />
+                  {notificationWebhookUrl && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleTestNotification}
+                      disabled={!alertEnabled || sendTestNotification.isPending || !webhookUrlIsSaved}
+                      title={!webhookUrlIsSaved ? "Save settings first to test this URL" : undefined}
+                    >
+                      {sendTestNotification.isPending ? "Sending..." : "Send test"}
+                    </Button>
+                  )}
+                </div>
                 <p className="text-xs text-muted-foreground">
                   When a spike is detected, a POST request with JSON details (provider name, fallback count, settings link) is sent to this URL. Works with Slack incoming webhooks, PagerDuty, Make, Zapier, and any HTTP endpoint.
                 </p>

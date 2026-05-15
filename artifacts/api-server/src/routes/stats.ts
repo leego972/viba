@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, auditLogsTable, sessionsTable, messagesTable, settingsTable } from "@workspace/db";
 import { eq, sql, desc } from "drizzle-orm";
 import { detectSpikeProviders, type ProviderCount } from "../lib/spikeDetect";
-import { sendSpikeNotifications } from "../lib/spikeNotify";
+import { sendSpikeNotifications, sendTestWebhookNotification } from "../lib/spikeNotify";
 
 const router: IRouter = Router();
 
@@ -182,6 +182,48 @@ router.get("/stats", async (req, res): Promise<void> => {
     recentSpikeThreshold: alertThreshold,
     alertEnabled,
   });
+});
+
+router.post("/stats/test-notification", async (req, res): Promise<void> => {
+  const notificationSettings = await db
+    .select({ key: settingsTable.key, value: settingsTable.value })
+    .from(settingsTable)
+    .where(
+      sql`${settingsTable.key} IN ('NOTIFICATION_WEBHOOK_URL', 'NOTIFICATION_EMAIL')`
+    );
+
+  const settingsMap = new Map(notificationSettings.map((s) => [s.key, s.value]));
+  const webhookUrl = settingsMap.get("NOTIFICATION_WEBHOOK_URL") ?? null;
+  const email = settingsMap.get("NOTIFICATION_EMAIL") ?? null;
+
+  if (!webhookUrl && !email) {
+    res.status(400).json({ error: "No notification channel configured. Set a webhook URL or email address in Settings." });
+    return;
+  }
+
+  const settingsUrl = `${req.protocol}://${req.get("host")}/settings`;
+
+  let webhookError: string | null = null;
+
+  if (webhookUrl) {
+    try {
+      await sendTestWebhookNotification(webhookUrl, settingsUrl);
+    } catch (err) {
+      webhookError = err instanceof Error ? err.message : "Unknown error";
+      req.log.warn({ url: webhookUrl, err }, "Test webhook notification failed");
+    }
+  }
+
+  if (email) {
+    req.log.info({ email }, "Test spike notification (email): would send alert to configured address");
+  }
+
+  if (webhookError) {
+    res.status(400).json({ error: `Webhook delivery failed: ${webhookError}` });
+    return;
+  }
+
+  res.json({ ok: true, message: "Test notification sent successfully." });
 });
 
 export default router;
