@@ -57,12 +57,16 @@ export function pruneStaleLocalStorageKeys(limit = MAX_BANNER_STORAGE_KEYS): voi
 
 /**
  * Reads and validates the stored dismissal timestamp for a given session.
- * Legacy count-based values (plain integers) are treated as "not dismissed".
+ * Legacy count-based values (plain integers stored before the ISO-timestamp
+ * migration) are treated as "not dismissed". A bare /^\d+$/ string must be
+ * rejected explicitly because some V8 builds accept integers like "42" via
+ * Date.parse, interpreting them as years or milliseconds-since-epoch.
  */
 export function readDismissedAt(sessionId: number): string | null {
   try {
     const stored = localStorage.getItem(`${BANNER_STORAGE_PREFIX}${sessionId}`);
-    if (stored !== null && isNaN(Date.parse(stored))) return null;
+    if (stored === null) return null;
+    if (/^\d+$/.test(stored) || isNaN(Date.parse(stored))) return null;
     return stored;
   } catch {
     return null;

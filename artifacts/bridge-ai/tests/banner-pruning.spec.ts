@@ -138,3 +138,45 @@ test.describe("pruneStaleLocalStorageKeys — localStorage cleanup (#47)", () =>
     expect(remaining).toContain(`${BANNER_PREFIX}29`);
   });
 });
+
+test.describe("pruneStaleLocalStorageKeys — mixed legacy integer and ISO timestamp values", () => {
+  test("removes oldest keys by numeric ID even when some keys hold legacy integer values", async ({ page }) => {
+    const sessionId = await createSession();
+
+    // Seed 25 keys: IDs 1-12 with valid ISO timestamps, IDs 13-25 with legacy integers.
+    // Legacy integer values are silently ignored by readDismissedAt but the key
+    // still occupies a slot toward the 20-key limit. Pruning must evict the 5
+    // smallest numeric IDs (1-5) regardless of the type of value they store.
+    await page.addInitScript(
+      ({ prefix }: { prefix: string }) => {
+        localStorage.clear();
+        const ts = new Date().toISOString();
+        for (let i = 1; i <= 12; i++) {
+          localStorage.setItem(`${prefix}${i}`, ts);
+        }
+        for (let i = 13; i <= 25; i++) {
+          localStorage.setItem(`${prefix}${i}`, "7"); // legacy count-based integer
+        }
+      },
+      { prefix: BANNER_PREFIX },
+    );
+
+    await page.goto(`/sessions/${sessionId}`);
+    await expect(page.getByText("TestAgent").first()).toBeVisible({ timeout: 10000 });
+
+    const remaining = await getBannerKeys(page, BANNER_PREFIX);
+
+    // Exactly 20 keys must survive
+    expect(remaining).toHaveLength(MAX_KEYS);
+
+    // The 5 oldest (IDs 1-5, all ISO-valued) must be pruned
+    for (let i = 1; i <= 5; i++) {
+      expect(remaining).not.toContain(`${BANNER_PREFIX}${i}`);
+    }
+
+    // The 20 newest (IDs 6-25, mix of ISO and legacy integer values) must remain
+    for (let i = 6; i <= 25; i++) {
+      expect(remaining).toContain(`${BANNER_PREFIX}${i}`);
+    }
+  });
+});

@@ -1,5 +1,12 @@
-import { describe, it, expect } from "vitest";
-import { computeShowFallbackBanner, getKeysToPrune } from "./bannerLogic";
+import { describe, it, expect, beforeEach } from "vitest";
+import {
+  computeShowFallbackBanner,
+  getKeysToPrune,
+  readDismissedAt,
+  pruneStaleLocalStorageKeys,
+  BANNER_STORAGE_PREFIX,
+  MAX_BANNER_STORAGE_KEYS,
+} from "./bannerLogic";
 
 describe("computeShowFallbackBanner", () => {
   it("returns false when there are no fallback messages", () => {
@@ -86,7 +93,7 @@ describe("getKeysToPrune (#47)", () => {
 
   it("removes multiple keys when significantly over limit", () => {
     const keys = ["k5", "k3", "k1", "k4", "k2"];
-    const toRemove = getKeysToPrune(keys, 2);
+    const toRemove = getKeysToPrune(keys, 2, "k");
     expect(toRemove).toHaveLength(3);
     expect(toRemove).toEqual(["k1", "k2", "k3"]);
   });
@@ -124,5 +131,93 @@ describe("getKeysToPrune (#47)", () => {
     const toRemove = getKeysToPrune(keys, 20);
     expect(toRemove).toHaveLength(1);
     expect(toRemove[0]).toBe("k000");
+  });
+});
+
+describe("readDismissedAt — legacy integer value handling (#74)", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("returns null for a legacy single-digit integer value", () => {
+    localStorage.setItem(`${BANNER_STORAGE_PREFIX}1`, "3");
+    expect(readDismissedAt(1)).toBeNull();
+  });
+
+  it("returns null for a legacy multi-digit integer value", () => {
+    localStorage.setItem(`${BANNER_STORAGE_PREFIX}2`, "42");
+    expect(readDismissedAt(2)).toBeNull();
+  });
+
+  it("returns the ISO timestamp string for a valid dismissal", () => {
+    const iso = new Date().toISOString();
+    localStorage.setItem(`${BANNER_STORAGE_PREFIX}3`, iso);
+    expect(readDismissedAt(3)).toBe(iso);
+  });
+
+  it("returns null when no key exists for the session", () => {
+    expect(readDismissedAt(9999)).toBeNull();
+  });
+
+  it("returns null for a clearly non-date string", () => {
+    localStorage.setItem(`${BANNER_STORAGE_PREFIX}4`, "not-a-date");
+    expect(readDismissedAt(4)).toBeNull();
+  });
+});
+
+describe("pruneStaleLocalStorageKeys — mixed legacy integer and ISO values (#74)", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("removes the oldest keys by numeric ID when values are a mix of ISO and legacy integers", () => {
+    const iso = new Date().toISOString();
+
+    // IDs 1-12: valid ISO timestamps; IDs 13-25: legacy count-based integers
+    for (let i = 1; i <= 12; i++) {
+      localStorage.setItem(`${BANNER_STORAGE_PREFIX}${i}`, iso);
+    }
+    for (let i = 13; i <= 25; i++) {
+      localStorage.setItem(`${BANNER_STORAGE_PREFIX}${i}`, "7");
+    }
+
+    pruneStaleLocalStorageKeys(MAX_BANNER_STORAGE_KEYS);
+
+    const remaining: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k?.startsWith(BANNER_STORAGE_PREFIX)) remaining.push(k);
+    }
+
+    expect(remaining).toHaveLength(MAX_BANNER_STORAGE_KEYS);
+
+    // Oldest 5 (IDs 1-5, ISO-valued) must have been pruned
+    for (let i = 1; i <= 5; i++) {
+      expect(remaining).not.toContain(`${BANNER_STORAGE_PREFIX}${i}`);
+    }
+
+    // Remaining 20 (IDs 6-25, mix of ISO and integer values) must survive
+    for (let i = 6; i <= 25; i++) {
+      expect(remaining).toContain(`${BANNER_STORAGE_PREFIX}${i}`);
+    }
+  });
+
+  it("legacy integer keys count toward the 20-key limit and are pruned by numeric ID", () => {
+    // All 21 keys hold legacy integer values — pruning must still remove the smallest ID
+    for (let i = 1; i <= 21; i++) {
+      localStorage.setItem(`${BANNER_STORAGE_PREFIX}${i}`, "5");
+    }
+
+    pruneStaleLocalStorageKeys(MAX_BANNER_STORAGE_KEYS);
+
+    const remaining: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k?.startsWith(BANNER_STORAGE_PREFIX)) remaining.push(k);
+    }
+
+    expect(remaining).toHaveLength(MAX_BANNER_STORAGE_KEYS);
+    expect(remaining).not.toContain(`${BANNER_STORAGE_PREFIX}1`);
+    expect(remaining).toContain(`${BANNER_STORAGE_PREFIX}21`);
   });
 });
