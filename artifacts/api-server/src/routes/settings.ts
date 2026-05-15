@@ -1,15 +1,26 @@
 import { Router, type IRouter } from "express";
 import { db, settingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+
 import { GetSettingsResponse, SaveSettingsBody, SaveSettingsResponse } from "@workspace/api-zod";
 
+const CLEARABLE_NOTIFICATION_KEYS = ["NOTIFICATION_WEBHOOK_URL", "NOTIFICATION_EMAIL"];
+
 const router: IRouter = Router();
+
+function serializeSetting(s: { id: number; key: string; value: string | null; createdAt: Date; updatedAt: Date }) {
+  return {
+    ...s,
+    createdAt: s.createdAt.toISOString(),
+    updatedAt: s.updatedAt.toISOString(),
+  };
+}
 
 // GET /settings
 router.get("/settings", async (_req, res): Promise<void> => {
   const settings = await db.select().from(settingsTable);
   // Never return the actual value of sensitive keys (case-insensitive match)
-  const safeSettings = settings.map((s) => ({
+  const safeSettings = settings.map((s) => serializeSetting({
     ...s,
     value: s.key.toLowerCase().includes("api_key") && s.value ? "***SET***" : s.value,
   }));
@@ -29,6 +40,12 @@ router.post("/settings", async (req, res): Promise<void> => {
     // Don't update if value is the masked placeholder
     if (value === "***SET***") continue;
 
+    // Clearing a notification key explicitly deletes the stored setting
+    if (value === "" && CLEARABLE_NOTIFICATION_KEYS.includes(key)) {
+      await db.delete(settingsTable).where(eq(settingsTable.key, key));
+      continue;
+    }
+
     const [existing] = await db.select().from(settingsTable).where(eq(settingsTable.key, key));
     if (existing) {
       const [updated] = await db
@@ -44,7 +61,7 @@ router.post("/settings", async (req, res): Promise<void> => {
   }
 
   const allSettings = await db.select().from(settingsTable);
-  const safeSettings = allSettings.map((s) => ({
+  const safeSettings = allSettings.map((s) => serializeSetting({
     ...s,
     value: s.key.toLowerCase().includes("api_key") && s.value ? "***SET***" : s.value,
   }));
