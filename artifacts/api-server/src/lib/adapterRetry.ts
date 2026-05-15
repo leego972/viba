@@ -30,8 +30,14 @@ export interface AdapterRetryResult {
 // revalidated from the DB if it is stale, which allows multiple API server
 // instances to share circuit state correctly.
 
-const CIRCUIT_OPEN_THRESHOLD = 5;
-const CIRCUIT_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+function parsePositiveInt(value: string | undefined, defaultValue: number): number {
+  if (value === undefined || value === "") return defaultValue;
+  const parsed = parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : defaultValue;
+}
+
+const CIRCUIT_OPEN_THRESHOLD = parsePositiveInt(process.env.CIRCUIT_OPEN_THRESHOLD, 5);
+const CIRCUIT_TIMEOUT_MS = parsePositiveInt(process.env.CIRCUIT_TIMEOUT_MS, 5 * 60 * 1000);
 const CACHE_TTL_MS = 30_000; // 30 seconds — max staleness across instances
 
 // Internal state kept in the map; cachedAt is not part of the public interface.
@@ -198,6 +204,21 @@ async function recordFailure(provider: string, now = Date.now()): Promise<void> 
 /** Exposed for tests only — resets all in-memory circuit state. */
 export function resetAllCircuits(): void {
   circuitMap.clear();
+}
+
+/**
+ * Manually reset a single provider's circuit breaker to closed state.
+ * Clears both the in-memory cache and the persisted DB row so the reset
+ * survives restarts and is visible to all running instances within one TTL.
+ */
+export async function resetProviderCircuit(provider: string): Promise<void> {
+  const now = Date.now();
+  const state = getOrCreateLocal(provider);
+  state.consecutiveFailures = 0;
+  state.openedAt = null;
+  state.cachedAt = now;
+  await persistCircuitState(provider, state);
+  logger.info({ provider }, "Circuit breaker manually reset by operator");
 }
 
 export interface CircuitStatusEntry {
