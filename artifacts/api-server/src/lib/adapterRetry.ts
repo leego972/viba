@@ -25,42 +25,157 @@ export interface AdapterRetryResult {
 }
 
 // ── Circuit breaker ────────────────────────────────────────────────────────────
-// Per-provider in-process state. Opens after CIRCUIT_OPEN_THRESHOLD consecutive
-// failures and stays open for CIRCUIT_TIMEOUT_MS before allowing one probe attempt.
+// Per-provider state. The in-memory map is a short-lived cache (TTL = 30 s).
+// The database is the source of truth. Before any circuit check the cache is
+// revalidated from the DB if it is stale, which allows multiple API server
+// instances to share circuit state correctly.
 
 const CIRCUIT_OPEN_THRESHOLD = 5;
 const CIRCUIT_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL_MS = 30_000; // 30 seconds — max staleness across instances
 
-interface CircuitState {
+// Internal state kept in the map; cachedAt is not part of the public interface.
+interface InternalCircuitState {
+  consecutiveFailures: number;
+  openedAt: number | null; // Unix ms timestamp, or null when closed
+  cachedAt: number;        // when the entry was last read from / written to DB
+}
+
+export interface CircuitState {
   consecutiveFailures: number;
   openedAt: number | null;
 }
 
-const circuitMap = new Map<string, CircuitState>();
+const circuitMap = new Map<string, InternalCircuitState>();
 
-function getCircuit(provider: string): CircuitState {
+function getOrCreateLocal(provider: string): InternalCircuitState {
   let state = circuitMap.get(provider);
   if (!state) {
-    state = { consecutiveFailures: 0, openedAt: null };
+    // cachedAt=0 forces a DB read-through on the next check
+    state = { consecutiveFailures: 0, openedAt: null, cachedAt: 0 };
     circuitMap.set(provider, state);
   }
   return state;
 }
 
+/**
+ * Revalidate a single provider's circuit state from the database when the
+ * in-memory entry is older than CACHE_TTL_MS. Skips silently if the DB is
+ * unavailable (e.g. in tests without DATABASE_URL) and updates cachedAt so
+ * the next in-window call doesn't hammer the DB.
+ */
+async function refreshCircuitFromDb(provider: string, now = Date.now()): Promise<void> {
+  const state = circuitMap.get(provider);
+  if (state && now - state.cachedAt < CACHE_TTL_MS) return; // cache is fresh
+
+  try {
+    const [{ db, circuitStateTable }, { eq }] = await Promise.all([
+      import("@workspace/db"),
+      import("drizzle-orm"),
+    ]);
+
+    const rows = await db
+      .select()
+      .from(circuitStateTable)
+      .where(eq(circuitStateTable.provider, provider));
+
+    if (rows.length > 0) {
+      const row = rows[0]!;
+      circuitMap.set(provider, {
+        consecutiveFailures: row.consecutiveFailures,
+        openedAt: row.openedAt !== null ? row.openedAt.getTime() : null,
+        cachedAt: now,
+      });
+    } else {
+      // No DB row yet for this provider — mark the cache as fresh so we
+      // don't hit the DB again until the next TTL window expires.
+      // (We do not zero out existing local state here, because a missing row
+      // can also mean the initial persist has not run yet rather than a
+      // deliberate reset.)
+      const existing = getOrCreateLocal(provider);
+      existing.cachedAt = now;
+    }
+  } catch (err) {
+    logger.warn({ err, provider }, "Failed to refresh circuit state from DB");
+    // Update cachedAt even on failure to avoid hammering the DB
+    const existing = getOrCreateLocal(provider);
+    existing.cachedAt = now;
+  }
+}
+
+/**
+ * Upsert a single provider's circuit state into the database.
+ * Uses a dynamic import so the module can be loaded in test environments
+ * that do not have DATABASE_URL set — failures are logged and swallowed.
+ */
+async function persistCircuitState(
+  provider: string,
+  state: InternalCircuitState,
+): Promise<void> {
+  try {
+    const { db, circuitStateTable } = await import("@workspace/db");
+    await db
+      .insert(circuitStateTable)
+      .values({
+        provider,
+        consecutiveFailures: state.consecutiveFailures,
+        openedAt: state.openedAt !== null ? new Date(state.openedAt) : null,
+      })
+      .onConflictDoUpdate({
+        target: circuitStateTable.provider,
+        set: {
+          consecutiveFailures: state.consecutiveFailures,
+          openedAt: state.openedAt !== null ? new Date(state.openedAt) : null,
+          updatedAt: new Date(),
+        },
+      });
+  } catch (err) {
+    logger.warn({ err, provider }, "Failed to persist circuit state to DB");
+  }
+}
+
+/**
+ * Load all circuit breaker state from the database into the in-memory map.
+ * Call once at server startup so the server resumes from the last known state
+ * rather than starting with all circuits closed. If the DB is unavailable,
+ * logs a warning and continues with a clean (all-closed) state.
+ */
+export async function loadCircuitStateFromDb(): Promise<void> {
+  try {
+    const { db, circuitStateTable } = await import("@workspace/db");
+    const rows = await db.select().from(circuitStateTable);
+    const now = Date.now();
+    for (const row of rows) {
+      circuitMap.set(row.provider, {
+        consecutiveFailures: row.consecutiveFailures,
+        openedAt: row.openedAt !== null ? row.openedAt.getTime() : null,
+        cachedAt: now,
+      });
+    }
+    logger.info({ count: rows.length }, "Loaded circuit breaker state from DB");
+  } catch (err) {
+    logger.warn({ err }, "Failed to load circuit state from DB — starting with empty state");
+  }
+}
+
+/** Synchronous check using the current in-memory cache. Always call
+ *  refreshCircuitFromDb() first when multi-instance correctness matters. */
 export function isCircuitOpen(provider: string, now = Date.now()): boolean {
-  const state = getCircuit(provider);
-  if (state.openedAt === null) return false;
+  const state = circuitMap.get(provider);
+  if (!state || state.openedAt === null) return false;
   return now - state.openedAt < CIRCUIT_TIMEOUT_MS;
 }
 
-function recordSuccess(provider: string): void {
-  const state = getCircuit(provider);
+async function recordSuccess(provider: string, now = Date.now()): Promise<void> {
+  const state = getOrCreateLocal(provider);
   state.consecutiveFailures = 0;
   state.openedAt = null;
+  state.cachedAt = now;
+  await persistCircuitState(provider, state);
 }
 
-function recordFailure(provider: string, now = Date.now()): void {
-  const state = getCircuit(provider);
+async function recordFailure(provider: string, now = Date.now()): Promise<void> {
+  const state = getOrCreateLocal(provider);
   state.consecutiveFailures += 1;
   if (state.consecutiveFailures >= CIRCUIT_OPEN_THRESHOLD) {
     const alreadyOpen =
@@ -76,9 +191,11 @@ function recordFailure(provider: string, now = Date.now()): void {
       );
     }
   }
+  state.cachedAt = now;
+  await persistCircuitState(provider, state);
 }
 
-/** Exposed for tests only — resets all circuit state. */
+/** Exposed for tests only — resets all in-memory circuit state. */
 export function resetAllCircuits(): void {
   circuitMap.clear();
 }
@@ -135,6 +252,9 @@ export function getCircuitStatus(now = Date.now()): CircuitStatusEntry[] {
  * the live call is bypassed entirely and simulation is used straight away.
  * If all live attempts fail, falls back to the mock adapter.
  *
+ * Before the circuit check, the per-provider cache is revalidated from the DB
+ * if it is stale (>30 s), so multiple API instances share circuit state.
+ *
  * Accepts injectable factory functions and an audit-log callback so the
  * function can be tested without touching the database.
  */
@@ -148,6 +268,9 @@ export async function runAdapterWithRetry(params: {
 }): Promise<AdapterRetryResult> {
   const { buildLiveAdapter, buildFallbackAdapter, taskInput, retryDelayMs, logAudit, context } =
     params;
+
+  // Revalidate cache from DB so this instance sees state from other instances.
+  await refreshCircuitFromDb(context.provider);
 
   // Circuit breaker short-circuit — skip live call entirely when open
   if (isCircuitOpen(context.provider)) {
@@ -190,7 +313,7 @@ export async function runAdapterWithRetry(params: {
       result = await adapter.runTask(taskInput);
       lastLiveError = null;
       successAttempt = attempt;
-      recordSuccess(context.provider);
+      await recordSuccess(context.provider);
       break;
     } catch (err) {
       lastLiveError = err;
@@ -226,7 +349,7 @@ export async function runAdapterWithRetry(params: {
 
   if (lastLiveError !== null || result === null) {
     const permanent = isPermanentError(lastLiveError);
-    recordFailure(context.provider);
+    await recordFailure(context.provider);
     logger.error(
       {
         err: lastLiveError,
