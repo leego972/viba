@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveAlertSettings, computeRecentSpike } from "./stats";
+import { resolveAlertSettings, computeRecentSpike, buildTestNotificationMessage } from "./stats";
 
 describe("resolveAlertSettings", () => {
   it("uses the default threshold when the setting is absent", () => {
@@ -119,5 +119,32 @@ describe("computeRecentSpike", () => {
       { provider: "openai", count: 100 },
     ];
     expect(computeRecentSpike(recentByProvider, false, 1)).toEqual([]);
+  });
+});
+
+describe("buildTestNotificationMessage", () => {
+  it("reports webhook delivered when webhook was sent and no email", () => {
+    expect(buildTestNotificationMessage(true, null)).toBe("Webhook delivered.");
+  });
+
+  it("reports email queued when only email is configured", () => {
+    expect(buildTestNotificationMessage(false, "alerts@example.com")).toBe(
+      "email alert queued for alerts@example.com."
+    );
+  });
+
+  it("reports both channels when webhook and email are both configured", () => {
+    const msg = buildTestNotificationMessage(true, "alerts@example.com");
+    expect(msg).toContain("Webhook delivered");
+    expect(msg).toContain("email alert queued for alerts@example.com");
+  });
+
+  it("falls back to generic message when neither webhook nor email is active", () => {
+    expect(buildTestNotificationMessage(false, null)).toBe("Test notification sent.");
+  });
+
+  it("uses the actual email address in the message", () => {
+    const msg = buildTestNotificationMessage(false, "ops@company.io");
+    expect(msg).toContain("ops@company.io");
   });
 });

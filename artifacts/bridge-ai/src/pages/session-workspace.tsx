@@ -92,6 +92,7 @@ export default function SessionWorkspace() {
   const [userInstruction, setUserInstruction] = useState("");
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [pendingApproval, setPendingApproval] = useState<any>(null);
+  const [spikeAlertDismissed, setSpikeAlertDismissed] = useState(false);
 
   // Prune stale keys from localStorage once on mount (#47)
   useEffect(() => { pruneStaleLocalStorageKeys(); }, []);
@@ -209,7 +210,11 @@ export default function SessionWorkspace() {
   const recentSpikeProviders = stats?.recentSpikeProviders ?? [];
   const recentSpikeThreshold = stats?.recentSpikeThreshold ?? 5;
   const alertEnabled = stats?.alertEnabled ?? true;
-  const showSpikeAlert = alertEnabled && recentSpikeProviders.length > 0;
+  const showSpikeAlert = alertEnabled && recentSpikeProviders.length > 0 && !spikeAlertDismissed;
+
+  // Reset dismissal whenever the set of spiking providers changes so new spikes are always visible
+  const spikeProvidersKey = recentSpikeProviders.join(",");
+  useEffect(() => { setSpikeAlertDismissed(false); }, [spikeProvidersKey]);
 
   // Browser notification when a spike is detected
   const prevSpikeRef = useRef<string[]>([]);
@@ -413,6 +418,13 @@ export default function SessionWorkspace() {
               </Link>
               .
             </div>
+            <button
+              onClick={() => setSpikeAlertDismissed(true)}
+              className="shrink-0 rounded p-0.5 hover:bg-red-500/20 transition-colors"
+              aria-label="Dismiss spike alert"
+            >
+              <X className="h-4 w-4 text-red-400" />
+            </button>
           </div>
         )}
 

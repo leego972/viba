@@ -4,7 +4,16 @@ import { eq } from "drizzle-orm";
 
 import { GetSettingsResponse, SaveSettingsBody, SaveSettingsResponse } from "@workspace/api-zod";
 
-const CLEARABLE_NOTIFICATION_KEYS = ["NOTIFICATION_WEBHOOK_URL", "NOTIFICATION_EMAIL"];
+const CLEARABLE_NOTIFICATION_KEYS = [
+  "NOTIFICATION_WEBHOOK_URL",
+  "NOTIFICATION_EMAIL",
+  "OPENAI_API_KEY",
+  "ANTHROPIC_API_KEY",
+  "GEMINI_API_KEY",
+  "PERPLEXITY_API_KEY",
+  "REPLIT_API_KEY",
+  "MANUS_API_KEY",
+];
 
 const router: IRouter = Router();
 

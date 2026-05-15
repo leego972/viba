@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Key, ShieldCheck, Zap, RotateCcw, BarChart2, Cpu, Bell } from "lucide-react";
+import { Key, ShieldCheck, Zap, RotateCcw, BarChart2, Cpu, Bell, X } from "lucide-react";
 
 type ModelOption = { value: string; label: string };
 
@@ -134,6 +134,8 @@ export default function Settings() {
   const [values, setValues] = useState<KeyState>(() =>
     Object.fromEntries(ALL_SETTING_KEYS.map((k) => [k, ""]))
   );
+  const [clearedKeys, setClearedKeys] = useState<Set<string>>(new Set());
+  const [thresholdError, setThresholdError] = useState<string | null>(null);
 
   useEffect(() => {
     if (settings) {
@@ -148,7 +150,16 @@ export default function Settings() {
   }, [settings]);
 
   const handleKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setValues((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+    setValues((prev) => ({ ...prev, [name]: value }));
+    if (clearedKeys.has(name)) {
+      setClearedKeys((prev) => { const next = new Set(prev); next.delete(name); return next; });
+    }
+  };
+
+  const handleClearKey = (key: string) => {
+    setValues((prev) => ({ ...prev, [key]: "" }));
+    setClearedKeys((prev) => new Set(prev).add(key));
   };
 
   const handleModelChange = (modelKey: string, value: string) => {
@@ -156,8 +167,32 @@ export default function Settings() {
   };
 
   const handleSave = () => {
+    if (alertEnabled) {
+      const n = parseInt(alertThreshold, 10);
+      if (!alertThreshold || !/^\d+$/.test(alertThreshold) || n < 1 || n > 100) {
+        toast({ title: "Invalid threshold", description: "Alert threshold must be a whole number between 1 and 100.", variant: "destructive" });
+        return;
+      }
+      if (notificationWebhookUrl) {
+        try {
+          const parsed = new URL(notificationWebhookUrl);
+          if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+            toast({ title: "Invalid webhook URL", description: "Webhook URL must start with http:// or https://.", variant: "destructive" });
+            return;
+          }
+        } catch {
+          toast({ title: "Invalid webhook URL", description: "Please enter a valid URL (e.g. https://hooks.example.com/notify).", variant: "destructive" });
+          return;
+        }
+      }
+      if (notificationEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(notificationEmail)) {
+        toast({ title: "Invalid email", description: "Please enter a valid email address.", variant: "destructive" });
+        return;
+      }
+    }
+
     const settingsToSave = Object.entries(values)
-      .filter(([key, value]) => value !== "" || CLEARABLE_NOTIFICATION_KEYS.includes(key))
+      .filter(([key, value]) => value !== "" || CLEARABLE_NOTIFICATION_KEYS.includes(key) || clearedKeys.has(key))
       .map(([key, value]) => ({ key, value }));
 
     saveSettings.mutate(
@@ -165,6 +200,7 @@ export default function Settings() {
       {
         onSuccess: () => {
           toast({ title: "Settings saved", description: "Your settings have been updated." });
+          setClearedKeys(new Set());
           queryClient.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
         },
         onError: () => {
@@ -198,8 +234,20 @@ export default function Settings() {
   };
 
   const handleAlertThresholdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = e.target.value.replace(/\D/g, "");
+    const v = e.target.value;
     setValues((prev) => ({ ...prev, FALLBACK_ALERT_THRESHOLD: v }));
+    if (v === "") {
+      setThresholdError("Threshold is required.");
+    } else if (!/^\d+$/.test(v)) {
+      setThresholdError("Must be a whole number.");
+    } else {
+      const n = parseInt(v, 10);
+      if (n < 1 || n > 100) {
+        setThresholdError("Must be between 1 and 100.");
+      } else {
+        setThresholdError(null);
+      }
+    }
   };
 
   const handleWebhookUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -337,10 +385,9 @@ export default function Settings() {
               <div className="flex items-center gap-3">
                 <Input
                   id="alert-threshold"
-                  type="number"
-                  min={1}
-                  max={100}
-                  className="w-24"
+                  type="text"
+                  inputMode="numeric"
+                  className={`w-24 ${thresholdError ? "border-red-500 focus-visible:ring-red-500" : ""}`}
                   value={alertThreshold}
                   onChange={handleAlertThresholdChange}
                   disabled={!alertEnabled}
@@ -349,6 +396,9 @@ export default function Settings() {
                   Alert fires when a provider hits this many fallbacks within the last hour.
                 </p>
               </div>
+              {thresholdError && alertEnabled && (
+                <p className="text-xs text-red-500">{thresholdError}</p>
+              )}
             </div>
             <div className={`space-y-4 border-t pt-4 transition-opacity ${alertEnabled ? "" : "opacity-40 pointer-events-none"}`}>
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Out-of-band notifications</p>
@@ -462,14 +512,31 @@ export default function Settings() {
                           </Badge>
                         )}
                       </div>
-                      <Input
-                        type="password"
-                        id={key}
-                        name={key}
-                        placeholder={placeholder}
-                        value={values[key] ?? ""}
-                        onChange={handleKeyChange}
-                      />
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="password"
+                          id={key}
+                          name={key}
+                          placeholder={clearedKeys.has(key) ? "Will be cleared on save" : placeholder}
+                          value={values[key] ?? ""}
+                          onChange={handleKeyChange}
+                          className="flex-1"
+                        />
+                        {(values[key] === "***SET***" || clearedKeys.has(key)) && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleClearKey(key)}
+                            disabled={clearedKeys.has(key)}
+                            title="Remove saved key"
+                            className="shrink-0 text-muted-foreground hover:text-destructive"
+                          >
+                            <X className="h-4 w-4" />
+                            <span className="ml-1 text-xs">{clearedKeys.has(key) ? "Cleared" : "Clear"}</span>
+                          </Button>
+                        )}
+                      </div>
                       {modelKey && models && (
                         <div className="flex items-center gap-2">
                           <Label htmlFor={modelKey} className="text-xs text-muted-foreground whitespace-nowrap">

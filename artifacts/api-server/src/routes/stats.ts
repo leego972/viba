@@ -186,6 +186,13 @@ router.get("/stats", async (req, res): Promise<void> => {
   });
 });
 
+export function buildTestNotificationMessage(webhookSent: boolean, email: string | null): string {
+  const parts: string[] = [];
+  if (webhookSent) parts.push("Webhook delivered");
+  if (email) parts.push(`email alert queued for ${email}`);
+  return parts.length > 0 ? parts.join("; ") + "." : "Test notification sent.";
+}
+
 router.post("/stats/test-notification", async (req, res): Promise<void> => {
   const notificationSettings = await db
     .select({ key: settingsTable.key, value: settingsTable.value })
@@ -206,10 +213,12 @@ router.post("/stats/test-notification", async (req, res): Promise<void> => {
   const settingsUrl = `${req.protocol}://${req.get("host")}/settings`;
 
   let webhookError: string | null = null;
+  let webhookSent = false;
 
   if (webhookUrl) {
     try {
       await sendTestWebhookNotification(webhookUrl, settingsUrl);
+      webhookSent = true;
     } catch (err) {
       webhookError = err instanceof Error ? err.message : "Unknown error";
       req.log.warn({ url: webhookUrl, err }, "Test webhook notification failed");
@@ -225,7 +234,7 @@ router.post("/stats/test-notification", async (req, res): Promise<void> => {
     return;
   }
 
-  res.json({ ok: true, message: "Test notification sent successfully." });
+  res.json({ ok: true, message: buildTestNotificationMessage(webhookSent, email) });
 });
 
 export default router;
