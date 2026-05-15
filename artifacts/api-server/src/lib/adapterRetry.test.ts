@@ -11,6 +11,26 @@ vi.mock("./logger", () => ({
   },
 }));
 
+vi.mock("@workspace/db", () => ({
+  db: {
+    select: vi.fn().mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue([]),
+      }),
+    }),
+    insert: vi.fn().mockReturnValue({
+      values: vi.fn().mockReturnValue({
+        onConflictDoUpdate: vi.fn().mockResolvedValue(undefined),
+      }),
+    }),
+  },
+  circuitStateTable: {},
+}));
+
+vi.mock("drizzle-orm", () => ({
+  eq: vi.fn().mockReturnValue(undefined),
+}));
+
 const TASK_INPUT: AgentTaskInput = {
   systemRole: "engineer",
   projectGoal: "build a widget",
