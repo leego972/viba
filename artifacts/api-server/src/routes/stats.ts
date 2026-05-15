@@ -17,9 +17,11 @@ export function resolveAlertSettings(settingsMap: Map<string, string>): {
   alertThreshold: number;
 } {
   const rawThreshold = settingsMap.get("FALLBACK_ALERT_THRESHOLD");
-  const alertThreshold = rawThreshold
-    ? Math.max(1, parseInt(rawThreshold, 10) || DEFAULT_ALERT_THRESHOLD)
-    : DEFAULT_ALERT_THRESHOLD;
+  const parsed = rawThreshold !== undefined ? parseInt(rawThreshold, 10) : NaN;
+  const alertThreshold =
+    rawThreshold !== undefined && !isNaN(parsed)
+      ? Math.max(1, parsed)
+      : DEFAULT_ALERT_THRESHOLD;
   const alertEnabled = settingsMap.get("FALLBACK_ALERT_ENABLED") !== "false";
   return { alertEnabled, alertThreshold };
 }

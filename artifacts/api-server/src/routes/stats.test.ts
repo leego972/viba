@@ -13,11 +13,11 @@ describe("resolveAlertSettings", () => {
     expect(alertThreshold).toBe(10);
   });
 
-  it("falls back to the default threshold when the value is '0' (falsy integer)", () => {
-    // parseInt("0") === 0 which is falsy, so the || branch picks DEFAULT_ALERT_THRESHOLD (5)
+  it("clamps a threshold of '0' to 1 rather than silently using the default", () => {
+    // parseInt("0") === 0, which is a valid parse; Math.max(1, 0) should clamp to 1
     const map = new Map([["FALLBACK_ALERT_THRESHOLD", "0"]]);
     const { alertThreshold } = resolveAlertSettings(map);
-    expect(alertThreshold).toBe(5);
+    expect(alertThreshold).toBe(1);
   });
 
   it("clamps a positive-but-low explicit threshold to at least 1", () => {
