@@ -111,7 +111,9 @@ const PROVIDERS: ProviderConfig[] = [
   },
 ];
 
-const ALERT_KEYS = ["FALLBACK_ALERT_ENABLED", "FALLBACK_ALERT_THRESHOLD", "NOTIFICATION_WEBHOOK_URL"] as const;
+const ALERT_KEYS = ["FALLBACK_ALERT_ENABLED", "FALLBACK_ALERT_THRESHOLD", "NOTIFICATION_WEBHOOK_URL", "NOTIFICATION_EMAIL"] as const;
+
+const CLEARABLE_NOTIFICATION_KEYS = ["NOTIFICATION_WEBHOOK_URL", "NOTIFICATION_EMAIL"];
 
 const ALL_SETTING_KEYS = [
   ...PROVIDERS.flatMap((p) => (p.modelKey ? [p.key, p.modelKey] : [p.key])),
@@ -153,7 +155,7 @@ export default function Settings() {
 
   const handleSave = () => {
     const settingsToSave = Object.entries(values)
-      .filter(([_, value]) => value !== "")
+      .filter(([key, value]) => value !== "" || CLEARABLE_NOTIFICATION_KEYS.includes(key))
       .map(([key, value]) => ({ key, value }));
 
     saveSettings.mutate(
@@ -182,6 +184,7 @@ export default function Settings() {
   const alertEnabled = values["FALLBACK_ALERT_ENABLED"] !== "false";
   const alertThreshold = values["FALLBACK_ALERT_THRESHOLD"] || "5";
   const notificationWebhookUrl = values["NOTIFICATION_WEBHOOK_URL"] || "";
+  const notificationEmail = values["NOTIFICATION_EMAIL"] || "";
 
   const handleAlertEnabledChange = (checked: boolean) => {
     setValues((prev) => ({ ...prev, FALLBACK_ALERT_ENABLED: checked ? "true" : "false" }));
@@ -194,6 +197,10 @@ export default function Settings() {
 
   const handleWebhookUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setValues((prev) => ({ ...prev, NOTIFICATION_WEBHOOK_URL: e.target.value }));
+  };
+
+  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setValues((prev) => ({ ...prev, NOTIFICATION_EMAIL: e.target.value }));
   };
 
   return (
@@ -338,6 +345,20 @@ export default function Settings() {
                 />
                 <p className="text-xs text-muted-foreground">
                   When a spike is detected, a POST request with JSON details (provider name, fallback count, settings link) is sent to this URL. Works with Slack incoming webhooks, PagerDuty, Make, Zapier, and any HTTP endpoint.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="notification-email">Email address</Label>
+                <Input
+                  id="notification-email"
+                  type="email"
+                  placeholder="alerts@example.com"
+                  value={notificationEmail}
+                  onChange={handleEmailChange}
+                  disabled={!alertEnabled}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Receive spike alert emails at this address. Leave blank to disable email notifications.
                 </p>
               </div>
             </div>
