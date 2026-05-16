@@ -635,6 +635,21 @@ export const GetCircuitStatusResponse = zod.array(GetCircuitStatusResponseItem);
  * Immediately clears an open or half-open circuit for a provider, allowing live calls to resume. The reset is persisted to the database so it survives restarts and is visible to all running instances.
  * @summary Manually reset a provider's circuit breaker
  */
+export const DeleteCircuitStatusParams = zod.object({
+  provider: zod.coerce
+    .string()
+    .describe('The provider name to reset (e.g. \"openai\", \"anthropic\")'),
+});
+
+export const DeleteCircuitStatusResponse = zod.object({
+  ok: zod.boolean(),
+  provider: zod.string(),
+});
+
+/**
+ * Immediately clears an open or half-open circuit for a provider, allowing live calls to resume. The reset is persisted to the database so it survives restarts and is visible to all running instances.
+ * @summary Manually reset a provider's circuit breaker (legacy)
+ */
 export const ResetCircuitParams = zod.object({
   provider: zod.coerce
     .string()

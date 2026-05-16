@@ -1970,6 +1970,91 @@ export function useGetCircuitStatus<
  * Immediately clears an open or half-open circuit for a provider, allowing live calls to resume. The reset is persisted to the database so it survives restarts and is visible to all running instances.
  * @summary Manually reset a provider's circuit breaker
  */
+export const getDeleteCircuitStatusUrl = (provider: string) => {
+  return `/api/circuit-status/${provider}`;
+};
+
+export const deleteCircuitStatus = async (
+  provider: string,
+  options?: RequestInit,
+): Promise<ResetCircuitResult> => {
+  return customFetch<ResetCircuitResult>(getDeleteCircuitStatusUrl(provider), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteCircuitStatusMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteCircuitStatus>>,
+    TError,
+    { provider: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteCircuitStatus>>,
+  TError,
+  { provider: string },
+  TContext
+> => {
+  const mutationKey = ["deleteCircuitStatus"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteCircuitStatus>>,
+    { provider: string }
+  > = (props) => {
+    const { provider } = props ?? {};
+
+    return deleteCircuitStatus(provider, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteCircuitStatusMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteCircuitStatus>>
+>;
+
+export type DeleteCircuitStatusMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Manually reset a provider's circuit breaker
+ */
+export const useDeleteCircuitStatus = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteCircuitStatus>>,
+    TError,
+    { provider: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteCircuitStatus>>,
+  TError,
+  { provider: string },
+  TContext
+> => {
+  return useMutation(getDeleteCircuitStatusMutationOptions(options));
+};
+
+/**
+ * Immediately clears an open or half-open circuit for a provider, allowing live calls to resume. The reset is persisted to the database so it survives restarts and is visible to all running instances.
+ * @summary Manually reset a provider's circuit breaker (legacy)
+ */
 export const getResetCircuitUrl = (provider: string) => {
   return `/api/circuit-status/${provider}/reset`;
 };
@@ -2029,7 +2114,7 @@ export type ResetCircuitMutationResult = NonNullable<
 export type ResetCircuitMutationError = ErrorType<ErrorResponse>;
 
 /**
- * @summary Manually reset a provider's circuit breaker
+ * @summary Manually reset a provider's circuit breaker (legacy)
  */
 export const useResetCircuit = <
   TError = ErrorType<ErrorResponse>,

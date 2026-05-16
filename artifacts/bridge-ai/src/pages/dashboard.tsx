@@ -5,7 +5,7 @@ import {
   useListSessions,
   useGetStats,
   useGetCircuitStatus,
-  useResetCircuit,
+  useDeleteCircuitStatus,
   useDeleteSession,
   getListSessionsQueryKey,
   getGetCircuitStatusQueryKey,
@@ -193,7 +193,7 @@ export default function Dashboard() {
 
   const [resettingProvider, setResettingProvider] = useState<string | null>(null);
 
-  const resetCircuit = useResetCircuit({
+  const deleteCircuit = useDeleteCircuitStatus({
     mutation: {
       onSuccess: (_data, { provider }) => {
         queryClient.invalidateQueries({ queryKey: getGetCircuitStatusQueryKey() });
@@ -209,7 +209,7 @@ export default function Dashboard() {
 
   const handleResetCircuit = (provider: string) => {
     setResettingProvider(provider);
-    resetCircuit.mutate({ provider });
+    deleteCircuit.mutate({ provider });
   };
 
   const deleteSession = useDeleteSession({

@@ -16,21 +16,54 @@ vi.mock("./logger", () => ({
   },
 }));
 
-vi.mock("@workspace/db", () => ({
-  db: {
-    select: vi.fn().mockReturnValue({
-      from: vi.fn().mockReturnValue({
-        where: vi.fn().mockResolvedValue([]),
+// Stateful in-memory DB rows shared across the mock so select/insert/delete
+// all operate on the same dataset — mirrors how circuitBreaker.test.ts works.
+const { mockRows } = vi.hoisted(() => {
+  type Row = { provider: string; consecutiveFailures: number; openedAt: Date | null };
+  const mockRows: Row[] = [];
+  return { mockRows };
+});
+
+vi.mock("@workspace/db", () => {
+  type Row = { provider: string; consecutiveFailures: number; openedAt: Date | null };
+
+  return {
+    db: {
+      select: vi.fn().mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockImplementation(() =>
+            Promise.resolve([...mockRows])
+          ),
+        }),
       }),
-    }),
-    insert: vi.fn().mockReturnValue({
-      values: vi.fn().mockReturnValue({
-        onConflictDoUpdate: vi.fn().mockResolvedValue(undefined),
+      insert: vi.fn().mockReturnValue({
+        values: vi.fn().mockImplementation((vals: Row) => ({
+          onConflictDoUpdate: vi.fn().mockImplementation(() => {
+            const idx = mockRows.findIndex((r) => r.provider === vals.provider);
+            const row: Row = {
+              provider: vals.provider,
+              consecutiveFailures: vals.consecutiveFailures,
+              openedAt: vals.openedAt,
+            };
+            if (idx >= 0) mockRows[idx] = row;
+            else mockRows.push(row);
+            return Promise.resolve(undefined);
+          }),
+        })),
       }),
-    }),
-  },
-  circuitStateTable: {},
-}));
+      delete: vi.fn().mockReturnValue({
+        where: vi.fn().mockImplementation(() => {
+          // We cannot extract the provider from the opaque eq() condition
+          // (eq mock returns undefined). Deletions are handled correctly for
+          // cross-instance reset tests in circuitBreaker.test.ts which uses a
+          // richer mock. Here we just need the call to succeed without error.
+          return Promise.resolve(undefined);
+        }),
+      }),
+    },
+    circuitStateTable: {},
+  };
+});
 
 vi.mock("drizzle-orm", () => ({
   eq: vi.fn().mockReturnValue(undefined),
@@ -99,6 +132,7 @@ describe("runAdapterWithRetry", () => {
 
   beforeEach(() => {
     resetAllCircuits();
+    mockRows.splice(0, mockRows.length);
     logAuditMock = vi.fn().mockResolvedValue(undefined);
     buildFallbackMock = vi.fn().mockImplementation(() => makeFallbackAdapter());
   });
@@ -106,6 +140,7 @@ describe("runAdapterWithRetry", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     resetAllCircuits();
+    mockRows.splice(0, mockRows.length);
   });
 
   it("retries after a transient error and logs adapter_success with attempt: 2", async () => {

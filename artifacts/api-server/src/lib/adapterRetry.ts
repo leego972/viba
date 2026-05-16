@@ -114,13 +114,10 @@ async function refreshCircuitFromDb(provider: string, now = Date.now()): Promise
         cachedAt: now,
       });
     } else {
-      // No DB row yet for this provider — mark the cache as fresh so we
-      // don't hit the DB again until the next TTL window expires.
-      // (We do not zero out existing local state here, because a missing row
-      // can also mean the initial persist has not run yet rather than a
-      // deliberate reset.)
-      const existing = getOrCreateLocal(provider);
-      existing.cachedAt = now;
+      // No DB row for this provider. A missing row is the canonical reset state —
+      // if another instance deleted the row via resetProviderCircuit, we must
+      // honour that by clearing the local entry too so the circuit closes.
+      circuitMap.delete(provider);
     }
   } catch (err) {
     logger.warn({ err, provider }, "Failed to refresh circuit state from DB");
@@ -158,6 +155,22 @@ async function persistCircuitState(
       });
   } catch (err) {
     logger.warn({ err, provider }, "Failed to persist circuit state to DB");
+  }
+}
+
+/**
+ * Delete a single provider's circuit state row from the database.
+ * A missing row is the canonical "closed/reset" state used by resetProviderCircuit.
+ */
+async function deleteCircuitStateFromDb(provider: string): Promise<void> {
+  try {
+    const [{ db, circuitStateTable }, { eq }] = await Promise.all([
+      import("@workspace/db"),
+      import("drizzle-orm"),
+    ]);
+    await db.delete(circuitStateTable).where(eq(circuitStateTable.provider, provider));
+  } catch (err) {
+    logger.warn({ err, provider }, "Failed to delete circuit state from DB");
   }
 }
 
@@ -229,16 +242,13 @@ export function resetAllCircuits(): void {
 
 /**
  * Manually reset a single provider's circuit breaker to closed state.
- * Clears both the in-memory cache and the persisted DB row so the reset
- * survives restarts and is visible to all running instances within one TTL.
+ * Removes the in-memory map entry and deletes the DB row so the reset
+ * is visible to all running instances within one cache TTL window.
+ * A missing map entry / missing DB row is the canonical "closed" state.
  */
 export async function resetProviderCircuit(provider: string): Promise<void> {
-  const now = Date.now();
-  const state = getOrCreateLocal(provider);
-  state.consecutiveFailures = 0;
-  state.openedAt = null;
-  state.cachedAt = now;
-  await persistCircuitState(provider, state);
+  circuitMap.delete(provider);
+  await deleteCircuitStateFromDb(provider);
   logger.info({ provider }, "Circuit breaker manually reset by operator");
 }
 
