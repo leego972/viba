@@ -24,16 +24,20 @@ args = "spike-tests"
 task = "workflow.run"
 args = "simulation-banner-tests"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "circuit-breaker-tests"
+
 [[workflows.workflow]]
 name = "spike-tests"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pnpm --filter @workspace/api-server run test -- --reporter=verbose src/lib/spikeNotify.test.ts src/routes/stats.test.ts"
-
 [workflows.workflow.metadata]
 isValidation = true
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @workspace/api-server run test"
 
 [[workflows.workflow]]
 name = "simulation-banner-tests"
@@ -45,6 +49,17 @@ args = "cd artifacts/bridge-ai && npx playwright test tests/simulation-fallback-
 
 [workflows.workflow.metadata]
 isValidation = true
+
+[[workflows.workflow]]
+name = "circuit-breaker-tests"
+author = "agent"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @workspace/api-server exec vitest run --reporter=verbose src/lib/circuitBreaker.test.ts src/lib/adapterRetry.test.ts"
 
 [agent]
 stack = "PNPM_WORKSPACE"
