@@ -32,12 +32,12 @@ args = "circuit-breaker-tests"
 name = "spike-tests"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pnpm --filter @workspace/api-server run test -- --reporter=verbose src/lib/spikeNotify.test.ts src/routes/stats.test.ts"
-
 [workflows.workflow.metadata]
 isValidation = true
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @workspace/api-server run test"
 
 [[workflows.workflow]]
 name = "simulation-banner-tests"
@@ -54,12 +54,12 @@ isValidation = true
 name = "circuit-breaker-tests"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pnpm --filter @workspace/api-server run test -- --reporter=verbose src/lib/circuitBreaker.test.ts src/lib/adapterRetry.test.ts"
-
 [workflows.workflow.metadata]
 isValidation = true
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @workspace/api-server exec vitest run --reporter=verbose src/lib/circuitBreaker.test.ts src/lib/adapterRetry.test.ts"
 
 [agent]
 stack = "PNPM_WORKSPACE"
