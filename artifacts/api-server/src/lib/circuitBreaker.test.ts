@@ -1,22 +1,80 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { isCircuitOpen, resetAllCircuits, runAdapterWithRetry } from "./adapterRetry";
+import {
+  isCircuitOpen,
+  resetAllCircuits,
+  resetProviderCircuit,
+  getCircuitStatus,
+  runAdapterWithRetry,
+  loadCircuitStateFromDb,
+} from "./adapterRetry";
 import type { AgentAdapter, AgentTaskInput, AgentTaskResult } from "./adapters/interface";
 
-vi.mock("@workspace/db", () => ({
-  db: {
-    select: vi.fn().mockReturnValue({
-      from: vi.fn().mockReturnValue({
-        where: vi.fn().mockResolvedValue([]),
-      }),
-    }),
-    insert: vi.fn().mockReturnValue({
-      values: vi.fn().mockReturnValue({
-        onConflictDoUpdate: vi.fn().mockResolvedValue(undefined),
-      }),
-    }),
-  },
-  circuitStateTable: {},
-}));
+// Shared mutable state — created during hoisting so the mock factory can
+// reference it even though vi.mock() is hoisted above the imports.
+const { mockDb } = vi.hoisted(() => {
+  type PersistedRow = {
+    provider: string;
+    consecutiveFailures: number;
+    openedAt: Date | null;
+  };
+  const rows: PersistedRow[] = [];
+
+  const mockDb = {
+    rows,
+    reset() {
+      rows.splice(0, rows.length);
+    },
+  };
+
+  return { mockDb };
+});
+
+vi.mock("@workspace/db", () => {
+  type PersistedRow = {
+    provider: string;
+    consecutiveFailures: number;
+    openedAt: Date | null;
+  };
+
+  const makeFrom = () =>
+    vi.fn().mockImplementation(() => {
+      // Returns a promise (for loadCircuitStateFromDb) that also exposes
+      // .where() (for refreshCircuitFromDb).  Both paths share this object.
+      const promise = Promise.resolve([...mockDb.rows]) as Promise<PersistedRow[]> & {
+        where: ReturnType<typeof vi.fn>;
+      };
+      promise.where = vi.fn().mockResolvedValue([]);
+      return promise;
+    });
+
+  const makeInsert = () =>
+    vi.fn().mockImplementation(() => ({
+      values: vi.fn().mockImplementation((vals: PersistedRow) => ({
+        onConflictDoUpdate: vi.fn().mockImplementation(() => {
+          const idx = mockDb.rows.findIndex((r) => r.provider === vals.provider);
+          const row: PersistedRow = {
+            provider: vals.provider,
+            consecutiveFailures: vals.consecutiveFailures,
+            openedAt: vals.openedAt,
+          };
+          if (idx >= 0) {
+            mockDb.rows[idx] = row;
+          } else {
+            mockDb.rows.push(row);
+          }
+          return Promise.resolve(undefined);
+        }),
+      })),
+    }));
+
+  return {
+    db: {
+      select: vi.fn().mockReturnValue({ from: makeFrom() }),
+      insert: makeInsert(),
+    },
+    circuitStateTable: {},
+  };
+});
 
 vi.mock("drizzle-orm", () => ({
   eq: vi.fn().mockReturnValue(undefined),
@@ -74,7 +132,114 @@ async function openCircuit(provider = "openai") {
   }
 }
 
-beforeEach(() => { resetAllCircuits(); });
+beforeEach(() => {
+  resetAllCircuits();
+  mockDb.reset();
+});
+
+// ── getCircuitStatus tests (task #77) ──────────────────────────────────────
+
+describe("getCircuitStatus", () => {
+  it("returns an empty array when no provider has ever failed", () => {
+    expect(getCircuitStatus()).toEqual([]);
+  });
+
+  it("returns an entry with state=open after 5 consecutive failures", async () => {
+    await openCircuit("openai");
+    const entries = getCircuitStatus();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.provider).toBe("openai");
+    expect(entries[0]!.state).toBe("open");
+    expect(entries[0]!.consecutiveFailures).toBe(5);
+    expect(entries[0]!.openedAt).toBeTypeOf("number");
+    expect(entries[0]!.msUntilReset).toBeGreaterThan(0);
+  });
+
+  it("returns state=half-open after the timeout window elapses", async () => {
+    await openCircuit("openai");
+    const futureNow = Date.now() + 6 * 60 * 1000;
+    const entries = getCircuitStatus(futureNow);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.state).toBe("half-open");
+    expect(entries[0]!.msUntilReset).toBe(0);
+  });
+
+  it("omits providers that have 0 failures and no openedAt", () => {
+    const status = getCircuitStatus();
+    expect(status.find(e => e.provider === "unused-provider")).toBeUndefined();
+  });
+
+  it("tracks multiple providers independently", async () => {
+    await openCircuit("openai");
+    await openCircuit("anthropic");
+    const entries = getCircuitStatus();
+    const providers = entries.map(e => e.provider).sort();
+    expect(providers).toContain("openai");
+    expect(providers).toContain("anthropic");
+    entries.forEach(e => expect(e.state).toBe("open"));
+  });
+});
+
+// ── resetProviderCircuit tests (task #78 / #80) ───────────────────────────
+
+describe("resetProviderCircuit", () => {
+  it("clears an open circuit so isCircuitOpen returns false", async () => {
+    await openCircuit("openai");
+    expect(isCircuitOpen("openai")).toBe(true);
+
+    await resetProviderCircuit("openai");
+
+    expect(isCircuitOpen("openai")).toBe(false);
+  });
+
+  it("removes the provider from getCircuitStatus after reset", async () => {
+    await openCircuit("openai");
+    expect(getCircuitStatus().find(e => e.provider === "openai")).toBeDefined();
+
+    await resetProviderCircuit("openai");
+
+    const entries = getCircuitStatus();
+    expect(entries.find(e => e.provider === "openai")).toBeUndefined();
+  });
+
+  it("reset does not affect other providers", async () => {
+    await openCircuit("openai");
+    await openCircuit("anthropic");
+
+    await resetProviderCircuit("openai");
+
+    expect(isCircuitOpen("openai")).toBe(false);
+    expect(isCircuitOpen("anthropic")).toBe(true);
+  });
+
+  it("reset on an already-closed provider is a no-op (does not throw)", async () => {
+    await expect(resetProviderCircuit("never-seen-provider")).resolves.toBeUndefined();
+    expect(isCircuitOpen("never-seen-provider")).toBe(false);
+  });
+
+  it("live calls resume after a manual reset", async () => {
+    await openCircuit("openai");
+    await resetProviderCircuit("openai");
+
+    let liveCalled = false;
+    const out = await runAdapterWithRetry({
+      buildLiveAdapter: async () => ({
+        id: "live", name: "Live", provider: "openai", model: "gpt-4",
+        capabilities: [], role: "tester", isMock: false,
+        runTask: async () => { liveCalled = true; return MOCK_RESULT; },
+      }),
+      buildFallbackAdapter: () => makeMockAdapter(),
+      taskInput: TASK_INPUT,
+      retryDelayMs: 0,
+      logAudit: noop as any,
+      context: makeCtx("openai"),
+    });
+
+    expect(liveCalled).toBe(true);
+    expect(out.usedFallback).toBe(false);
+    expect(out.circuitOpen).toBeUndefined();
+  });
+});
 
 describe("isCircuitOpen", () => {
   it("is closed by default", () => {
@@ -147,5 +312,107 @@ describe("isCircuitOpen", () => {
 
     expect(out.usedFallback).toBe(false);
     expect(isCircuitOpen("openai")).toBe(false);
+  });
+});
+
+// ── loadCircuitStateFromDb persistence tests (task #79) ───────────────────
+
+describe("loadCircuitStateFromDb", () => {
+  it("restores an open circuit after an in-memory wipe (simulated restart)", async () => {
+    // 1. Drive the provider to open its circuit — this also persists state
+    //    into mockDb.rows via the insert mock.
+    await openCircuit("openai");
+
+    const beforeWipe = getCircuitStatus();
+    expect(beforeWipe).toHaveLength(1);
+    const original = beforeWipe[0]!;
+    expect(original.state).toBe("open");
+    expect(original.consecutiveFailures).toBe(5);
+    const originalOpenedAt = original.openedAt!;
+    expect(originalOpenedAt).toBeTypeOf("number");
+
+    // 2. Wipe in-memory state — simulates the server process restarting.
+    resetAllCircuits();
+    expect(getCircuitStatus()).toHaveLength(0);
+    expect(isCircuitOpen("openai")).toBe(false);
+
+    // 3. Restore from the "DB" (mockDb.rows populated by the insert mock).
+    //    The mock's select().from() returns a promise that resolves to
+    //    mockDb.rows, matching what loadCircuitStateFromDb expects.
+    await loadCircuitStateFromDb();
+
+    // 4. Assert the circuit is open again with the correct values.
+    expect(isCircuitOpen("openai")).toBe(true);
+
+    const afterLoad = getCircuitStatus();
+    expect(afterLoad).toHaveLength(1);
+    const restored = afterLoad[0]!;
+    expect(restored.provider).toBe("openai");
+    expect(restored.state).toBe("open");
+    expect(restored.consecutiveFailures).toBe(5);
+    expect(restored.openedAt).toBe(originalOpenedAt);
+    expect(restored.msUntilReset).toBeGreaterThan(0);
+  });
+
+  it("restores multiple open circuits independently", async () => {
+    await openCircuit("openai");
+    await openCircuit("anthropic");
+
+    const beforeWipe = getCircuitStatus();
+    expect(beforeWipe).toHaveLength(2);
+
+    const openaiEntry = beforeWipe.find(e => e.provider === "openai")!;
+    const anthropicEntry = beforeWipe.find(e => e.provider === "anthropic")!;
+
+    resetAllCircuits();
+    expect(getCircuitStatus()).toHaveLength(0);
+
+    await loadCircuitStateFromDb();
+
+    expect(isCircuitOpen("openai")).toBe(true);
+    expect(isCircuitOpen("anthropic")).toBe(true);
+
+    const afterLoad = getCircuitStatus();
+    const restoredOpenai = afterLoad.find(e => e.provider === "openai")!;
+    const restoredAnthropic = afterLoad.find(e => e.provider === "anthropic")!;
+
+    expect(restoredOpenai.consecutiveFailures).toBe(openaiEntry.consecutiveFailures);
+    expect(restoredOpenai.openedAt).toBe(openaiEntry.openedAt);
+    expect(restoredAnthropic.consecutiveFailures).toBe(anthropicEntry.consecutiveFailures);
+    expect(restoredAnthropic.openedAt).toBe(anthropicEntry.openedAt);
+  });
+
+  it("leaves circuits closed when the DB has no rows", async () => {
+    // mockDb.rows is already empty (reset in beforeEach)
+    resetAllCircuits();
+
+    await loadCircuitStateFromDb();
+
+    expect(getCircuitStatus()).toHaveLength(0);
+    expect(isCircuitOpen("openai")).toBe(false);
+  });
+
+  it("circuit remains open and blocks live calls after load", async () => {
+    await openCircuit("openai");
+    resetAllCircuits();
+    await loadCircuitStateFromDb();
+
+    let liveCalls = 0;
+    const out = await runAdapterWithRetry({
+      buildLiveAdapter: async () => {
+        liveCalls++;
+        throw new Error("should not be reached");
+      },
+      buildFallbackAdapter: () => makeMockAdapter("post-restart-mock"),
+      taskInput: TASK_INPUT,
+      retryDelayMs: 0,
+      logAudit: noop as any,
+      context: makeCtx("openai"),
+    });
+
+    expect(liveCalls).toBe(0);
+    expect(out.usedFallback).toBe(true);
+    expect(out.circuitOpen).toBe(true);
+    expect(out.usedModel).toBe("post-restart-mock");
   });
 });
