@@ -1,6 +1,15 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { loadCircuitStateFromDb } from "./lib/adapterRetry";
+import { loadCircuitStateFromDb, validateCircuitBreakerEnv } from "./lib/adapterRetry";
+
+// Fail fast if circuit breaker env vars are set to invalid values.
+// This must run before any other startup logic so misconfigured deployments
+// surface a clear error immediately rather than behaving unpredictably.
+validateCircuitBreakerEnv();
+
+if (!process.env["DATABASE_URL"]) {
+  throw new Error("DATABASE_URL environment variable is required but was not provided.");
+}
 
 const rawPort = process.env["PORT"];
 

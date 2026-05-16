@@ -40,24 +40,33 @@ const CIRCUIT_OPEN_THRESHOLD = parsePositiveInt(process.env.CIRCUIT_OPEN_THRESHO
 const CIRCUIT_TIMEOUT_MS = parsePositiveInt(process.env.CIRCUIT_TIMEOUT_MS, 5 * 60 * 1000);
 const CACHE_TTL_MS = 30_000; // 30 seconds — max staleness across instances
 
-// Startup validation: warn if an env var was set but is not a valid positive integer
-// (parsePositiveInt silently falls back to the default, so this makes it visible)
-if (process.env.CIRCUIT_OPEN_THRESHOLD !== undefined && process.env.CIRCUIT_OPEN_THRESHOLD !== "") {
-  const _raw = parseInt(process.env.CIRCUIT_OPEN_THRESHOLD, 10);
-  if (!Number.isFinite(_raw) || _raw <= 0) {
-    logger.warn(
-      { value: process.env.CIRCUIT_OPEN_THRESHOLD, fallback: 5 },
-      "CIRCUIT_OPEN_THRESHOLD env var is invalid; using default of 5"
-    );
+/**
+ * Validates CIRCUIT_OPEN_THRESHOLD and CIRCUIT_TIMEOUT_MS environment variables.
+ * Throws a descriptive Error if either variable is set to a non-positive-integer value
+ * so that misconfigured deployments fail fast with a clear message instead of
+ * silently falling back to defaults and behaving unpredictably.
+ *
+ * Call once at server startup before beginning to listen for requests.
+ */
+export function validateCircuitBreakerEnv(): void {
+  const threshold = process.env.CIRCUIT_OPEN_THRESHOLD;
+  if (threshold !== undefined && threshold !== "") {
+    const parsed = parseInt(threshold, 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      throw new Error(
+        `Invalid CIRCUIT_OPEN_THRESHOLD: "${threshold}" — must be a positive integer (e.g. 5)`
+      );
+    }
   }
-}
-if (process.env.CIRCUIT_TIMEOUT_MS !== undefined && process.env.CIRCUIT_TIMEOUT_MS !== "") {
-  const _raw = parseInt(process.env.CIRCUIT_TIMEOUT_MS, 10);
-  if (!Number.isFinite(_raw) || _raw <= 0) {
-    logger.warn(
-      { value: process.env.CIRCUIT_TIMEOUT_MS, fallback: 5 * 60 * 1000 },
-      "CIRCUIT_TIMEOUT_MS env var is invalid; using default of 300000ms"
-    );
+
+  const timeoutMs = process.env.CIRCUIT_TIMEOUT_MS;
+  if (timeoutMs !== undefined && timeoutMs !== "") {
+    const parsed = parseInt(timeoutMs, 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      throw new Error(
+        `Invalid CIRCUIT_TIMEOUT_MS: "${timeoutMs}" — must be a positive integer in milliseconds (e.g. 300000)`
+      );
+    }
   }
 }
 
