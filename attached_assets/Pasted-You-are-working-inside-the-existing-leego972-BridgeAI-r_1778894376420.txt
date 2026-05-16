@@ -1,0 +1,389 @@
+You are working inside the existing `leego972/BridgeAI` repository.
+
+Objective:
+Do not convert or rebuild BridgeAI. Preserve the current BridgeAI product as a backend AI task router/orchestrator.
+
+Add an optional feature module called:
+
+AI Trainer Workbench
+
+This module should integrate into BridgeAI as an add-on layer for human-reviewed AI-training/data-labeling work. It should use BridgeAI’s existing routing, connector, budget, audit, storage, and emergency stop systems wherever possible.
+
+Important boundary:
+Do NOT add third-party platform auto-login, credential collection, auto-submit, CAPTCHA handling, stealth browsing, IP rotation, fake human timing, anti-detection, or account automation.
+
+The user must remain in control:
+- user manually logs into any third-party work platform
+- user manually opens task pages
+- user manually submits final answers
+- BridgeAI only assists with drafting, checking, scoring, and logging
+
+Core integration goal:
+Add AI Trainer Workbench as an optional route/API/UI layer that calls the existing BridgeAI routing engine.
+
+Do not replace:
+- current BridgeAI connector system
+- existing CLI
+- existing server APIs
+- existing emergency stop
+- current storage adapters
+- current production/security structure
+
+Add new files under:
+
+src/workbench/
+docs/
+examples/
+
+Required files:
+
+1. src/workbench/types.ts
+
+Define types:
+
+Platform =
+  "alignerr" |
+  "outlier" |
+  "dataannotation" |
+  "toloka" |
+  "remotasks" |
+  "mindrift" |
+  "other"
+
+TaskType =
+  "grammar_cleanup" |
+  "classification" |
+  "sentiment_labeling" |
+  "response_comparison" |
+  "factuality_check" |
+  "math_reasoning" |
+  "coding" |
+  "expert_domain" |
+  "subjective_judgment" |
+  "unknown"
+
+ReviewLevel =
+  "quick_review" |
+  "careful_review" |
+  "human_only"
+
+AnalyzeTaskRequest:
+{
+  platform: Platform;
+  taskType?: TaskType;
+  instructions: string;
+  rubric?: string;
+  taskContent: string;
+  answerOptions?: string[];
+  userNotes?: string;
+  budgetLimitUsd?: number;
+  routingMode?: "fast" | "balanced" | "quality";
+}
+
+AnalyzeTaskResponse:
+{
+  taskId: string;
+  platform: Platform;
+  taskType: TaskType;
+  recommendedAnswer: string;
+  confidence: number;
+  reasoningSummary: string;
+  riskFlags: string[];
+  rubricChecklist: string[];
+  reviewLevel: ReviewLevel;
+  humanReviewRequired: boolean;
+  routingReceipt?: unknown;
+}
+
+2. src/workbench/taskClassifier.ts
+
+Create a classifier function:
+
+classifyTask(input: AnalyzeTaskRequest): {
+  taskType: TaskType;
+  automationReliability: "high" | "medium" | "low";
+  recommendedModelStrength: "cheap" | "standard" | "strong";
+  humanReviewRequired: boolean;
+  reviewLevel: ReviewLevel;
+}
+
+Logic:
+- grammar cleanup, simple classification, sentiment = high reliability
+- response comparison, factuality, coding = medium reliability
+- math, expert domain, subjective judgment = low or medium depending on rubric clarity
+- missing rubric = lower confidence and careful review
+- expert domain always requires human review
+
+3. src/workbench/prompts.ts
+
+Create prompt builders:
+
+buildAnswerGenerationPrompt(input, classification)
+buildRubricReviewPrompt(input, draft)
+buildRiskScoringPrompt(input, draft, rubricReview)
+buildFinalFormattingPrompt(input, draft, rubricReview, riskScore)
+
+Prompt rules:
+- Follow supplied instructions and rubric exactly.
+- Do not invent facts.
+- If task requires external facts and no source is provided, flag missing evidence.
+- If task is subjective, explain the tradeoff.
+- Always produce a human-review note.
+- Never instruct the user to auto-submit.
+- Never ask for login credentials.
+- Never bypass any platform control.
+
+4. src/workbench/rubricChecker.ts
+
+Create:
+
+checkRubric({
+  input,
+  draft,
+  bridge
+}): Promise<{
+  checklist: string[];
+  riskFlags: string[];
+  confidence: number;
+  reviewLevel: ReviewLevel;
+  reasoningSummary: string;
+}>
+
+Use BridgeAI’s existing connector routing if possible.
+
+The rubric checker should evaluate:
+- format compliance
+- completeness
+- instruction match
+- hallucination risk
+- ambiguity
+- missing evidence
+- domain expertise risk
+- answer-option consistency
+
+5. src/workbench/analyzeTask.ts
+
+Main orchestration function:
+
+analyzeTask(input: AnalyzeTaskRequest, bridge: BridgeAI): Promise<AnalyzeTaskResponse>
+
+Flow:
+1. Validate input.
+2. Classify task.
+3. Build generation prompt.
+4. Call BridgeAI preview route if available.
+5. Call BridgeAI run/handle command using existing connector routing.
+6. Generate draft answer.
+7. Run rubric checker.
+8. Produce final recommended answer.
+9. Apply confidence/review-level logic.
+10. Store audit/log entry if storage is available.
+11. Return AnalyzeTaskResponse.
+
+Important:
+Use existing BridgeAI budget guard if `budgetLimitUsd` is passed.
+Use existing routing receipt if available.
+Use existing audit sink if available.
+Use existing emergency stop support if available.
+
+6. src/workbench/safety.ts
+
+Create:
+
+validateWorkbenchRequest(input)
+
+Reject requests that include or request:
+- auto-login
+- credential capture
+- password storage for third-party platforms
+- auto-submit
+- CAPTCHA handling
+- stealth browser automation
+- anti-detection
+- IP rotation
+- fake human behavior simulation
+- account sharing
+- payment extraction automation
+
+Return this refusal message:
+
+"AI Trainer Workbench supports human-reviewed task assistance only. Automatic login, submission, evasion, credential handling, or account automation is not supported."
+
+7. src/workbench/storage.ts
+
+Create simple logging adapter that can use existing BridgeAI storage when available.
+
+Log:
+{
+  taskId,
+  platform,
+  taskType,
+  instructionsHash,
+  rubricHash,
+  taskContentHash,
+  recommendedAnswer,
+  confidence,
+  riskFlags,
+  reviewLevel,
+  timestamp,
+  durationMs
+}
+
+Do not store raw third-party credentials.
+Do not store passwords.
+Do not store session cookies.
+Do not store platform tokens.
+
+8. src/workbench/serverRoutes.ts
+
+Add optional API routes:
+
+POST /api/workbench/analyze
+
+Input:
+AnalyzeTaskRequest
+
+Output:
+AnalyzeTaskResponse
+
+GET /api/workbench/health
+
+Output:
+{
+  status: "ok",
+  module: "ai-trainer-workbench"
+}
+
+POST /api/workbench/refuse-check
+
+Input:
+{
+  requestText: string
+}
+
+Output:
+{
+  allowed: boolean,
+  reason?: string
+}
+
+Integrate these routes into the existing production server only as optional workbench routes.
+
+Do not break existing endpoints:
+- /health
+- /openapi.json
+- /api/templates/connectors
+- /api/connectors
+- /api/bridge/preview
+- /api/bridge/run
+- /api/bridge/:id
+- /api/bridge/:id/events
+- /api/bridge/:id/stop
+
+9. src/workbench/ui.ts or equivalent
+
+If the repo has an existing web preview/live viewer, add a simple optional Workbench page.
+
+Route:
+/workbench
+
+UI fields:
+- platform dropdown
+- task type dropdown
+- instructions textarea
+- rubric textarea
+- task content textarea
+- answer options textarea
+- user notes textarea
+- budget limit field
+- routing mode selector
+- analyze button
+
+Result card:
+- recommended answer
+- confidence
+- review level
+- reasoning summary
+- rubric checklist
+- risk flags
+- copy answer button
+- save reviewed answer button
+
+Do not add platform login UI.
+Do not add credential fields.
+Do not add submit button for third-party platforms.
+
+10. docs/AI_TRAINER_WORKBENCH.md
+
+Document:
+- what the module does
+- what it does not do
+- setup
+- API examples
+- UI usage
+- human review workflow
+- safe operating boundaries
+- supported platforms
+- roadmap
+
+Mention:
+BridgeAI remains the backend router/orchestrator. AI Trainer Workbench is an optional assisted-review workflow layer.
+
+11. examples/workbench.analyze.example.json
+
+Create example:
+
+{
+  "platform": "alignerr",
+  "taskType": "response_comparison",
+  "instructions": "Compare two AI responses and choose the better one based on helpfulness, correctness, and instruction following.",
+  "rubric": "Prefer the response that is accurate, directly answers the prompt, avoids hallucinations, and follows all formatting requirements.",
+  "taskContent": "Prompt: ... Response A: ... Response B: ...",
+  "answerOptions": ["A", "B", "Tie"],
+  "userNotes": "Flag uncertainty if both answers have factual issues.",
+  "routingMode": "balanced",
+  "budgetLimitUsd": 0.05
+}
+
+12. Tests
+
+Add tests for:
+- task classification
+- safety refusal
+- analyze endpoint
+- missing rubric
+- expert-domain task
+- low-confidence response
+- budget limit pass-through
+- no credential storage
+- no auto-submit route exists
+- no login automation route exists
+
+13. README update
+
+Add a short section:
+
+## Optional AI Trainer Workbench
+
+BridgeAI can optionally assist human reviewers with AI-training/data-labeling tasks by drafting answers, checking rubrics, scoring confidence, and logging review metadata.
+
+It does not perform platform login, submission automation, CAPTCHA handling, stealth automation, or account automation.
+
+Link to:
+docs/AI_TRAINER_WORKBENCH.md
+
+Implementation order:
+1. Add types, safety, classifier, prompts.
+2. Add analyzeTask orchestration.
+3. Add API route.
+4. Add basic UI.
+5. Add logging.
+6. Add tests.
+7. Update docs.
+
+Quality bar:
+- TypeScript strict mode compatible.
+- No broken existing tests.
+- No replacement of existing BridgeAI architecture.
+- New module must be optional.
+- Keep code modular and production-ready.
