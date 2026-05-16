@@ -5,6 +5,7 @@ import {
   useListSessions,
   useGetStats,
   useGetCircuitStatus,
+  useDeleteCircuitStatus,
   useDeleteSession,
   getListSessionsQueryKey,
   getGetCircuitStatusQueryKey,
@@ -62,7 +63,15 @@ function CircuitStateBadge({ state }: { state: CircuitBreakerEntry["state"] }) {
   );
 }
 
-function ProviderHealthPanel({ entries }: { entries: CircuitBreakerEntry[] }) {
+function ProviderHealthPanel({
+  entries,
+  onReset,
+  resetting,
+}: {
+  entries: CircuitBreakerEntry[];
+  onReset: (provider: string) => void;
+  resetting: string | null;
+}) {
   if (entries.length === 0) {
     return (
       <p className="text-xs text-muted-foreground">
@@ -99,6 +108,22 @@ function ProviderHealthPanel({ entries }: { entries: CircuitBreakerEntry[] }) {
             <span className="text-xs text-amber-400/80">
               probe next call
             </span>
+          )}
+          {(entry.state === "open" || entry.state === "half-open") && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 px-2 text-xs gap-1 border-muted-foreground/30 hover:border-emerald-500/50 hover:text-emerald-400 hover:bg-emerald-500/10"
+              disabled={resetting === entry.provider}
+              onClick={() => onReset(entry.provider)}
+            >
+              {resetting === entry.provider ? (
+                <RefreshCw className="h-3 w-3 animate-spin" />
+              ) : (
+                <RotateCcw className="h-3 w-3" />
+              )}
+              Reset
+            </Button>
           )}
         </div>
       ))}
@@ -165,6 +190,27 @@ export default function Dashboard() {
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+
+  const [resettingProvider, setResettingProvider] = useState<string | null>(null);
+
+  const deleteCircuit = useDeleteCircuitStatus({
+    mutation: {
+      onSuccess: (_data, { provider }) => {
+        queryClient.invalidateQueries({ queryKey: getGetCircuitStatusQueryKey() });
+        toast({ title: "Circuit reset", description: `${provider} circuit breaker cleared — live calls will resume.` });
+        setResettingProvider(null);
+      },
+      onError: (_err, { provider }) => {
+        toast({ title: "Reset failed", description: `Could not reset ${provider}. Try again.`, variant: "destructive" });
+        setResettingProvider(null);
+      },
+    },
+  });
+
+  const handleResetCircuit = (provider: string) => {
+    setResettingProvider(provider);
+    deleteCircuit.mutate({ provider });
+  };
 
   const deleteSession = useDeleteSession({
     mutation: {
@@ -345,7 +391,11 @@ export default function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
-            <ProviderHealthPanel entries={circuitEntries} />
+            <ProviderHealthPanel
+              entries={circuitEntries}
+              onReset={handleResetCircuit}
+              resetting={resettingProvider}
+            />
             <p className="text-[11px] text-muted-foreground mt-3">
               <span className="font-medium text-red-400">Open</span> — provider is blocked (cooldown active).{" "}
               <span className="font-medium text-amber-400">Half-open</span> — cooldown elapsed, next call is a probe.{" "}

@@ -526,11 +526,38 @@ paths:
                 items:
                   $ref: "#/components/schemas/CircuitBreakerEntry"
 
+  /circuit-status/{provider}:
+    delete:
+      operationId: deleteCircuitStatus
+      tags: [stats]
+      summary: Manually reset a provider's circuit breaker
+      description: Immediately clears an open or half-open circuit for a provider, allowing live calls to resume. The reset is persisted to the database so it survives restarts and is visible to all running instances.
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The provider name to reset (e.g. "openai", "anthropic")
+      responses:
+        "200":
+          description: Circuit successfully reset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResetCircuitResult"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /circuit-status/{provider}/reset:
     post:
       operationId: resetCircuit
       tags: [stats]
-      summary: Manually reset a provider's circuit breaker
+      summary: Manually reset a provider's circuit breaker (legacy)
       description: Immediately clears an open or half-open circuit for a provider, allowing live calls to resume. The reset is persisted to the database so it survives restarts and is visible to all running instances.
       parameters:
         - name: provider

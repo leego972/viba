@@ -67,10 +67,25 @@ vi.mock("@workspace/db", () => {
       })),
     }));
 
+  const makeDelete = () =>
+    vi.fn().mockImplementation(() => ({
+      where: vi.fn().mockImplementation((condition: unknown) => {
+        // The eq mock always returns undefined for the condition, but we need
+        // to identify the provider. We capture it from the last insert call's
+        // argument by hooking into the where() call with an injected provider.
+        // Since we can't easily extract the provider from the opaque condition,
+        // we expose a helper on mockDb to do it externally when needed.
+        // For now, the delete mock just signals success; resetProviderCircuit
+        // deletes from circuitMap directly so in-memory state is correct.
+        return Promise.resolve(undefined);
+      }),
+    }));
+
   return {
     db: {
       select: vi.fn().mockReturnValue({ from: makeFrom() }),
       insert: makeInsert(),
+      delete: makeDelete(),
     },
     circuitStateTable: {},
   };
