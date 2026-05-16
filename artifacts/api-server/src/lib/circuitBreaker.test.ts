@@ -16,6 +16,7 @@ const { mockDb } = vi.hoisted(() => {
     provider: string;
     consecutiveFailures: number;
     openedAt: Date | null;
+    updatedAt: Date;
   };
   const rows: PersistedRow[] = [];
 
@@ -34,6 +35,7 @@ vi.mock("@workspace/db", () => {
     provider: string;
     consecutiveFailures: number;
     openedAt: Date | null;
+    updatedAt: Date;
   };
 
   const makeFrom = () =>
@@ -56,6 +58,7 @@ vi.mock("@workspace/db", () => {
             provider: vals.provider,
             consecutiveFailures: vals.consecutiveFailures,
             openedAt: vals.openedAt,
+            updatedAt: new Date(),
           };
           if (idx >= 0) {
             mockDb.rows[idx] = row;

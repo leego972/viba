@@ -846,12 +846,16 @@ components:
         msUntilReset:
           type: ["integer", "null"]
           description: Milliseconds remaining until the circuit allows a probe, or null if closed
+        persistedAt:
+          type: ["integer", "null"]
+          description: Unix ms timestamp of the last time this state was written to the database, or null if not yet persisted
       required:
         - provider
         - state
         - consecutiveFailures
         - openedAt
         - msUntilReset
+        - persistedAt
 
     ErrorResponse:
       type: object

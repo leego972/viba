@@ -2,6 +2,10 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { loadCircuitStateFromDb } from "./lib/adapterRetry";
 
+if (!process.env["DATABASE_URL"]) {
+  throw new Error("DATABASE_URL environment variable is required but was not provided.");
+}
+
 const rawPort = process.env["PORT"];
 
 if (!rawPort) {

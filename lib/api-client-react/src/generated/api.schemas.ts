@@ -107,6 +107,11 @@ export interface CircuitBreakerEntry {
    * @nullable
    */
   msUntilReset: number | null;
+  /**
+   * Unix ms timestamp of the last time this state was written to the database, or null if not yet persisted
+   * @nullable
+   */
+  persistedAt: number | null;
 }
 
 export interface ErrorResponse {
