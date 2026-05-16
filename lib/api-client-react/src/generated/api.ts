@@ -39,6 +39,11 @@ import type {
   Setting,
   Task,
   TestNotificationResult,
+  WorkbenchAnalyzeRequest,
+  WorkbenchAnalyzeResponse,
+  WorkbenchHealthResponse,
+  WorkbenchRefuseCheckRequest,
+  WorkbenchRefuseCheckResponse,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -1966,7 +1971,7 @@ export function useGetCircuitStatus<
  * @summary Manually reset a provider's circuit breaker
  */
 export const getResetCircuitUrl = (provider: string) => {
-  return `/api/circuit-breaker/reset/${provider}`;
+  return `/api/circuit-status/${provider}/reset`;
 };
 
 export const resetCircuit = async (
@@ -2044,4 +2049,261 @@ export const useResetCircuit = <
   TContext
 > => {
   return useMutation(getResetCircuitMutationOptions(options));
+};
+
+/**
+ * Returns the health status of the AI Trainer Workbench module
+ * @summary Workbench health check
+ */
+export const getGetWorkbenchHealthUrl = () => {
+  return `/api/workbench/health`;
+};
+
+export const getWorkbenchHealth = async (
+  options?: RequestInit,
+): Promise<WorkbenchHealthResponse> => {
+  return customFetch<WorkbenchHealthResponse>(getGetWorkbenchHealthUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetWorkbenchHealthQueryKey = () => {
+  return [`/api/workbench/health`] as const;
+};
+
+export const getGetWorkbenchHealthQueryOptions = <
+  TData = Awaited<ReturnType<typeof getWorkbenchHealth>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getWorkbenchHealth>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetWorkbenchHealthQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getWorkbenchHealth>>
+  > = ({ signal }) => getWorkbenchHealth({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getWorkbenchHealth>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetWorkbenchHealthQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getWorkbenchHealth>>
+>;
+export type GetWorkbenchHealthQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Workbench health check
+ */
+
+export function useGetWorkbenchHealth<
+  TData = Awaited<ReturnType<typeof getWorkbenchHealth>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getWorkbenchHealth>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetWorkbenchHealthQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Accepts a platform task (instructions + content + optional rubric) and returns a recommended answer with rubric checklist, risk flags, confidence score, and review level. Every response must be reviewed by a human before manual submission. Automatic login, submission, or platform automation is not supported.
+
+ * @summary Analyse a training task
+ */
+export const getAnalyzeWorkbenchTaskUrl = () => {
+  return `/api/workbench/analyze`;
+};
+
+export const analyzeWorkbenchTask = async (
+  workbenchAnalyzeRequest: WorkbenchAnalyzeRequest,
+  options?: RequestInit,
+): Promise<WorkbenchAnalyzeResponse> => {
+  return customFetch<WorkbenchAnalyzeResponse>(getAnalyzeWorkbenchTaskUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(workbenchAnalyzeRequest),
+  });
+};
+
+export const getAnalyzeWorkbenchTaskMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof analyzeWorkbenchTask>>,
+    TError,
+    { data: BodyType<WorkbenchAnalyzeRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof analyzeWorkbenchTask>>,
+  TError,
+  { data: BodyType<WorkbenchAnalyzeRequest> },
+  TContext
+> => {
+  const mutationKey = ["analyzeWorkbenchTask"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof analyzeWorkbenchTask>>,
+    { data: BodyType<WorkbenchAnalyzeRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return analyzeWorkbenchTask(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AnalyzeWorkbenchTaskMutationResult = NonNullable<
+  Awaited<ReturnType<typeof analyzeWorkbenchTask>>
+>;
+export type AnalyzeWorkbenchTaskMutationBody =
+  BodyType<WorkbenchAnalyzeRequest>;
+export type AnalyzeWorkbenchTaskMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Analyse a training task
+ */
+export const useAnalyzeWorkbenchTask = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof analyzeWorkbenchTask>>,
+    TError,
+    { data: BodyType<WorkbenchAnalyzeRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof analyzeWorkbenchTask>>,
+  TError,
+  { data: BodyType<WorkbenchAnalyzeRequest> },
+  TContext
+> => {
+  return useMutation(getAnalyzeWorkbenchTaskMutationOptions(options));
+};
+
+/**
+ * Tests whether a given request text would be refused by the workbench safety policy without running a full analysis.
+
+ * @summary Pre-flight safety check
+ */
+export const getWorkbenchRefuseCheckUrl = () => {
+  return `/api/workbench/refuse-check`;
+};
+
+export const workbenchRefuseCheck = async (
+  workbenchRefuseCheckRequest: WorkbenchRefuseCheckRequest,
+  options?: RequestInit,
+): Promise<WorkbenchRefuseCheckResponse> => {
+  return customFetch<WorkbenchRefuseCheckResponse>(
+    getWorkbenchRefuseCheckUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(workbenchRefuseCheckRequest),
+    },
+  );
+};
+
+export const getWorkbenchRefuseCheckMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof workbenchRefuseCheck>>,
+    TError,
+    { data: BodyType<WorkbenchRefuseCheckRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof workbenchRefuseCheck>>,
+  TError,
+  { data: BodyType<WorkbenchRefuseCheckRequest> },
+  TContext
+> => {
+  const mutationKey = ["workbenchRefuseCheck"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof workbenchRefuseCheck>>,
+    { data: BodyType<WorkbenchRefuseCheckRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return workbenchRefuseCheck(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type WorkbenchRefuseCheckMutationResult = NonNullable<
+  Awaited<ReturnType<typeof workbenchRefuseCheck>>
+>;
+export type WorkbenchRefuseCheckMutationBody =
+  BodyType<WorkbenchRefuseCheckRequest>;
+export type WorkbenchRefuseCheckMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Pre-flight safety check
+ */
+export const useWorkbenchRefuseCheck = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof workbenchRefuseCheck>>,
+    TError,
+    { data: BodyType<WorkbenchRefuseCheckRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof workbenchRefuseCheck>>,
+  TError,
+  { data: BodyType<WorkbenchRefuseCheckRequest> },
+  TContext
+> => {
+  return useMutation(getWorkbenchRefuseCheckMutationOptions(options));
 };
