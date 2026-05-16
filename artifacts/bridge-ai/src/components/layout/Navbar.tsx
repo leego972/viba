@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Cpu, Settings, Activity } from "lucide-react";
+import { Cpu, Settings, Activity, FlaskConical } from "lucide-react";
 
 export function Navbar() {
   const [location] = useLocation();
@@ -25,6 +25,15 @@ export function Navbar() {
               }`}
             >
               Dashboard
+            </Link>
+            <Link
+              href="/workbench"
+              className={`transition-colors hover:text-foreground/80 flex items-center gap-1.5 ${
+                location.startsWith("/workbench") ? "text-foreground" : "text-foreground/60"
+              }`}
+            >
+              <FlaskConical className="h-3.5 w-3.5" />
+              Workbench
             </Link>
             <Link
               href="/settings"

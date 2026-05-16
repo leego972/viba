@@ -8,6 +8,7 @@ import Dashboard from "@/pages/dashboard";
 import NewSession from "@/pages/new-session";
 import SessionWorkspace from "@/pages/session-workspace";
 import Settings from "@/pages/settings";
+import Workbench from "@/pages/workbench";
 
 const queryClient = new QueryClient();
 
@@ -18,7 +19,8 @@ function Router() {
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/sessions/new" component={NewSession} />
       <Route path="/sessions/:id" component={SessionWorkspace} />
-      <Route path="/settings" component={Settings} /> 
+      <Route path="/settings" component={Settings} />
+      <Route path="/workbench" component={Workbench} />
       <Route component={NotFound} />
     </Switch>
   );

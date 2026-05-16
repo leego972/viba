@@ -1,0 +1,39 @@
+{
+  "request": {
+    "platform": "alignerr",
+    "taskType": "sentiment_labeling",
+    "instructions": "Label the sentiment of the following tweet as Positive, Negative, or Neutral. Choose exactly one label.",
+    "rubric": "Positive: clearly favourable tone. Negative: clearly unfavourable tone. Neutral: factual or mixed. Do not use sub-labels.",
+    "taskContent": "Just upgraded to the new phone and I absolutely love it! The camera quality is incredible.",
+    "answerOptions": ["Positive", "Negative", "Neutral"],
+    "userNotes": "Strong positive language throughout, no mixed signals.",
+    "budgetLimitUsd": 0.05,
+    "routingMode": "fast"
+  },
+  "response": {
+    "taskId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "platform": "alignerr",
+    "taskType": "sentiment_labeling",
+    "recommendedAnswer": "Positive\n\nJustification: The tweet uses strong positive language (\"absolutely love it\", \"incredible\") with no negative or neutral counterpoints.",
+    "confidence": 0.95,
+    "reasoningSummary": "Clear positive sentiment. No ambiguity. Single label matches rubric requirements.",
+    "riskFlags": [],
+    "rubricChecklist": [
+      "Format compliance: pass — single label on first line",
+      "Completeness: pass — all instructions addressed",
+      "Instruction match: pass — 'Positive' chosen from provided options",
+      "Hallucination risk: pass — no external facts assumed",
+      "Ambiguity: pass — no mixed sentiment",
+      "Missing evidence: pass — content is self-contained",
+      "Domain expertise risk: pass — general knowledge sufficient",
+      "Answer-option consistency: pass — 'Positive' is one of the provided options"
+    ],
+    "reviewLevel": "quick_review",
+    "humanReviewRequired": false,
+    "routingReceipt": {
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "simulated": false
+    }
+  }
+}

@@ -645,3 +645,79 @@ export const ResetCircuitResponse = zod.object({
   ok: zod.boolean(),
   provider: zod.string(),
 });
+
+/**
+ * Returns the health status of the AI Trainer Workbench module
+ * @summary Workbench health check
+ */
+export const GetWorkbenchHealthResponse = zod.object({
+  status: zod.string(),
+  module: zod.string(),
+  version: zod.string(),
+});
+
+/**
+ * Accepts a platform task (instructions + content + optional rubric) and returns a recommended answer with rubric checklist, risk flags, confidence score, and review level. Every response must be reviewed by a human before manual submission. Automatic login, submission, or platform automation is not supported.
+
+ * @summary Analyse a training task
+ */
+export const AnalyzeWorkbenchTaskBody = zod.object({
+  platform: zod.enum([
+    "alignerr",
+    "outlier",
+    "dataannotation",
+    "toloka",
+    "remotasks",
+    "mindrift",
+    "other",
+  ]),
+  taskType: zod
+    .enum([
+      "grammar_cleanup",
+      "classification",
+      "sentiment_labeling",
+      "response_comparison",
+      "factuality_check",
+      "math_reasoning",
+      "coding",
+      "expert_domain",
+      "subjective_judgment",
+      "unknown",
+    ])
+    .optional(),
+  instructions: zod.string(),
+  rubric: zod.string().optional(),
+  taskContent: zod.string(),
+  answerOptions: zod.array(zod.string()).optional(),
+  userNotes: zod.string().optional(),
+  budgetLimitUsd: zod.number().optional(),
+  routingMode: zod.enum(["fast", "balanced", "quality"]).optional(),
+});
+
+export const AnalyzeWorkbenchTaskResponse = zod.object({
+  taskId: zod.string(),
+  platform: zod.string(),
+  taskType: zod.string(),
+  recommendedAnswer: zod.string(),
+  confidence: zod.number(),
+  reasoningSummary: zod.string(),
+  riskFlags: zod.array(zod.string()),
+  rubricChecklist: zod.array(zod.string()),
+  reviewLevel: zod.enum(["quick_review", "careful_review", "human_only"]),
+  humanReviewRequired: zod.boolean(),
+  routingReceipt: zod.record(zod.string(), zod.unknown()).nullish(),
+});
+
+/**
+ * Tests whether a given request text would be refused by the workbench safety policy without running a full analysis.
+
+ * @summary Pre-flight safety check
+ */
+export const WorkbenchRefuseCheckBody = zod.object({
+  requestText: zod.string(),
+});
+
+export const WorkbenchRefuseCheckResponse = zod.object({
+  allowed: zod.boolean(),
+  reason: zod.string().nullable(),
+});
