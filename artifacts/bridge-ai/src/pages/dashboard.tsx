@@ -38,6 +38,17 @@ function formatMsRemaining(ms: number | null): string {
   return remainSecs > 0 ? `${mins}m ${remainSecs}s` : `${mins}m`;
 }
 
+function formatTimeAgo(ms: number | null): string {
+  if (ms === null) return "never";
+  const age = Date.now() - ms;
+  if (age < 2000) return "just now";
+  const secs = Math.floor(age / 1000);
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  return `${Math.floor(mins / 60)}h ago`;
+}
+
 function CircuitStateBadge({ state }: { state: CircuitBreakerEntry["state"] }) {
   if (state === "open") {
     return (
@@ -107,6 +118,11 @@ function ProviderHealthPanel({
           {entry.state === "half-open" && (
             <span className="text-xs text-amber-400/80">
               probe next call
+            </span>
+          )}
+          {entry.persistedAt !== null && entry.persistedAt !== undefined && (
+            <span className="text-xs text-muted-foreground/60" title="Last synced to database">
+              synced {formatTimeAgo(entry.persistedAt)}
             </span>
           )}
           {(entry.state === "open" || entry.state === "half-open") && (
