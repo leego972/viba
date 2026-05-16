@@ -66,6 +66,7 @@ interface InternalCircuitState {
   consecutiveFailures: number;
   openedAt: number | null; // Unix ms timestamp, or null when closed
   cachedAt: number;        // when the entry was last read from / written to DB
+  persistedAt: number | null; // Unix ms timestamp of last successful DB write, or null
 }
 
 export interface CircuitState {
@@ -79,7 +80,7 @@ function getOrCreateLocal(provider: string): InternalCircuitState {
   let state = circuitMap.get(provider);
   if (!state) {
     // cachedAt=0 forces a DB read-through on the next check
-    state = { consecutiveFailures: 0, openedAt: null, cachedAt: 0 };
+    state = { consecutiveFailures: 0, openedAt: null, cachedAt: 0, persistedAt: null };
     circuitMap.set(provider, state);
   }
   return state;
@@ -112,6 +113,7 @@ async function refreshCircuitFromDb(provider: string, now = Date.now()): Promise
         consecutiveFailures: row.consecutiveFailures,
         openedAt: row.openedAt !== null ? row.openedAt.getTime() : null,
         cachedAt: now,
+        persistedAt: row.updatedAt.getTime(),
       });
     } else {
       // No DB row for this provider. A missing row is the canonical reset state —
@@ -153,6 +155,7 @@ async function persistCircuitState(
           updatedAt: new Date(),
         },
       });
+    state.persistedAt = Date.now();
   } catch (err) {
     logger.warn({ err, provider }, "Failed to persist circuit state to DB");
   }
@@ -190,6 +193,7 @@ export async function loadCircuitStateFromDb(): Promise<void> {
         consecutiveFailures: row.consecutiveFailures,
         openedAt: row.openedAt !== null ? row.openedAt.getTime() : null,
         cachedAt: now,
+        persistedAt: row.updatedAt.getTime(),
       });
     }
     logger.info({ count: rows.length }, "Loaded circuit breaker state from DB");
@@ -258,6 +262,7 @@ export interface CircuitStatusEntry {
   consecutiveFailures: number;
   openedAt: number | null;
   msUntilReset: number | null;
+  persistedAt: number | null;
 }
 
 /**
@@ -289,6 +294,7 @@ export function getCircuitStatus(now = Date.now()): CircuitStatusEntry[] {
       consecutiveFailures: cs.consecutiveFailures,
       openedAt: cs.openedAt,
       msUntilReset,
+      persistedAt: cs.persistedAt ?? null,
     });
   }
 
