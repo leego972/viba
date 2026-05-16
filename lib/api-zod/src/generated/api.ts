@@ -628,6 +628,12 @@ export const GetCircuitStatusResponseItem = zod.object({
     .describe(
       "Milliseconds remaining until the circuit allows a probe, or null if closed",
     ),
+  persistedAt: zod
+    .number()
+    .nullable()
+    .describe(
+      "Unix ms timestamp of the last time this state was written to the database, or null if not yet persisted",
+    ),
 });
 export const GetCircuitStatusResponse = zod.array(GetCircuitStatusResponseItem);
 
