@@ -526,7 +526,7 @@ paths:
                 items:
                   $ref: "#/components/schemas/CircuitBreakerEntry"
 
-  /circuit-breaker/reset/{provider}:
+  /circuit-status/{provider}/reset:
     post:
       operationId: resetCircuit
       tags: [stats]

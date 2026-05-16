@@ -1971,7 +1971,7 @@ export function useGetCircuitStatus<
  * @summary Manually reset a provider's circuit breaker
  */
 export const getResetCircuitUrl = (provider: string) => {
-  return `/api/circuit-breaker/reset/${provider}`;
+  return `/api/circuit-status/${provider}/reset`;
 };
 
 export const resetCircuit = async (

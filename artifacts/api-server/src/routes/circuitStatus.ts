@@ -8,7 +8,7 @@ router.get("/circuit-status", (req, res): void => {
 });
 
 router.post(
-  "/circuit-breaker/reset/:provider",
+  "/circuit-status/:provider/reset",
   async (req, res): Promise<void> => {
     const provider = (req.params.provider ?? "").trim();
     if (!provider) {
