@@ -183,3 +183,44 @@ describe("POST /api/stats/test-notification — email-only channel", () => {
     expect(res.body.message).toContain("alerts@example.com");
   });
 });
+
+describe("POST /api/stats/test-notification — webhook and email both configured", () => {
+  it("returns 200 with ok:true when both channels are configured", async () => {
+    await setSettings({
+      NOTIFICATION_WEBHOOK_URL: "https://hooks.example.com/test",
+      NOTIFICATION_EMAIL: "alerts@example.com",
+    });
+
+    const res = await request(app)
+      .post("/api/stats/test-notification")
+      .expect(200);
+
+    expect(res.body.ok).toBe(true);
+  });
+
+  it("mentions the webhook channel in the response message", async () => {
+    await setSettings({
+      NOTIFICATION_WEBHOOK_URL: "https://hooks.example.com/test",
+      NOTIFICATION_EMAIL: "alerts@example.com",
+    });
+
+    const res = await request(app)
+      .post("/api/stats/test-notification")
+      .expect(200);
+
+    expect(res.body.message).toContain("Webhook delivered");
+  });
+
+  it("mentions the email address in the response message", async () => {
+    await setSettings({
+      NOTIFICATION_WEBHOOK_URL: "https://hooks.example.com/test",
+      NOTIFICATION_EMAIL: "alerts@example.com",
+    });
+
+    const res = await request(app)
+      .post("/api/stats/test-notification")
+      .expect(200);
+
+    expect(res.body.message).toContain("alerts@example.com");
+  });
+});
