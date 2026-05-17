@@ -6,10 +6,12 @@ import { eq } from "drizzle-orm";
 
 const CLEARABLE_KEY = "NOTIFICATION_WEBHOOK_URL";
 const NON_CLEARABLE_KEY = "FALLBACK_ALERT_THRESHOLD";
+const API_KEY = "OPENAI_API_KEY";
 
 afterEach(async () => {
   await db.delete(settingsTable).where(eq(settingsTable.key, CLEARABLE_KEY));
   await db.delete(settingsTable).where(eq(settingsTable.key, NON_CLEARABLE_KEY));
+  await db.delete(settingsTable).where(eq(settingsTable.key, API_KEY));
 });
 
 describe("POST /api/settings — clearing a clearable key", () => {
@@ -70,6 +72,42 @@ describe("POST /api/settings — non-clearable key with empty value", () => {
 
     expect(row).toBeDefined();
     expect(row.value).toBe(ORIGINAL_VALUE);
+  });
+});
+
+describe("POST /api/settings — clearing an API key", () => {
+  beforeEach(async () => {
+    await db
+      .insert(settingsTable)
+      .values({ key: API_KEY, value: "sk-test-abc123" });
+  });
+
+  it("deletes the row when an empty string is POSTed for an API key", async () => {
+    await request(app)
+      .post("/api/settings")
+      .send({ settings: [{ key: API_KEY, value: "" }] })
+      .expect(200);
+
+    const rows = await db
+      .select()
+      .from(settingsTable)
+      .where(eq(settingsTable.key, API_KEY));
+
+    expect(rows).toHaveLength(0);
+  });
+
+  it("GET /api/settings no longer returns the key after it is cleared", async () => {
+    await request(app)
+      .post("/api/settings")
+      .send({ settings: [{ key: API_KEY, value: "" }] })
+      .expect(200);
+
+    const res = await request(app).get("/api/settings").expect(200);
+
+    const entry = (res.body as Array<{ key: string; value: string | null }>).find(
+      (s) => s.key === API_KEY,
+    );
+    expect(entry).toBeUndefined();
   });
 });
 
