@@ -58,6 +58,15 @@ router.post("/settings", async (req, res): Promise<void> => {
     // Non-clearable keys: treat empty string as a no-op to prevent silent data loss
     if (value === "") continue;
 
+    // Validate FALLBACK_ALERT_THRESHOLD must be a positive integer
+    if (key === "FALLBACK_ALERT_THRESHOLD") {
+      const n = parseInt(value, 10);
+      if (!/^\d+$/.test(value) || isNaN(n) || n < 1) {
+        res.status(400).json({ error: "FALLBACK_ALERT_THRESHOLD must be a positive whole number (e.g. 5)." });
+        return;
+      }
+    }
+
     const [existing] = await db.select().from(settingsTable).where(eq(settingsTable.key, key));
     if (existing) {
       const [updated] = await db
