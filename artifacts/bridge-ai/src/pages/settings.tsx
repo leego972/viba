@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Key, ShieldCheck, Zap, RotateCcw, BarChart2, Cpu, Bell, X } from "lucide-react";
+import { Key, ShieldCheck, Zap, RotateCcw, BarChart2, Cpu, Bell, X, CheckCircle2, MinusCircle, Trash2 } from "lucide-react";
 
 type ModelOption = { value: string; label: string };
 
@@ -140,6 +140,7 @@ export default function Settings() {
   );
   const [clearedKeys, setClearedKeys] = useState<Set<string>>(new Set());
   const [thresholdError, setThresholdError] = useState<string | null>(null);
+  const [saveResults, setSaveResults] = useState<Record<string, "saved" | "skipped" | "deleted">>({});
 
   useEffect(() => {
     if (settings) {
@@ -158,6 +159,9 @@ export default function Settings() {
     setValues((prev) => ({ ...prev, [name]: value }));
     if (clearedKeys.has(name)) {
       setClearedKeys((prev) => { const next = new Set(prev); next.delete(name); return next; });
+    }
+    if (saveResults[name]) {
+      setSaveResults((prev) => { const next = { ...prev }; delete next[name]; return next; });
     }
   };
 
@@ -202,11 +206,30 @@ export default function Settings() {
     saveSettings.mutate(
       { data: { settings: settingsToSave } },
       {
-        onSuccess: () => {
-          toast({ title: "Settings saved", description: "Your settings have been updated." });
+        onSuccess: (data) => {
+          const resultsMap: Record<string, "saved" | "skipped" | "deleted"> = {};
+          const savedKeys: string[] = [];
+          const skippedKeys: string[] = [];
+          const deletedKeys: string[] = [];
+          for (const r of data.results) {
+            resultsMap[r.key] = r.status;
+            if (r.status === "saved") savedKeys.push(r.key);
+            else if (r.status === "skipped") skippedKeys.push(r.key);
+            else if (r.status === "deleted") deletedKeys.push(r.key);
+          }
+          setSaveResults(resultsMap);
           setClearedKeys(new Set());
           queryClient.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
           queryClient.invalidateQueries({ queryKey: getGetStatsQueryKey() });
+
+          const parts: string[] = [];
+          if (savedKeys.length) parts.push(`${savedKeys.length} saved`);
+          if (deletedKeys.length) parts.push(`${deletedKeys.length} cleared`);
+          if (skippedKeys.length) parts.push(`${skippedKeys.length} unchanged`);
+          toast({
+            title: "Settings saved",
+            description: parts.length ? parts.join(", ") + "." : "No changes were made.",
+          });
         },
         onError: (err) => {
           const message = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
@@ -579,6 +602,21 @@ export default function Settings() {
                           </Button>
                         )}
                       </div>
+                      {saveResults[key] === "saved" && (
+                        <p className="flex items-center gap-1 text-xs text-emerald-500">
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Saved successfully
+                        </p>
+                      )}
+                      {saveResults[key] === "skipped" && (
+                        <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <MinusCircle className="h-3.5 w-3.5" /> Unchanged — enter a new value to update
+                        </p>
+                      )}
+                      {saveResults[key] === "deleted" && (
+                        <p className="flex items-center gap-1 text-xs text-amber-500">
+                          <Trash2 className="h-3.5 w-3.5" /> Cleared
+                        </p>
+                      )}
                       {modelKey && models && (
                         <div className="flex items-center gap-2">
                           <Label htmlFor={modelKey} className="text-xs text-muted-foreground whitespace-nowrap">

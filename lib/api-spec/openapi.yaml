@@ -466,9 +466,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Setting"
+                $ref: "#/components/schemas/SaveSettingsResponse"
         "400":
           description: Invalid request
           content:
@@ -1237,6 +1235,36 @@ components:
         - value
         - createdAt
         - updatedAt
+
+    SettingResult:
+      type: object
+      properties:
+        key:
+          type: string
+        status:
+          type: string
+          enum:
+            - saved
+            - skipped
+            - deleted
+      required:
+        - key
+        - status
+
+    SaveSettingsResponse:
+      type: object
+      properties:
+        settings:
+          type: array
+          items:
+            $ref: "#/components/schemas/Setting"
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/SettingResult"
+      required:
+        - settings
+        - results
 
     SaveSettingsBody:
       type: object

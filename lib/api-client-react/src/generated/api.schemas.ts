@@ -297,6 +297,25 @@ export interface Setting {
   updatedAt: string;
 }
 
+export type SettingResultStatus =
+  (typeof SettingResultStatus)[keyof typeof SettingResultStatus];
+
+export const SettingResultStatus = {
+  saved: "saved",
+  skipped: "skipped",
+  deleted: "deleted",
+} as const;
+
+export interface SettingResult {
+  key: string;
+  status: SettingResultStatus;
+}
+
+export interface SaveSettingsResponse {
+  settings: Setting[];
+  results: SettingResult[];
+}
+
 export type SaveSettingsBodySettingsItem = {
   key: string;
   value: string;
