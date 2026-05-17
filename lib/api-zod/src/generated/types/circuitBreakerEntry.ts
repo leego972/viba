@@ -21,4 +21,13 @@ export interface CircuitBreakerEntry {
    * @nullable
    */
   msUntilReset: number | null;
+  /**
+   * Unix ms timestamp of the last time this state was written to the database, or null if not yet persisted
+   * @nullable
+   */
+  persistedAt: number | null;
+  /** Number of consecutive failures required to open the circuit (CIRCUIT_OPEN_THRESHOLD) */
+  openThreshold: number;
+  /** Cooldown window in milliseconds before a half-open probe is allowed (CIRCUIT_TIMEOUT_MS) */
+  timeoutMs: number;
 }

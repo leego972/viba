@@ -272,6 +272,8 @@ export interface CircuitStatusEntry {
   openedAt: number | null;
   msUntilReset: number | null;
   persistedAt: number | null;
+  openThreshold: number;
+  timeoutMs: number;
 }
 
 /**
@@ -304,6 +306,8 @@ export function getCircuitStatus(now = Date.now()): CircuitStatusEntry[] {
       openedAt: cs.openedAt,
       msUntilReset,
       persistedAt: cs.persistedAt ?? null,
+      openThreshold: CIRCUIT_OPEN_THRESHOLD,
+      timeoutMs: CIRCUIT_TIMEOUT_MS,
     });
   }
 
