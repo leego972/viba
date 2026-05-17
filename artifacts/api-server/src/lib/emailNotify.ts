@@ -61,14 +61,23 @@ function buildEmailBody(opts: SpikeEmailOptions): { subject: string; text: strin
   return { subject, text, html };
 }
 
-export async function sendSpikeAlertEmail(opts: SpikeEmailOptions): Promise<void> {
+function getSmtpTransport(): { transporter: nodemailer.Transporter; from: string } | null {
   const host = process.env.SMTP_HOST;
   const port = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 587;
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
   const from = process.env.SMTP_FROM ?? user ?? "noreply@bridgeai.local";
 
-  if (!host || !user || !pass) {
+  if (!host || !user || !pass) return null;
+
+  const transporter = nodemailer.createTransport({ host, port, auth: { user, pass } });
+  return { transporter, from };
+}
+
+export async function sendSpikeAlertEmail(opts: SpikeEmailOptions): Promise<void> {
+  const smtp = getSmtpTransport();
+
+  if (!smtp) {
     logger.warn(
       { missingVars: ["SMTP_HOST", "SMTP_USER", "SMTP_PASS"].filter((v) => !process.env[v]) },
       "Spike alert email skipped: SMTP credentials not configured"
@@ -76,13 +85,49 @@ export async function sendSpikeAlertEmail(opts: SpikeEmailOptions): Promise<void
     return;
   }
 
-  const transporter = nodemailer.createTransport({ host, port, auth: { user, pass } });
   const { subject, text, html } = buildEmailBody(opts);
 
   try {
-    const info = await transporter.sendMail({ from, to: opts.to, subject, text, html });
+    const info = await smtp.transporter.sendMail({ from: smtp.from, to: opts.to, subject, text, html });
     logger.info({ email: opts.to, messageId: info.messageId }, "Spike alert email sent");
   } catch (err) {
     logger.error({ email: opts.to, err }, "Failed to send spike alert email");
+  }
+}
+
+export interface TestEmailResult {
+  sent: boolean;
+  reason?: string;
+}
+
+export async function sendTestEmail(to: string, settingsUrl: string): Promise<TestEmailResult> {
+  const smtp = getSmtpTransport();
+
+  if (!smtp) {
+    logger.info(
+      { to, missingVars: ["SMTP_HOST", "SMTP_USER", "SMTP_PASS"].filter((v) => !process.env[v]) },
+      "Test email skipped: SMTP not configured"
+    );
+    return { sent: false, reason: "SMTP not configured" };
+  }
+
+  const subject = "[BridgeAI] Test spike alert";
+  const text = [
+    "This is a test spike alert from BridgeAI.",
+    "Your email notification channel is configured correctly.",
+    "",
+    `Settings: ${settingsUrl}`,
+    "",
+    "You are receiving this because an alert email address is configured in BridgeAI Settings.",
+  ].join("\n");
+
+  try {
+    const info = await smtp.transporter.sendMail({ from: smtp.from, to, subject, text });
+    logger.info({ email: to, messageId: info.messageId }, "Test spike alert email sent");
+    return { sent: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown SMTP error";
+    logger.warn({ email: to, err }, "Failed to send test spike alert email");
+    return { sent: false, reason: message };
   }
 }

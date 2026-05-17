@@ -77,6 +77,8 @@ export interface BridgeStats {
 export interface TestNotificationResult {
   ok: boolean;
   message: string;
+  /** Whether a test email was actually delivered. False when SMTP is not configured or delivery failed. */
+  emailSent?: boolean;
 }
 
 export interface ResetCircuitResult {
@@ -107,6 +109,11 @@ export interface CircuitBreakerEntry {
    * @nullable
    */
   msUntilReset: number | null;
+  /**
+   * Unix ms timestamp of the last time this state was written to the database, or null if not yet persisted
+   * @nullable
+   */
+  persistedAt: number | null;
 }
 
 export interface ErrorResponse {
@@ -299,4 +306,96 @@ export interface RunStepResult {
   approvalRequired: boolean;
   approval: Approval | null;
   stepsRun: number;
+}
+
+export interface WorkbenchHealthResponse {
+  status: string;
+  module: string;
+  version: string;
+}
+
+export type WorkbenchAnalyzeRequestPlatform =
+  (typeof WorkbenchAnalyzeRequestPlatform)[keyof typeof WorkbenchAnalyzeRequestPlatform];
+
+export const WorkbenchAnalyzeRequestPlatform = {
+  alignerr: "alignerr",
+  outlier: "outlier",
+  dataannotation: "dataannotation",
+  toloka: "toloka",
+  remotasks: "remotasks",
+  mindrift: "mindrift",
+  other: "other",
+} as const;
+
+export type WorkbenchAnalyzeRequestTaskType =
+  (typeof WorkbenchAnalyzeRequestTaskType)[keyof typeof WorkbenchAnalyzeRequestTaskType];
+
+export const WorkbenchAnalyzeRequestTaskType = {
+  grammar_cleanup: "grammar_cleanup",
+  classification: "classification",
+  sentiment_labeling: "sentiment_labeling",
+  response_comparison: "response_comparison",
+  factuality_check: "factuality_check",
+  math_reasoning: "math_reasoning",
+  coding: "coding",
+  expert_domain: "expert_domain",
+  subjective_judgment: "subjective_judgment",
+  unknown: "unknown",
+} as const;
+
+export type WorkbenchAnalyzeRequestRoutingMode =
+  (typeof WorkbenchAnalyzeRequestRoutingMode)[keyof typeof WorkbenchAnalyzeRequestRoutingMode];
+
+export const WorkbenchAnalyzeRequestRoutingMode = {
+  fast: "fast",
+  balanced: "balanced",
+  quality: "quality",
+} as const;
+
+export interface WorkbenchAnalyzeRequest {
+  platform: WorkbenchAnalyzeRequestPlatform;
+  taskType?: WorkbenchAnalyzeRequestTaskType;
+  instructions: string;
+  rubric?: string;
+  taskContent: string;
+  answerOptions?: string[];
+  userNotes?: string;
+  budgetLimitUsd?: number;
+  routingMode?: WorkbenchAnalyzeRequestRoutingMode;
+}
+
+export type WorkbenchAnalyzeResponseReviewLevel =
+  (typeof WorkbenchAnalyzeResponseReviewLevel)[keyof typeof WorkbenchAnalyzeResponseReviewLevel];
+
+export const WorkbenchAnalyzeResponseReviewLevel = {
+  quick_review: "quick_review",
+  careful_review: "careful_review",
+  human_only: "human_only",
+} as const;
+
+export type WorkbenchAnalyzeResponseRoutingReceipt = {
+  [key: string]: unknown;
+} | null;
+
+export interface WorkbenchAnalyzeResponse {
+  taskId: string;
+  platform: string;
+  taskType: string;
+  recommendedAnswer: string;
+  confidence: number;
+  reasoningSummary: string;
+  riskFlags: string[];
+  rubricChecklist: string[];
+  reviewLevel: WorkbenchAnalyzeResponseReviewLevel;
+  humanReviewRequired: boolean;
+  routingReceipt?: WorkbenchAnalyzeResponseRoutingReceipt;
+}
+
+export interface WorkbenchRefuseCheckRequest {
+  requestText: string;
+}
+
+export interface WorkbenchRefuseCheckResponse {
+  allowed: boolean;
+  reason: string | null;
 }

@@ -233,6 +233,11 @@ export default function Settings() {
     : "";
   const webhookUrlIsSaved = notificationWebhookUrl === savedWebhookUrl && !!notificationWebhookUrl;
 
+  const savedEmail = settings
+    ? (settings.find((s) => s.key === "NOTIFICATION_EMAIL")?.value ?? "")
+    : "";
+  const emailIsSaved = notificationEmail === savedEmail && !!notificationEmail;
+
   const handleAlertEnabledChange = (checked: boolean) => {
     setValues((prev) => ({ ...prev, FALLBACK_ALERT_ENABLED: checked ? "true" : "false" }));
   };
@@ -265,7 +270,18 @@ export default function Settings() {
   const handleTestNotification = () => {
     sendTestNotification.mutate(undefined, {
       onSuccess: (data) => {
-        toast({ title: "Test sent", description: data.message });
+        if (data.emailSent === false) {
+          const hint = data.message.includes("SMTP not configured")
+            ? " Configure SMTP_HOST, SMTP_USER, and SMTP_PASS to enable real email delivery."
+            : "";
+          toast({
+            title: "Test sent — email not delivered",
+            description: `${data.message}${hint}`,
+            variant: "destructive",
+          });
+        } else {
+          toast({ title: "Test sent", description: data.message });
+        }
       },
       onError: (err) => {
         const message = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Failed to send test notification.";
@@ -329,7 +345,7 @@ export default function Settings() {
                   return (
                     <div key={model} className="space-y-1">
                       <div className="flex items-center gap-3">
-                        <span className="text-xs font-mono w-44 truncate shrink-0">{model}</span>
+                        <span className="text-xs font-mono w-28 sm:w-44 truncate shrink-0">{model}</span>
                         <div className="flex-1 bg-muted rounded-full h-1.5 overflow-hidden">
                           <div
                             className="h-full bg-primary rounded-full transition-all"
@@ -340,7 +356,7 @@ export default function Settings() {
                           {count} msg{count !== 1 ? "s" : ""} ({pct}%)
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 pl-44 ml-0">
+                      <div className="flex items-center gap-2 pl-28 sm:pl-44 ml-0">
                         {liveCount > 0 && (
                           <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-emerald-500/40 text-emerald-400 bg-emerald-500/10">
                             {liveCount} live ({livePct}%)
@@ -386,12 +402,12 @@ export default function Settings() {
             </div>
             <div className={`space-y-1.5 transition-opacity ${alertEnabled ? "" : "opacity-40 pointer-events-none"}`}>
               <Label htmlFor="alert-threshold">Alert threshold (fallbacks per hour)</Label>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <Input
                   id="alert-threshold"
                   type="text"
                   inputMode="numeric"
-                  className={`w-24 ${thresholdError ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                  className={`w-24 shrink-0 ${thresholdError ? "border-red-500 focus-visible:ring-red-500" : ""}`}
                   value={alertThreshold}
                   onChange={handleAlertThresholdChange}
                   disabled={!alertEnabled}
@@ -437,16 +453,32 @@ export default function Settings() {
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="notification-email">Email address</Label>
-                <Input
-                  id="notification-email"
-                  type="email"
-                  placeholder="alerts@example.com"
-                  value={notificationEmail}
-                  onChange={handleEmailChange}
-                  disabled={!alertEnabled}
-                />
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="notification-email"
+                    type="email"
+                    placeholder="alerts@example.com"
+                    value={notificationEmail}
+                    onChange={handleEmailChange}
+                    disabled={!alertEnabled}
+                    className="flex-1"
+                  />
+                  {notificationEmail && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleTestNotification}
+                      disabled={!alertEnabled || sendTestNotification.isPending || !emailIsSaved}
+                      title={!emailIsSaved ? "Save settings first to test this email" : undefined}
+                    >
+                      {sendTestNotification.isPending ? "Sending..." : "Send test"}
+                    </Button>
+                  )}
+                </div>
                 <p className="text-xs text-muted-foreground">
                   Receive spike alert emails at this address. Leave blank to disable email notifications.
+                  Requires SMTP configuration (SMTP_HOST, SMTP_USER, SMTP_PASS).
                 </p>
               </div>
             </div>

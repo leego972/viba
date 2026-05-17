@@ -3,6 +3,7 @@ import { db, auditLogsTable, sessionsTable, messagesTable, settingsTable } from 
 import { eq, sql, desc } from "drizzle-orm";
 import { detectSpikeProviders, type ProviderCount } from "../lib/spikeDetect";
 import { sendSpikeNotifications, sendTestWebhookNotification } from "../lib/spikeNotify";
+import { sendTestEmail } from "../lib/emailNotify";
 
 const router: IRouter = Router();
 
@@ -188,10 +189,22 @@ router.get("/stats", async (req, res): Promise<void> => {
   });
 });
 
-export function buildTestNotificationMessage(webhookSent: boolean, email: string | null): string {
+export function buildTestNotificationMessage(
+  webhookSent: boolean,
+  email: string | null,
+  emailSent: boolean,
+  emailReason?: string
+): string {
   const parts: string[] = [];
   if (webhookSent) parts.push("Webhook delivered");
-  if (email) parts.push(`email alert queued for ${email}`);
+  if (email) {
+    if (emailSent) {
+      parts.push(`test email sent to ${email}`);
+    } else {
+      const detail = emailReason ? ` (${emailReason})` : "";
+      parts.push(`email not sent to ${email}${detail}`);
+    }
+  }
   return parts.length > 0 ? parts.join("; ") + "." : "Test notification sent.";
 }
 
@@ -216,6 +229,8 @@ router.post("/stats/test-notification", async (req, res): Promise<void> => {
 
   let webhookError: string | null = null;
   let webhookSent = false;
+  let emailSent = false;
+  let emailReason: string | undefined;
 
   if (webhookUrl) {
     try {
@@ -228,7 +243,9 @@ router.post("/stats/test-notification", async (req, res): Promise<void> => {
   }
 
   if (email) {
-    req.log.info({ email }, "Test spike notification (email): would send alert to configured address");
+    const result = await sendTestEmail(email, settingsUrl);
+    emailSent = result.sent;
+    emailReason = result.reason;
   }
 
   if (webhookError) {
@@ -236,7 +253,11 @@ router.post("/stats/test-notification", async (req, res): Promise<void> => {
     return;
   }
 
-  res.json({ ok: true, message: buildTestNotificationMessage(webhookSent, email) });
+  res.json({
+    ok: true,
+    message: buildTestNotificationMessage(webhookSent, email, emailSent, emailReason),
+    emailSent,
+  });
 });
 
 export default router;

@@ -1743,7 +1743,7 @@ export const useSaveSettings = <
 };
 
 /**
- * Posts a test payload to the configured webhook URL (and logs for email) so the user can verify the notification channel works.
+ * Posts a test payload to the configured webhook URL and sends a real test email (when SMTP is configured) so the user can verify each notification channel works.
  * @summary Send a test spike notification
  */
 export const getSendTestNotificationUrl = () => {
