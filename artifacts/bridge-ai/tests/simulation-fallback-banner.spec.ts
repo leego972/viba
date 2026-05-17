@@ -90,6 +90,40 @@ test.describe("Simulation fallback banner", () => {
   });
 });
 
+test.describe("Simulation fallback banner — real-time re-appearance via SSE", () => {
+  test("banner reappears in real time when a simulated SSE message arrives after dismissal", async ({ page }) => {
+    // Create a fresh session with one simulated message already in the past
+    const sessionId = await createSession();
+    const pastTs = new Date(Date.now() - 5_000).toISOString();
+    await insertSimulatedMessageAt(sessionId, pastTs);
+
+    // Dismiss the banner by setting a dismissal timestamp after that message
+    const dismissalTs = new Date(Date.now() - 2_000).toISOString();
+    await page.addInitScript(
+      ({ key, ts }) => { localStorage.setItem(key, ts); },
+      { key: BANNER_KEY(sessionId), ts: dismissalTs }
+    );
+
+    await page.goto(`/sessions/${sessionId}`);
+
+    // Wait for the page to fully hydrate — banner should be hidden because the
+    // only message pre-dates our dismissal timestamp.
+    await expect(page.getByText("TestAgent").first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole("button", { name: "Dismiss banner" })).not.toBeVisible();
+
+    // Insert a new simulated message timestamped AFTER the dismissal so the
+    // SSE stream will carry it to the open page on its next poll (~800 ms).
+    const afterDismissalTs = new Date(Date.now() + 500).toISOString();
+    await insertSimulatedMessageAt(sessionId, afterDismissalTs);
+
+    // The SSE handler invalidates the banner-dismissal query when a newer
+    // simulated message arrives, causing the banner to reappear without reload.
+    const dismissBtn = page.getByRole("button", { name: "Dismiss banner" });
+    await expect(dismissBtn).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("switched to simulation mid-run")).toBeVisible();
+  });
+});
+
 test.describe("Simulation fallback banner — re-appearance after new fallbacks", () => {
   test("banner re-appears when a new simulated message arrives after the dismissal timestamp", async ({ page }) => {
     const sessionId = await createSession();
