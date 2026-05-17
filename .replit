@@ -63,7 +63,7 @@ isValidation = true
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "pnpm --filter @workspace/api-server exec vitest run --reporter=verbose src/lib/circuitBreaker.test.ts src/lib/adapterRetry.test.ts"
+args = "pnpm --filter @workspace/api-server run test"
 
 [[workflows.workflow]]
 name = "playwright-tests"
