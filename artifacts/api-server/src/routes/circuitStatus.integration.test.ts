@@ -161,3 +161,45 @@ describe("GET /api/circuit-status", () => {
     });
   });
 });
+
+describe("POST /api/circuit-status/:provider/reset", () => {
+  it("returns { ok: true } after resetting an open circuit", async () => {
+    await openCircuit("openai");
+
+    const res = await request(app)
+      .post("/api/circuit-status/openai/reset")
+      .expect(200);
+
+    expect(res.body).toMatchObject({ ok: true, provider: "openai" });
+  });
+
+  it("circuit is gone from GET /api/circuit-status after reset", async () => {
+    await openCircuit("openai");
+
+    await request(app).post("/api/circuit-status/openai/reset").expect(200);
+
+    const statusRes = await request(app).get("/api/circuit-status").expect(200);
+    expect(statusRes.body.find((e: { provider: string }) => e.provider === "openai")).toBeUndefined();
+  });
+
+  it("only removes the targeted provider, leaving others intact", async () => {
+    await openCircuit("openai");
+    await openCircuit("anthropic");
+
+    await request(app).post("/api/circuit-status/openai/reset").expect(200);
+
+    const statusRes = await request(app).get("/api/circuit-status").expect(200);
+    expect(statusRes.body.find((e: { provider: string }) => e.provider === "openai")).toBeUndefined();
+    const remaining = statusRes.body.find((e: { provider: string }) => e.provider === "anthropic");
+    expect(remaining).toBeDefined();
+    expect(remaining.state).toBe("open");
+  });
+
+  it("is a no-op and returns { ok: true } when the provider was never open", async () => {
+    const res = await request(app)
+      .post("/api/circuit-status/never-seen/reset")
+      .expect(200);
+
+    expect(res.body).toMatchObject({ ok: true, provider: "never-seen" });
+  });
+});
