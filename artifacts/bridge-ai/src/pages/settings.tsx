@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { useGetSettings, useSaveSettings, useGetStats, useSendTestNotification, getGetSettingsQueryKey } from "@workspace/api-client-react";
+import { useGetSettings, useSaveSettings, useGetStats, useSendTestNotification, getGetSettingsQueryKey, getGetStatsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -206,6 +206,7 @@ export default function Settings() {
           toast({ title: "Settings saved", description: "Your settings have been updated." });
           setClearedKeys(new Set());
           queryClient.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getGetStatsQueryKey() });
         },
         onError: (err) => {
           const message = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;

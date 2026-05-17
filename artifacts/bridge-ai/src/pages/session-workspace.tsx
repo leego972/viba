@@ -22,6 +22,7 @@ import {
   getListApprovalsQueryKey,
   getListAuditLogsQueryKey,
   getGetBannerDismissalQueryKey,
+  getGetStatsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -159,7 +160,11 @@ export default function SessionWorkspace() {
   useSessionStream(sessionId);
 
   // Queries — no refetchInterval needed; SSE keeps the cache fresh
-  const { data: stats } = useGetStats();
+  // Stats are polled every 30 s so the spike threshold and recentSpikeProviders
+  // stay current even when the operator changes the threshold from another tab.
+  const { data: stats } = useGetStats({
+    query: { queryKey: getGetStatsQueryKey(), refetchInterval: 30_000 },
+  });
 
   const { data: session, isLoading: sessionLoading } = useGetSession(sessionId, {
     query: { enabled: !!sessionId, queryKey: getGetSessionQueryKey(sessionId) }
