@@ -33,6 +33,7 @@ import type {
   ResetCircuitResult,
   RunStepResult,
   SaveSettingsBody,
+  SaveSettingsResponse,
   SendMessageBody,
   Session,
   SessionDetail,
@@ -1666,8 +1667,8 @@ export const getSaveSettingsUrl = () => {
 export const saveSettings = async (
   saveSettingsBody: SaveSettingsBody,
   options?: RequestInit,
-): Promise<Setting[]> => {
-  return customFetch<Setting[]>(getSaveSettingsUrl(), {
+): Promise<SaveSettingsResponse> => {
+  return customFetch<SaveSettingsResponse>(getSaveSettingsUrl(), {
     ...options,
     method: "POST",
     headers: { "Content-Type": "application/json", ...options?.headers },

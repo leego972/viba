@@ -533,14 +533,23 @@ export const SaveSettingsBody = zod.object({
   ),
 });
 
-export const SaveSettingsResponseItem = zod.object({
-  id: zod.number(),
-  key: zod.string(),
-  value: zod.string(),
-  createdAt: zod.string(),
-  updatedAt: zod.string(),
+export const SaveSettingsResponse = zod.object({
+  settings: zod.array(
+    zod.object({
+      id: zod.number(),
+      key: zod.string(),
+      value: zod.string(),
+      createdAt: zod.string(),
+      updatedAt: zod.string(),
+    }),
+  ),
+  results: zod.array(
+    zod.object({
+      key: zod.string(),
+      status: zod.enum(["saved", "skipped", "deleted"]),
+    }),
+  ),
 });
-export const SaveSettingsResponse = zod.array(SaveSettingsResponseItem);
 
 /**
  * Posts a test payload to the configured webhook URL and sends a real test email (when SMTP is configured) so the user can verify each notification channel works.

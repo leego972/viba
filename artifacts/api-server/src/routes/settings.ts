@@ -44,19 +44,27 @@ router.post("/settings", async (req, res): Promise<void> => {
     return;
   }
 
-  const results = [];
+  const keyResults: Array<{ key: string; status: "saved" | "skipped" | "deleted" }> = [];
+
   for (const { key, value } of parsed.data.settings) {
     // Don't update if value is the masked placeholder
-    if (value === "***SET***") continue;
+    if (value === "***SET***") {
+      keyResults.push({ key, status: "skipped" });
+      continue;
+    }
 
     // Clearing a clearable key with an empty string explicitly deletes it
     if (value === "" && CLEARABLE_NOTIFICATION_KEYS.includes(key)) {
       await db.delete(settingsTable).where(eq(settingsTable.key, key));
+      keyResults.push({ key, status: "deleted" });
       continue;
     }
 
     // Non-clearable keys: treat empty string as a no-op to prevent silent data loss
-    if (value === "") continue;
+    if (value === "") {
+      keyResults.push({ key, status: "skipped" });
+      continue;
+    }
 
     // Validate FALLBACK_ALERT_THRESHOLD must be a positive integer
     if (key === "FALLBACK_ALERT_THRESHOLD") {
@@ -69,16 +77,14 @@ router.post("/settings", async (req, res): Promise<void> => {
 
     const [existing] = await db.select().from(settingsTable).where(eq(settingsTable.key, key));
     if (existing) {
-      const [updated] = await db
+      await db
         .update(settingsTable)
         .set({ value })
-        .where(eq(settingsTable.key, key))
-        .returning();
-      if (updated) results.push(updated);
+        .where(eq(settingsTable.key, key));
     } else {
-      const [inserted] = await db.insert(settingsTable).values({ key, value }).returning();
-      if (inserted) results.push(inserted);
+      await db.insert(settingsTable).values({ key, value });
     }
+    keyResults.push({ key, status: "saved" });
   }
 
   const allSettings = await db.select().from(settingsTable);
@@ -86,7 +92,7 @@ router.post("/settings", async (req, res): Promise<void> => {
     ...s,
     value: s.key.toLowerCase().includes("api_key") && s.value ? "***SET***" : s.value,
   }));
-  res.json(SaveSettingsResponse.parse(safeSettings));
+  res.json(SaveSettingsResponse.parse({ settings: safeSettings, results: keyResults }));
 });
 
 export default router;
