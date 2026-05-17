@@ -6,6 +6,7 @@ export interface SpikeEmailOptions {
   providers: Array<{ provider: string; count: number }>;
   threshold: number;
   settingsUrl: string;
+  smtpSettings?: Map<string, string>;
 }
 
 export type EmailSender = (opts: SpikeEmailOptions) => Promise<void>;
@@ -61,12 +62,22 @@ function buildEmailBody(opts: SpikeEmailOptions): { subject: string; text: strin
   return { subject, text, html };
 }
 
-function getSmtpTransport(): { transporter: nodemailer.Transporter; from: string } | null {
-  const host = process.env.SMTP_HOST;
-  const port = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 587;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  const from = process.env.SMTP_FROM ?? user ?? "noreply@bridgeai.local";
+function resolveSmtpValue(
+  envKey: string,
+  dbSettings: Map<string, string> | undefined
+): string | undefined {
+  return process.env[envKey] ?? dbSettings?.get(envKey) ?? undefined;
+}
+
+function getSmtpTransport(
+  smtpSettings?: Map<string, string>
+): { transporter: nodemailer.Transporter; from: string } | null {
+  const host = resolveSmtpValue("SMTP_HOST", smtpSettings);
+  const portStr = resolveSmtpValue("SMTP_PORT", smtpSettings);
+  const port = portStr ? parseInt(portStr, 10) : 587;
+  const user = resolveSmtpValue("SMTP_USER", smtpSettings);
+  const pass = resolveSmtpValue("SMTP_PASS", smtpSettings);
+  const from = resolveSmtpValue("SMTP_FROM", smtpSettings) ?? user ?? "noreply@bridgeai.local";
 
   if (!host || !user || !pass) return null;
 
@@ -75,11 +86,11 @@ function getSmtpTransport(): { transporter: nodemailer.Transporter; from: string
 }
 
 export async function sendSpikeAlertEmail(opts: SpikeEmailOptions): Promise<void> {
-  const smtp = getSmtpTransport();
+  const smtp = getSmtpTransport(opts.smtpSettings);
 
   if (!smtp) {
     logger.warn(
-      { missingVars: ["SMTP_HOST", "SMTP_USER", "SMTP_PASS"].filter((v) => !process.env[v]) },
+      { missingVars: ["SMTP_HOST", "SMTP_USER", "SMTP_PASS"].filter((v) => !process.env[v] && !opts.smtpSettings?.get(v)) },
       "Spike alert email skipped: SMTP credentials not configured"
     );
     return;
@@ -100,12 +111,19 @@ export interface TestEmailResult {
   reason?: string;
 }
 
-export async function sendTestEmail(to: string, settingsUrl: string): Promise<TestEmailResult> {
-  const smtp = getSmtpTransport();
+export async function sendTestEmail(
+  to: string,
+  settingsUrl: string,
+  smtpSettings?: Map<string, string>
+): Promise<TestEmailResult> {
+  const smtp = getSmtpTransport(smtpSettings);
 
   if (!smtp) {
+    const missingVars = ["SMTP_HOST", "SMTP_USER", "SMTP_PASS"].filter(
+      (v) => !process.env[v] && !smtpSettings?.get(v)
+    );
     logger.info(
-      { to, missingVars: ["SMTP_HOST", "SMTP_USER", "SMTP_PASS"].filter((v) => !process.env[v]) },
+      { to, missingVars },
       "Test email skipped: SMTP not configured"
     );
     return { sent: false, reason: "SMTP not configured" };

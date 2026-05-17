@@ -137,7 +137,7 @@ router.get("/stats", async (req, res): Promise<void> => {
     .select({ key: settingsTable.key, value: settingsTable.value })
     .from(settingsTable)
     .where(
-      sql`${settingsTable.key} IN ('FALLBACK_ALERT_THRESHOLD', 'FALLBACK_ALERT_ENABLED', 'NOTIFICATION_WEBHOOK_URL', 'NOTIFICATION_EMAIL')`
+      sql`${settingsTable.key} IN ('FALLBACK_ALERT_THRESHOLD', 'FALLBACK_ALERT_ENABLED', 'NOTIFICATION_WEBHOOK_URL', 'NOTIFICATION_EMAIL', 'SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM')`
     );
 
   const alertSettingsMap = new Map(alertSettings.map((s) => [s.key, s.value]));
@@ -172,6 +172,7 @@ router.get("/stats", async (req, res): Promise<void> => {
       webhookUrl,
       notificationEmail,
       settingsUrl,
+      smtpSettings: alertSettingsMap,
     });
   }
 
@@ -222,7 +223,7 @@ router.post("/stats/test-notification", async (req, res): Promise<void> => {
     .select({ key: settingsTable.key, value: settingsTable.value })
     .from(settingsTable)
     .where(
-      sql`${settingsTable.key} IN ('NOTIFICATION_WEBHOOK_URL', 'NOTIFICATION_EMAIL')`
+      sql`${settingsTable.key} IN ('NOTIFICATION_WEBHOOK_URL', 'NOTIFICATION_EMAIL', 'SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM')`
     );
 
   const settingsMap = new Map(notificationSettings.map((s) => [s.key, s.value]));
@@ -252,7 +253,7 @@ router.post("/stats/test-notification", async (req, res): Promise<void> => {
   }
 
   if (email) {
-    const result = await sendTestEmail(email, settingsUrl);
+    const result = await sendTestEmail(email, settingsUrl, settingsMap);
     emailSent = result.sent;
     emailReason = result.reason;
   }

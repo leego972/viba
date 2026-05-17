@@ -111,17 +111,21 @@ const PROVIDERS: ProviderConfig[] = [
   },
 ];
 
+const SMTP_KEYS = ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "SMTP_FROM"] as const;
+
 const ALERT_KEYS = ["FALLBACK_ALERT_ENABLED", "FALLBACK_ALERT_THRESHOLD", "NOTIFICATION_WEBHOOK_URL", "NOTIFICATION_EMAIL"] as const;
 
 const CLEARABLE_NOTIFICATION_KEYS = [
   "NOTIFICATION_WEBHOOK_URL",
   "NOTIFICATION_EMAIL",
+  ...SMTP_KEYS,
   ...PROVIDERS.map((p) => p.key),
 ];
 
 const ALL_SETTING_KEYS = [
   ...PROVIDERS.flatMap((p) => (p.modelKey ? [p.key, p.modelKey] : [p.key])),
   ...ALERT_KEYS,
+  ...SMTP_KEYS,
 ];
 
 type KeyState = Record<string, string>;
@@ -301,7 +305,7 @@ export default function Settings() {
       onSuccess: (data) => {
         if (data.emailSent === false) {
           const hint = data.message.includes("SMTP not configured")
-            ? " Configure SMTP_HOST, SMTP_USER, and SMTP_PASS to enable real email delivery."
+            ? " Configure SMTP settings in the Email (SMTP) section below to enable real email delivery."
             : "";
           toast({
             title: "Test sent — email not delivered",
@@ -317,6 +321,20 @@ export default function Settings() {
         toast({ title: "Test failed", description: message, variant: "destructive" });
       },
     });
+  };
+
+  const smtpHost = values["SMTP_HOST"] || "";
+  const smtpPort = values["SMTP_PORT"] || "";
+  const smtpUser = values["SMTP_USER"] || "";
+  const smtpPass = values["SMTP_PASS"] || "";
+  const smtpFrom = values["SMTP_FROM"] || "";
+
+  const savedSmtpHost = settings ? (settings.find((s) => s.key === "SMTP_HOST")?.value ?? "") : "";
+  const smtpIsConfigured = savedSmtpHost !== "";
+
+  const handleSmtpClear = (key: string) => {
+    setValues((prev) => ({ ...prev, [key]: "" }));
+    setClearedKeys((prev) => new Set(prev).add(key));
   };
 
   return (
@@ -507,8 +525,110 @@ export default function Settings() {
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Receive spike alert emails at this address. Leave blank to disable email notifications.
-                  Requires SMTP configuration (SMTP_HOST, SMTP_USER, SMTP_PASS).
+                  Configure SMTP credentials below to enable real email delivery.
                 </p>
+              </div>
+
+              <div className="space-y-3 border-t pt-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Email (SMTP)</p>
+                  {smtpIsConfigured && (
+                    <Badge variant="outline" className="text-emerald-400 border-emerald-500/40 bg-emerald-500/10 text-[10px] px-1.5">
+                      <CheckCircle2 className="h-3 w-3 mr-1" />Configured
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  SMTP credentials for sending real alert emails. If not set here, server environment variables are used as a fallback.
+                </p>
+                <div className={`space-y-3 transition-opacity ${alertEnabled ? "" : "opacity-40 pointer-events-none"}`}>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="sm:col-span-2 space-y-1.5">
+                      <Label htmlFor="smtp-host" className="text-xs">SMTP Host</Label>
+                      <Input
+                        id="smtp-host"
+                        name="SMTP_HOST"
+                        type="text"
+                        placeholder="smtp.example.com"
+                        value={smtpHost}
+                        onChange={handleKeyChange}
+                        disabled={!alertEnabled}
+                        className="text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="smtp-port" className="text-xs">Port</Label>
+                      <Input
+                        id="smtp-port"
+                        name="SMTP_PORT"
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="587"
+                        value={smtpPort}
+                        onChange={handleKeyChange}
+                        disabled={!alertEnabled}
+                        className="text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="smtp-user" className="text-xs">Username</Label>
+                      <Input
+                        id="smtp-user"
+                        name="SMTP_USER"
+                        type="text"
+                        placeholder="user@example.com"
+                        value={smtpUser}
+                        onChange={handleKeyChange}
+                        disabled={!alertEnabled}
+                        className="text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="smtp-pass" className="text-xs">Password</Label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id="smtp-pass"
+                          name="SMTP_PASS"
+                          type="password"
+                          placeholder={clearedKeys.has("SMTP_PASS") ? "Will be cleared on save" : "••••••••"}
+                          value={smtpPass}
+                          onChange={handleKeyChange}
+                          disabled={!alertEnabled}
+                          className="text-sm flex-1"
+                        />
+                        {(smtpPass === "***SET***" || clearedKeys.has("SMTP_PASS")) && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleSmtpClear("SMTP_PASS")}
+                            disabled={clearedKeys.has("SMTP_PASS")}
+                            title="Remove saved password"
+                            className="shrink-0 text-muted-foreground hover:text-destructive"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="smtp-from" className="text-xs">From address <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                    <Input
+                      id="smtp-from"
+                      name="SMTP_FROM"
+                      type="email"
+                      placeholder="noreply@example.com"
+                      value={smtpFrom}
+                      onChange={handleKeyChange}
+                      disabled={!alertEnabled}
+                      className="text-sm"
+                    />
+                    <p className="text-xs text-muted-foreground">Defaults to the username if left blank.</p>
+                  </div>
+                </div>
               </div>
             </div>
           </CardContent>
