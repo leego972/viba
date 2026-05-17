@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import request from "supertest";
 import app from "../app";
-import { resetAllCircuits, runAdapterWithRetry } from "../lib/adapterRetry";
+import { resetAllCircuits, runAdapterWithRetry, loadCircuitStateFromDb } from "../lib/adapterRetry";
 import type { AgentAdapter, AgentTaskInput, AgentTaskResult } from "../lib/adapters/interface";
 
 vi.mock("@workspace/db", () => ({
@@ -77,10 +77,13 @@ beforeEach(() => {
 });
 
 describe("GET /api/circuit-status", () => {
-  it("returns 200 with an empty array when no provider has ever failed", async () => {
+  it("returns 200 with the correct response shape and an empty entries array when no provider has ever failed", async () => {
     const res = await request(app).get("/api/circuit-status").expect(200);
-    expect(Array.isArray(res.body)).toBe(true);
-    expect(res.body).toEqual([]);
+    expect(res.body).toHaveProperty("entries");
+    expect(res.body).toHaveProperty("restoredCount");
+    expect(Array.isArray(res.body.entries)).toBe(true);
+    expect(res.body.entries).toEqual([]);
+    expect(typeof res.body.restoredCount).toBe("number");
   });
 
   it("returns open state with correct fields after enough consecutive failures", async () => {
@@ -88,10 +91,10 @@ describe("GET /api/circuit-status", () => {
 
     const res = await request(app).get("/api/circuit-status").expect(200);
 
-    expect(Array.isArray(res.body)).toBe(true);
-    expect(res.body).toHaveLength(1);
+    expect(Array.isArray(res.body.entries)).toBe(true);
+    expect(res.body.entries).toHaveLength(1);
 
-    const entry = res.body[0];
+    const entry = res.body.entries[0];
     expect(entry.provider).toBe("openai");
     expect(entry.state).toBe("open");
     expect(entry.consecutiveFailures).toBe(CIRCUIT_OPEN_THRESHOLD);
@@ -109,8 +112,8 @@ describe("GET /api/circuit-status", () => {
 
       const res = await request(app).get("/api/circuit-status").expect(200);
 
-      expect(res.body).toHaveLength(1);
-      const entry = res.body[0];
+      expect(res.body.entries).toHaveLength(1);
+      const entry = res.body.entries[0];
       expect(entry.provider).toBe("anthropic");
       expect(entry.state).toBe("half-open");
       expect(entry.msUntilReset).toBe(0);
@@ -137,8 +140,8 @@ describe("GET /api/circuit-status", () => {
 
     const res = await request(app).get("/api/circuit-status").expect(200);
 
-    expect(res.body).toHaveLength(1);
-    const entry = res.body[0];
+    expect(res.body.entries).toHaveLength(1);
+    const entry = res.body.entries[0];
     expect(entry.provider).toBe("google");
     expect(entry.state).toBe("closed");
     expect(entry.consecutiveFailures).toBe(failuresBelowThreshold);
@@ -152,13 +155,35 @@ describe("GET /api/circuit-status", () => {
 
     const res = await request(app).get("/api/circuit-status").expect(200);
 
-    expect(res.body).toHaveLength(2);
-    const providers = res.body.map((e: { provider: string }) => e.provider).sort();
+    expect(res.body.entries).toHaveLength(2);
+    const providers = res.body.entries.map((e: { provider: string }) => e.provider).sort();
     expect(providers).toContain("openai");
     expect(providers).toContain("anthropic");
-    res.body.forEach((entry: { state: string }) => {
+    res.body.entries.forEach((entry: { state: string }) => {
       expect(entry.state).toBe("open");
     });
+  });
+
+  it("returns null lastLoadedAt before loadCircuitStateFromDb has run (clean state)", async () => {
+    // resetAllCircuits (called in beforeEach) now also clears startupLoadInfo
+    const res = await request(app).get("/api/circuit-status").expect(200);
+    expect(res.body.lastLoadedAt).toBeNull();
+    expect(res.body.restoredCount).toBe(0);
+  });
+
+  it("returns non-null lastLoadedAt and correct restoredCount after a successful loadCircuitStateFromDb call", async () => {
+    const { db: mockDb } = await import("@workspace/db");
+    // Override from() to resolve with an empty rows array (simulates successful but empty DB load)
+    vi.mocked(mockDb.select).mockReturnValueOnce({
+      from: vi.fn().mockResolvedValue([]),
+    } as any);
+
+    await loadCircuitStateFromDb();
+
+    const res = await request(app).get("/api/circuit-status").expect(200);
+    expect(typeof res.body.lastLoadedAt).toBe("number");
+    expect(res.body.lastLoadedAt).toBeGreaterThan(0);
+    expect(res.body.restoredCount).toBe(0);
   });
 });
 
@@ -179,7 +204,7 @@ describe("POST /api/circuit-status/:provider/reset", () => {
     await request(app).post("/api/circuit-status/openai/reset").expect(200);
 
     const statusRes = await request(app).get("/api/circuit-status").expect(200);
-    expect(statusRes.body.find((e: { provider: string }) => e.provider === "openai")).toBeUndefined();
+    expect(statusRes.body.entries.find((e: { provider: string }) => e.provider === "openai")).toBeUndefined();
   });
 
   it("only removes the targeted provider, leaving others intact", async () => {
@@ -189,8 +214,8 @@ describe("POST /api/circuit-status/:provider/reset", () => {
     await request(app).post("/api/circuit-status/openai/reset").expect(200);
 
     const statusRes = await request(app).get("/api/circuit-status").expect(200);
-    expect(statusRes.body.find((e: { provider: string }) => e.provider === "openai")).toBeUndefined();
-    const remaining = statusRes.body.find((e: { provider: string }) => e.provider === "anthropic");
+    expect(statusRes.body.entries.find((e: { provider: string }) => e.provider === "openai")).toBeUndefined();
+    const remaining = statusRes.body.entries.find((e: { provider: string }) => e.provider === "anthropic");
     expect(remaining).toBeDefined();
     expect(remaining.state).toBe("open");
   });

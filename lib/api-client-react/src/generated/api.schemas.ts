@@ -120,6 +120,17 @@ export interface CircuitBreakerEntry {
   timeoutMs: number;
 }
 
+export interface CircuitStatusResponse {
+  entries: CircuitBreakerEntry[];
+  /**
+   * Unix ms timestamp when circuit state was last loaded from DB at startup, or null if loadCircuitStateFromDb has not run yet
+   * @nullable
+   */
+  lastLoadedAt: number | null;
+  /** Number of circuit entries restored from DB during the last startup load (0 if DB was empty or load has not run) */
+  restoredCount: number;
+}
+
 export interface ErrorResponse {
   error: string;
 }

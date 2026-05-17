@@ -23,7 +23,7 @@ import type {
   AuditLog,
   BannerDismissal,
   BridgeStats,
-  CircuitBreakerEntry,
+  CircuitStatusResponse,
   CreateSessionBody,
   DismissBannerBody,
   ErrorResponse,
@@ -1891,7 +1891,7 @@ export function useGetStats<
 }
 
 /**
- * Returns the current open/half-open/closed state for every provider tracked by the circuit breaker
+ * Returns the current open/half-open/closed state for every provider tracked by the circuit breaker, along with startup DB load metadata
  * @summary Get per-provider circuit breaker status
  */
 export const getGetCircuitStatusUrl = () => {
@@ -1900,8 +1900,8 @@ export const getGetCircuitStatusUrl = () => {
 
 export const getCircuitStatus = async (
   options?: RequestInit,
-): Promise<CircuitBreakerEntry[]> => {
-  return customFetch<CircuitBreakerEntry[]>(getGetCircuitStatusUrl(), {
+): Promise<CircuitStatusResponse> => {
+  return customFetch<CircuitStatusResponse>(getGetCircuitStatusUrl(), {
     ...options,
     method: "GET",
   });

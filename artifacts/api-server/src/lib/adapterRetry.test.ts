@@ -422,8 +422,8 @@ describe("loadCircuitStateFromDb", () => {
       from: vi.fn().mockRejectedValue(new Error("DB connection refused")),
     } as any);
 
-    // Should not throw
-    await expect(loadCircuitStateFromDb()).resolves.toBeUndefined();
+    // Should not throw; returns 0 on DB error
+    await expect(loadCircuitStateFromDb()).resolves.toBe(0);
     expect(isCircuitOpen("openai")).toBe(false);
   });
 });
