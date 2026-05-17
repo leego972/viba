@@ -124,27 +124,40 @@ describe("computeRecentSpike", () => {
 
 describe("buildTestNotificationMessage", () => {
   it("reports webhook delivered when webhook was sent and no email", () => {
-    expect(buildTestNotificationMessage(true, null)).toBe("Webhook delivered.");
+    expect(buildTestNotificationMessage(true, null, false)).toBe("Webhook delivered.");
   });
 
-  it("reports email queued when only email is configured", () => {
-    expect(buildTestNotificationMessage(false, "alerts@example.com")).toBe(
-      "email alert queued for alerts@example.com."
+  it("reports email sent when email was successfully delivered", () => {
+    expect(buildTestNotificationMessage(false, "alerts@example.com", true)).toBe(
+      "test email sent to alerts@example.com."
     );
   });
 
-  it("reports both channels when webhook and email are both configured", () => {
-    const msg = buildTestNotificationMessage(true, "alerts@example.com");
+  it("reports email not sent with reason when SMTP is not configured", () => {
+    const msg = buildTestNotificationMessage(false, "alerts@example.com", false, "SMTP not configured");
+    expect(msg).toContain("alerts@example.com");
+    expect(msg).toContain("SMTP not configured");
+    expect(msg).not.toContain("queued");
+  });
+
+  it("reports both channels when webhook delivered and email sent", () => {
+    const msg = buildTestNotificationMessage(true, "alerts@example.com", true);
     expect(msg).toContain("Webhook delivered");
-    expect(msg).toContain("email alert queued for alerts@example.com");
+    expect(msg).toContain("test email sent to alerts@example.com");
+  });
+
+  it("reports both channels when webhook delivered and email not sent", () => {
+    const msg = buildTestNotificationMessage(true, "alerts@example.com", false, "SMTP not configured");
+    expect(msg).toContain("Webhook delivered");
+    expect(msg).toContain("email not sent to alerts@example.com");
   });
 
   it("falls back to generic message when neither webhook nor email is active", () => {
-    expect(buildTestNotificationMessage(false, null)).toBe("Test notification sent.");
+    expect(buildTestNotificationMessage(false, null, false)).toBe("Test notification sent.");
   });
 
   it("uses the actual email address in the message", () => {
-    const msg = buildTestNotificationMessage(false, "ops@company.io");
+    const msg = buildTestNotificationMessage(false, "ops@company.io", false);
     expect(msg).toContain("ops@company.io");
   });
 });

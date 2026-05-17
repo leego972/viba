@@ -77,6 +77,8 @@ export interface BridgeStats {
 export interface TestNotificationResult {
   ok: boolean;
   message: string;
+  /** Whether a test email was actually delivered. False when SMTP is not configured or delivery failed. */
+  emailSent?: boolean;
 }
 
 export interface ResetCircuitResult {

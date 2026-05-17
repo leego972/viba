@@ -233,6 +233,11 @@ export default function Settings() {
     : "";
   const webhookUrlIsSaved = notificationWebhookUrl === savedWebhookUrl && !!notificationWebhookUrl;
 
+  const savedEmail = settings
+    ? (settings.find((s) => s.key === "NOTIFICATION_EMAIL")?.value ?? "")
+    : "";
+  const emailIsSaved = notificationEmail === savedEmail && !!notificationEmail;
+
   const handleAlertEnabledChange = (checked: boolean) => {
     setValues((prev) => ({ ...prev, FALLBACK_ALERT_ENABLED: checked ? "true" : "false" }));
   };
@@ -265,7 +270,18 @@ export default function Settings() {
   const handleTestNotification = () => {
     sendTestNotification.mutate(undefined, {
       onSuccess: (data) => {
-        toast({ title: "Test sent", description: data.message });
+        if (data.emailSent === false) {
+          const hint = data.message.includes("SMTP not configured")
+            ? " Configure SMTP_HOST, SMTP_USER, and SMTP_PASS to enable real email delivery."
+            : "";
+          toast({
+            title: "Test sent — email not delivered",
+            description: `${data.message}${hint}`,
+            variant: "destructive",
+          });
+        } else {
+          toast({ title: "Test sent", description: data.message });
+        }
       },
       onError: (err) => {
         const message = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Failed to send test notification.";
@@ -437,16 +453,32 @@ export default function Settings() {
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="notification-email">Email address</Label>
-                <Input
-                  id="notification-email"
-                  type="email"
-                  placeholder="alerts@example.com"
-                  value={notificationEmail}
-                  onChange={handleEmailChange}
-                  disabled={!alertEnabled}
-                />
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="notification-email"
+                    type="email"
+                    placeholder="alerts@example.com"
+                    value={notificationEmail}
+                    onChange={handleEmailChange}
+                    disabled={!alertEnabled}
+                    className="flex-1"
+                  />
+                  {notificationEmail && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleTestNotification}
+                      disabled={!alertEnabled || sendTestNotification.isPending || !emailIsSaved}
+                      title={!emailIsSaved ? "Save settings first to test this email" : undefined}
+                    >
+                      {sendTestNotification.isPending ? "Sending..." : "Send test"}
+                    </Button>
+                  )}
+                </div>
                 <p className="text-xs text-muted-foreground">
                   Receive spike alert emails at this address. Leave blank to disable email notifications.
+                  Requires SMTP configuration (SMTP_HOST, SMTP_USER, SMTP_PASS).
                 </p>
               </div>
             </div>

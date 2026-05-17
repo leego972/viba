@@ -481,7 +481,7 @@ paths:
       operationId: sendTestNotification
       tags: [stats]
       summary: Send a test spike notification
-      description: Posts a test payload to the configured webhook URL (and logs for email) so the user can verify the notification channel works.
+      description: Posts a test payload to the configured webhook URL and sends a real test email (when SMTP is configured) so the user can verify each notification channel works.
       responses:
         "200":
           description: Test notification result
@@ -815,6 +815,9 @@ components:
           type: boolean
         message:
           type: string
+        emailSent:
+          type: boolean
+          description: Whether a test email was actually delivered. False when SMTP is not configured or delivery failed.
       required:
         - ok
         - message

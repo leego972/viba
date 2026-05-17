@@ -543,12 +543,18 @@ export const SaveSettingsResponseItem = zod.object({
 export const SaveSettingsResponse = zod.array(SaveSettingsResponseItem);
 
 /**
- * Posts a test payload to the configured webhook URL (and logs for email) so the user can verify the notification channel works.
+ * Posts a test payload to the configured webhook URL and sends a real test email (when SMTP is configured) so the user can verify each notification channel works.
  * @summary Send a test spike notification
  */
 export const SendTestNotificationResponse = zod.object({
   ok: zod.boolean(),
   message: zod.string(),
+  emailSent: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Whether a test email was actually delivered. False when SMTP is not configured or delivery failed.",
+    ),
 });
 
 /**
