@@ -28,6 +28,10 @@ args = "simulation-banner-tests"
 task = "workflow.run"
 args = "circuit-breaker-tests"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "playwright-tests"
+
 [[workflows.workflow]]
 name = "spike-tests"
 author = "agent"
@@ -60,6 +64,17 @@ isValidation = true
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "pnpm --filter @workspace/api-server exec vitest run --reporter=verbose src/lib/circuitBreaker.test.ts src/lib/adapterRetry.test.ts"
+
+[[workflows.workflow]]
+name = "playwright-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd artifacts/bridge-ai && npx playwright test"
+
+[workflows.workflow.metadata]
+isValidation = true
 
 [agent]
 stack = "PNPM_WORKSPACE"
