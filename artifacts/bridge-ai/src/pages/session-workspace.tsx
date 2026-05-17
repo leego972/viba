@@ -44,6 +44,12 @@ import {
   SIMULATED_PREFIX,
   pruneStaleLocalStorageKeys,
 } from "@/lib/bannerLogic";
+import {
+  computeShowSpikeAlert,
+  computeUndismissedProviders,
+  readDismissedSpikeProviders,
+  writeDismissedSpikeProviders,
+} from "@/lib/spikeAlertLogic";
 
 const AGENT_COLORS: Record<string, string> = {
   "openai": "bg-green-500/10 text-green-400 border-green-500/20",
@@ -210,40 +216,23 @@ export default function SessionWorkspace() {
   const recentSpikeThreshold = stats?.recentSpikeThreshold ?? 5;
   const alertEnabled = stats?.alertEnabled ?? true;
   // Spike alert dismiss — sessionStorage so it resets on next page load
-  const spikeStorageKey = `bridge_spike_dismissed_${sessionId}`;
-  const [dismissedSpikeProviders, setDismissedSpikeProviders] = useState<string[]>(() => {
-    try {
-      const raw = sessionStorage.getItem(spikeStorageKey);
-      return raw ? (JSON.parse(raw) as string[]) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [dismissedSpikeProviders, setDismissedSpikeProviders] = useState<string[]>(() =>
+    readDismissedSpikeProviders(sessionId)
+  );
 
   // Reload dismissal state from sessionStorage if sessionId changes without remount
   useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem(spikeStorageKey);
-      setDismissedSpikeProviders(raw ? (JSON.parse(raw) as string[]) : []);
-    } catch {
-      setDismissedSpikeProviders([]);
-    }
-  }, [spikeStorageKey]);
+    setDismissedSpikeProviders(readDismissedSpikeProviders(sessionId));
+  }, [sessionId]);
 
   const dismissSpikeAlert = () => {
     setDismissedSpikeProviders(recentSpikeProviders);
-    try {
-      sessionStorage.setItem(spikeStorageKey, JSON.stringify(recentSpikeProviders));
-    } catch {
-      // Ignore
-    }
+    writeDismissedSpikeProviders(sessionId, recentSpikeProviders);
   };
 
   // Re-show if a new provider appears that wasn't dismissed
-  const undismissedSpikeProviders = recentSpikeProviders.filter(
-    p => !dismissedSpikeProviders.includes(p)
-  );
-  const showSpikeAlert = alertEnabled && undismissedSpikeProviders.length > 0;
+  const undismissedSpikeProviders = computeUndismissedProviders(recentSpikeProviders, dismissedSpikeProviders);
+  const showSpikeAlert = computeShowSpikeAlert(alertEnabled, recentSpikeProviders, dismissedSpikeProviders);
 
   // Browser notification when a spike is detected
   const prevSpikeRef = useRef<string[]>([]);
@@ -431,7 +420,7 @@ export default function SessionWorkspace() {
 
   return (
     <AppLayout>
-      <div className="flex flex-col h-[calc(100vh-8rem)] gap-4">
+      <div className="flex flex-col lg:h-[calc(100vh-8rem)] gap-4">
         {/* Spike alert */}
         {showSpikeAlert && (
           <div className="flex items-start gap-3 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm text-red-300 shrink-0">
@@ -483,11 +472,11 @@ export default function SessionWorkspace() {
         )}
 
         {/* Header Bar */}
-        <div className="flex items-center justify-between bg-card border rounded-lg p-4 shadow-sm shrink-0">
-          <div className="flex items-center gap-4 flex-wrap">
-            <h1 className="font-bold text-lg truncate max-w-[300px]" title={session.goal}>{session.goal}</h1>
-            <Badge variant="outline" className="capitalize">{session.status}</Badge>
-            <Badge variant="secondary">{session.autonomyMode}</Badge>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 bg-card border rounded-lg p-4 shadow-sm shrink-0">
+          <div className="flex items-center gap-3 flex-wrap min-w-0 flex-1">
+            <h1 className="font-bold text-lg truncate max-w-[240px] sm:max-w-[300px]" title={session.goal}>{session.goal}</h1>
+            <Badge variant="outline" className="capitalize shrink-0">{session.status}</Badge>
+            <Badge variant="secondary" className="shrink-0">{session.autonomyMode}</Badge>
             {agents.length > 0 && (
               <div className="flex items-center gap-1.5">
                 {liveAgentCount > 0 && (
@@ -503,11 +492,11 @@ export default function SessionWorkspace() {
               </div>
             )}
             <div className="text-sm text-muted-foreground flex items-center gap-1">
-              <Clock className="w-4 h-4" />
+              <Clock className="w-4 h-4 shrink-0" />
               Est. Cost: ${session.estimatedCost?.toFixed(4) || "0.0000"}
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
             <Button size="sm" variant="ghost" onClick={handleExport} title="Download session transcript as Markdown">
               <Download className="w-4 h-4 mr-1.5" /> Export
             </Button>
@@ -546,7 +535,7 @@ export default function SessionWorkspace() {
         )}
 
         {/* 3 Column Layout */}
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 min-h-0">
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 min-h-0 overflow-auto lg:overflow-hidden">
 
           {/* Left: Info, Memory & Agents (3 cols) */}
           <div className="lg:col-span-3 flex flex-col gap-4 overflow-y-auto pr-1">
