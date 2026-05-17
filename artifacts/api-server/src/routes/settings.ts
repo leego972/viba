@@ -7,6 +7,11 @@ import { GetSettingsResponse, SaveSettingsBody, SaveSettingsResponse } from "@wo
 const CLEARABLE_NOTIFICATION_KEYS = [
   "NOTIFICATION_WEBHOOK_URL",
   "NOTIFICATION_EMAIL",
+  "SMTP_HOST",
+  "SMTP_PORT",
+  "SMTP_USER",
+  "SMTP_PASS",
+  "SMTP_FROM",
   "OPENAI_API_KEY",
   "ANTHROPIC_API_KEY",
   "GEMINI_API_KEY",
@@ -14,6 +19,8 @@ const CLEARABLE_NOTIFICATION_KEYS = [
   "REPLIT_API_KEY",
   "MANUS_API_KEY",
 ];
+
+const MASKED_KEYS = new Set(["SMTP_PASS"]);
 
 const router: IRouter = Router();
 
@@ -25,13 +32,18 @@ function serializeSetting(s: { id: number; key: string; value: string | null; cr
   };
 }
 
+function maskValue(key: string, value: string | null): string | null {
+  if (!value) return value;
+  if (key.toLowerCase().includes("api_key") || MASKED_KEYS.has(key)) return "***SET***";
+  return value;
+}
+
 // GET /settings
 router.get("/settings", async (_req, res): Promise<void> => {
   const settings = await db.select().from(settingsTable);
-  // Never return the actual value of sensitive keys (case-insensitive match)
   const safeSettings = settings.map((s) => serializeSetting({
     ...s,
-    value: s.key.toLowerCase().includes("api_key") && s.value ? "***SET***" : s.value,
+    value: maskValue(s.key, s.value),
   }));
   res.json(GetSettingsResponse.parse(safeSettings));
 });
@@ -90,7 +102,7 @@ router.post("/settings", async (req, res): Promise<void> => {
   const allSettings = await db.select().from(settingsTable);
   const safeSettings = allSettings.map((s) => serializeSetting({
     ...s,
-    value: s.key.toLowerCase().includes("api_key") && s.value ? "***SET***" : s.value,
+    value: maskValue(s.key, s.value),
   }));
   res.json(SaveSettingsResponse.parse({ settings: safeSettings, results: keyResults }));
 });

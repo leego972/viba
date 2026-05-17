@@ -8,6 +8,7 @@ export interface SpikeNotifyOptions {
   webhookUrl?: string | null;
   notificationEmail?: string | null;
   settingsUrl: string;
+  smtpSettings?: Map<string, string>;
   _emailSender?: EmailSender;
 }
 
@@ -135,7 +136,7 @@ export async function sendTestWebhookNotification(
 }
 
 export async function sendSpikeNotifications(opts: SpikeNotifyOptions): Promise<void> {
-  const { providers, threshold, webhookUrl, notificationEmail, settingsUrl, _emailSender = sendSpikeAlertEmail } = opts;
+  const { providers, threshold, webhookUrl, notificationEmail, settingsUrl, smtpSettings, _emailSender = sendSpikeAlertEmail } = opts;
 
   const fresh = providers.filter((p) => isCooledDown(p.provider));
   if (fresh.length === 0) return;
@@ -160,6 +161,7 @@ export async function sendSpikeNotifications(opts: SpikeNotifyOptions): Promise<
       providers: fresh,
       threshold,
       settingsUrl,
+      smtpSettings,
     });
     logger.info(
       { email: notificationEmail, providers: fresh.map((p) => p.provider) },
