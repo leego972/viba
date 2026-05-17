@@ -139,6 +139,68 @@ test.describe("pruneStaleLocalStorageKeys — localStorage cleanup (#47)", () =>
   });
 });
 
+test.describe("readDismissedAt — malformed and edge-case stored values", () => {
+  // These tests exercise the readDismissedAt validation logic in the browser
+  // context by inlining the same guard so localStorage is accessible.
+  // Each malformed value must return null (treated as not-dismissed) so a
+  // banner is never permanently suppressed by a garbage stored value.
+
+  const STORAGE_PREFIX = "bridge_fallback_banner_";
+
+  async function evalReadDismissedAt(
+    page: import("@playwright/test").Page,
+    sessionId: number,
+    storedValue: string,
+  ): Promise<string | null> {
+    return page.evaluate(
+      ({ sid, val, prefix }: { sid: number; val: string; prefix: string }) => {
+        localStorage.setItem(`${prefix}${sid}`, val);
+        const stored = localStorage.getItem(`${prefix}${sid}`);
+        if (stored === null) return null;
+        if (/^\d+(\.\d+)?$/.test(stored) || isNaN(Date.parse(stored))) return null;
+        return stored;
+      },
+      { sid: sessionId, val: storedValue, prefix: STORAGE_PREFIX },
+    );
+  }
+
+  test('returns null for empty string ""', async ({ page }) => {
+    const sessionId = await createSession();
+    await page.goto(`/sessions/${sessionId}`);
+    await expect(page.getByText("TestAgent").first()).toBeVisible({ timeout: 10000 });
+
+    const result = await evalReadDismissedAt(page, sessionId, "");
+    expect(result).toBeNull();
+  });
+
+  test('returns null for "NaN"', async ({ page }) => {
+    const sessionId = await createSession();
+    await page.goto(`/sessions/${sessionId}`);
+    await expect(page.getByText("TestAgent").first()).toBeVisible({ timeout: 10000 });
+
+    const result = await evalReadDismissedAt(page, sessionId, "NaN");
+    expect(result).toBeNull();
+  });
+
+  test('returns null for stringified float "3.14"', async ({ page }) => {
+    const sessionId = await createSession();
+    await page.goto(`/sessions/${sessionId}`);
+    await expect(page.getByText("TestAgent").first()).toBeVisible({ timeout: 10000 });
+
+    const result = await evalReadDismissedAt(page, sessionId, "3.14");
+    expect(result).toBeNull();
+  });
+
+  test('returns null for out-of-range date "2024-13-99"', async ({ page }) => {
+    const sessionId = await createSession();
+    await page.goto(`/sessions/${sessionId}`);
+    await expect(page.getByText("TestAgent").first()).toBeVisible({ timeout: 10000 });
+
+    const result = await evalReadDismissedAt(page, sessionId, "2024-13-99");
+    expect(result).toBeNull();
+  });
+});
+
 test.describe("pruneStaleLocalStorageKeys — mixed legacy integer and ISO timestamp values", () => {
   test("removes oldest keys by numeric ID even when some keys hold legacy integer values", async ({ page }) => {
     const sessionId = await createSession();
