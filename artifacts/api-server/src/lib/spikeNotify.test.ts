@@ -104,9 +104,59 @@ describe("sendSpikeNotifications", () => {
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    it("does nothing when no webhookUrl is configured", async () => {
-      await sendSpikeNotifications({ ...BASE_OPTS, webhookUrl: null });
+    it("does nothing when neither webhookUrl nor notificationEmail is configured", async () => {
+      const emailSenderMock = vi.fn().mockResolvedValue(undefined);
+      await sendSpikeNotifications({ ...BASE_OPTS, webhookUrl: null, notificationEmail: null, _emailSender: emailSenderMock });
       expect(fetchMock).not.toHaveBeenCalled();
+      expect(emailSenderMock).not.toHaveBeenCalled();
+    });
+
+    it("calls email sender and skips fetch when only notificationEmail is configured", async () => {
+      const emailSenderMock = vi.fn().mockResolvedValue(undefined);
+      await sendSpikeNotifications({
+        ...BASE_OPTS,
+        webhookUrl: null,
+        notificationEmail: "ops@example.com",
+        _emailSender: emailSenderMock,
+      });
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(emailSenderMock).toHaveBeenCalledOnce();
+      expect(emailSenderMock).toHaveBeenCalledWith(
+        expect.objectContaining({ to: "ops@example.com" })
+      );
+    });
+
+    it("sends webhook and calls email sender when both channels are configured", async () => {
+      const emailSenderMock = vi.fn().mockResolvedValue(undefined);
+      await sendSpikeNotifications({ ...BASE_OPTS, notificationEmail: "ops@example.com", _emailSender: emailSenderMock });
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(emailSenderMock).toHaveBeenCalledOnce();
+      expect(emailSenderMock).toHaveBeenCalledWith(
+        expect.objectContaining({ to: "ops@example.com" })
+      );
+    });
+
+    it("does not mark cooldown when only webhook is configured but rejected by safety check", async () => {
+      const emailSenderMock = vi.fn().mockResolvedValue(undefined);
+      await sendSpikeNotifications({
+        ...BASE_OPTS,
+        webhookUrl: "http://localhost/bad",
+        notificationEmail: null,
+        _emailSender: emailSenderMock,
+      });
+      fetchMock.mockClear();
+
+      await sendSpikeNotifications({
+        ...BASE_OPTS,
+        webhookUrl: "http://localhost/bad",
+        notificationEmail: null,
+        _emailSender: emailSenderMock,
+      });
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(emailSenderMock).not.toHaveBeenCalled();
     });
   });
 

@@ -126,7 +126,7 @@ router.get("/stats", async (req, res): Promise<void> => {
     .select({ key: settingsTable.key, value: settingsTable.value })
     .from(settingsTable)
     .where(
-      sql`${settingsTable.key} IN ('FALLBACK_ALERT_THRESHOLD', 'FALLBACK_ALERT_ENABLED', 'NOTIFICATION_WEBHOOK_URL')`
+      sql`${settingsTable.key} IN ('FALLBACK_ALERT_THRESHOLD', 'FALLBACK_ALERT_ENABLED', 'NOTIFICATION_WEBHOOK_URL', 'NOTIFICATION_EMAIL')`
     );
 
   const alertSettingsMap = new Map(alertSettings.map((s) => [s.key, s.value]));
@@ -151,6 +151,7 @@ router.get("/stats", async (req, res): Promise<void> => {
 
   if (recentSpikeProviders.length > 0) {
     const webhookUrl = alertSettingsMap.get("NOTIFICATION_WEBHOOK_URL") ?? null;
+    const notificationEmail = alertSettingsMap.get("NOTIFICATION_EMAIL") ?? null;
     const spikeDetails = recentByProvider.filter((p) =>
       recentSpikeProviders.includes(p.provider)
     );
@@ -159,6 +160,7 @@ router.get("/stats", async (req, res): Promise<void> => {
       providers: spikeDetails,
       threshold: alertThreshold,
       webhookUrl,
+      notificationEmail,
       settingsUrl,
     });
   }
@@ -186,6 +188,13 @@ router.get("/stats", async (req, res): Promise<void> => {
   });
 });
 
+export function buildTestNotificationMessage(webhookSent: boolean, email: string | null): string {
+  const parts: string[] = [];
+  if (webhookSent) parts.push("Webhook delivered");
+  if (email) parts.push(`email alert queued for ${email}`);
+  return parts.length > 0 ? parts.join("; ") + "." : "Test notification sent.";
+}
+
 router.post("/stats/test-notification", async (req, res): Promise<void> => {
   const notificationSettings = await db
     .select({ key: settingsTable.key, value: settingsTable.value })
@@ -206,10 +215,12 @@ router.post("/stats/test-notification", async (req, res): Promise<void> => {
   const settingsUrl = `${req.protocol}://${req.get("host")}/settings`;
 
   let webhookError: string | null = null;
+  let webhookSent = false;
 
   if (webhookUrl) {
     try {
       await sendTestWebhookNotification(webhookUrl, settingsUrl);
+      webhookSent = true;
     } catch (err) {
       webhookError = err instanceof Error ? err.message : "Unknown error";
       req.log.warn({ url: webhookUrl, err }, "Test webhook notification failed");
@@ -225,7 +236,7 @@ router.post("/stats/test-notification", async (req, res): Promise<void> => {
     return;
   }
 
-  res.json({ ok: true, message: "Test notification sent successfully." });
+  res.json({ ok: true, message: buildTestNotificationMessage(webhookSent, email) });
 });
 
 export default router;

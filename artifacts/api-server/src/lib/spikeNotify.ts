@@ -1,11 +1,14 @@
 import { logger } from "./logger";
 import dns from "node:dns/promises";
+import { sendSpikeAlertEmail, type EmailSender } from "./emailNotify";
 
 export interface SpikeNotifyOptions {
   providers: Array<{ provider: string; count: number }>;
   threshold: number;
   webhookUrl?: string | null;
+  notificationEmail?: string | null;
   settingsUrl: string;
+  _emailSender?: EmailSender;
 }
 
 const COOLDOWN_MS = 60 * 60 * 1000;
@@ -132,22 +135,38 @@ export async function sendTestWebhookNotification(
 }
 
 export async function sendSpikeNotifications(opts: SpikeNotifyOptions): Promise<void> {
-  const { providers, threshold, webhookUrl, settingsUrl } = opts;
+  const { providers, threshold, webhookUrl, notificationEmail, settingsUrl, _emailSender = sendSpikeAlertEmail } = opts;
 
   const fresh = providers.filter((p) => isCooledDown(p.provider));
   if (fresh.length === 0) return;
 
-  if (!webhookUrl) return;
+  if (!webhookUrl && !notificationEmail) return;
 
-  try {
-    await assertSafeUrl(webhookUrl);
-  } catch (err) {
-    logger.warn({ url: webhookUrl, err }, "Spike webhook URL rejected by safety check");
-    return;
+  let dispatched = false;
+
+  if (webhookUrl) {
+    try {
+      await assertSafeUrl(webhookUrl);
+      await sendWebhook(webhookUrl, fresh, threshold, settingsUrl);
+      dispatched = true;
+    } catch (err) {
+      logger.warn({ url: webhookUrl, err }, "Spike webhook URL rejected by safety check");
+    }
   }
 
-  markNotified(fresh.map((p) => p.provider));
-  await sendWebhook(webhookUrl, fresh, threshold, settingsUrl);
+  if (notificationEmail) {
+    await _emailSender({
+      to: notificationEmail,
+      providers: fresh,
+      threshold,
+      settingsUrl,
+    });
+    dispatched = true;
+  }
+
+  if (dispatched) {
+    markNotified(fresh.map((p) => p.provider));
+  }
 }
 
 async function sendWebhook(
