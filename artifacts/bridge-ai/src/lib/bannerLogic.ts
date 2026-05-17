@@ -61,12 +61,15 @@ export function pruneStaleLocalStorageKeys(limit = MAX_BANNER_STORAGE_KEYS): voi
  * migration) are treated as "not dismissed". A bare /^\d+$/ string must be
  * rejected explicitly because some V8 builds accept integers like "42" via
  * Date.parse, interpreting them as years or milliseconds-since-epoch.
+ * The same applies to stringified floats like "3.14" — Chromium's V8 also
+ * accepts those via Date.parse, so any numeric-looking string is rejected
+ * before the Date.parse call.
  */
 export function readDismissedAt(sessionId: number): string | null {
   try {
     const stored = localStorage.getItem(`${BANNER_STORAGE_PREFIX}${sessionId}`);
     if (stored === null) return null;
-    if (/^\d+$/.test(stored) || isNaN(Date.parse(stored))) return null;
+    if (/^\d+(\.\d+)?$/.test(stored) || isNaN(Date.parse(stored))) return null;
     return stored;
   } catch {
     return null;
