@@ -615,4 +615,23 @@ router.put("/sessions/:id/banner-dismissal", async (req, res): Promise<void> => 
   res.json({ sessionId: id, dismissedAt: dismissedAt.toISOString() });
 });
 
+// DELETE /sessions/:id/banner-dismissal
+// Removes the dismissal record so the banner reappears (e.g. when new
+// simulated messages arrive). Returns 200 with { sessionId, dismissedAt: null }
+// whether or not a record existed (idempotent).
+router.delete("/sessions/:id/banner-dismissal", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id ?? "", 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid session id" });
+    return;
+  }
+  const [session] = await db.select({ id: sessionsTable.id }).from(sessionsTable).where(eq(sessionsTable.id, id));
+  if (!session) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+  await db.delete(bannerDismissalsTable).where(eq(bannerDismissalsTable.sessionId, id));
+  res.json({ sessionId: id, dismissedAt: null });
+});
+
 export default router;
