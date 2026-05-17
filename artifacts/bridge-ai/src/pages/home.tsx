@@ -39,14 +39,14 @@ export default function Home() {
                   BridgeAI is a powerful orchestration platform. Connect ChatGPT, Claude, Manus, Replit, Gemini, and Perplexity. Give them a project goal, assign roles, and watch them collaborate autonomously.
                 </p>
               </div>
-              <div className="space-x-4">
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                 <Link href="/dashboard">
-                  <Button size="lg" className="h-12 px-8 text-lg font-medium gap-2">
+                  <Button size="lg" className="w-full sm:w-auto h-12 px-8 text-lg font-medium gap-2">
                     Start a Bridge Session <ArrowRight className="h-5 w-5" />
                   </Button>
                 </Link>
                 <Link href="/settings">
-                  <Button variant="outline" size="lg" className="h-12 px-8 text-lg font-medium">
+                  <Button variant="outline" size="lg" className="w-full sm:w-auto h-12 px-8 text-lg font-medium">
                     Configure API Keys
                   </Button>
                 </Link>

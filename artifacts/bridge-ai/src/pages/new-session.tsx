@@ -185,8 +185,8 @@ export default function NewSession() {
                 {AVAILABLE_PROVIDERS.map(provider => {
                   const live = isLive(provider.id);
                   return (
-                    <div key={provider.id} className="flex items-center justify-between gap-4 p-2 rounded-md hover:bg-muted/50 transition-colors">
-                      <div className="flex items-center gap-3 min-w-0">
+                    <div key={provider.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 p-2 rounded-md hover:bg-muted/50 transition-colors">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
                         <Checkbox 
                           id={`agent-${provider.id}`} 
                           checked={selectedAgents[provider.id].selected}
@@ -211,7 +211,7 @@ export default function NewSession() {
                           value={selectedAgents[provider.id].role} 
                           onValueChange={(val) => handleRoleChange(provider.id, val)}
                         >
-                          <SelectTrigger className="w-[140px] h-8 text-xs flex-shrink-0">
+                          <SelectTrigger className="w-[130px] sm:w-[140px] h-8 text-xs flex-shrink-0">
                             <SelectValue placeholder="Select role" />
                           </SelectTrigger>
                           <SelectContent>

@@ -329,7 +329,7 @@ export default function Settings() {
                   return (
                     <div key={model} className="space-y-1">
                       <div className="flex items-center gap-3">
-                        <span className="text-xs font-mono w-44 truncate shrink-0">{model}</span>
+                        <span className="text-xs font-mono w-28 sm:w-44 truncate shrink-0">{model}</span>
                         <div className="flex-1 bg-muted rounded-full h-1.5 overflow-hidden">
                           <div
                             className="h-full bg-primary rounded-full transition-all"
@@ -340,7 +340,7 @@ export default function Settings() {
                           {count} msg{count !== 1 ? "s" : ""} ({pct}%)
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 pl-44 ml-0">
+                      <div className="flex items-center gap-2 pl-28 sm:pl-44 ml-0">
                         {liveCount > 0 && (
                           <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-emerald-500/40 text-emerald-400 bg-emerald-500/10">
                             {liveCount} live ({livePct}%)
@@ -386,12 +386,12 @@ export default function Settings() {
             </div>
             <div className={`space-y-1.5 transition-opacity ${alertEnabled ? "" : "opacity-40 pointer-events-none"}`}>
               <Label htmlFor="alert-threshold">Alert threshold (fallbacks per hour)</Label>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <Input
                   id="alert-threshold"
                   type="text"
                   inputMode="numeric"
-                  className={`w-24 ${thresholdError ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                  className={`w-24 shrink-0 ${thresholdError ? "border-red-500 focus-visible:ring-red-500" : ""}`}
                   value={alertThreshold}
                   onChange={handleAlertThresholdChange}
                   disabled={!alertEnabled}
