@@ -44,6 +44,12 @@ import {
   SIMULATED_PREFIX,
   pruneStaleLocalStorageKeys,
 } from "@/lib/bannerLogic";
+import {
+  computeShowSpikeAlert,
+  computeUndismissedProviders,
+  readDismissedSpikeProviders,
+  writeDismissedSpikeProviders,
+} from "@/lib/spikeAlertLogic";
 
 const AGENT_COLORS: Record<string, string> = {
   "openai": "bg-green-500/10 text-green-400 border-green-500/20",
@@ -210,40 +216,23 @@ export default function SessionWorkspace() {
   const recentSpikeThreshold = stats?.recentSpikeThreshold ?? 5;
   const alertEnabled = stats?.alertEnabled ?? true;
   // Spike alert dismiss — sessionStorage so it resets on next page load
-  const spikeStorageKey = `bridge_spike_dismissed_${sessionId}`;
-  const [dismissedSpikeProviders, setDismissedSpikeProviders] = useState<string[]>(() => {
-    try {
-      const raw = sessionStorage.getItem(spikeStorageKey);
-      return raw ? (JSON.parse(raw) as string[]) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [dismissedSpikeProviders, setDismissedSpikeProviders] = useState<string[]>(() =>
+    readDismissedSpikeProviders(sessionId)
+  );
 
   // Reload dismissal state from sessionStorage if sessionId changes without remount
   useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem(spikeStorageKey);
-      setDismissedSpikeProviders(raw ? (JSON.parse(raw) as string[]) : []);
-    } catch {
-      setDismissedSpikeProviders([]);
-    }
-  }, [spikeStorageKey]);
+    setDismissedSpikeProviders(readDismissedSpikeProviders(sessionId));
+  }, [sessionId]);
 
   const dismissSpikeAlert = () => {
     setDismissedSpikeProviders(recentSpikeProviders);
-    try {
-      sessionStorage.setItem(spikeStorageKey, JSON.stringify(recentSpikeProviders));
-    } catch {
-      // Ignore
-    }
+    writeDismissedSpikeProviders(sessionId, recentSpikeProviders);
   };
 
   // Re-show if a new provider appears that wasn't dismissed
-  const undismissedSpikeProviders = recentSpikeProviders.filter(
-    p => !dismissedSpikeProviders.includes(p)
-  );
-  const showSpikeAlert = alertEnabled && undismissedSpikeProviders.length > 0;
+  const undismissedSpikeProviders = computeUndismissedProviders(recentSpikeProviders, dismissedSpikeProviders);
+  const showSpikeAlert = computeShowSpikeAlert(alertEnabled, recentSpikeProviders, dismissedSpikeProviders);
 
   // Browser notification when a spike is detected
   const prevSpikeRef = useRef<string[]>([]);
