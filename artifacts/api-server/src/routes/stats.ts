@@ -27,6 +27,16 @@ export function resolveAlertSettings(settingsMap: Map<string, string>): {
   return { alertEnabled, alertThreshold };
 }
 
+export function resolveNotificationChannels(settingsMap: Map<string, string>): {
+  webhookUrl: string | null;
+  notificationEmail: string | null;
+} {
+  return {
+    webhookUrl: settingsMap.get("NOTIFICATION_WEBHOOK_URL") ?? null,
+    notificationEmail: settingsMap.get("NOTIFICATION_EMAIL") ?? null,
+  };
+}
+
 export function computeRecentSpike(
   recentByProvider: ProviderCount[],
   alertEnabled: boolean,
@@ -151,8 +161,7 @@ router.get("/stats", async (req, res): Promise<void> => {
   const recentSpikeProviders = computeRecentSpike(recentByProvider, alertEnabled, alertThreshold);
 
   if (recentSpikeProviders.length > 0) {
-    const webhookUrl = alertSettingsMap.get("NOTIFICATION_WEBHOOK_URL") ?? null;
-    const notificationEmail = alertSettingsMap.get("NOTIFICATION_EMAIL") ?? null;
+    const { webhookUrl, notificationEmail } = resolveNotificationChannels(alertSettingsMap);
     const spikeDetails = recentByProvider.filter((p) =>
       recentSpikeProviders.includes(p.provider)
     );

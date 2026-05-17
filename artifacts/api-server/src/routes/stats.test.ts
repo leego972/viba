@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveAlertSettings, computeRecentSpike, buildTestNotificationMessage } from "./stats";
+import { resolveAlertSettings, computeRecentSpike, buildTestNotificationMessage, resolveNotificationChannels } from "./stats";
 
 describe("resolveAlertSettings", () => {
   it("uses the default threshold when the setting is absent", () => {
@@ -119,6 +119,54 @@ describe("computeRecentSpike", () => {
       { provider: "openai", count: 100 },
     ];
     expect(computeRecentSpike(recentByProvider, false, 1)).toEqual([]);
+  });
+});
+
+describe("resolveNotificationChannels", () => {
+  it("returns null for both channels when the settings map is empty", () => {
+    const { webhookUrl, notificationEmail } = resolveNotificationChannels(new Map());
+    expect(webhookUrl).toBeNull();
+    expect(notificationEmail).toBeNull();
+  });
+
+  it("extracts NOTIFICATION_EMAIL from the settings map", () => {
+    const map = new Map([["NOTIFICATION_EMAIL", "alerts@example.com"]]);
+    const { notificationEmail } = resolveNotificationChannels(map);
+    expect(notificationEmail).toBe("alerts@example.com");
+  });
+
+  it("extracts NOTIFICATION_WEBHOOK_URL from the settings map", () => {
+    const map = new Map([["NOTIFICATION_WEBHOOK_URL", "https://hooks.example.com/spike"]]);
+    const { webhookUrl } = resolveNotificationChannels(map);
+    expect(webhookUrl).toBe("https://hooks.example.com/spike");
+  });
+
+  it("extracts both channels when both are present in the settings map", () => {
+    const map = new Map([
+      ["NOTIFICATION_EMAIL", "ops@company.io"],
+      ["NOTIFICATION_WEBHOOK_URL", "https://hooks.example.com/spike"],
+    ]);
+    const { webhookUrl, notificationEmail } = resolveNotificationChannels(map);
+    expect(webhookUrl).toBe("https://hooks.example.com/spike");
+    expect(notificationEmail).toBe("ops@company.io");
+  });
+
+  it("returns null for webhook when only email is configured", () => {
+    const map = new Map([["NOTIFICATION_EMAIL", "alerts@example.com"]]);
+    const { webhookUrl } = resolveNotificationChannels(map);
+    expect(webhookUrl).toBeNull();
+  });
+
+  it("returns null for email when only webhook is configured", () => {
+    const map = new Map([["NOTIFICATION_WEBHOOK_URL", "https://hooks.example.com/spike"]]);
+    const { notificationEmail } = resolveNotificationChannels(map);
+    expect(notificationEmail).toBeNull();
+  });
+
+  it("preserves the exact email string from settings without modification", () => {
+    const email = "Team.Alerts+spike@company.io";
+    const map = new Map([["NOTIFICATION_EMAIL", email]]);
+    expect(resolveNotificationChannels(map).notificationEmail).toBe(email);
   });
 });
 

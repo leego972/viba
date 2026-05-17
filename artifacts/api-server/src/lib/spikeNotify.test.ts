@@ -30,6 +30,7 @@ describe("sendSpikeNotifications", () => {
   let sendSpikeNotifications: (opts: SpikeNotifyOptions) => Promise<void>;
   let warnMock: ReturnType<typeof vi.fn>;
   let errorMock: ReturnType<typeof vi.fn>;
+  let infoMock: ReturnType<typeof vi.fn>;
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
@@ -41,6 +42,7 @@ describe("sendSpikeNotifications", () => {
     const { logger } = await import("./logger");
     warnMock = logger.warn as ReturnType<typeof vi.fn>;
     errorMock = logger.error as ReturnType<typeof vi.fn>;
+    infoMock = logger.info as ReturnType<typeof vi.fn>;
 
     fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
     vi.stubGlobal("fetch", fetchMock);
@@ -247,6 +249,89 @@ describe("sendSpikeNotifications", () => {
 
       await expect(sendSpikeNotifications(BASE_OPTS)).resolves.toBeUndefined();
       expect(errorMock).toHaveBeenCalled();
+    });
+  });
+
+  describe("email notification details", () => {
+    it("logs info with the recipient email address and provider list after email dispatch", async () => {
+      const emailSenderMock = vi.fn().mockResolvedValue(undefined);
+      await sendSpikeNotifications({
+        ...BASE_OPTS,
+        webhookUrl: null,
+        notificationEmail: "ops@example.com",
+        _emailSender: emailSenderMock,
+      });
+
+      expect(infoMock).toHaveBeenCalledWith(
+        expect.objectContaining({ email: "ops@example.com", providers: expect.arrayContaining(["openai"]) }),
+        expect.any(String)
+      );
+    });
+
+    it("includes all spiking providers in the info log when multiple providers trigger the alert", async () => {
+      const emailSenderMock = vi.fn().mockResolvedValue(undefined);
+      await sendSpikeNotifications({
+        providers: [
+          { provider: "openai", count: 12 },
+          { provider: "anthropic", count: 8 },
+        ],
+        threshold: 5,
+        webhookUrl: null,
+        notificationEmail: "alerts@company.io",
+        settingsUrl: SETTINGS_URL,
+        _emailSender: emailSenderMock,
+      });
+
+      expect(infoMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          email: "alerts@company.io",
+          providers: expect.arrayContaining(["openai", "anthropic"]),
+        }),
+        expect.any(String)
+      );
+    });
+
+    it("forwards the full provider payload (count + threshold + settingsUrl) to the email sender", async () => {
+      const emailSenderMock = vi.fn().mockResolvedValue(undefined);
+      await sendSpikeNotifications({
+        providers: [{ provider: "openai", count: 12 }],
+        threshold: 7,
+        webhookUrl: null,
+        notificationEmail: "ops@example.com",
+        settingsUrl: SETTINGS_URL,
+        _emailSender: emailSenderMock,
+      });
+
+      expect(emailSenderMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: "ops@example.com",
+          providers: expect.arrayContaining([
+            expect.objectContaining({ provider: "openai", count: 12 }),
+          ]),
+          threshold: 7,
+          settingsUrl: SETTINGS_URL,
+        })
+      );
+    });
+
+    it("does not log info for email when the provider is within the cooldown window", async () => {
+      const emailSenderMock = vi.fn().mockResolvedValue(undefined);
+      await sendSpikeNotifications({
+        ...BASE_OPTS,
+        webhookUrl: null,
+        notificationEmail: "ops@example.com",
+        _emailSender: emailSenderMock,
+      });
+      infoMock.mockClear();
+
+      await sendSpikeNotifications({
+        ...BASE_OPTS,
+        webhookUrl: null,
+        notificationEmail: "ops@example.com",
+        _emailSender: emailSenderMock,
+      });
+
+      expect(infoMock).not.toHaveBeenCalled();
     });
   });
 });
