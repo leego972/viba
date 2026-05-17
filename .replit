@@ -37,7 +37,7 @@ isValidation = true
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "pnpm --filter @workspace/api-server run test"
+args = "cd artifacts/bridge-ai && npx playwright test tests/spike-alert.spec.ts"
 
 [[workflows.workflow]]
 name = "simulation-banner-tests"
