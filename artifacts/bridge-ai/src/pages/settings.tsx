@@ -207,8 +207,13 @@ export default function Settings() {
           setClearedKeys(new Set());
           queryClient.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
         },
-        onError: () => {
-          toast({ title: "Error", description: "Failed to save settings.", variant: "destructive" });
+        onError: (err) => {
+          const message = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+          if (message?.includes("FALLBACK_ALERT_THRESHOLD")) {
+            setThresholdError(message);
+          } else {
+            toast({ title: "Error", description: message ?? "Failed to save settings.", variant: "destructive" });
+          }
         },
       }
     );
