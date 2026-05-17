@@ -161,6 +161,10 @@ export async function sendSpikeNotifications(opts: SpikeNotifyOptions): Promise<
       threshold,
       settingsUrl,
     });
+    logger.info(
+      { email: notificationEmail, providers: fresh.map((p) => p.provider) },
+      "Spike alert email dispatched"
+    );
     dispatched = true;
   }
 
