@@ -1,10 +1,15 @@
 import { Router, type IRouter } from "express";
-import { getCircuitStatus, resetProviderCircuit } from "../lib/adapterRetry";
+import { getCircuitStatus, getStartupLoadInfo, resetProviderCircuit } from "../lib/adapterRetry";
 
 const router: IRouter = Router();
 
 router.get("/circuit-status", (req, res): void => {
-  res.json(getCircuitStatus());
+  const info = getStartupLoadInfo();
+  res.json({
+    entries: getCircuitStatus(),
+    lastLoadedAt: info?.loadedAt ?? null,
+    restoredCount: info?.restoredCount ?? 0,
+  });
 });
 
 router.delete(

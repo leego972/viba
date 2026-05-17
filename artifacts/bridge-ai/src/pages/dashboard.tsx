@@ -11,6 +11,7 @@ import {
   getGetCircuitStatusQueryKey,
   type AgentModeSummary,
   type CircuitBreakerEntry,
+  type CircuitStatusResponse,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -21,7 +22,7 @@ import { Input } from "@/components/ui/input";
 import {
   Plus, Activity, Clock, DollarSign, Layers, Zap, RotateCcw,
   Wifi, WifiOff, AlertTriangle, TrendingDown, Search, Trash2,
-  ShieldCheck, ShieldAlert, ShieldOff, RefreshCw,
+  ShieldCheck, ShieldAlert, ShieldOff, RefreshCw, DatabaseZap,
 } from "lucide-react";
 import { format, subDays } from "date-fns";
 import {
@@ -201,9 +202,12 @@ type StatusFilter = typeof STATUS_FILTERS[number];
 export default function Dashboard() {
   const { data: sessions, isLoading, isError } = useListSessions();
   const { data: stats } = useGetStats();
-  const { data: circuitEntries = [], dataUpdatedAt: circuitUpdatedAt } = useGetCircuitStatus({
+  const { data: circuitData, dataUpdatedAt: circuitUpdatedAt } = useGetCircuitStatus({
     query: { queryKey: getGetCircuitStatusQueryKey(), refetchInterval: 10_000 },
   });
+  const circuitEntries: CircuitBreakerEntry[] = circuitData?.entries ?? [];
+  const circuitLastLoadedAt: CircuitStatusResponse["lastLoadedAt"] = circuitData?.lastLoadedAt ?? null;
+  const circuitRestoredCount: number = circuitData?.restoredCount ?? 0;
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -401,6 +405,18 @@ export default function Dashboard() {
             <CardTitle className="flex items-center gap-2 text-base">
               <ShieldCheck className="h-4 w-4 text-emerald-400" />
               Provider Health
+              {circuitLastLoadedAt !== null && (
+                <Badge
+                  variant="outline"
+                  className="gap-1 text-[10px] font-normal border-sky-500/40 text-sky-400 bg-sky-500/10"
+                  title={`Circuit state loaded from database at ${format(new Date(circuitLastLoadedAt), "HH:mm:ss")} — ${circuitRestoredCount} circuit${circuitRestoredCount !== 1 ? "s" : ""} restored`}
+                >
+                  <DatabaseZap className="h-3 w-3" />
+                  {circuitRestoredCount > 0
+                    ? `Restored ${circuitRestoredCount} from DB`
+                    : "Loaded from DB"}
+                </Badge>
+              )}
               <span className="ml-auto text-[11px] font-normal text-muted-foreground flex items-center gap-1">
                 <RefreshCw className="h-3 w-3" />
                 {circuitUpdatedAt
@@ -415,6 +431,15 @@ export default function Dashboard() {
               onReset={handleResetCircuit}
               resetting={resettingProvider}
             />
+            {circuitLastLoadedAt !== null && (
+              <p className="text-[11px] text-sky-400/70 mt-2">
+                State loaded from database at startup ·{" "}
+                {circuitRestoredCount > 0
+                  ? `${circuitRestoredCount} circuit${circuitRestoredCount !== 1 ? "s" : ""} restored`
+                  : "no circuits were persisted"}{" "}
+                · {format(new Date(circuitLastLoadedAt), "HH:mm:ss")}
+              </p>
+            )}
             <p className="text-[11px] text-muted-foreground mt-3">
               <span className="font-medium text-red-400">Open</span> — provider is blocked (cooldown active).{" "}
               <span className="font-medium text-amber-400">Half-open</span> — cooldown elapsed, next call is a probe.{" "}

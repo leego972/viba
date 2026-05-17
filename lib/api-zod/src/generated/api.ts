@@ -617,41 +617,57 @@ export const GetStatsResponse = zod.object({
 });
 
 /**
- * Returns the current open/half-open/closed state for every provider tracked by the circuit breaker
+ * Returns the current open/half-open/closed state for every provider tracked by the circuit breaker, along with startup DB load metadata
  * @summary Get per-provider circuit breaker status
  */
-export const GetCircuitStatusResponseItem = zod.object({
-  provider: zod.string(),
-  state: zod.enum(["open", "half-open", "closed"]),
-  consecutiveFailures: zod.number(),
-  openedAt: zod
+export const GetCircuitStatusResponse = zod.object({
+  entries: zod.array(
+    zod.object({
+      provider: zod.string(),
+      state: zod.enum(["open", "half-open", "closed"]),
+      consecutiveFailures: zod.number(),
+      openedAt: zod
+        .number()
+        .nullable()
+        .describe(
+          "Unix ms timestamp when the circuit opened, or null if closed",
+        ),
+      msUntilReset: zod
+        .number()
+        .nullable()
+        .describe(
+          "Milliseconds remaining until the circuit allows a probe, or null if closed",
+        ),
+      persistedAt: zod
+        .number()
+        .nullable()
+        .describe(
+          "Unix ms timestamp of the last time this state was written to the database, or null if not yet persisted",
+        ),
+      openThreshold: zod
+        .number()
+        .describe(
+          "Number of consecutive failures required to open the circuit (CIRCUIT_OPEN_THRESHOLD)",
+        ),
+      timeoutMs: zod
+        .number()
+        .describe(
+          "Cooldown window in milliseconds before a half-open probe is allowed (CIRCUIT_TIMEOUT_MS)",
+        ),
+    }),
+  ),
+  lastLoadedAt: zod
     .number()
     .nullable()
-    .describe("Unix ms timestamp when the circuit opened, or null if closed"),
-  msUntilReset: zod
-    .number()
-    .nullable()
     .describe(
-      "Milliseconds remaining until the circuit allows a probe, or null if closed",
+      "Unix ms timestamp when circuit state was last loaded from DB at startup, or null if loadCircuitStateFromDb has not run yet",
     ),
-  persistedAt: zod
-    .number()
-    .nullable()
-    .describe(
-      "Unix ms timestamp of the last time this state was written to the database, or null if not yet persisted",
-    ),
-  openThreshold: zod
+  restoredCount: zod
     .number()
     .describe(
-      "Number of consecutive failures required to open the circuit (CIRCUIT_OPEN_THRESHOLD)",
-    ),
-  timeoutMs: zod
-    .number()
-    .describe(
-      "Cooldown window in milliseconds before a half-open probe is allowed (CIRCUIT_TIMEOUT_MS)",
+      "Number of circuit entries restored from DB during the last startup load (0 if DB was empty or load has not run)",
     ),
 });
-export const GetCircuitStatusResponse = zod.array(GetCircuitStatusResponseItem);
 
 /**
  * Immediately clears an open or half-open circuit for a provider, allowing live calls to resume. The reset is persisted to the database so it survives restarts and is visible to all running instances.

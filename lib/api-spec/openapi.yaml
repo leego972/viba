@@ -515,16 +515,14 @@ paths:
       operationId: getCircuitStatus
       tags: [stats]
       summary: Get per-provider circuit breaker status
-      description: Returns the current open/half-open/closed state for every provider tracked by the circuit breaker
+      description: Returns the current open/half-open/closed state for every provider tracked by the circuit breaker, along with startup DB load metadata
       responses:
         "200":
           description: Circuit breaker status per provider
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/CircuitBreakerEntry"
+                $ref: "#/components/schemas/CircuitStatusResponse"
 
   /circuit-status/{provider}:
     delete:
@@ -832,6 +830,24 @@ components:
       required:
         - ok
         - provider
+
+    CircuitStatusResponse:
+      type: object
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/CircuitBreakerEntry"
+        lastLoadedAt:
+          type: ["integer", "null"]
+          description: Unix ms timestamp when circuit state was last loaded from DB at startup, or null if loadCircuitStateFromDb has not run yet
+        restoredCount:
+          type: integer
+          description: Number of circuit entries restored from DB during the last startup load (0 if DB was empty or load has not run)
+      required:
+        - entries
+        - lastLoadedAt
+        - restoredCount
 
     CircuitBreakerEntry:
       type: object

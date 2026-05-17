@@ -85,6 +85,21 @@ export interface CircuitState {
 
 const circuitMap = new Map<string, InternalCircuitState>();
 
+interface StartupLoadInfo {
+  loadedAt: number;
+  restoredCount: number;
+}
+
+let startupLoadInfo: StartupLoadInfo | null = null;
+
+/**
+ * Returns metadata about the most recent call to loadCircuitStateFromDb(),
+ * or null if it has not been called yet.
+ */
+export function getStartupLoadInfo(): StartupLoadInfo | null {
+  return startupLoadInfo;
+}
+
 function getOrCreateLocal(provider: string): InternalCircuitState {
   let state = circuitMap.get(provider);
   if (!state) {
@@ -192,7 +207,7 @@ async function deleteCircuitStateFromDb(provider: string): Promise<void> {
  * rather than starting with all circuits closed. If the DB is unavailable,
  * logs a warning and continues with a clean (all-closed) state.
  */
-export async function loadCircuitStateFromDb(): Promise<void> {
+export async function loadCircuitStateFromDb(): Promise<number> {
   try {
     const { db, circuitStateTable } = await import("@workspace/db");
     const rows = await db.select().from(circuitStateTable);
@@ -205,9 +220,16 @@ export async function loadCircuitStateFromDb(): Promise<void> {
         persistedAt: row.updatedAt.getTime(),
       });
     }
+    startupLoadInfo = { loadedAt: now, restoredCount: rows.length };
     logger.info({ count: rows.length }, "Loaded circuit breaker state from DB");
+    return rows.length;
   } catch (err) {
     logger.warn({ err }, "Failed to load circuit state from DB — starting with empty state");
+    // Clear any previously successful load info so that a re-load failure does
+    // not leave stale "loaded" metadata visible. A null lastLoadedAt signals that
+    // the load has not run successfully, keeping it distinct from a successful 0-row load.
+    startupLoadInfo = null;
+    return 0;
   }
 }
 
@@ -248,9 +270,14 @@ async function recordFailure(provider: string, now = Date.now()): Promise<void> 
   await persistCircuitState(provider, state);
 }
 
-/** Exposed for tests only — resets all in-memory circuit state. */
+/**
+ * Exposed for tests only — resets all in-memory circuit state and startup load
+ * metadata so that tests start from a clean slate without leaking loaded info
+ * across scenarios.
+ */
 export function resetAllCircuits(): void {
   circuitMap.clear();
+  startupLoadInfo = null;
 }
 
 /**
