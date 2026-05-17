@@ -49,11 +49,14 @@ router.post("/settings", async (req, res): Promise<void> => {
     // Don't update if value is the masked placeholder
     if (value === "***SET***") continue;
 
-    // Clearing a notification key explicitly deletes the stored setting
+    // Clearing a clearable key with an empty string explicitly deletes it
     if (value === "" && CLEARABLE_NOTIFICATION_KEYS.includes(key)) {
       await db.delete(settingsTable).where(eq(settingsTable.key, key));
       continue;
     }
+
+    // Non-clearable keys: treat empty string as a no-op to prevent silent data loss
+    if (value === "") continue;
 
     const [existing] = await db.select().from(settingsTable).where(eq(settingsTable.key, key));
     if (existing) {
