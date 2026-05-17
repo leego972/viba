@@ -852,6 +852,12 @@ components:
         persistedAt:
           type: ["integer", "null"]
           description: Unix ms timestamp of the last time this state was written to the database, or null if not yet persisted
+        openThreshold:
+          type: integer
+          description: Number of consecutive failures required to open the circuit (CIRCUIT_OPEN_THRESHOLD)
+        timeoutMs:
+          type: integer
+          description: Cooldown window in milliseconds before a half-open probe is allowed (CIRCUIT_TIMEOUT_MS)
       required:
         - provider
         - state
@@ -859,6 +865,8 @@ components:
         - openedAt
         - msUntilReset
         - persistedAt
+        - openThreshold
+        - timeoutMs
 
     ErrorResponse:
       type: object

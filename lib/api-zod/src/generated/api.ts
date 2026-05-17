@@ -640,6 +640,16 @@ export const GetCircuitStatusResponseItem = zod.object({
     .describe(
       "Unix ms timestamp of the last time this state was written to the database, or null if not yet persisted",
     ),
+  openThreshold: zod
+    .number()
+    .describe(
+      "Number of consecutive failures required to open the circuit (CIRCUIT_OPEN_THRESHOLD)",
+    ),
+  timeoutMs: zod
+    .number()
+    .describe(
+      "Cooldown window in milliseconds before a half-open probe is allowed (CIRCUIT_TIMEOUT_MS)",
+    ),
 });
 export const GetCircuitStatusResponse = zod.array(GetCircuitStatusResponseItem);
 

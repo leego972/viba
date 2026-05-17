@@ -110,6 +110,9 @@ function ProviderHealthPanel({
           <span className="text-xs text-muted-foreground">
             {entry.consecutiveFailures} failure{entry.consecutiveFailures !== 1 ? "s" : ""}
           </span>
+          <span className="text-xs text-muted-foreground/70" title="Circuit breaker thresholds">
+            Opens after {entry.openThreshold} failure{entry.openThreshold !== 1 ? "s" : ""} · {formatMsRemaining(entry.timeoutMs)} cooldown
+          </span>
           {entry.state === "open" && entry.msUntilReset !== null && (
             <span className="text-xs text-red-400/80">
               resets in {formatMsRemaining(entry.msUntilReset)}

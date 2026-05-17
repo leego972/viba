@@ -26,4 +26,8 @@ export interface CircuitBreakerEntry {
    * @nullable
    */
   persistedAt: number | null;
+  /** Number of consecutive failures required to open the circuit (CIRCUIT_OPEN_THRESHOLD) */
+  openThreshold: number;
+  /** Cooldown window in milliseconds before a half-open probe is allowed (CIRCUIT_TIMEOUT_MS) */
+  timeoutMs: number;
 }
