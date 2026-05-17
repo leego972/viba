@@ -159,3 +159,50 @@ describe("PUT /api/sessions/:id/banner-dismissal", () => {
     expect(res.body.error).toBeDefined();
   });
 });
+
+describe("DELETE /api/sessions/:id/banner-dismissal", () => {
+  it("deletes an existing dismissal and GET returns null afterwards", async () => {
+    await request(app)
+      .put(`/api/sessions/${testSessionId}/banner-dismissal`)
+      .send({ dismissedAt: "2026-04-01T10:00:00.000Z" })
+      .expect(200);
+
+    const delRes = await request(app)
+      .delete(`/api/sessions/${testSessionId}/banner-dismissal`)
+      .expect(200);
+
+    expect(delRes.body.sessionId).toBe(testSessionId);
+    expect(delRes.body.dismissedAt).toBeNull();
+
+    const getRes = await request(app)
+      .get(`/api/sessions/${testSessionId}/banner-dismissal`)
+      .expect(200);
+
+    expect(getRes.body.dismissedAt).toBeNull();
+  });
+
+  it("is idempotent — deleting when no dismissal exists still returns 200 with null", async () => {
+    const res = await request(app)
+      .delete(`/api/sessions/${testSessionId}/banner-dismissal`)
+      .expect(200);
+
+    expect(res.body.sessionId).toBe(testSessionId);
+    expect(res.body.dismissedAt).toBeNull();
+  });
+
+  it("returns 404 when the session does not exist", async () => {
+    const res = await request(app)
+      .delete("/api/sessions/999999999/banner-dismissal")
+      .expect(404);
+
+    expect(res.body.error).toBeDefined();
+  });
+
+  it("returns 400 for a non-numeric session id", async () => {
+    const res = await request(app)
+      .delete("/api/sessions/not-a-number/banner-dismissal")
+      .expect(400);
+
+    expect(res.body.error).toBeDefined();
+  });
+});
