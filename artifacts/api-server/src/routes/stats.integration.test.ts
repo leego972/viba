@@ -165,3 +165,66 @@ describe("GET /api/stats — fallback spike alert (integration)", () => {
     expect(res.body.recentSpikeThreshold).toBe(5);
   });
 });
+
+describe("GET /api/stats — spike threshold change takes effect in real time", () => {
+  it("reflects a threshold lowered via the settings API on the next stats call", async () => {
+    await request(app)
+      .post("/api/settings")
+      .send({ settings: [{ key: "FALLBACK_ALERT_THRESHOLD", value: "3" }] })
+      .expect(200);
+
+    const res = await request(app).get("/api/stats").expect(200);
+    expect(res.body.recentSpikeThreshold).toBe(3);
+  });
+
+  it("reflects a threshold raised via the settings API on the next stats call", async () => {
+    await request(app)
+      .post("/api/settings")
+      .send({ settings: [{ key: "FALLBACK_ALERT_THRESHOLD", value: "12" }] })
+      .expect(200);
+
+    const res = await request(app).get("/api/stats").expect(200);
+    expect(res.body.recentSpikeThreshold).toBe(12);
+  });
+
+  it("triggers a spike alert for providers that exceed the newly lowered threshold", async () => {
+    for (let i = 0; i < 3; i++) await insertFallback("openai", minsAgo(10 + i));
+
+    await request(app)
+      .post("/api/settings")
+      .send({ settings: [{ key: "FALLBACK_ALERT_THRESHOLD", value: "3" }] })
+      .expect(200);
+
+    const res = await request(app).get("/api/stats").expect(200);
+    expect(res.body.recentSpikeThreshold).toBe(3);
+    expect(res.body.recentSpikeProviders).toContain("openai");
+  });
+
+  it("suppresses a spike alert when the threshold is raised above the current fallback count", async () => {
+    for (let i = 0; i < 5; i++) await insertFallback("openai", minsAgo(10 + i));
+
+    await request(app)
+      .post("/api/settings")
+      .send({ settings: [{ key: "FALLBACK_ALERT_THRESHOLD", value: "10" }] })
+      .expect(200);
+
+    const res = await request(app).get("/api/stats").expect(200);
+    expect(res.body.recentSpikeThreshold).toBe(10);
+    expect(res.body.recentSpikeProviders).not.toContain("openai");
+  });
+
+  it("updates the threshold twice and stats reflects the final value", async () => {
+    await request(app)
+      .post("/api/settings")
+      .send({ settings: [{ key: "FALLBACK_ALERT_THRESHOLD", value: "2" }] })
+      .expect(200);
+
+    await request(app)
+      .post("/api/settings")
+      .send({ settings: [{ key: "FALLBACK_ALERT_THRESHOLD", value: "8" }] })
+      .expect(200);
+
+    const res = await request(app).get("/api/stats").expect(200);
+    expect(res.body.recentSpikeThreshold).toBe(8);
+  });
+});
