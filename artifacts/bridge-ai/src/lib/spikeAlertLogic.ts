@@ -92,3 +92,45 @@ export function pruneStaleSpikeDismissalKeys(limit = MAX_SPIKE_STORAGE_KEYS): vo
     // Ignore — localStorage may be unavailable (SSR, private mode, quota exceeded)
   }
 }
+
+// ── Cross-tab sync via BroadcastChannel ───────────────────────────────────────
+
+export const SPIKE_BROADCAST_CHANNEL_NAME = "bridge_spike_dismissal";
+
+export interface SpikeDismissalMessage {
+  sessionId: number;
+  providers: string[];
+}
+
+/**
+ * Broadcasts a spike dismissal to all other open tabs on the same origin
+ * so their alerts hide immediately without waiting for a reload.
+ */
+export function broadcastSpikeDismissal(sessionId: number, providers: string[]): void {
+  try {
+    const channel = new BroadcastChannel(SPIKE_BROADCAST_CHANNEL_NAME);
+    const msg: SpikeDismissalMessage = { sessionId, providers };
+    channel.postMessage(msg);
+    channel.close();
+  } catch {
+    // BroadcastChannel unavailable in this environment (SSR, old browser)
+  }
+}
+
+/**
+ * Subscribes to spike dismissal messages from other tabs. Returns a cleanup
+ * function that closes the channel — call it from a useEffect return.
+ */
+export function subscribeToSpikeDismissals(
+  callback: (msg: SpikeDismissalMessage) => void,
+): () => void {
+  try {
+    const channel = new BroadcastChannel(SPIKE_BROADCAST_CHANNEL_NAME);
+    channel.onmessage = (event: MessageEvent<SpikeDismissalMessage>) => {
+      callback(event.data);
+    };
+    return () => channel.close();
+  } catch {
+    return () => {};
+  }
+}

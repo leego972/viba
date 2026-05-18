@@ -47,9 +47,9 @@ function selectProvider(
   ): { provider: Provider; model: string } => ({ provider, model });
 
   if (routingMode === "quality" || modelStrength === "strong") {
-    if (keys.anthropic) return pick("anthropic", "claude-3-5-haiku-20241022");
-    if (keys.openai) return pick("openai", "gpt-4o-mini");
-    if (keys.gemini) return pick("gemini", "gemini-2.0-flash");
+    if (keys.anthropic) return pick("anthropic", "claude-3-5-sonnet-20241022");
+    if (keys.openai) return pick("openai", "gpt-4o");
+    if (keys.gemini) return pick("gemini", "gemini-1.5-pro");
   } else if (routingMode === "fast" || modelStrength === "cheap") {
     if (keys.gemini) return pick("gemini", "gemini-2.0-flash");
     if (keys.openai) return pick("openai", "gpt-4o-mini");
@@ -243,7 +243,12 @@ export async function analyzeTask(input: AnalyzeTaskRequest): Promise<AnalyzeTas
   }
 
   // 7. Final formatting pass
-  const finalPrompt = buildFinalFormattingPrompt(input, draft, riskRaw, riskRaw);
+  const rubricReviewSummary = JSON.stringify({
+    checklist: rubricResult.checklist,
+    riskFlags: rubricResult.riskFlags,
+    confidence: rubricResult.confidence,
+  });
+  const finalPrompt = buildFinalFormattingPrompt(input, draft, rubricReviewSummary, riskRaw);
   let finalAnswer: string;
   try {
     finalAnswer = await llm.call(finalPrompt);

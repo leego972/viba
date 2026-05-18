@@ -140,6 +140,18 @@ describe("POST /api/settings — FALLBACK_ALERT_THRESHOLD validation", () => {
     expect(res.body.error).toContain("positive whole number");
   });
 
+  it("returns 400 when the value is a negative number", async () => {
+    const res = await request(app)
+      .post("/api/settings")
+      .send({ settings: [{ key: "FALLBACK_ALERT_THRESHOLD", value: "-5" }] })
+      .expect(400);
+
+    expect(res.body).toHaveProperty("error");
+    expect(typeof res.body.error).toBe("string");
+    expect(res.body.error).toContain("FALLBACK_ALERT_THRESHOLD");
+    expect(res.body.error).toContain("positive whole number");
+  });
+
   it("returns 200 and saves the setting when the value is a valid positive integer", async () => {
     await request(app)
       .post("/api/settings")

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,7 +25,11 @@ import {
   Copy,
   Loader2,
   Info,
+  Clock,
+  ThumbsUp,
+  Trash2,
 } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
 
 const PLATFORMS = [
   { value: "alignerr", label: "Alignerr" },
@@ -77,6 +81,54 @@ const REVIEW_LEVEL_CONFIG = {
   },
 };
 
+// ── History types and helpers ─────────────────────────────────────────────────
+
+interface WorkbenchResult {
+  taskId: string;
+  platform: string;
+  taskType: string;
+  recommendedAnswer: string;
+  confidence: number;
+  reasoningSummary: string;
+  riskFlags: string[];
+  rubricChecklist: string[];
+  reviewLevel: string;
+  humanReviewRequired: boolean;
+  routingReceipt: unknown;
+}
+
+interface WorkbenchHistoryEntry {
+  taskId: string;
+  platform: string;
+  taskType: string;
+  confidence: number;
+  reviewLevel: string;
+  timestamp: string;
+  used: boolean;
+  result: WorkbenchResult;
+}
+
+const HISTORY_KEY = "bridge_workbench_history";
+const MAX_HISTORY = 20;
+
+function loadHistory(): WorkbenchHistoryEntry[] {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw) as WorkbenchHistoryEntry[];
+  } catch {
+    return [];
+  }
+}
+
+function persistHistory(entries: WorkbenchHistoryEntry[]): void {
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(entries));
+  } catch {
+    // localStorage unavailable
+  }
+}
+
 function ConfidenceBar({ value }: { value: number }) {
   const pct = Math.round(value * 100);
   const color = pct >= 80 ? "bg-green-500" : pct >= 50 ? "bg-yellow-500" : "bg-red-500";
@@ -107,6 +159,11 @@ export default function Workbench() {
   const [routingMode, setRoutingMode] =
     useState<WorkbenchAnalyzeRequest["routingMode"]>("balanced");
 
+  // History state — loaded from localStorage once on mount
+  const [history, setHistory] = useState<WorkbenchHistoryEntry[]>(() => loadHistory());
+  const [historicResult, setHistoricResult] = useState<WorkbenchResult | null>(null);
+  const [markedUsedIds, setMarkedUsedIds] = useState<Set<string>>(new Set());
+
   const canSubmit =
     platform && instructions.trim().length > 0 && taskContent.trim().length > 0;
 
@@ -129,6 +186,7 @@ export default function Workbench() {
 
   function handleAnalyze() {
     if (!canSubmit) return;
+    setHistoricResult(null);
     analyzeMutation.mutate(
       { data: buildRequest() },
       {
@@ -141,14 +199,57 @@ export default function Workbench() {
     );
   }
 
+  // Save to history whenever a new result arrives
+  useEffect(() => {
+    const data = analyzeMutation.data;
+    if (!data) return;
+    const entry: WorkbenchHistoryEntry = {
+      taskId: data.taskId,
+      platform: data.platform,
+      taskType: data.taskType,
+      confidence: data.confidence,
+      reviewLevel: data.reviewLevel,
+      timestamp: new Date().toISOString(),
+      used: false,
+      result: data as WorkbenchResult,
+    };
+    setHistory((prev) => {
+      const deduped = prev.filter((h) => h.taskId !== entry.taskId);
+      const updated = [entry, ...deduped].slice(0, MAX_HISTORY);
+      persistHistory(updated);
+      return updated;
+    });
+  }, [analyzeMutation.data]);
+
+  function handleLoadHistory(entry: WorkbenchHistoryEntry) {
+    setHistoricResult(entry.result);
+  }
+
+  function handleMarkUsed(taskId: string) {
+    setMarkedUsedIds((prev) => new Set([...prev, taskId]));
+    setHistory((prev) => {
+      const updated = prev.map((h) => (h.taskId === taskId ? { ...h, used: true } : h));
+      persistHistory(updated);
+      return updated;
+    });
+  }
+
+  function handleClearHistory() {
+    setHistory([]);
+    persistHistory([]);
+  }
+
   function copyAnswer() {
-    if (!analyzeMutation.data?.recommendedAnswer) return;
-    navigator.clipboard.writeText(analyzeMutation.data.recommendedAnswer).then(() => {
+    const answer = result?.recommendedAnswer;
+    if (!answer) return;
+    navigator.clipboard.writeText(answer).then(() => {
       toast({ title: "Copied to clipboard" });
     });
   }
 
-  const result = analyzeMutation.data;
+  // Use a loaded historic result, or fall back to the latest mutation result
+  const result = historicResult ?? (analyzeMutation.isPending ? undefined : analyzeMutation.data);
+  const isHistoric = historicResult !== null;
 
   return (
     <AppLayout>
@@ -381,19 +482,49 @@ export default function Workbench() {
                   </div>
                 )}
 
+                {/* Historic result indicator */}
+                {isHistoric && (
+                  <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2">
+                    <Clock className="h-3.5 w-3.5 text-primary shrink-0" />
+                    <p className="text-xs text-primary flex-1">Viewing a historic analysis</p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-xs px-2"
+                      onClick={() => setHistoricResult(null)}
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                )}
+
                 {/* Recommended answer */}
                 <Card>
                   <CardHeader className="pb-2 flex flex-row items-center justify-between">
                     <CardTitle className="text-sm">Recommended Answer</CardTitle>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 gap-1.5 text-xs"
-                      onClick={copyAnswer}
-                    >
-                      <Copy className="h-3.5 w-3.5" />
-                      Copy
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      {!isHistoric && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 gap-1.5 text-xs"
+                          onClick={() => handleMarkUsed(result.taskId)}
+                          disabled={markedUsedIds.has(result.taskId)}
+                        >
+                          <ThumbsUp className="h-3.5 w-3.5" />
+                          {markedUsedIds.has(result.taskId) ? "Marked as used" : "Mark as used"}
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 gap-1.5 text-xs"
+                        onClick={copyAnswer}
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                        Copy
+                      </Button>
+                    </div>
                   </CardHeader>
                   <CardContent>
                     <pre className="whitespace-pre-wrap text-sm font-mono leading-relaxed bg-muted/40 rounded-md p-3">
@@ -489,6 +620,83 @@ export default function Workbench() {
             )}
           </div>
         </div>
+
+        {/* History panel */}
+        {history.length > 0 && (
+          <>
+            <Separator />
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-semibold flex items-center gap-2">
+                  <Clock className="h-4 w-4" />
+                  Recent Analyses
+                  <Badge variant="secondary" className="text-xs">{history.length}</Badge>
+                </h2>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1.5 text-xs text-muted-foreground"
+                  onClick={handleClearHistory}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Clear all
+                </Button>
+              </div>
+              <div className="flex flex-col gap-2">
+                {history.map((entry) => {
+                  const cfg = REVIEW_LEVEL_CONFIG[entry.reviewLevel as keyof typeof REVIEW_LEVEL_CONFIG];
+                  const isCurrentlyLoaded = historicResult?.taskId === entry.taskId;
+                  return (
+                    <div
+                      key={entry.taskId}
+                      className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 transition-colors ${isCurrentlyLoaded ? "border-primary/40 bg-primary/5" : "bg-card"}`}
+                    >
+                      <div className="flex items-center gap-2 flex-wrap min-w-0">
+                        <Badge variant="outline" className="text-xs shrink-0">
+                          {entry.platform}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground truncate">
+                          {entry.taskType.replace(/_/g, " ")}
+                        </span>
+                        <span className="text-xs font-medium tabular-nums">
+                          {Math.round(entry.confidence * 100)}%
+                        </span>
+                        {cfg && (
+                          <Badge
+                            variant="outline"
+                            className={`text-xs shrink-0 ${cfg.color}`}
+                          >
+                            {cfg.label}
+                          </Badge>
+                        )}
+                        {(entry.used || markedUsedIds.has(entry.taskId)) && (
+                          <Badge variant="secondary" className="text-xs gap-1 shrink-0">
+                            <ThumbsUp className="h-2.5 w-2.5" />
+                            Used
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs text-muted-foreground">
+                          {formatDistanceToNow(new Date(entry.timestamp), { addSuffix: true })}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => handleLoadHistory(entry)}
+                          disabled={isCurrentlyLoaded}
+                        >
+                          {isCurrentlyLoaded ? "Loaded" : "Load"}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </AppLayout>
   );

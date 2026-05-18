@@ -51,6 +51,8 @@ import {
   pruneStaleSpikeDismissalKeys,
   readDismissedSpikeProviders,
   writeDismissedSpikeProviders,
+  broadcastSpikeDismissal,
+  subscribeToSpikeDismissals,
 } from "@/lib/spikeAlertLogic";
 
 const AGENT_COLORS: Record<string, string> = {
@@ -237,7 +239,17 @@ export default function SessionWorkspace() {
   const dismissSpikeAlert = () => {
     setDismissedSpikeProviders(recentSpikeProviders);
     writeDismissedSpikeProviders(sessionId, recentSpikeProviders);
+    broadcastSpikeDismissal(sessionId, recentSpikeProviders);
   };
+
+  // Cross-tab sync — when another tab dismisses the spike alert, update this tab too
+  useEffect(() => {
+    return subscribeToSpikeDismissals((msg) => {
+      if (msg.sessionId === sessionId) {
+        setDismissedSpikeProviders(msg.providers);
+      }
+    });
+  }, [sessionId]);
 
   // Re-show if a new provider appears that wasn't dismissed
   const undismissedSpikeProviders = computeUndismissedProviders(recentSpikeProviders, dismissedSpikeProviders);
