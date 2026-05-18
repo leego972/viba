@@ -48,6 +48,7 @@ import {
 import {
   computeShowSpikeAlert,
   computeUndismissedProviders,
+  pruneStaleSpikeDismissalKeys,
   readDismissedSpikeProviders,
   writeDismissedSpikeProviders,
 } from "@/lib/spikeAlertLogic";
@@ -101,7 +102,10 @@ export default function SessionWorkspace() {
   const [pendingApproval, setPendingApproval] = useState<any>(null);
 
   // Prune stale keys from localStorage once on mount (#47)
-  useEffect(() => { pruneStaleLocalStorageKeys(); }, []);
+  useEffect(() => {
+    pruneStaleLocalStorageKeys();
+    pruneStaleSpikeDismissalKeys();
+  }, []);
 
   // Banner dismissal — persisted server-side so it works across devices.
   // On first load we migrate any existing localStorage value to the server.
@@ -220,12 +224,12 @@ export default function SessionWorkspace() {
   const recentSpikeProviders = stats?.recentSpikeProviders ?? [];
   const recentSpikeThreshold = stats?.recentSpikeThreshold ?? 5;
   const alertEnabled = stats?.alertEnabled ?? true;
-  // Spike alert dismiss — sessionStorage so it resets on next page load
+  // Spike alert dismiss — localStorage so dismissals survive page reloads
   const [dismissedSpikeProviders, setDismissedSpikeProviders] = useState<string[]>(() =>
     readDismissedSpikeProviders(sessionId)
   );
 
-  // Reload dismissal state from sessionStorage if sessionId changes without remount
+  // Reload dismissal state from localStorage if sessionId changes without remount
   useEffect(() => {
     setDismissedSpikeProviders(readDismissedSpikeProviders(sessionId));
   }, [sessionId]);

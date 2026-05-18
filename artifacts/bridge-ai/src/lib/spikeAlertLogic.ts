@@ -1,4 +1,5 @@
 export const SPIKE_STORAGE_PREFIX = "bridge_spike_dismissed_";
+export const MAX_SPIKE_STORAGE_KEYS = 20;
 
 /**
  * Pure function — filters out providers that have already been dismissed,
@@ -29,12 +30,12 @@ export function computeShowSpikeAlert(
 
 /**
  * Reads the list of dismissed spike providers for a given session from
- * sessionStorage. Returns an empty array if nothing is stored or storage
+ * localStorage. Returns an empty array if nothing is stored or storage
  * is unavailable.
  */
 export function readDismissedSpikeProviders(sessionId: number): string[] {
   try {
-    const raw = sessionStorage.getItem(`${SPIKE_STORAGE_PREFIX}${sessionId}`);
+    const raw = localStorage.getItem(`${SPIKE_STORAGE_PREFIX}${sessionId}`);
     if (!raw) return [];
     return JSON.parse(raw) as string[];
   } catch {
@@ -43,13 +44,51 @@ export function readDismissedSpikeProviders(sessionId: number): string[] {
 }
 
 /**
- * Persists the dismissed spike providers for a session to sessionStorage.
- * Silently ignores storage errors (private mode, quota exceeded, etc.).
+ * Persists the dismissed spike providers for a session to localStorage so
+ * that dismissals survive page reloads. Silently ignores storage errors
+ * (private mode, quota exceeded, etc.).
  */
 export function writeDismissedSpikeProviders(sessionId: number, providers: string[]): void {
   try {
-    sessionStorage.setItem(`${SPIKE_STORAGE_PREFIX}${sessionId}`, JSON.stringify(providers));
+    localStorage.setItem(`${SPIKE_STORAGE_PREFIX}${sessionId}`, JSON.stringify(providers));
   } catch {
     // Ignore
+  }
+}
+
+/**
+ * Pure function — returns the localStorage keys that should be removed to
+ * keep the total number of spike dismissal entries under the given limit.
+ * Oldest session IDs (lowest numeric suffix) are removed first.
+ */
+export function getSpikeKeysToPrune(
+  keys: string[],
+  limit: number,
+  prefix = SPIKE_STORAGE_PREFIX,
+): string[] {
+  if (keys.length <= limit) return [];
+  const sorted = [...keys].sort((a, b) => {
+    const idA = parseInt(a.slice(prefix.length), 10);
+    const idB = parseInt(b.slice(prefix.length), 10);
+    return idA - idB;
+  });
+  return sorted.slice(0, keys.length - limit);
+}
+
+/**
+ * Side-effectful — prunes stale spike dismissal keys from localStorage
+ * so entries don't accumulate indefinitely across many sessions.
+ */
+export function pruneStaleSpikeDismissalKeys(limit = MAX_SPIKE_STORAGE_KEYS): void {
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k?.startsWith(SPIKE_STORAGE_PREFIX)) keys.push(k);
+    }
+    const toRemove = getSpikeKeysToPrune(keys, limit);
+    toRemove.forEach((k) => localStorage.removeItem(k));
+  } catch {
+    // Ignore — localStorage may be unavailable (SSR, private mode, quota exceeded)
   }
 }

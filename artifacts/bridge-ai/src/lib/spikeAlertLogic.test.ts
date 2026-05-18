@@ -4,7 +4,10 @@ import {
   computeShowSpikeAlert,
   readDismissedSpikeProviders,
   writeDismissedSpikeProviders,
+  getSpikeKeysToPrune,
+  pruneStaleSpikeDismissalKeys,
   SPIKE_STORAGE_PREFIX,
+  MAX_SPIKE_STORAGE_KEYS,
 } from "./spikeAlertLogic";
 
 describe("computeUndismissedProviders", () => {
@@ -90,9 +93,9 @@ describe("computeShowSpikeAlert — re-appear after new provider arrives", () =>
   });
 });
 
-describe("readDismissedSpikeProviders / writeDismissedSpikeProviders", () => {
+describe("readDismissedSpikeProviders / writeDismissedSpikeProviders — localStorage persistence", () => {
   beforeEach(() => {
-    sessionStorage.clear();
+    localStorage.clear();
   });
 
   it("returns an empty array when nothing has been stored", () => {
@@ -104,9 +107,9 @@ describe("readDismissedSpikeProviders / writeDismissedSpikeProviders", () => {
     expect(readDismissedSpikeProviders(42)).toEqual(["openai", "anthropic"]);
   });
 
-  it("stores under the correct sessionStorage key", () => {
+  it("stores under the correct localStorage key", () => {
     writeDismissedSpikeProviders(7, ["cohere"]);
-    const raw = sessionStorage.getItem(`${SPIKE_STORAGE_PREFIX}7`);
+    const raw = localStorage.getItem(`${SPIKE_STORAGE_PREFIX}7`);
     expect(raw).toBe(JSON.stringify(["cohere"]));
   });
 
@@ -126,5 +129,86 @@ describe("readDismissedSpikeProviders / writeDismissedSpikeProviders", () => {
     writeDismissedSpikeProviders(10, ["openai"]);
     writeDismissedSpikeProviders(10, ["openai", "anthropic"]);
     expect(readDismissedSpikeProviders(10)).toEqual(["openai", "anthropic"]);
+  });
+
+  it("survives a simulated page reload (reads back from localStorage on fresh call)", () => {
+    writeDismissedSpikeProviders(99, ["openai", "cohere"]);
+    // Simulate reload: read in a fresh call without using any in-memory state
+    const readBack = readDismissedSpikeProviders(99);
+    expect(readBack).toEqual(["openai", "cohere"]);
+  });
+
+  it("re-triggers for a new provider that was not in the stored dismissal list", () => {
+    writeDismissedSpikeProviders(20, ["openai"]);
+    const dismissed = readDismissedSpikeProviders(20);
+    // A new provider has appeared after the stored dismissal
+    const updatedProviders = ["openai", "anthropic"];
+    expect(computeShowSpikeAlert(true, updatedProviders, dismissed)).toBe(true);
+  });
+
+  it("does not re-trigger if the new provider list exactly matches the stored dismissal", () => {
+    writeDismissedSpikeProviders(21, ["openai", "anthropic"]);
+    const dismissed = readDismissedSpikeProviders(21);
+    expect(computeShowSpikeAlert(true, ["openai", "anthropic"], dismissed)).toBe(false);
+  });
+});
+
+describe("getSpikeKeysToPrune", () => {
+  it("returns an empty array when within the limit", () => {
+    const keys = [`${SPIKE_STORAGE_PREFIX}1`, `${SPIKE_STORAGE_PREFIX}2`];
+    expect(getSpikeKeysToPrune(keys, 5)).toEqual([]);
+  });
+
+  it("returns the oldest keys when over the limit", () => {
+    const keys = [1, 2, 3, 4, 5, 6].map((n) => `${SPIKE_STORAGE_PREFIX}${n}`);
+    const toRemove = getSpikeKeysToPrune(keys, 4);
+    expect(toRemove).toEqual([
+      `${SPIKE_STORAGE_PREFIX}1`,
+      `${SPIKE_STORAGE_PREFIX}2`,
+    ]);
+  });
+
+  it("sorts numerically so high IDs are always kept over lower ones", () => {
+    const keys = [10, 9, 100, 5].map((n) => `${SPIKE_STORAGE_PREFIX}${n}`);
+    const toRemove = getSpikeKeysToPrune(keys, 2);
+    expect(toRemove).toEqual([
+      `${SPIKE_STORAGE_PREFIX}5`,
+      `${SPIKE_STORAGE_PREFIX}9`,
+    ]);
+  });
+
+  it("returns an empty array when the key list is exactly at the limit", () => {
+    const keys = [1, 2, 3].map((n) => `${SPIKE_STORAGE_PREFIX}${n}`);
+    expect(getSpikeKeysToPrune(keys, 3)).toEqual([]);
+  });
+});
+
+describe("pruneStaleSpikeDismissalKeys", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("removes oldest keys when over the limit", () => {
+    for (let i = 1; i <= MAX_SPIKE_STORAGE_KEYS + 3; i++) {
+      writeDismissedSpikeProviders(i, ["openai"]);
+    }
+    pruneStaleSpikeDismissalKeys(MAX_SPIKE_STORAGE_KEYS);
+    const remaining: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k?.startsWith(SPIKE_STORAGE_PREFIX)) remaining.push(k);
+    }
+    expect(remaining.length).toBe(MAX_SPIKE_STORAGE_KEYS);
+    expect(remaining).not.toContain(`${SPIKE_STORAGE_PREFIX}1`);
+    expect(remaining).not.toContain(`${SPIKE_STORAGE_PREFIX}2`);
+    expect(remaining).not.toContain(`${SPIKE_STORAGE_PREFIX}3`);
+  });
+
+  it("leaves storage untouched when within the limit", () => {
+    writeDismissedSpikeProviders(1, ["openai"]);
+    writeDismissedSpikeProviders(2, ["anthropic"]);
+    pruneStaleSpikeDismissalKeys(MAX_SPIKE_STORAGE_KEYS);
+    expect(readDismissedSpikeProviders(1)).toEqual(["openai"]);
+    expect(readDismissedSpikeProviders(2)).toEqual(["anthropic"]);
   });
 });
