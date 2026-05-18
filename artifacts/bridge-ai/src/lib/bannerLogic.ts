@@ -61,9 +61,14 @@ export function pruneStaleLocalStorageKeys(limit = MAX_BANNER_STORAGE_KEYS): voi
  * migration) are treated as "not dismissed". A bare /^\d+$/ string must be
  * rejected explicitly because some V8 builds accept integers like "42" via
  * Date.parse, interpreting them as years or milliseconds-since-epoch.
- * The same applies to stringified floats like "3.14" — Chromium's V8 also
- * accepts those via Date.parse, so any numeric-looking string is rejected
- * before the Date.parse call.
+ *
+ * The guard also covers stringified floats: Chromium's V8 silently accepts
+ * values such as "3.14" via Date.parse — returning 3 (milliseconds since the
+ * Unix epoch, i.e. 1970-01-01T00:00:00.003Z) rather than NaN. That means the
+ * isNaN check alone is not enough; the regex /^\d+(\.\d+)?$/ must run first to
+ * catch any numeric-looking string before Date.parse ever sees it. Narrowing
+ * the regex back to /^\d+$/ would silently re-admit float strings as valid
+ * timestamps.
  */
 export function readDismissedAt(sessionId: number): string | null {
   try {

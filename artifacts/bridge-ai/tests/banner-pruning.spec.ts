@@ -144,6 +144,15 @@ test.describe("readDismissedAt — malformed and edge-case stored values", () =>
   // context by inlining the same guard so localStorage is accessible.
   // Each malformed value must return null (treated as not-dismissed) so a
   // banner is never permanently suppressed by a garbage stored value.
+  //
+  // Why the numeric-guard regex exists:
+  // Chromium's V8 silently accepts stringified floats via Date.parse — for
+  // example, Date.parse("3.14") returns 3 (ms since the Unix epoch) instead of
+  // NaN. A plain isNaN check is therefore not sufficient to reject non-ISO
+  // strings. The guard regex /^\d+(\.\d+)?$/ catches both plain integers (legacy
+  // count-based values) and floats before Date.parse is ever called. The "3.14"
+  // test case below directly targets this V8 quirk; removing or narrowing the
+  // regex would let it slip through as a valid timestamp.
 
   const STORAGE_PREFIX = "bridge_fallback_banner_";
 
