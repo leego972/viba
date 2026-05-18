@@ -117,7 +117,7 @@ test.describe("Spike alert banner", () => {
     await expect(page.getByText("Fallback spike alert")).not.toBeVisible();
   });
 
-  test("spike alert stays hidden after dismissal when localStorage has all current providers", async ({ page }) => {
+  test("spike alert stays hidden after dismissal when all current providers are already dismissed", async ({ page }) => {
     await mockStatsWithSpike(page, ["openai"]);
     await page.addInitScript((key) => {
       localStorage.setItem(key, JSON.stringify(["openai"]));
@@ -167,5 +167,44 @@ test.describe("Spike alert banner", () => {
     await expect(page.getByText("TestAgent").first()).toBeVisible({ timeout: 15000 });
     await expect(page.locator('[aria-label="Dismiss spike alert"]')).not.toBeVisible();
     await expect(page.getByText("Fallback spike alert")).not.toBeVisible();
+  });
+});
+
+test.describe("Spike alert — full end-to-end flow", () => {
+  test("alert appears, dismisses on click, then reappears when a new provider is added", async ({ page }) => {
+    // Use the shared helper — creates a unique session so localStorage starts empty
+    const sessionId = await createSession();
+
+    // Step 1 — load page with a single spiking provider
+    // No addInitScript needed: the session is brand-new so no prior dismissal exists
+    // in localStorage. Using addInitScript here would re-run on every navigation and
+    // would wipe the dismissal that the click in Step 2 is supposed to persist.
+    await mockStatsWithSpike(page, ["openai"]);
+    await page.goto(`/sessions/${sessionId}`);
+
+    const dismissBtn = page.locator('[aria-label="Dismiss spike alert"]');
+    await expect(dismissBtn).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText("Fallback spike alert")).toBeVisible();
+    await expect(page.getByText(/The openai provider/)).toBeVisible();
+
+    // Step 2 — click X; alert must disappear immediately within the same page load
+    await dismissBtn.click();
+    await expect(dismissBtn).not.toBeVisible();
+    await expect(page.getByText("Fallback spike alert")).not.toBeVisible();
+
+    // Step 3 — change the stats mock so "anthropic" is now also spiking
+    await page.unroute("**/api/stats");
+    await mockStatsWithSpike(page, ["openai", "anthropic"]);
+
+    // Reload — localStorage still holds ["openai"] as dismissed (written by the dismiss
+    // click above). "anthropic" was never dismissed, so it is the only undismissed
+    // provider. The alert must reappear showing the singular "The anthropic provider"
+    // form, which proves openai remains dismissed.
+    await page.goto(`/sessions/${sessionId}`);
+
+    await expect(dismissBtn).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText("Fallback spike alert")).toBeVisible();
+    // Singular form confirms only anthropic is undismissed (openai stayed dismissed)
+    await expect(page.getByText(/The anthropic provider/)).toBeVisible();
   });
 });
