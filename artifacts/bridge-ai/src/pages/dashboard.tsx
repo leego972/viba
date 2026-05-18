@@ -248,7 +248,7 @@ export default function Dashboard() {
     },
   });
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string): "default" | "secondary" | "destructive" | "outline" => {
     switch (status) {
       case "active": return "default";
       case "completed": return "secondary";
@@ -731,7 +731,7 @@ export default function Dashboard() {
                       <CardHeader className="pb-3">
                         <div className="flex flex-wrap justify-between items-start gap-2">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <Badge variant={getStatusColor(session.status) as any} className="capitalize">
+                            <Badge variant={getStatusColor(session.status)} className="capitalize">
                               {session.status}
                             </Badge>
                             <SessionModeBadge agentModes={session.agentModes} />

@@ -23,6 +23,7 @@ import {
   getListAuditLogsQueryKey,
   getGetBannerDismissalQueryKey,
   getGetStatsQueryKey,
+  type Approval,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -101,7 +102,7 @@ export default function SessionWorkspace() {
 
   const [userInstruction, setUserInstruction] = useState("");
   const [showApprovalModal, setShowApprovalModal] = useState(false);
-  const [pendingApproval, setPendingApproval] = useState<any>(null);
+  const [pendingApproval, setPendingApproval] = useState<Approval | null>(null);
 
   // Prune stale keys from localStorage once on mount (#47)
   useEffect(() => {
@@ -207,7 +208,7 @@ export default function SessionWorkspace() {
   const isSessionComplete = session?.status === "completed";
 
   // Memory from SSE-enriched session data
-  const sessionMemory = (session as any)?.memory as { summary: string; decisions: string[] } | null | undefined;
+  const sessionMemory = session?.memory ?? null;
 
   // Detect fallback messages
   const fallbackMessages = messages.filter(m => m.content?.startsWith(SIMULATED_PREFIX));
@@ -309,21 +310,21 @@ export default function SessionWorkspace() {
   const handleRunNext = () => {
     runNext.mutate({ id: sessionId }, {
       onSuccess: () => invalidateAll(),
-      onError: (err: any) => toast({ title: "Error", description: err?.message || "Failed to run step", variant: "destructive" })
+      onError: (err: unknown) => toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to run step", variant: "destructive" })
     });
   };
 
   const handleRunFull = () => {
     runFull.mutate({ id: sessionId }, {
       onSuccess: () => invalidateAll(),
-      onError: (err: any) => toast({ title: "Error", description: err?.message || "Failed to run workflow", variant: "destructive" })
+      onError: (err: unknown) => toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to run workflow", variant: "destructive" })
     });
   };
 
   const handleStop = () => {
     stopSess.mutate({ id: sessionId }, {
       onSuccess: () => invalidateAll(),
-      onError: (err: any) => toast({ title: "Error", description: err?.message || "Failed to stop", variant: "destructive" })
+      onError: (err: unknown) => toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to stop", variant: "destructive" })
     });
   };
 
@@ -334,7 +335,7 @@ export default function SessionWorkspace() {
         setUserInstruction("");
         invalidateAll();
       },
-      onError: (err: any) => toast({ title: "Error", description: err?.message || "Failed to send message", variant: "destructive" })
+      onError: (err: unknown) => toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to send message", variant: "destructive" })
     });
   };
 
@@ -347,7 +348,7 @@ export default function SessionWorkspace() {
         invalidateAll();
         toast({ title: "Approved", description: "Action approved successfully." });
       },
-      onError: (err: any) => toast({ title: "Error", description: err?.message || "Failed to approve", variant: "destructive" })
+      onError: (err: unknown) => toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to approve", variant: "destructive" })
     });
   };
 
@@ -393,7 +394,7 @@ export default function SessionWorkspace() {
         : msg.content;
       lines.push(`### ${sender} [${time}]`);
       if (msg.agentRole && msg.role !== "user") {
-        lines.push(`*${msg.agentRole}${msg.model ? ` | ${msg.model}` : ""}${(msg as any).agentId && !agents.find(a => a.id === (msg as any).agentId)?.isMock ? " | Live" : " | Simulated"}*`);
+        lines.push(`*${msg.agentRole}${msg.model ? ` | ${msg.model}` : ""}${msg.agentId && !agents.find(a => a.id === msg.agentId)?.isMock ? " | Live" : " | Simulated"}*`);
       }
       lines.push("");
       lines.push(displayContent || "");
@@ -518,7 +519,7 @@ export default function SessionWorkspace() {
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap shrink-0">
-            <Button size="sm" variant="ghost" onClick={handleExport} title="Download session transcript as Markdown">
+            <Button size="sm" variant="ghost" onClick={handleExport} title="Download session transcript as Markdown" aria-label="Export session as Markdown">
               <Download className="w-4 h-4 mr-1.5" /> Export
             </Button>
             {isSessionActive && (
@@ -653,7 +654,7 @@ export default function SessionWorkspace() {
                 <span className="ml-auto text-[10px] font-normal text-muted-foreground">{messages.length} messages</span>
               </CardTitle>
             </CardHeader>
-            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4" ref={scrollRef as any}>
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4" ref={scrollRef}>
               {messages.length === 0 ? (
                 <div className="flex h-full items-center justify-center text-muted-foreground text-sm italic">
                   No messages yet. Start the session to see collaboration.

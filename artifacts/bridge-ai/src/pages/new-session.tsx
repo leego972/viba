@@ -159,8 +159,12 @@ export default function NewSession() {
                 ].map(mode => (
                   <div 
                     key={mode.value}
+                    role="button"
+                    tabIndex={0}
                     className={`p-4 border rounded-lg cursor-pointer transition-colors ${autonomyMode === mode.value ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'}`}
                     onClick={() => setAutonomyMode(mode.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setAutonomyMode(mode.value); } }}
+                    aria-pressed={autonomyMode === mode.value}
                   >
                     <div className="font-semibold">{mode.value}</div>
                     <div className="text-sm text-muted-foreground">{mode.desc}</div>
