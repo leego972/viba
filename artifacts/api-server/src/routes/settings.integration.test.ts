@@ -111,6 +111,51 @@ describe("POST /api/settings — clearing an API key", () => {
   });
 });
 
+describe("POST /api/settings — FALLBACK_ALERT_THRESHOLD validation", () => {
+  afterEach(async () => {
+    await db.delete(settingsTable).where(eq(settingsTable.key, NON_CLEARABLE_KEY));
+  });
+
+  it("returns 400 with a descriptive error when the value is non-numeric", async () => {
+    const res = await request(app)
+      .post("/api/settings")
+      .send({ settings: [{ key: "FALLBACK_ALERT_THRESHOLD", value: "abc" }] })
+      .expect(400);
+
+    expect(res.body).toHaveProperty("error");
+    expect(typeof res.body.error).toBe("string");
+    expect(res.body.error).toContain("FALLBACK_ALERT_THRESHOLD");
+    expect(res.body.error).toContain("positive whole number");
+  });
+
+  it("returns 400 when the value is zero", async () => {
+    const res = await request(app)
+      .post("/api/settings")
+      .send({ settings: [{ key: "FALLBACK_ALERT_THRESHOLD", value: "0" }] })
+      .expect(400);
+
+    expect(res.body).toHaveProperty("error");
+    expect(typeof res.body.error).toBe("string");
+    expect(res.body.error).toContain("FALLBACK_ALERT_THRESHOLD");
+    expect(res.body.error).toContain("positive whole number");
+  });
+
+  it("returns 200 and saves the setting when the value is a valid positive integer", async () => {
+    await request(app)
+      .post("/api/settings")
+      .send({ settings: [{ key: "FALLBACK_ALERT_THRESHOLD", value: "5" }] })
+      .expect(200);
+
+    const rows = await db
+      .select()
+      .from(settingsTable)
+      .where(eq(settingsTable.key, NON_CLEARABLE_KEY));
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].value).toBe("5");
+  });
+});
+
 describe("GET /api/settings — date serialization", () => {
   beforeEach(async () => {
     await db
