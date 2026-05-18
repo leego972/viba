@@ -198,9 +198,17 @@ export default function Settings() {
           return;
         }
       }
-      if (notificationEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(notificationEmail)) {
-        toast({ title: "Invalid email", description: "Please enter a valid email address.", variant: "destructive" });
-        return;
+      if (notificationEmail) {
+        const emails = notificationEmail.split(",").map((e) => e.trim()).filter(Boolean);
+        if (emails.length === 0) {
+          toast({ title: "Invalid email", description: "Please enter at least one valid email address.", variant: "destructive" });
+          return;
+        }
+        const invalid = emails.find((e) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+        if (invalid) {
+          toast({ title: "Invalid email", description: `"${invalid}" is not a valid email address.`, variant: "destructive" });
+          return;
+        }
       }
     }
 
@@ -327,7 +335,7 @@ export default function Settings() {
         }
       },
       onError: (err) => {
-        const message = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Failed to send test notification.";
+        const message = (err as { data?: { error?: string } })?.data?.error ?? "Failed to send test notification.";
         toast({ title: "Test failed", description: message, variant: "destructive" });
       },
     });
@@ -504,6 +512,21 @@ export default function Settings() {
                     </Button>
                   )}
                 </div>
+                {saveResults["NOTIFICATION_WEBHOOK_URL"] === "saved" && (
+                  <p className="flex items-center gap-1 text-xs text-emerald-500">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Saved successfully
+                  </p>
+                )}
+                {saveResults["NOTIFICATION_WEBHOOK_URL"] === "skipped" && (
+                  <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <MinusCircle className="h-3.5 w-3.5" /> Unchanged
+                  </p>
+                )}
+                {saveResults["NOTIFICATION_WEBHOOK_URL"] === "deleted" && (
+                  <p className="flex items-center gap-1 text-xs text-amber-500">
+                    <Trash2 className="h-3.5 w-3.5" /> Cleared
+                  </p>
+                )}
                 <p className="text-xs text-muted-foreground">
                   When a spike is detected, a POST request with JSON details (provider name, fallback count, settings link) is sent to this URL. Works with Slack incoming webhooks, PagerDuty, Make, Zapier, and any HTTP endpoint.
                 </p>
@@ -513,8 +536,8 @@ export default function Settings() {
                 <div className="flex items-center gap-2">
                   <Input
                     id="notification-email"
-                    type="email"
-                    placeholder="alerts@example.com"
+                    type="text"
+                    placeholder="alerts@example.com, ops@example.com"
                     value={notificationEmail}
                     onChange={handleEmailChange}
                     disabled={!alertEnabled}
@@ -533,8 +556,23 @@ export default function Settings() {
                     </Button>
                   )}
                 </div>
+                {saveResults["NOTIFICATION_EMAIL"] === "saved" && (
+                  <p className="flex items-center gap-1 text-xs text-emerald-500">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Saved successfully
+                  </p>
+                )}
+                {saveResults["NOTIFICATION_EMAIL"] === "skipped" && (
+                  <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <MinusCircle className="h-3.5 w-3.5" /> Unchanged
+                  </p>
+                )}
+                {saveResults["NOTIFICATION_EMAIL"] === "deleted" && (
+                  <p className="flex items-center gap-1 text-xs text-amber-500">
+                    <Trash2 className="h-3.5 w-3.5" /> Cleared
+                  </p>
+                )}
                 <p className="text-xs text-muted-foreground">
-                  Receive spike alert emails at this address. Leave blank to disable email notifications.
+                  Receive spike alert emails at this address. Separate multiple addresses with commas. Leave blank to disable email notifications.
                   Configure SMTP credentials below to enable real email delivery.
                 </p>
               </div>
@@ -585,6 +623,16 @@ export default function Settings() {
                         disabled={!alertEnabled}
                         className="text-sm"
                       />
+                      {saveResults["SMTP_HOST"] === "saved" && (
+                        <p className="flex items-center gap-1 text-xs text-emerald-500">
+                          <CheckCircle2 className="h-3 w-3" /> Saved
+                        </p>
+                      )}
+                      {saveResults["SMTP_HOST"] === "deleted" && (
+                        <p className="flex items-center gap-1 text-xs text-amber-500">
+                          <Trash2 className="h-3 w-3" /> Cleared
+                        </p>
+                      )}
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="smtp-port" className="text-xs">Port</Label>
@@ -599,6 +647,11 @@ export default function Settings() {
                         disabled={!alertEnabled}
                         className="text-sm"
                       />
+                      {saveResults["SMTP_PORT"] === "saved" && (
+                        <p className="flex items-center gap-1 text-xs text-emerald-500">
+                          <CheckCircle2 className="h-3 w-3" /> Saved
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -614,6 +667,16 @@ export default function Settings() {
                         disabled={!alertEnabled}
                         className="text-sm"
                       />
+                      {saveResults["SMTP_USER"] === "saved" && (
+                        <p className="flex items-center gap-1 text-xs text-emerald-500">
+                          <CheckCircle2 className="h-3 w-3" /> Saved
+                        </p>
+                      )}
+                      {saveResults["SMTP_USER"] === "deleted" && (
+                        <p className="flex items-center gap-1 text-xs text-amber-500">
+                          <Trash2 className="h-3 w-3" /> Cleared
+                        </p>
+                      )}
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="smtp-pass" className="text-xs">Password</Label>
@@ -656,6 +719,16 @@ export default function Settings() {
                       disabled={!alertEnabled}
                       className="text-sm"
                     />
+                    {saveResults["SMTP_FROM"] === "saved" && (
+                      <p className="flex items-center gap-1 text-xs text-emerald-500">
+                        <CheckCircle2 className="h-3 w-3" /> Saved
+                      </p>
+                    )}
+                    {saveResults["SMTP_FROM"] === "deleted" && (
+                      <p className="flex items-center gap-1 text-xs text-amber-500">
+                        <Trash2 className="h-3 w-3" /> Cleared
+                      </p>
+                    )}
                     <p className="text-xs text-muted-foreground">Defaults to the username if left blank.</p>
                   </div>
                 </div>

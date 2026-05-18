@@ -7,6 +7,7 @@ import { eq, inArray } from "drizzle-orm";
 vi.mock("../lib/spikeNotify", () => ({
   sendSpikeNotifications: vi.fn().mockResolvedValue(undefined),
   sendTestWebhookNotification: vi.fn().mockResolvedValue(undefined),
+  getLastNotification: vi.fn().mockReturnValue(null),
 }));
 
 const TEST_GOAL = "__test_spike_email_forwarding__";

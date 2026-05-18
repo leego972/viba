@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, auditLogsTable, sessionsTable, messagesTable, settingsTable } from "@workspace/db";
 import { eq, sql, desc } from "drizzle-orm";
 import { detectSpikeProviders, type ProviderCount } from "../lib/spikeDetect";
-import { sendSpikeNotifications, sendTestWebhookNotification } from "../lib/spikeNotify";
+import { sendSpikeNotifications, sendTestWebhookNotification, getLastNotification } from "../lib/spikeNotify";
 import { sendTestEmail } from "../lib/emailNotify";
 
 const router: IRouter = Router();
@@ -196,6 +196,7 @@ router.get("/stats", async (req, res): Promise<void> => {
     recentSpikeProviders,
     recentSpikeThreshold: alertThreshold,
     alertEnabled,
+    lastSpikeNotification: getLastNotification(),
   });
 });
 

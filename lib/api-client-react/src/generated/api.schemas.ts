@@ -55,6 +55,18 @@ export interface ModelUsageBreakdown {
   count: number;
 }
 
+/**
+ * Details of the last out-of-band spike notification that was dispatched, or null if none has been sent since server start
+ * @nullable
+ */
+export type BridgeStatsLastSpikeNotification = {
+  /** Unix ms timestamp when the notification was sent */
+  sentAt: number;
+  providers: string[];
+  channels: string[];
+  emailAddresses: string[];
+} | null;
+
 export interface BridgeStats {
   totalSessions: number;
   activeSessions: number;
@@ -72,6 +84,11 @@ export interface BridgeStats {
   recentSpikeThreshold: number;
   /** Whether fallback spike alerts are enabled */
   alertEnabled: boolean;
+  /**
+   * Details of the last out-of-band spike notification that was dispatched, or null if none has been sent since server start
+   * @nullable
+   */
+  lastSpikeNotification?: BridgeStatsLastSpikeNotification;
 }
 
 export interface TestNotificationResult {

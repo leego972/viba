@@ -51,7 +51,7 @@ async function main() {
   console.log("╚══════════════════════════════════════════════╝\n");
 
   // Verify account
-  const account = await stripe.account.retrieve();
+  const account = await stripe.accounts.retrieve("me");
   console.log(`Account: ${account.id} (${account.email ?? "no email"})\n`);
 
   console.log("── Subscription Plans ─────────────────────────────────────────\n");

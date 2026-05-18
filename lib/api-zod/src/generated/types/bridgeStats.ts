@@ -5,6 +5,7 @@
  * BridgeAI API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { BridgeStatsLastSpikeNotification } from "./bridgeStatsLastSpikeNotification";
 import type { FallbackTrendPoint } from "./fallbackTrendPoint";
 import type { ModelUsageBreakdown } from "./modelUsageBreakdown";
 import type { ModelUsageCount } from "./modelUsageCount";
@@ -27,4 +28,9 @@ export interface BridgeStats {
   recentSpikeThreshold: number;
   /** Whether fallback spike alerts are enabled */
   alertEnabled: boolean;
+  /**
+   * Details of the last out-of-band spike notification that was dispatched, or null if none has been sent since server start
+   * @nullable
+   */
+  lastSpikeNotification?: BridgeStatsLastSpikeNotification;
 }

@@ -790,6 +790,26 @@ components:
         alertEnabled:
           type: boolean
           description: Whether fallback spike alerts are enabled
+        lastSpikeNotification:
+          description: Details of the last out-of-band spike notification that was dispatched, or null if none has been sent since server start
+          type: ["object", "null"]
+          properties:
+            sentAt:
+              type: integer
+              description: Unix ms timestamp when the notification was sent
+            providers:
+              type: array
+              items:
+                type: string
+            channels:
+              type: array
+              items:
+                type: string
+            emailAddresses:
+              type: array
+              items:
+                type: string
+          required: [sentAt, providers, channels, emailAddresses]
       required:
         - totalSessions
         - activeSessions

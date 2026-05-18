@@ -12,6 +12,19 @@ export interface SpikeNotifyOptions {
   _emailSender?: EmailSender;
 }
 
+export interface LastNotification {
+  sentAt: number;
+  providers: string[];
+  channels: string[];
+  emailAddresses: string[];
+}
+
+let lastNotification: LastNotification | null = null;
+
+export function getLastNotification(): LastNotification | null {
+  return lastNotification;
+}
+
 const COOLDOWN_MS = 60 * 60 * 1000;
 
 const notifiedAt = new Map<string, number>();
@@ -27,6 +40,27 @@ function markNotified(providers: string[]): void {
   for (const p of providers) {
     notifiedAt.set(p, now);
   }
+}
+
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  attempts: number,
+  delayMs: number,
+  label: string
+): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (i < attempts - 1) {
+        logger.warn({ attempt: i + 1, label }, "Retrying after failure");
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+    }
+  }
+  throw lastErr;
 }
 
 const PRIVATE_RANGES = [
@@ -135,43 +169,85 @@ export async function sendTestWebhookNotification(
   logger.info({ url: webhookUrl }, "Test spike webhook delivered");
 }
 
+function parseEmails(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((e) => e.trim())
+    .filter(Boolean);
+}
+
 export async function sendSpikeNotifications(opts: SpikeNotifyOptions): Promise<void> {
-  const { providers, threshold, webhookUrl, notificationEmail, settingsUrl, smtpSettings, _emailSender = sendSpikeAlertEmail } = opts;
+  const {
+    providers,
+    threshold,
+    webhookUrl,
+    notificationEmail,
+    settingsUrl,
+    smtpSettings,
+    _emailSender = sendSpikeAlertEmail,
+  } = opts;
 
   const fresh = providers.filter((p) => isCooledDown(p.provider));
   if (fresh.length === 0) return;
 
-  if (!webhookUrl && !notificationEmail) return;
+  const emails = parseEmails(notificationEmail);
+  if (!webhookUrl && emails.length === 0) return;
 
   let dispatched = false;
+  const channels: string[] = [];
+  const sentEmailAddresses: string[] = [];
 
   if (webhookUrl) {
     try {
       await assertSafeUrl(webhookUrl);
       await sendWebhook(webhookUrl, fresh, threshold, settingsUrl);
+      channels.push("webhook");
       dispatched = true;
     } catch (err) {
       logger.warn({ url: webhookUrl, err }, "Spike webhook URL rejected by safety check");
     }
   }
 
-  if (notificationEmail) {
-    await _emailSender({
-      to: notificationEmail,
-      providers: fresh,
-      threshold,
-      settingsUrl,
-      smtpSettings,
-    });
-    logger.info(
-      { email: notificationEmail, providers: fresh.map((p) => p.provider) },
-      "Spike alert email dispatched"
-    );
-    dispatched = true;
+  if (emails.length > 0) {
+    for (const email of emails) {
+      try {
+        await withRetry(
+          () =>
+            _emailSender({
+              to: email,
+              providers: fresh,
+              threshold,
+              settingsUrl,
+              smtpSettings,
+            }),
+          3,
+          1000,
+          `spike-email:${email}`
+        );
+        logger.info(
+          { email, providers: fresh.map((p) => p.provider) },
+          "Spike alert email dispatched"
+        );
+        sentEmailAddresses.push(email);
+      } catch (err) {
+        logger.error({ email, err }, "Spike alert email failed after retries");
+      }
+    }
+    if (sentEmailAddresses.length > 0) {
+      channels.push("email");
+      dispatched = true;
+    }
   }
 
   if (dispatched) {
     markNotified(fresh.map((p) => p.provider));
+    lastNotification = {
+      sentAt: Date.now(),
+      providers: fresh.map((p) => p.provider),
+      channels,
+      emailAddresses: sentEmailAddresses,
+    };
   }
 }
 

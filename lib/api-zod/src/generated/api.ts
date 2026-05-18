@@ -623,6 +623,19 @@ export const GetStatsResponse = zod.object({
   alertEnabled: zod
     .boolean()
     .describe("Whether fallback spike alerts are enabled"),
+  lastSpikeNotification: zod
+    .object({
+      sentAt: zod
+        .number()
+        .describe("Unix ms timestamp when the notification was sent"),
+      providers: zod.array(zod.string()),
+      channels: zod.array(zod.string()),
+      emailAddresses: zod.array(zod.string()),
+    })
+    .nullish()
+    .describe(
+      "Details of the last out-of-band spike notification that was dispatched, or null if none has been sent since server start",
+    ),
 });
 
 /**

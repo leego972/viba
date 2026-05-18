@@ -23,6 +23,7 @@ import {
   Plus, Activity, Clock, DollarSign, Layers, Zap, RotateCcw,
   Wifi, WifiOff, AlertTriangle, TrendingDown, Search, Trash2,
   ShieldCheck, ShieldAlert, ShieldOff, RefreshCw, DatabaseZap,
+  Bell, Mail, Webhook,
 } from "lucide-react";
 import { format, subDays } from "date-fns";
 import {
@@ -297,6 +298,7 @@ export default function Dashboard() {
   const hasTrendData = (stats?.fallbackTrend ?? []).length > 0;
   const modelUsage = stats?.modelUsage ?? [];
   const modelUsageBreakdown = stats?.modelUsageBreakdown ?? [];
+  const lastSpikeNotification = stats?.lastSpikeNotification ?? null;
 
   const breakdownByProvider = modelUsageBreakdown.reduce<
     Record<string, { live: Array<{ model: string; count: number }>; simulated: Array<{ model: string; count: number }> }>
@@ -447,6 +449,49 @@ export default function Dashboard() {
             </p>
           </CardContent>
         </Card>
+
+        {/* Last spike notification status */}
+        {lastSpikeNotification && (
+          <Card className="border-sky-500/20 bg-sky-500/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-sm text-sky-300">
+                <Bell className="h-4 w-4" />
+                Last Alert Notification
+                <span className="ml-auto text-[11px] font-normal text-sky-400/70">
+                  {formatTimeAgo(lastSpikeNotification.sentAt)}
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0 space-y-2">
+              <div className="flex flex-wrap gap-2">
+                {lastSpikeNotification.channels.includes("webhook") && (
+                  <Badge variant="outline" className="gap-1 text-xs border-sky-500/40 text-sky-300 bg-sky-500/10">
+                    <Webhook className="h-3 w-3" />
+                    Webhook
+                  </Badge>
+                )}
+                {lastSpikeNotification.channels.includes("email") && (
+                  <Badge variant="outline" className="gap-1 text-xs border-sky-500/40 text-sky-300 bg-sky-500/10">
+                    <Mail className="h-3 w-3" />
+                    Email
+                  </Badge>
+                )}
+              </div>
+              <p className="text-xs text-sky-400/70">
+                Providers alerted:{" "}
+                <span className="font-medium text-sky-300">
+                  {lastSpikeNotification.providers.join(", ")}
+                </span>
+                {lastSpikeNotification.emailAddresses.length > 0 && (
+                  <> · sent to {lastSpikeNotification.emailAddresses.join(", ")}</>
+                )}
+              </p>
+              <p className="text-[11px] text-sky-400/50">
+                Sent at {format(new Date(lastSpikeNotification.sentAt), "MMM d, HH:mm:ss")} · Resets on server restart
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Per-provider fallback breakdown */}
         {hasFallbacks && fallbacksByProvider.length > 0 && (
