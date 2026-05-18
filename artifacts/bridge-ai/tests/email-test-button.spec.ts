@@ -78,6 +78,6 @@ test.describe("Email 'Send test' button confirmation", () => {
 
     await expect(page.getByText("Test sent — email not delivered", { exact: true }).first()).toBeVisible({ timeout: 10000 });
     await expect(page.getByText(/SMTP not configured/).first()).toBeVisible();
-    await expect(page.getByText(/Configure SMTP settings/).first()).toBeVisible();
+    await expect(page.getByText(/SMTP credentials required for email delivery/).first()).toBeVisible();
   });
 });

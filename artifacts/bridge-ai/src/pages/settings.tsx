@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Key, ShieldCheck, Zap, RotateCcw, BarChart2, Cpu, Bell, X, CheckCircle2, MinusCircle, Trash2 } from "lucide-react";
+import { Key, ShieldCheck, Zap, RotateCcw, BarChart2, Cpu, Bell, X, CheckCircle2, MinusCircle, Trash2, MailWarning } from "lucide-react";
 
 type ModelOption = { value: string; label: string };
 
@@ -145,6 +145,7 @@ export default function Settings() {
   const [clearedKeys, setClearedKeys] = useState<Set<string>>(new Set());
   const [thresholdError, setThresholdError] = useState<string | null>(null);
   const [saveResults, setSaveResults] = useState<Record<string, "saved" | "skipped" | "deleted">>({});
+  const [smtpMissingBanner, setSmtpMissingBanner] = useState(false);
 
   useEffect(() => {
     if (settings) {
@@ -304,15 +305,24 @@ export default function Settings() {
     sendTestNotification.mutate(undefined, {
       onSuccess: (data) => {
         if (data.emailSent === false) {
-          const hint = data.message.includes("SMTP not configured")
-            ? " Configure SMTP settings in the Email (SMTP) section below to enable real email delivery."
-            : "";
-          toast({
-            title: "Test sent — email not delivered",
-            description: `${data.message}${hint}`,
-            variant: "destructive",
-          });
+          const isSmtpMissing = data.message.includes("SMTP not configured");
+          if (isSmtpMissing) {
+            setSmtpMissingBanner(true);
+            toast({
+              title: "Test sent — email not delivered",
+              description: data.message,
+              variant: "destructive",
+            });
+          } else {
+            setSmtpMissingBanner(false);
+            toast({
+              title: "Test sent — email not delivered",
+              description: data.message,
+              variant: "destructive",
+            });
+          }
         } else {
+          setSmtpMissingBanner(false);
           toast({ title: "Test sent", description: data.message });
         }
       },
@@ -528,6 +538,26 @@ export default function Settings() {
                   Configure SMTP credentials below to enable real email delivery.
                 </p>
               </div>
+
+              {smtpMissingBanner && (
+                <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3">
+                  <MailWarning className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-amber-300">SMTP credentials required for email delivery</p>
+                    <p className="text-xs text-amber-400/80 mt-0.5">
+                      Your email address is saved, but no SMTP server is configured so the message could not be sent. Fill in the <strong>SMTP Host</strong>, <strong>Port</strong>, <strong>Username</strong>, and <strong>Password</strong> fields below, then save and run the test again.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSmtpMissingBanner(false)}
+                    className="text-amber-400/60 hover:text-amber-300 flex-shrink-0"
+                    aria-label="Dismiss"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
 
               <div className="space-y-3 border-t pt-4">
                 <div className="flex items-center justify-between">
