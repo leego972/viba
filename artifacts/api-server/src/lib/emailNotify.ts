@@ -21,7 +21,7 @@ function buildEmailBody(opts: SpikeEmailOptions): { subject: string; text: strin
     .join("\n");
 
   const text = [
-    "VIBA - AI Manager has detected a fallback spike on the following provider(s):",
+    "VIBA - Collaborative Multi-Agent Orchestration System has detected a fallback spike on the following provider(s):",
     "",
     providerLines,
     "",
@@ -131,7 +131,7 @@ export async function sendTestEmail(
 
   const subject = "[VIBA] Test spike alert";
   const text = [
-    "This is a test spike alert from VIBA - AI Manager.",
+    "This is a test spike alert from VIBA - Collaborative Multi-Agent Orchestration System.",
     "Your email notification channel is configured correctly.",
     "",
     `Settings: ${settingsUrl}`,
