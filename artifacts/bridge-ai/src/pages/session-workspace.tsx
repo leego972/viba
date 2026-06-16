@@ -682,7 +682,7 @@ export default function SessionWorkspace() {
                 messages.map(msg => {
                   const isUser = msg.role === "user";
                   const isSimulated = !isUser && msg.content?.startsWith(SIMULATED_PREFIX);
-                  const msgType = (msg as unknown as { messageType?: string }).messageType ?? "output";
+                  const msgType = msg.messageType ?? "output";
                   const colorClass = isUser
                     ? AGENT_COLORS["user"]
                     : msgType === "handoff"
