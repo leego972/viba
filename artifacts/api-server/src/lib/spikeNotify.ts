@@ -149,7 +149,7 @@ export async function sendTestWebhookNotification(
 
   const body = {
     event: "test_notification",
-    message: "This is a test spike alert from VIBA - AI Manager. Your webhook is configured correctly.",
+    message: "This is a test spike alert from VIBA - Collaborative Multi-Agent Orchestration System. Your webhook is configured correctly.",
     providers: [{ provider: "test", fallbackCount: 0, threshold: 0 }],
     settingsUrl,
     timestamp: new Date().toISOString(),
