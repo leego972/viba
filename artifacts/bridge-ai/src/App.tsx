@@ -14,6 +14,7 @@ import Workbench from "@/pages/workbench";
 import Bridge from "@/pages/bridge";
 import Pricing from "@/pages/pricing";
 import CheckoutSuccess from "@/pages/checkout-success";
+import Admin from "@/pages/admin";
 import { initAuth } from "@/lib/auth";
 
 // Register the stored access token as the bearer for every API request
@@ -43,9 +44,11 @@ function App() {
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
           <ErrorBoundary>
             <Switch>
-              {/* Public routes — bypass AccessGate entirely */}
+              {/* Public / self-authenticated routes — bypass AccessGate entirely */}
               <Route path="/pricing" component={Pricing} />
               <Route path="/checkout/success" component={CheckoutSuccess} />
+              {/* Admin — self-gated by ADMIN_TOKEN, never behind AccessGate */}
+              <Route path="/admin" component={Admin} />
               {/* All other routes — gated by AccessGate */}
               <Route>
                 <AccessGate>
