@@ -1,1 +1,1 @@
-export * from "./generated/api";
+ZXhwb3J0ICogZnJvbSAiLi9nZW5lcmF0ZWQvYXBpIjsK
