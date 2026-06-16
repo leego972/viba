@@ -8,6 +8,7 @@ export class AnthropicAdapter implements AgentAdapter {
   capabilities = ["code_review", "writing", "logic_critique", "ux_review"];
   role: string;
   isMock = false;
+  canUseTools = false;
 
   private apiKey: string;
   model: string;
