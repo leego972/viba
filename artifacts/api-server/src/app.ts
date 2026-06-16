@@ -7,6 +7,7 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 import { createRateLimiter } from "./middlewares/rateLimiter";
 import { accessTokenMiddleware } from "./middlewares/accessToken";
+import { webhookHandler } from "./routes/stripeWebhook";
 
 const app: Express = express();
 
@@ -24,9 +25,28 @@ const agentLimiter = createRateLimiter({
   message: "Agent execution rate limit reached. Wait before running more steps.",
 });
 
+// ─── Stripe webhook — MUST be registered BEFORE express.json() ───────────────
+// Stripe's signature verification requires the raw request body as a Buffer.
+// Any body-parsing middleware running before this will break signature checks.
+app.post(
+  "/api/stripe/webhook",
+  express.raw({ type: "application/json" }),
+  webhookHandler,
+);
+
 // These paths bypass the ACCESS_TOKEN gate so the frontend can bootstrap
-// before it has a token.
-const AUTH_EXEMPT_PATHS = new Set(["/auth/config", "/auth/verify", "/healthz"]);
+// before it has a token. Stripe paths are always public — they are part of
+// the subscription flow that grants access.
+const AUTH_EXEMPT_PATHS = new Set([
+  "/auth/config",
+  "/auth/verify",
+  "/auth/verify-bypass",
+  "/stripe/config",
+  "/stripe/checkout",
+  "/stripe/subscription",
+  "/stripe/portal",
+  "/healthz",
+]);
 
 app.use(
   pinoHttp({
@@ -40,9 +60,7 @@ app.use(
         };
       },
       res(res) {
-        return {
-          statusCode: res.statusCode,
-        };
+        return { statusCode: res.statusCode };
       },
     },
   }),
@@ -60,7 +78,7 @@ app.use(
   "/api",
   apiLimiter,
   (req, res, next) => {
-    // Auth bootstrap endpoints are always reachable without a token
+    // Auth bootstrap and Stripe subscription-flow endpoints are always reachable
     if (AUTH_EXEMPT_PATHS.has(req.path)) { next(); return; }
     accessTokenMiddleware(req, res, next);
   },
