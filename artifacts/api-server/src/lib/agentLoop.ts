@@ -134,7 +134,7 @@ export async function runNextAgentStep(sessionId: number): Promise<{
     .where(eq(messagesTable.sessionId, sessionId))
     .orderBy(asc(messagesTable.id));
 
-  const recentMessages = previousMessages.slice(-6);
+  const recentMessages = previousMessages.slice(-12); // adapters support up to 15; 12 gives rich context without over-bloating the prompt
   const [memory] = await db.select().from(memoryTable).where(eq(memoryTable.sessionId, sessionId));
 
   // Build adapter and run task — retry once before falling back to simulation
