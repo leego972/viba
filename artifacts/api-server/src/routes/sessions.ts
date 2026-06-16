@@ -662,11 +662,11 @@ router.delete("/sessions/:id/banner-dismissal", async (req, res): Promise<void> 
     ]);
 
     const agentLines = agents.map(
-      (a) => `- **${a.name}** — Provider: ${a.provider}, Role: ${a.role}, Mode: ${a.mode}`
+      (a) => `- **${a.name}** — Provider: ${a.provider}, Role: ${a.role}, Mode: ${a.isMock ? "simulation" : "live"}`
     );
 
     const lines = [
-      `# BridgeAI Session Transcript`,
+      `# VIBA - AI Manager Session Transcript`,
       ``,
       `**Goal:** ${session.goal}`,
       `**Mode:** ${session.mode}`,
@@ -685,11 +685,11 @@ router.delete("/sessions/:id/banner-dismissal", async (req, res): Promise<void> 
       ``,
       ...messageLines,
       `---`,
-      `*Exported from BridgeAI — Multi-AI Orchestration Platform*`,
+      `*Exported from VIBA - AI Manager*`,
     ];
 
     const markdown = lines.join("\n");
-    const filename = `bridge-session-${id}.md`;
+    const filename = `viba-session-${id}.md`;
 
     res.set("Content-Type", "text/markdown; charset=utf-8");
     res.set("Content-Disposition", `attachment; filename="${filename}"`);
