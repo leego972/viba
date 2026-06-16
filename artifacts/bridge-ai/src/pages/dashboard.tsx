@@ -15,6 +15,16 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -216,6 +226,7 @@ export default function Dashboard() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
   const [resettingProvider, setResettingProvider] = useState<string | null>(null);
+  const [sessionToDelete, setSessionToDelete] = useState<{ id: number; goal?: string | null } | null>(null);
 
   const deleteCircuit = useDeleteCircuitStatus({
     mutation: {
@@ -746,9 +757,7 @@ export default function Dashboard() {
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                if (window.confirm(`Delete "${session.goal || "this session"}"? This cannot be undone.`)) {
-                                  deleteSession.mutate({ id: session.id });
-                                }
+                                setSessionToDelete({ id: session.id, goal: session.goal });
                               }}
                             >
                               <Trash2 className="h-3.5 w-3.5" />
@@ -784,6 +793,33 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={!!sessionToDelete} onOpenChange={(open) => { if (!open) setSessionToDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete session?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {sessionToDelete?.goal
+                ? <><span className="font-medium text-foreground">"{sessionToDelete.goal}"</span> will be permanently deleted. This cannot be undone.</>
+                : "This session will be permanently deleted. This cannot be undone."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setSessionToDelete(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (sessionToDelete) {
+                  deleteSession.mutate({ id: sessionToDelete.id });
+                  setSessionToDelete(null);
+                }
+              }}
+            >
+              Delete session
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }
