@@ -1,5 +1,6 @@
+import { z } from "zod/v4";
 import { Router, type IRouter } from "express";
-import { eq, asc, desc, inArray, sql } from "drizzle-orm";
+import { eq, asc, desc, inArray, sql, and } from "drizzle-orm";
 import {
   db,
   sessionsTable,
@@ -55,6 +56,8 @@ const PROVIDER_CAPABILITIES: Record<string, string[]> = {
   google: ["multimodal", "contextual_analysis", "summarization", "creative"],
   perplexity: ["research_summary", "fact_checking", "citation"],
 };
+
+const TOOL_CAPABLE_PROVIDERS = new Set(["replit", "manus"]);
 
 function getCapabilities(provider: string): string[] {
   return PROVIDER_CAPABILITIES[provider.toLowerCase()] ?? ["general"];
@@ -163,6 +166,9 @@ router.post("/sessions", async (req, res): Promise<void> => {
   }
 
   const { goal, autonomyMode, agents } = parsed.data;
+  const repoUrl = typeof req.body?.repoUrl === "string" ? req.body.repoUrl.trim() || null : null;
+  const repoBranch = typeof req.body?.repoBranch === "string" ? req.body.repoBranch.trim() || null : null;
+  const workspaceEnv = typeof req.body?.workspaceEnv === "string" ? req.body.workspaceEnv.trim() || null : null;
 
   const allMock = agents.every((a) => a.isMock);
   const noneMock = agents.every((a) => !a.isMock);
@@ -170,7 +176,7 @@ router.post("/sessions", async (req, res): Promise<void> => {
 
   const [session] = await db
     .insert(sessionsTable)
-    .values({ goal, autonomyMode, status: "active", mode })
+    .values({ goal, autonomyMode, status: "active", mode, repoUrl: repoUrl ?? null, repoBranch: repoBranch ?? null, workspaceEnv: workspaceEnv ?? null })
     .returning();
 
   if (!session) {
@@ -194,6 +200,7 @@ router.post("/sessions", async (req, res): Promise<void> => {
         provider: agentInput.provider.toLowerCase(),
         role,
         capabilities: getCapabilities(agentInput.provider),
+        canUseTools: TOOL_CAPABLE_PROVIDERS.has(agentInput.provider.toLowerCase()),
         isMock: agentInput.isMock,
       })
       .returning();
@@ -536,7 +543,11 @@ router.get("/sessions/:id/messages", async (req, res): Promise<void> => {
     res.status(400).json({ error: params.error.message });
     return;
   }
-  const messages = await db.select().from(messagesTable).where(eq(messagesTable.sessionId, params.data.id)).orderBy(asc(messagesTable.id));
+  const msgTypeFilter = typeof req.query["type"] === "string" ? req.query["type"] : undefined;
+  const msgRows = db.select().from(messagesTable).where(eq(messagesTable.sessionId, params.data.id)).orderBy(asc(messagesTable.id));
+  const messages = msgTypeFilter
+    ? await db.select().from(messagesTable).where(and(eq(messagesTable.sessionId, params.data.id), eq(messagesTable.messageType, msgTypeFilter))).orderBy(asc(messagesTable.id))
+    : await db.select().from(messagesTable).where(eq(messagesTable.sessionId, params.data.id)).orderBy(asc(messagesTable.id));
   res.json(serialize(messages));
 });
 
