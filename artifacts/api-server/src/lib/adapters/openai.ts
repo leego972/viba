@@ -45,15 +45,15 @@ Respond in character as your role. Be specific, actionable, and concise. At the 
 
     try {
       const { default: OpenAI } = await import("openai");
-      const client = new OpenAI({ apiKey: this.apiKey });
+      const client = new OpenAI({ apiKey: this.apiKey, timeout: 30_000 });
 
       const response = await client.chat.completions.create({
         model: this.model,
         messages: [
           { role: "system", content: systemPrompt },
-          ...messages.slice(-10),
+          ...messages.slice(-15),
         ],
-        max_tokens: 800,
+        max_tokens: 2048,
         temperature: 0.7,
       });
 
