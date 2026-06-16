@@ -8,7 +8,7 @@ export const bannerDismissalsTable = pgTable(
     sessionId: integer("session_id")
       .notNull()
       .references(() => sessionsTable.id, { onDelete: "cascade" }),
-    dismissedAt: timestamp("dismissed_at", { withTimezone: true }).notNull(),
+    dismissedAt: timestamp("dismissed_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [unique("banner_dismissals_session_id_unique").on(t.sessionId)],
 );
