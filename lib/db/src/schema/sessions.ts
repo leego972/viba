@@ -10,6 +10,12 @@ export const sessionsTable = pgTable("sessions", {
   mode: text("mode").notNull().default("simulation"),
   estimatedCost: real("estimated_cost"),
   finalOutput: text("final_output"),
+  /** Git repo URL the tool-capable agents should act on (optional). */
+  repoUrl: text("repo_url"),
+  /** Branch to target — defaults to main if not specified. */
+  repoBranch: text("repo_branch"),
+  /** Environment label: development | staging | production */
+  workspaceEnv: text("workspace_env"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
