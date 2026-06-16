@@ -14,7 +14,11 @@ import { getStripeClient } from "../lib/stripe/client";
 
 const router: IRouter = Router();
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+function safeInt(raw: unknown, fallback: number, max?: number): number {
+  const n = parseInt(String(raw ?? fallback), 10);
+  const safe = Number.isNaN(n) ? fallback : n;
+  return max !== undefined ? Math.min(safe, max) : safe;
+}
 
 function newAccessToken() {
   return "viba_" + crypto.randomBytes(24).toString("hex");
@@ -46,7 +50,6 @@ router.get("/overview", async (req, res): Promise<void> => {
           AND ${auditLogsTable.createdAt} >= NOW() - INTERVAL '7 days'`
     );
 
-  // Subscribers — raw SQL so we don't need a typed import in this generic router
   const subsRows = await db.execute(
     sql`SELECT status, COUNT(*)::int AS count FROM subscribers GROUP BY status`
   );
@@ -85,7 +88,7 @@ router.get("/users", async (req, res): Promise<void> => {
 
 // ─── POST /api/admin/users/:id/revoke (destructive) ──────────────────────────
 router.post("/users/:id/revoke", requireConfirmation, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id ?? "", 10);
+  const id = safeInt(req.params.id, 0);
   if (!id) { res.status(400).json({ error: "invalid id" }); return; }
   const token = newAccessToken();
   await db.execute(
@@ -97,7 +100,7 @@ router.post("/users/:id/revoke", requireConfirmation, async (req, res): Promise<
 
 // ─── POST /api/admin/users/:id/cancel-subscription (destructive) ─────────────
 router.post("/users/:id/cancel-subscription", requireConfirmation, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id ?? "", 10);
+  const id = safeInt(req.params.id, 0);
   if (!id) { res.status(400).json({ error: "invalid id" }); return; }
 
   const rows = await db.execute(
@@ -126,8 +129,8 @@ router.post("/users/:id/cancel-subscription", requireConfirmation, async (req, r
 
 // ─── GET /api/admin/sessions ──────────────────────────────────────────────────
 router.get("/sessions", async (req, res): Promise<void> => {
-  const limit = Math.min(parseInt(String(req.query.limit ?? "50"), 10), 200);
-  const offset = parseInt(String(req.query.offset ?? "0"), 10);
+  const limit = safeInt(req.query.limit, 50, 200);
+  const offset = safeInt(req.query.offset, 0);
 
   const rows = await db.execute(
     sql`SELECT s.id, s.goal, s.status, s.mode, s.autonomy_mode,
@@ -150,7 +153,7 @@ router.get("/sessions", async (req, res): Promise<void> => {
 
 // ─── DELETE /api/admin/sessions/:id (destructive) ────────────────────────────
 router.delete("/sessions/:id", requireConfirmation, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id ?? "", 10);
+  const id = safeInt(req.params.id, 0);
   if (!id) { res.status(400).json({ error: "invalid id" }); return; }
   await db.execute(sql`DELETE FROM sessions WHERE id = ${id}`);
   req.log.warn({ adminAction: "delete_session", targetId: id }, "Admin deleted session");
@@ -159,10 +162,10 @@ router.delete("/sessions/:id", requireConfirmation, async (req, res): Promise<vo
 
 // ─── GET /api/admin/requests ──────────────────────────────────────────────────
 router.get("/requests", async (req, res): Promise<void> => {
-  const limit = Math.min(parseInt(String(req.query.limit ?? "100"), 10), 500);
-  const offset = parseInt(String(req.query.offset ?? "0"), 10);
+  const limit = safeInt(req.query.limit, 100, 500);
+  const offset = safeInt(req.query.offset, 0);
   const provider = String(req.query.provider ?? "").trim();
-  const sessionId = parseInt(String(req.query.session ?? "0"), 10);
+  const sessionId = safeInt(req.query.session, 0);
 
   const providerClause = provider ? sql` AND m.provider = ${provider}` : sql``;
   const sessionClause = sessionId ? sql` AND m.session_id = ${sessionId}` : sql``;
@@ -195,8 +198,8 @@ router.get("/requests", async (req, res): Promise<void> => {
 
 // ─── GET /api/admin/errors ────────────────────────────────────────────────────
 router.get("/errors", async (req, res): Promise<void> => {
-  const limit = Math.min(parseInt(String(req.query.limit ?? "100"), 10), 500);
-  const offset = parseInt(String(req.query.offset ?? "0"), 10);
+  const limit = safeInt(req.query.limit, 100, 500);
+  const offset = safeInt(req.query.offset, 0);
 
   const rows = await db
     .select()
@@ -222,7 +225,6 @@ router.get("/errors", async (req, res): Promise<void> => {
 router.get("/health", async (req, res): Promise<void> => {
   const circuits = await db.select().from(circuitStateTable).orderBy(circuitStateTable.provider);
 
-  // DB latency ping
   const dbStart = Date.now();
   await db.execute(sql`SELECT 1`);
   const dbLatencyMs = Date.now() - dbStart;
@@ -265,7 +267,6 @@ router.post("/circuit/:provider/reset", requireConfirmation, async (req, res): P
 
 // ─── GET /api/admin/abuse ─────────────────────────────────────────────────────
 router.get("/abuse", async (req, res): Promise<void> => {
-  // Session creation rate — last 7 days by hour
   const sessionRate = await db.execute(
     sql`SELECT date_trunc('hour', created_at) AS hour,
                COUNT(*)::int AS count
@@ -274,7 +275,6 @@ router.get("/abuse", async (req, res): Promise<void> => {
         GROUP BY 1 ORDER BY 1 DESC LIMIT 168`
   );
 
-  // Spike providers (fallbacks in last 1h)
   const spikeProviders = await db
     .select({
       provider: sql<string>`metadata->>'provider'`,
@@ -289,7 +289,6 @@ router.get("/abuse", async (req, res): Promise<void> => {
     .groupBy(sql`metadata->>'provider'`)
     .orderBy(desc(sql`count(*)`));
 
-  // Top sessions by message count (potential abuse)
   const heavySessions = await db.execute(
     sql`SELECT session_id, COUNT(*)::int AS msg_count
         FROM messages
@@ -298,8 +297,7 @@ router.get("/abuse", async (req, res): Promise<void> => {
         LIMIT 20`
   );
 
-  // Failed payments in last 30d
-  const failedPayments = await db
+  const [failedPayments] = await db
     .select({ total: sql<number>`count(*)::int` })
     .from(auditLogsTable)
     .where(
@@ -307,7 +305,6 @@ router.get("/abuse", async (req, res): Promise<void> => {
           AND created_at >= NOW() - INTERVAL '30 days'`
     );
 
-  // Subscribers in 'past_due' or 'unpaid' status
   const delinquentSubs = await db.execute(
     sql`SELECT id, email, status, created_at
         FROM subscribers
@@ -319,22 +316,21 @@ router.get("/abuse", async (req, res): Promise<void> => {
     sessionCreationRate: sessionRate.rows,
     spikeProviders,
     heavySessions: heavySessions.rows,
-    failedPayments: failedPayments[0]?.total ?? 0,
+    failedPayments: failedPayments?.total ?? 0,
     delinquentSubscribers: delinquentSubs.rows,
   });
 });
 
 // ─── GET /api/admin/logs ──────────────────────────────────────────────────────
 router.get("/logs", async (req, res): Promise<void> => {
-  const limit = Math.min(parseInt(String(req.query.limit ?? "100"), 10), 500);
-  const offset = parseInt(String(req.query.offset ?? "0"), 10);
+  const limit = safeInt(req.query.limit, 100, 500);
+  const offset = safeInt(req.query.offset, 0);
   const eventType = String(req.query.type ?? "").trim();
 
   const whereClause = eventType ? sql`WHERE event_type = ${eventType}` : sql``;
 
   const rows = await db.execute(
-    sql`SELECT id, session_id, event_type, description,
-               metadata, created_at
+    sql`SELECT id, session_id, event_type, description, metadata, created_at
         FROM audit_logs
         ${whereClause}
         ORDER BY created_at DESC
@@ -361,7 +357,6 @@ router.get("/logs", async (req, res): Promise<void> => {
 // ─── GET /api/admin/config ────────────────────────────────────────────────────
 router.get("/config", async (req, res): Promise<void> => {
   const rows = await db.select().from(settingsTable).orderBy(settingsTable.key);
-  // Mask password-like values
   const masked = rows.map((r) => ({
     key: r.key,
     value: /pass|secret|password/i.test(r.key) ? "••••••••" : r.value,
