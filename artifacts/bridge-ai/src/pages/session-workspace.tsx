@@ -265,7 +265,7 @@ export default function SessionWorkspace() {
       prevSpikeRef.current = recentSpikeProviders;
       if ("Notification" in window) {
         const fire = () => {
-          new Notification("BridgeAI — Fallback Spike", {
+          new Notification("VIBA — Fallback Spike", {
             body: `${newProviders.join(", ")} hit ${recentSpikeThreshold}+ fallbacks in the last hour. Check your API keys.`,
             icon: "/favicon.ico",
           });
