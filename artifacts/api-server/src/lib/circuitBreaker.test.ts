@@ -130,6 +130,7 @@ function makeMockAdapter(model = "mock-v1"): AgentAdapter {
     capabilities: [],
     role: "tester",
     isMock: true,
+    canUseTools: false,
     runTask: async () => MOCK_RESULT,
   };
 }
@@ -243,7 +244,7 @@ describe("resetProviderCircuit", () => {
     const out = await runAdapterWithRetry({
       buildLiveAdapter: async () => ({
         id: "live", name: "Live", provider: "openai", model: "gpt-4",
-        capabilities: [], role: "tester", isMock: false,
+        capabilities: [], role: "tester", isMock: false, canUseTools: false,
         runTask: async () => { liveCalled = true; return MOCK_RESULT; },
       }),
       buildFallbackAdapter: () => makeMockAdapter(),
@@ -318,7 +319,7 @@ describe("isCircuitOpen", () => {
     const out = await runAdapterWithRetry({
       buildLiveAdapter: async () => ({
         id: "live", name: "Live", provider: "openai", model: "gpt-4",
-        capabilities: [], role: "coder", isMock: false,
+        capabilities: [], role: "coder", isMock: false, canUseTools: false,
         runTask: async () => MOCK_RESULT,
       }),
       buildFallbackAdapter: () => makeMockAdapter(),
