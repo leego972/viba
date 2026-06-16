@@ -6,6 +6,7 @@ import statsRouter from "./stats";
 import circuitStatusRouter from "./circuitStatus";
 import workbenchRouter from "../workbench/serverRoutes";
 import authRouter from "./auth";
+import stripeRouter from "./stripe";
 
 const router: IRouter = Router();
 
@@ -17,5 +18,6 @@ router.use(settingsRouter);
 router.use(statsRouter);
 router.use(circuitStatusRouter);
 router.use(workbenchRouter);
+router.use(stripeRouter);
 
 export default router;
