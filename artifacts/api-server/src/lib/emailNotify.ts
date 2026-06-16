@@ -14,20 +14,20 @@ export type EmailSender = (opts: SpikeEmailOptions) => Promise<void>;
 function buildEmailBody(opts: SpikeEmailOptions): { subject: string; text: string; html: string } {
   const { providers, threshold, settingsUrl } = opts;
   const summary = providers.map((p) => `${p.provider} (${p.count} fallbacks)`).join(", ");
-  const subject = `BridgeAI Spike Alert: ${summary}`;
+  const subject = `VIBA Spike Alert: ${summary}`;
 
   const providerLines = providers
     .map((p) => `  • ${p.provider}: ${p.count} fallbacks (threshold: ${threshold})`)
     .join("\n");
 
   const text = [
-    "BridgeAI has detected a fallback spike on the following provider(s):",
+    "VIBA - AI Manager has detected a fallback spike on the following provider(s):",
     "",
     providerLines,
     "",
     `View and update your alert settings: ${settingsUrl}`,
     "",
-    "You are receiving this because an alert email address is configured in BridgeAI Settings.",
+    "You are receiving this because an alert email address is configured in VIBA Settings.",
   ].join("\n");
 
   const providerHtmlRows = providers
@@ -39,7 +39,7 @@ function buildEmailBody(opts: SpikeEmailOptions): { subject: string; text: strin
 
   const html = `
 <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-  <h2 style="color:#dc2626">BridgeAI Spike Alert</h2>
+  <h2 style="color:#dc2626">VIBA Spike Alert</h2>
   <p>A fallback spike has been detected on the following provider(s):</p>
   <table style="border-collapse:collapse;width:100%">
     <thead>
@@ -55,7 +55,7 @@ function buildEmailBody(opts: SpikeEmailOptions): { subject: string; text: strin
     <a href="${settingsUrl}" style="color:#2563eb">View alert settings</a>
   </p>
   <p style="color:#6b7280;font-size:12px">
-    You are receiving this because an alert email address is configured in BridgeAI Settings.
+    You are receiving this because an alert email address is configured in VIBA Settings.
   </p>
 </div>`.trim();
 
@@ -129,14 +129,14 @@ export async function sendTestEmail(
     return { sent: false, reason: "SMTP not configured" };
   }
 
-  const subject = "[BridgeAI] Test spike alert";
+  const subject = "[VIBA] Test spike alert";
   const text = [
-    "This is a test spike alert from BridgeAI.",
+    "This is a test spike alert from VIBA - AI Manager.",
     "Your email notification channel is configured correctly.",
     "",
     `Settings: ${settingsUrl}`,
     "",
-    "You are receiving this because an alert email address is configured in BridgeAI Settings.",
+    "You are receiving this because an alert email address is configured in VIBA Settings.",
   ].join("\n");
 
   try {
