@@ -36,7 +36,7 @@ export default function Home() {
                   <span className="text-primary">Let them work together.</span>
                 </h1>
                 <p className="mx-auto max-w-[700px] text-muted-foreground md:text-xl lg:text-2xl leading-relaxed">
-                  VIBA - AI Manager is a powerful orchestration platform. Connect ChatGPT, Claude, Manus, Replit, Gemini, and Perplexity. Give them a project goal, assign roles, and watch them collaborate autonomously.
+                  VIBA - Collaborative Multi-Agent Orchestration System is a powerful orchestration platform. Connect ChatGPT, Claude, Manus, Replit, Gemini, and Perplexity. Give them a project goal, assign roles, and watch them collaborate autonomously.
                 </p>
               </div>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -138,7 +138,7 @@ export default function Home() {
       <footer className="w-full border-t py-6 md:py-0">
         <div className="container flex flex-col items-center justify-between gap-4 md:h-24 md:flex-row">
           <p className="text-center text-sm leading-loose text-muted-foreground md:text-left">
-            Built for developers. VIBA - AI Manager is an open architecture project.
+            Built for developers. VIBA - Collaborative Multi-Agent Orchestration System is an open architecture project.
           </p>
         </div>
       </footer>
