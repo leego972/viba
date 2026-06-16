@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, type ReactNode, type FormEvent } from "react";
 import { getStoredToken, setStoredToken, clearStoredToken } from "@/lib/auth";
 
 interface AuthConfig {
@@ -72,7 +72,7 @@ export function AccessGate({ children }: AccessGateProps) {
     return () => { cancelled = true; };
   }, []);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     const trimmed = passcode.trim();
     if (!trimmed) return;
