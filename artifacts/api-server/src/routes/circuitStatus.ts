@@ -15,7 +15,7 @@ router.get("/circuit-status", (_req, res): void => {
 
 // Admin-only: resetting a circuit forces live API traffic and can burn API credits.
 router.delete("/circuit-status/:provider", requireAdmin, async (req, res): Promise<void> => {
-  const provider = (req.params.provider ?? "").trim();
+  const provider = String(req.params.provider ?? "").trim();
   if (!provider) { res.status(400).json({ error: "provider is required" }); return; }
   await resetProviderCircuit(provider);
   req.log.warn({ adminAction: "reset_circuit", provider }, "Circuit reset via status route");
@@ -23,7 +23,7 @@ router.delete("/circuit-status/:provider", requireAdmin, async (req, res): Promi
 });
 
 router.post("/circuit-status/:provider/reset", requireAdmin, async (req, res): Promise<void> => {
-  const provider = (req.params.provider ?? "").trim();
+  const provider = String(req.params.provider ?? "").trim();
   if (!provider) { res.status(400).json({ error: "provider is required" }); return; }
   await resetProviderCircuit(provider);
   req.log.warn({ adminAction: "reset_circuit", provider }, "Circuit reset via status route");
