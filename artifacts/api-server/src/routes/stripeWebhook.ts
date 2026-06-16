@@ -102,7 +102,7 @@ export const webhookHandler: RequestHandler = async (req, res): Promise<void> =>
 
       case "customer.subscription.deleted": {
         const sub = event.data.object as any;
-        await updateSubscriberBySubscriptionId(sub.id as string, { status: "cancelled" });
+        await updateSubscriberBySubscriptionId(sub.id as string, { status: "canceled" });
         logger.info({ subscriptionId: sub.id }, "Subscription cancelled");
         break;
       }
