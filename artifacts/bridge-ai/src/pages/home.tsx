@@ -8,7 +8,7 @@ export default function Home() {
       <header className="px-6 h-14 flex items-center border-b border-border">
         <Link href="/" className="flex items-center justify-center gap-2">
           <Cpu className="h-6 w-6 text-primary" />
-          <span className="font-bold text-lg tracking-tight">BridgeAI</span>
+          <span className="font-bold text-lg tracking-tight">VIBA</span>
         </Link>
         <nav className="ml-auto flex gap-4 sm:gap-6">
           <Link href="/settings">
@@ -36,7 +36,7 @@ export default function Home() {
                   <span className="text-primary">Let them work together.</span>
                 </h1>
                 <p className="mx-auto max-w-[700px] text-muted-foreground md:text-xl lg:text-2xl leading-relaxed">
-                  BridgeAI is a powerful orchestration platform. Connect ChatGPT, Claude, Manus, Replit, Gemini, and Perplexity. Give them a project goal, assign roles, and watch them collaborate autonomously.
+                  VIBA - AI Manager is a powerful orchestration platform. Connect ChatGPT, Claude, Manus, Replit, Gemini, and Perplexity. Give them a project goal, assign roles, and watch them collaborate autonomously.
                 </p>
               </div>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -125,7 +125,7 @@ export default function Home() {
                   <div className="p-6 space-y-4">
                     <h3 className="font-semibold text-lg">Server-Side Security</h3>
                     <p className="text-sm text-muted-foreground">
-                      API keys are stored securely in the database and never exposed to the browser. All provider calls go through BridgeAI's API layer — giving you full cost visibility and control without client-side leaks.
+                      API keys are stored securely in the database and never exposed to the browser. All provider calls go through VIBA's API layer — giving you full cost visibility and control without client-side leaks.
                     </p>
                   </div>
                 </div>
@@ -138,7 +138,7 @@ export default function Home() {
       <footer className="w-full border-t py-6 md:py-0">
         <div className="container flex flex-col items-center justify-between gap-4 md:h-24 md:flex-row">
           <p className="text-center text-sm leading-loose text-muted-foreground md:text-left">
-            Built for developers. BridgeAI is an open architecture project.
+            Built for developers. VIBA - AI Manager is an open architecture project.
           </p>
         </div>
       </footer>
