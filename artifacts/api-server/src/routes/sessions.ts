@@ -153,7 +153,6 @@ async function withAgentModes<T extends { id: number }>(session: T) {
 
     res.json(serialize({ sessions: result, total: totalRows[0]?.total ?? 0, limit, offset }));
   });
-);
 
 // POST /sessions
 router.post("/sessions", async (req, res): Promise<void> => {
