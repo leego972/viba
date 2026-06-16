@@ -634,4 +634,66 @@ router.delete("/sessions/:id/banner-dismissal", async (req, res): Promise<void> 
   res.json({ sessionId: id, dismissedAt: null });
 });
 
-export default router;
+
+  // GET /sessions/:id/export — download full session as Markdown transcript
+  router.get("/sessions/:id/export", async (req, res): Promise<void> => {
+    const parsed = GetSessionParams.safeParse(req.params);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    const id = parsed.data.id;
+
+    const [session] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, id));
+    if (!session) { res.status(404).json({ error: "Session not found" }); return; }
+
+    const [agents, tasks, messages] = await Promise.all([
+      db.select().from(agentsTable).where(eq(agentsTable.sessionId, id)).orderBy(asc(agentsTable.id)),
+      db.select().from(tasksTable).where(eq(tasksTable.sessionId, id)).orderBy(asc(tasksTable.id)),
+      db.select().from(messagesTable).where(eq(messagesTable.sessionId, id)).orderBy(asc(messagesTable.id)),
+    ]);
+
+    const taskLines = tasks.map((t) =>
+      `- [${t.status === "completed" ? "x" : " "}] **${t.title}** (${t.type}) — ${t.status}`
+    );
+
+    const messageLines = messages.flatMap((m) => [
+      `### ${m.agentName ? `[${m.agentName}]` : "User"} — ${new Date(m.createdAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}`,
+      ``,
+      m.content,
+      ``,
+    ]);
+
+    const agentLines = agents.map(
+      (a) => `- **${a.name}** — Provider: ${a.provider}, Role: ${a.role}, Mode: ${a.mode}`
+    );
+
+    const lines = [
+      `# BridgeAI Session Transcript`,
+      ``,
+      `**Goal:** ${session.goal}`,
+      `**Mode:** ${session.mode}`,
+      `**Status:** ${session.status}`,
+      `**Created:** ${new Date(session.createdAt).toISOString()}`,
+      ``,
+      `## Agents (${agents.length})`,
+      ``,
+      ...agentLines,
+      ``,
+      `## Task Plan (${tasks.length} tasks)`,
+      ``,
+      ...taskLines,
+      ``,
+      `## Conversation`,
+      ``,
+      ...messageLines,
+      `---`,
+      `*Exported from BridgeAI — Multi-AI Orchestration Platform*`,
+    ];
+
+    const markdown = lines.join("\n");
+    const filename = `bridge-session-${id}.md`;
+
+    res.set("Content-Type", "text/markdown; charset=utf-8");
+    res.set("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(markdown);
+  });
+
+  export default router;
