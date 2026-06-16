@@ -12,6 +12,7 @@ function makeAgent(overrides: Partial<Agent> = {}): Agent {
     capabilities: ["planning", "strategy"],
     isMock: false,
     lastUsedModel: null,
+    createdAt: new Date(),
     ...overrides,
   };
 }
