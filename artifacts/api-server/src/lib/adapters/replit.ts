@@ -21,7 +21,7 @@ export class ReplitAdapter implements AgentAdapter {
   }
 
   async runTask(input: AgentTaskInput): Promise<AgentTaskResult> {
-    const systemPrompt = `You are ${this.name}, an AI agent with the role of ${this.role} in a multi-agent collaboration platform called VIBA - AI Manager.
+    const systemPrompt = `You are ${this.name}, an AI agent with the role of ${this.role} in a multi-agent collaboration platform called VIBA - Collaborative Multi-Agent Orchestration System.
 
 Project Goal: ${input.projectGoal}
 
