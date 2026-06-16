@@ -12,6 +12,8 @@ import SessionWorkspace from "@/pages/session-workspace";
 import Settings from "@/pages/settings";
 import Workbench from "@/pages/workbench";
 import Bridge from "@/pages/bridge";
+import Pricing from "@/pages/pricing";
+import CheckoutSuccess from "@/pages/checkout-success";
 import { initAuth } from "@/lib/auth";
 
 // Register the stored access token as the bearer for every API request
@@ -19,7 +21,7 @@ initAuth();
 
 const queryClient = new QueryClient();
 
-function Router() {
+function GatedRouter() {
   return (
     <Switch>
       <Route path="/" component={Home} />
@@ -38,13 +40,21 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <AccessGate>
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <ErrorBoundary>
-              <Router />
-            </ErrorBoundary>
-          </WouterRouter>
-        </AccessGate>
+        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+          <ErrorBoundary>
+            <Switch>
+              {/* Public routes — bypass AccessGate entirely */}
+              <Route path="/pricing" component={Pricing} />
+              <Route path="/checkout/success" component={CheckoutSuccess} />
+              {/* All other routes — gated by AccessGate */}
+              <Route>
+                <AccessGate>
+                  <GatedRouter />
+                </AccessGate>
+              </Route>
+            </Switch>
+          </ErrorBoundary>
+        </WouterRouter>
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>
