@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import {
@@ -38,7 +38,7 @@ import {
   Play, FastForward, Square, Send, CheckCircle2, Clock, Bot,
   Crosshair, LineChart, Zap, FlaskConical, RotateCcw, X,
   RefreshCw, History, ShieldCheck, TrendingDown, AlertTriangle,
-  Download, Brain,
+  Download, Brain, Copy,
 } from "lucide-react";
 import { useSessionStream } from "@/hooks/useSessionStream";
 import { MarkdownContent } from "@/components/MarkdownContent";
@@ -101,6 +101,7 @@ export default function SessionWorkspace() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const [userInstruction, setUserInstruction] = useState("");
+  const [isAtBottom, setIsAtBottom] = useState(true);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [pendingApproval, setPendingApproval] = useState<Approval | null>(null);
 
@@ -291,10 +292,10 @@ export default function SessionWorkspace() {
     .slice(0, 15);
 
   useEffect(() => {
-    if (scrollRef.current) {
+    if (isAtBottom && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, isAtBottom]);
 
   useEffect(() => {
     const pending = approvals.find(a => a.status === "pending");
@@ -306,6 +307,17 @@ export default function SessionWorkspace() {
       setPendingApproval(null);
     }
   }, [approvals, showApprovalModal]);
+
+  const handleMessagesScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    setIsAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 80);
+  };
+
+  const copyMessage = useCallback((content: string) => {
+    navigator.clipboard.writeText(content).then(() => {
+      toast({ title: "Copied" });
+    });
+  }, [toast]);
 
   const handleRunNext = () => {
     runNext.mutate({ id: sessionId }, {
@@ -651,10 +663,16 @@ export default function SessionWorkspace() {
             <CardHeader className="p-4 border-b shrink-0">
               <CardTitle className="text-sm flex items-center gap-2">
                 <LineChart className="w-4 h-4" /> Live Collaboration
-                <span className="ml-auto text-[10px] font-normal text-muted-foreground">{messages.length} messages</span>
+                <span className="ml-auto text-[10px] font-normal text-muted-foreground flex items-center gap-3">
+                  <span>{messages.length} msg{messages.length !== 1 ? "s" : ""}</span>
+                  {session && <span className="font-mono tabular-nums">${session.estimatedCost?.toFixed(4) ?? "0.0000"}</span>}
+                  {(runNext.isPending || runFull.isPending) && (
+                    <span className="text-primary animate-pulse font-medium">Processing…</span>
+                  )}
+                </span>
               </CardTitle>
             </CardHeader>
-            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4" ref={scrollRef}>
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4" ref={scrollRef} onScroll={handleMessagesScroll}>
               {messages.length === 0 ? (
                 <div className="flex h-full items-center justify-center text-muted-foreground text-sm italic">
                   No messages yet. Start the session to see collaboration.
@@ -674,7 +692,7 @@ export default function SessionWorkspace() {
                     : msg.content;
 
                   return (
-                    <div key={msg.id} className={`flex flex-col max-w-[85%] rounded-lg border p-3 ${colorClass} ${isUser ? "self-end" : "self-start"}`}>
+                    <div key={msg.id} className={`group flex flex-col max-w-[85%] rounded-lg border p-3 ${colorClass} ${isUser ? "self-end" : "self-start"}`}>
                       <div className="flex items-center gap-2 mb-2 flex-wrap">
                         <span className="font-semibold text-xs">{isUser ? "You" : msg.agentName || "System"}</span>
                         {!isUser && msg.agentRole && <span className="text-[10px] opacity-70">| {msg.agentRole}</span>}
@@ -687,6 +705,14 @@ export default function SessionWorkspace() {
                           </Badge>
                         )}
                         <span className="text-[10px] opacity-50 ml-auto">{format(new Date(msg.createdAt), "HH:mm:ss")}</span>
+                        <button
+                          type="button"
+                          title="Copy message"
+                          className="opacity-0 group-hover:opacity-50 hover:!opacity-100 transition-opacity shrink-0 p-0.5 rounded"
+                          onClick={() => copyMessage(displayContent || "")}
+                        >
+                          <Copy className="h-3 w-3" />
+                        </button>
                       </div>
                       {isUser ? (
                         <div className="text-sm whitespace-pre-wrap leading-relaxed">{displayContent}</div>
@@ -696,6 +722,16 @@ export default function SessionWorkspace() {
                     </div>
                   );
                 })
+              )}
+              {(runNext.isPending || runFull.isPending) && (
+                <div className="flex self-start items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 mt-1">
+                  <span className="flex gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary/70 animate-bounce [animation-delay:0ms]" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary/70 animate-bounce [animation-delay:150ms]" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary/70 animate-bounce [animation-delay:300ms]" />
+                  </span>
+                  <span className="text-xs text-muted-foreground">Processing…</span>
+                </div>
               )}
             </div>
 
@@ -721,7 +757,9 @@ export default function SessionWorkspace() {
                   disabled={!isSessionActive}
                 />
                 <Button className="h-auto w-12 shrink-0" onClick={handleSend} disabled={!isSessionActive || !userInstruction.trim() || sendMsg.isPending}>
-                  <Send className="h-4 w-4" />
+                  {sendMsg.isPending
+                    ? <RefreshCw className="h-4 w-4 animate-spin" />
+                    : <Send className="h-4 w-4" />}
                 </Button>
               </div>
             </div>
