@@ -22,9 +22,14 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-// Create the subscribers table if it doesn't exist yet.
-// This is idempotent — safe to run on every startup.
-async function ensureSubscribersTable(): Promise<void> {
+/**
+ * Idempotent startup migrations.
+ * All statements use IF NOT EXISTS / DO $$ guards so they are safe to re-run
+ * on every deploy. Never use DROP or ALTER COLUMN TYPE here without a manual
+ * migration note — those are destructive and must be run once, by hand.
+ */
+async function runStartupMigrations(): Promise<void> {
+  // ── subscribers table (create if not present) ─────────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS subscribers (
       id                     SERIAL      PRIMARY KEY,
@@ -39,7 +44,93 @@ async function ensureSubscribersTable(): Promise<void> {
       updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
-  logger.info("Subscribers table ready");
+
+  // ── subscribers: email unique constraint (safe to add if missing) ──────────
+  await pool.query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'subscribers_email_unique'
+          AND conrelid = 'subscribers'::regclass
+      ) THEN
+        ALTER TABLE subscribers
+          ADD CONSTRAINT subscribers_email_unique UNIQUE (email);
+      END IF;
+    END $$
+  `);
+
+  // ── agents: created_at column (added in db-audit, safe additive migration) ─
+  await pool.query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'agents' AND column_name = 'created_at'
+      ) THEN
+        ALTER TABLE agents
+          ADD COLUMN created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+      END IF;
+    END $$
+  `);
+
+  // ── memory: created_at column ─────────────────────────────────────────────
+  await pool.query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'memory' AND column_name = 'created_at'
+      ) THEN
+        ALTER TABLE memory
+          ADD COLUMN created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+      END IF;
+    END $$
+  `);
+
+  // ── memory: unique constraint on session_id ───────────────────────────────
+  await pool.query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'memory_session_id_unique'
+          AND conrelid = 'memory'::regclass
+      ) THEN
+        ALTER TABLE memory
+          ADD CONSTRAINT memory_session_id_unique UNIQUE (session_id);
+      END IF;
+    END $$
+  `);
+
+  // ── approvals: updatedAt, rejectedAt, rejectedReason columns ─────────────
+  await pool.query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'approvals' AND column_name = 'updated_at'
+      ) THEN
+        ALTER TABLE approvals
+          ADD COLUMN updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          ADD COLUMN rejected_at  TIMESTAMPTZ,
+          ADD COLUMN rejected_reason TEXT;
+      END IF;
+    END $$
+  `);
+
+  // ── audit_logs: make session_id nullable (system-level events) ────────────
+  // This is a one-time structural change — idempotent because NOT NULL can only
+  // be dropped, not added, by this guard pattern.
+  await pool.query(`
+    DO $$ BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'audit_logs'
+          AND column_name = 'session_id'
+          AND is_nullable = 'NO'
+      ) THEN
+        ALTER TABLE audit_logs ALTER COLUMN session_id DROP NOT NULL;
+      END IF;
+    END $$
+  `);
+
+  logger.info("Startup migrations complete");
 }
 
 // Bind the server with one EADDRINUSE retry to survive workflow restart races
@@ -68,7 +159,7 @@ function listenWithRetry(attemptNumber: number): void {
 }
 
 loadCircuitStateFromDb()
-  .then(() => ensureSubscribersTable())
+  .then(() => runStartupMigrations())
   .then(() => {
     listenWithRetry(1);
   })
