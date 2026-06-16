@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, asc, desc, inArray } from "drizzle-orm";
+import { eq, asc, desc, inArray, sql } from "drizzle-orm";
 import {
   db,
   sessionsTable,
@@ -116,28 +116,44 @@ async function withAgentModes<T extends { id: number }>(session: T) {
   };
 }
 
-// GET /sessions
-router.get("/sessions", async (req, res): Promise<void> => {
-  const sessions = await db.select().from(sessionsTable).orderBy(asc(sessionsTable.id));
-  const agents = await db.select().from(agentsTable);
+// GET /sessions  — paginated (default 100, max 500)
+  router.get("/sessions", async (req, res): Promise<void> => {
+    const rawLimit = parseInt(String(req.query.limit ?? "100"), 10);
+    const rawOffset = parseInt(String(req.query.offset ?? "0"), 10);
+    const limit = Math.min(Number.isNaN(rawLimit) ? 100 : Math.max(1, rawLimit), 500);
+    const offset = Number.isNaN(rawOffset) ? 0 : Math.max(0, rawOffset);
 
-  const agentsBySession = agents.reduce<Record<number, typeof agents>>((acc, agent) => {
-    if (!acc[agent.sessionId]) acc[agent.sessionId] = [];
-    acc[agent.sessionId]!.push(agent);
-    return acc;
-  }, {});
+    const [[sessions, totalRows]] = await Promise.all([
+      Promise.all([
+        db.select().from(sessionsTable).orderBy(asc(sessionsTable.id)).limit(limit).offset(offset),
+        db.select({ total: sql`count(*)::int` }).from(sessionsTable),
+      ]),
+    ]);
 
-  const result = sessions.map((session) => ({
-    ...session,
-    agentModes: (agentsBySession[session.id] ?? []).map((a) => ({
-      name: a.name,
-      provider: a.provider,
-      isMock: a.isMock,
-    })),
-  }));
+    // Only fetch agents for the sessions we actually returned — avoids full-table scan
+    const sessionIds = sessions.map((s) => s.id);
+    const agents = sessionIds.length > 0
+      ? await db.select().from(agentsTable).where(inArray(agentsTable.sessionId, sessionIds))
+      : [];
 
-  res.json(serialize(result));
-});
+    const agentsBySession = agents.reduce<Record<number, typeof agents>>((acc, agent) => {
+      if (!acc[agent.sessionId]) acc[agent.sessionId] = [];
+      acc[agent.sessionId]!.push(agent);
+      return acc;
+    }, {});
+
+    const result = sessions.map((session) => ({
+      ...session,
+      agentModes: (agentsBySession[session.id] ?? []).map((a) => ({
+        name: a.name,
+        provider: a.provider,
+        isMock: a.isMock,
+      })),
+    }));
+
+    res.json(serialize({ sessions: result, total: totalRows[0]?.total ?? 0, limit, offset }));
+  });
+);
 
 // POST /sessions
 router.post("/sessions", async (req, res): Promise<void> => {
