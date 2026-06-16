@@ -4,6 +4,30 @@ import { eq } from "drizzle-orm";
 
 import { GetSettingsResponse, SaveSettingsBody, SaveSettingsResponse } from "@workspace/api-zod";
 
+// Exhaustive whitelist of keys that may be stored via this endpoint.
+// Any key NOT in this set is rejected with 400 Bad Request.
+const ALLOWED_SETTINGS_KEYS = new Set([
+  "FALLBACK_ALERT_THRESHOLD",
+  "FALLBACK_ALERT_ENABLED",
+  "NOTIFICATION_WEBHOOK_URL",
+  "NOTIFICATION_EMAIL",
+  "SMTP_HOST",
+  "SMTP_PORT",
+  "SMTP_USER",
+  "SMTP_PASS",
+  "SMTP_FROM",
+  "OPENAI_API_KEY",
+  "ANTHROPIC_API_KEY",
+  "GEMINI_API_KEY",
+  "PERPLEXITY_API_KEY",
+  "REPLIT_API_KEY",
+  "MANUS_API_KEY",
+  "OPENAI_MODEL",
+  "ANTHROPIC_MODEL",
+  "GEMINI_MODEL",
+  "PERPLEXITY_MODEL",
+]);
+
 const CLEARABLE_NOTIFICATION_KEYS = [
   "NOTIFICATION_WEBHOOK_URL",
   "NOTIFICATION_EMAIL",
@@ -53,6 +77,17 @@ router.post("/settings", async (req, res): Promise<void> => {
   const parsed = SaveSettingsBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  // Reject any key not on the explicit whitelist — prevents arbitrary table pollution
+  const unknownKeys = parsed.data.settings
+    .map((s) => s.key)
+    .filter((k) => !ALLOWED_SETTINGS_KEYS.has(k));
+  if (unknownKeys.length > 0) {
+    res.status(400).json({
+      error: `Unknown settings key(s): ${unknownKeys.join(", ")}. Only recognised configuration keys are accepted.`,
+    });
     return;
   }
 
