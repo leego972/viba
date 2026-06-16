@@ -8,8 +8,8 @@ import type { AgentTaskResult } from "./adapters/interface";
 import { runAdapterWithRetry } from "./adapterRetry";
 
 const APPROVAL_TASK_TYPES = new Set(["final_qa"]);
-const MAX_TURNS = 8;
-const RETRY_DELAY_MS = 1200;
+const MAX_TURNS = 12;
+const RETRY_DELAY_MS = 1_500;
 
 async function logAudit(sessionId: number, eventType: string, description: string, metadata?: Record<string, unknown>) {
   await db.insert(auditLogsTable).values({
