@@ -19,30 +19,125 @@ abstract class MockAdapter implements AgentAdapter {
   abstract model: string;
   abstract capabilities: string[];
   abstract role: string;
+  abstract canUseTools: boolean;
   isMock = true;
 
   abstract generateResponse(input: AgentTaskInput): string;
 
   async runTask(input: AgentTaskInput): Promise<AgentTaskResult> {
     await delay(400 + Math.random() * 600);
+
+    // Answer any pending questions first
+    const answersToQuestions: AgentTaskResult["answersToQuestions"] = (input.pendingQuestions ?? []).map((q) => ({
+      messageId: q.messageId,
+      answer: this.generateQuestionAnswer(q.fromAgent, q.question),
+    }));
+
     const messageText = this.generateResponse(input);
-    // Tasks that are planning/research always go to review; build/code go to complete
     const buildTypes = new Set(["build", "code_review", "final_qa"]);
     const completionStatus: AgentTaskResult["completionStatus"] = buildTypes.has(input.taskType ?? "")
       ? pick(["complete", "needs_review"])
       : "needs_review";
+
     return {
       messageText,
       suggestedNextTasks: [],
       completionStatus,
       confidence: 0.72 + Math.random() * 0.24,
       estimatedCost: randomCost(),
+      answersToQuestions,
+      outboundQuestions: [],
+    };
+  }
+
+  protected generateQuestionAnswer(fromAgent: string, question: string): string {
+    return `[Answering ${fromAgent}'s question: "${question.substring(0, 60)}…"] Based on my current work context: the approach I've taken accounts for this. The relevant output is included in my task response above.`;
+  }
+}
+
+// ── Text-only mock base ───────────────────────────────────────────────────────
+// 10% chance a text-only adapter signals it needs tools (for simulation demo)
+abstract class TextOnlyMockAdapter extends MockAdapter {
+  canUseTools = false;
+
+  async runTask(input: AgentTaskInput): Promise<AgentTaskResult> {
+    await delay(400 + Math.random() * 600);
+
+    const answersToQuestions: AgentTaskResult["answersToQuestions"] = (input.pendingQuestions ?? []).map((q) => ({
+      messageId: q.messageId,
+      answer: this.generateQuestionAnswer(q.fromAgent, q.question),
+    }));
+
+    // 10% chance: simulate hitting a tool blocker on build tasks (demo mode)
+    const isToolTask = ["build", "deployment_approval"].includes(input.taskType ?? "");
+    const shouldBlock = isToolTask && Math.random() < 0.10;
+
+    if (shouldBlock) {
+      const partial = this.generateResponse(input);
+      return {
+        messageText: partial,
+        suggestedNextTasks: [],
+        completionStatus: "in_progress",
+        confidence: 0.5,
+        estimatedCost: randomCost(),
+        blockedReason: "This task requires executing code and interacting with a git repository — capabilities not available to this text-only agent.",
+        partialWork: partial,
+        toolRequirements: ["git_clone", "run_tests", "code_execution"],
+        answersToQuestions,
+        outboundQuestions: [],
+      };
+    }
+
+    const messageText = this.generateResponse(input);
+    const buildTypes = new Set(["build", "code_review", "final_qa"]);
+    const completionStatus: AgentTaskResult["completionStatus"] = buildTypes.has(input.taskType ?? "")
+      ? pick(["complete", "needs_review"])
+      : "needs_review";
+
+    return {
+      messageText,
+      suggestedNextTasks: [],
+      completionStatus,
+      confidence: 0.72 + Math.random() * 0.24,
+      estimatedCost: randomCost(),
+      answersToQuestions,
+      outboundQuestions: [],
+    };
+  }
+}
+
+// ── Tool-capable mock base ────────────────────────────────────────────────────
+abstract class ToolCapableMockAdapter extends MockAdapter {
+  canUseTools = true;
+
+  async runTask(input: AgentTaskInput): Promise<AgentTaskResult> {
+    await delay(500 + Math.random() * 800);
+
+    const answersToQuestions: AgentTaskResult["answersToQuestions"] = (input.pendingQuestions ?? []).map((q) => ({
+      messageId: q.messageId,
+      answer: this.generateQuestionAnswer(q.fromAgent, q.question),
+    }));
+
+    const messageText = this.generateResponse(input);
+    const buildTypes = new Set(["build", "code_review", "final_qa", "deployment_approval"]);
+    const completionStatus: AgentTaskResult["completionStatus"] = buildTypes.has(input.taskType ?? "")
+      ? pick(["complete", "needs_review"])
+      : "needs_review";
+
+    return {
+      messageText,
+      suggestedNextTasks: [],
+      completionStatus,
+      confidence: 0.80 + Math.random() * 0.18,
+      estimatedCost: randomCost(),
+      answersToQuestions,
+      outboundQuestions: [],
     };
   }
 }
 
 // ── ChatGPT / OpenAI ──────────────────────────────────────────────────────────
-export class ChatGPTMockAdapter extends MockAdapter {
+export class ChatGPTMockAdapter extends TextOnlyMockAdapter {
   id: string; name: string; provider = "openai"; model = "gpt-4.1-mini (sim)"; role: string;
   capabilities = ["planning", "reasoning", "creative_direction", "code_review", "final_qa"];
 
@@ -68,15 +163,13 @@ export class ChatGPTMockAdapter extends MockAdapter {
         `Code review for "${goal}": The implementation is clean. I've flagged two improvements: (1) add input validation on the API layer, (2) the builder's module could be split for better testability. No blocking issues — approve with minor revisions.`,
       ],
     };
-    const fallback = [
-      `Analysis for "${goal}": scope is clear, priorities are set, agents are aligned. Ready to proceed.`,
-    ];
+    const fallback = [`Analysis for "${goal}": scope is clear, priorities are set, agents are aligned. Ready to proceed.`];
     return pick(responses[type] ?? fallback);
   }
 }
 
 // ── Claude / Anthropic ────────────────────────────────────────────────────────
-export class ClaudeMockAdapter extends MockAdapter {
+export class ClaudeMockAdapter extends TextOnlyMockAdapter {
   id: string; name: string; provider = "anthropic"; model = "claude-3-5-haiku-20241022 (sim)"; role: string;
   capabilities = ["code_review", "writing", "logic_critique", "ux_review"];
 
@@ -100,73 +193,13 @@ export class ClaudeMockAdapter extends MockAdapter {
         `Build review for "${goal}": I've audited the implementation plan. The architecture decisions are solid. I'd suggest adding a retry layer on the external API calls and documenting the data contract between modules. Otherwise ready to ship.`,
       ],
     };
-    const fallback = [
-      `Review for "${goal}": I've examined the current output carefully. The core logic is correct; a few rough edges remain. Recommend one more pass before marking complete.`,
-    ];
-    return pick(responses[type] ?? fallback);
-  }
-}
-
-// ── Manus ─────────────────────────────────────────────────────────────────────
-export class ManusMockAdapter extends MockAdapter {
-  id: string; name: string; provider = "manus"; model = "manus-deep-research-1 (sim)"; role: string;
-  capabilities = ["research", "execution", "data_gathering", "analysis"];
-
-  constructor(id: string, name: string, role: string) { super(); this.id = id; this.name = name; this.role = role; }
-
-  generateResponse(input: AgentTaskInput): string {
-    const goal = input.projectGoal;
-    const type = input.taskType ?? "research";
-    const responses: Record<string, string[]> = {
-      research: [
-        `Research complete for "${goal}". Key findings: (1) market demand is validated by three independent data sources, (2) top competitors have gaps in UX and pricing transparency, (3) the technical approach is proven — two similar implementations shipped successfully in the past 12 months. Handing off structured data to the Builder.`,
-        `Data gathered for "${goal}". I've cross-referenced industry reports, recent case studies, and primary sources. The opportunity is real and the timing is right. Two risks identified: market saturation risk (low) and execution complexity (medium). Full analysis ready.`,
-      ],
-      planning: [
-        `Research-informed planning for "${goal}": I've pulled the relevant precedents and data to ground the plan in evidence. Three insights shape the approach: prioritise speed-to-value, keep the first iteration narrow, and build in a feedback loop from day one.`,
-      ],
-      build: [
-        `Execution plan for "${goal}": I've mapped the implementation steps in sequence, flagged dependencies, and estimated effort per component. The critical path is clear. No blockers identified. Ready for the Builder to start sprint 1.`,
-      ],
-    };
-    const fallback = [
-      `Analysis for "${goal}": data collected and synthesised. Key patterns identified. Recommendations grounded in evidence. Ready to hand off.`,
-    ];
-    return pick(responses[type] ?? fallback);
-  }
-}
-
-// ── Replit ────────────────────────────────────────────────────────────────────
-export class ReplitMockAdapter extends MockAdapter {
-  id: string; name: string; provider = "replit"; model = "replit-code-v1-3b (sim)"; role: string;
-  capabilities = ["build", "code", "deployment", "implementation"];
-
-  constructor(id: string, name: string, role: string) { super(); this.id = id; this.name = name; this.role = role; }
-
-  generateResponse(input: AgentTaskInput): string {
-    const goal = input.projectGoal;
-    const type = input.taskType ?? "build";
-    const responses: Record<string, string[]> = {
-      build: [
-        `Implementation complete for "${goal}". Stack: modular, typed, documented. Core components built: data layer, business logic, API interface. Unit tests pass. Edge cases handled. Ready for code review — no known regressions.`,
-        `Build done for "${goal}". I kept the architecture lean and the dependencies minimal. The module structure is clean enough that the next engineer can pick it up without a handoff call. Deployment config is included.`,
-      ],
-      deployment_approval: [
-        `Deployment ready for "${goal}". Build passes all checks: linting ✓, tests ✓, environment config ✓. Infrastructure is provisioned. Awaiting final approval to ship.`,
-      ],
-      code_review: [
-        `Technical review for "${goal}": I've checked the implementation from an engineering perspective. Performance is acceptable, the data layer is efficient, and the error handling is solid. One suggestion: add rate limiting to the API endpoints. Otherwise ship-ready.`,
-      ],
-    };
-    const fallback = [
-      `Engineering update for "${goal}": build is progressing on schedule. No blockers. Current status: core functionality implemented, tests running.`,
-    ];
+    const fallback = [`Review for "${goal}": I've examined the current output carefully. The core logic is correct; a few rough edges remain. Recommend one more pass before marking complete.`];
     return pick(responses[type] ?? fallback);
   }
 }
 
 // ── Gemini / Google ───────────────────────────────────────────────────────────
-export class GeminiMockAdapter extends MockAdapter {
+export class GeminiMockAdapter extends TextOnlyMockAdapter {
   id: string; name: string; provider = "google"; model = "gemini-2.0-flash (sim)"; role: string;
   capabilities = ["multimodal", "contextual_analysis", "summarization", "creative"];
 
@@ -190,15 +223,13 @@ export class GeminiMockAdapter extends MockAdapter {
         `Final synthesis for "${goal}": all agent outputs are coherent and complementary. The collective output is on-brief. I've done a cross-agent consistency check — no contradictions. Recommend shipping.`,
       ],
     };
-    const fallback = [
-      `Contextual review for "${goal}": cross-dimensional analysis complete. Output is coherent and well-structured. Recommend one final pass on presentation before delivery.`,
-    ];
+    const fallback = [`Contextual review for "${goal}": cross-dimensional analysis complete. Output is coherent and well-structured. Recommend one final pass on presentation before delivery.`];
     return pick(responses[type] ?? fallback);
   }
 }
 
 // ── Perplexity ────────────────────────────────────────────────────────────────
-export class PerplexityMockAdapter extends MockAdapter {
+export class PerplexityMockAdapter extends TextOnlyMockAdapter {
   id: string; name: string; provider = "perplexity"; model = "sonar (sim)"; role: string;
   capabilities = ["research_summary", "fact_checking", "citation", "web_search"];
 
@@ -219,9 +250,65 @@ export class PerplexityMockAdapter extends MockAdapter {
         `Technical fact-check for "${goal}": I've verified the implementation decisions against current best practices. All approaches are sound. One deprecated library flagged — updated alternative provided. Documentation references are accurate and up-to-date.`,
       ],
     };
-    const fallback = [
-      `Research and fact-check for "${goal}": sources reviewed, claims verified. The output is well-supported. Ready to proceed.`,
-    ];
+    const fallback = [`Research and fact-check for "${goal}": sources reviewed, claims verified. The output is well-supported. Ready to proceed.`];
+    return pick(responses[type] ?? fallback);
+  }
+}
+
+// ── Manus ─────────────────────────────────────────────────────────────────────
+export class ManusMockAdapter extends ToolCapableMockAdapter {
+  id: string; name: string; provider = "manus"; model = "manus-deep-research-1 (sim)"; role: string;
+  capabilities = ["research", "execution", "data_gathering", "analysis"];
+
+  constructor(id: string, name: string, role: string) { super(); this.id = id; this.name = name; this.role = role; }
+
+  generateResponse(input: AgentTaskInput): string {
+    const goal = input.projectGoal;
+    const type = input.taskType ?? "research";
+    const repo = input.repoUrl ? ` [repo: ${input.repoUrl}]` : "";
+    const responses: Record<string, string[]> = {
+      research: [
+        `Research complete for "${goal}". Key findings: (1) market demand is validated by three independent data sources, (2) top competitors have gaps in UX and pricing transparency, (3) the technical approach is proven — two similar implementations shipped successfully in the past 12 months. Handing off structured data to the Builder.`,
+        `Data gathered for "${goal}". I've cross-referenced industry reports, recent case studies, and primary sources. The opportunity is real and the timing is right. Two risks identified: market saturation risk (low) and execution complexity (medium). Full analysis ready.`,
+      ],
+      build: [
+        `Execution plan for "${goal}"${repo}: I've mapped the implementation steps in sequence, flagged dependencies, and estimated effort per component. The critical path is clear. No blockers identified. Ready for the Builder to start sprint 1.`,
+        `Build task complete for "${goal}"${repo}: I've executed the required steps — data gathered, code scaffolded, dependencies installed. The implementation is ready for review.`,
+      ],
+      deployment_approval: [
+        `Deployment verified for "${goal}"${repo}: I've checked the environment config, run the smoke tests, and confirmed the build is healthy. Infrastructure is ready. Recommend proceeding to deploy.`,
+      ],
+    };
+    const fallback = [`Analysis for "${goal}": data collected and synthesised. Key patterns identified. Recommendations grounded in evidence. Ready to hand off.`];
+    return pick(responses[type] ?? fallback);
+  }
+}
+
+// ── Replit ────────────────────────────────────────────────────────────────────
+export class ReplitMockAdapter extends ToolCapableMockAdapter {
+  id: string; name: string; provider = "replit"; model = "replit-code-v1-3b (sim)"; role: string;
+  capabilities = ["build", "code", "deployment", "implementation"];
+
+  constructor(id: string, name: string, role: string) { super(); this.id = id; this.name = name; this.role = role; }
+
+  generateResponse(input: AgentTaskInput): string {
+    const goal = input.projectGoal;
+    const type = input.taskType ?? "build";
+    const repo = input.repoUrl ? ` [repo: ${input.repoUrl}, branch: ${input.repoBranch ?? "main"}]` : "";
+    const env = input.workspaceEnv ? ` (${input.workspaceEnv})` : "";
+    const responses: Record<string, string[]> = {
+      build: [
+        `Implementation complete for "${goal}"${repo}${env}. Stack: modular, typed, documented. Core components built: data layer, business logic, API interface. Unit tests pass. Edge cases handled. Ready for code review — no known regressions.`,
+        `Build done for "${goal}"${repo}. I kept the architecture lean and the dependencies minimal. The module structure is clean enough that the next engineer can pick it up without a handoff call. Deployment config is included.`,
+      ],
+      deployment_approval: [
+        `Deployment ready for "${goal}"${repo}${env}. Build passes all checks: linting ✓, tests ✓, environment config ✓. Infrastructure is provisioned. Awaiting final approval to ship.`,
+      ],
+      code_review: [
+        `Technical review for "${goal}": I've checked the implementation from an engineering perspective. Performance is acceptable, the data layer is efficient, and the error handling is solid. One suggestion: add rate limiting to the API endpoints. Otherwise ship-ready.`,
+      ],
+    };
+    const fallback = [`Engineering update for "${goal}": build is progressing on schedule. No blockers. Current status: core functionality implemented, tests running.`];
     return pick(responses[type] ?? fallback);
   }
 }
