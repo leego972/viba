@@ -130,6 +130,64 @@ async function runStartupMigrations(): Promise<void> {
     END $$
   `);
 
+  // agents: canUseTools column
+  await pool.query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'agents' AND column_name = 'can_use_tools'
+      ) THEN
+        ALTER TABLE agents ADD COLUMN can_use_tools BOOLEAN NOT NULL DEFAULT false;
+        UPDATE agents SET can_use_tools = true WHERE provider IN ('replit', 'manus');
+      END IF;
+    END $$
+  `);
+
+  // sessions: workspace context columns
+  await pool.query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'sessions' AND column_name = 'repo_url'
+      ) THEN
+        ALTER TABLE sessions
+          ADD COLUMN repo_url TEXT,
+          ADD COLUMN repo_branch TEXT,
+          ADD COLUMN workspace_env TEXT;
+      END IF;
+    END $$
+  `);
+
+  // tasks: tool handoff columns
+  await pool.query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'tasks' AND column_name = 'blocked_reason'
+      ) THEN
+        ALTER TABLE tasks
+          ADD COLUMN blocked_reason TEXT,
+          ADD COLUMN partial_work TEXT,
+          ADD COLUMN tool_requirements TEXT[];
+      END IF;
+    END $$
+  `);
+
+  // messages: inter-agent comms columns
+  await pool.query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'messages' AND column_name = 'message_type'
+      ) THEN
+        ALTER TABLE messages
+          ADD COLUMN message_type TEXT NOT NULL DEFAULT 'output',
+          ADD COLUMN to_agent_id INTEGER,
+          ADD COLUMN metadata JSONB;
+      END IF;
+    END $$
+  `);
+
   logger.info("Startup migrations complete");
 }
 
@@ -167,3 +225,7 @@ loadCircuitStateFromDb()
     logger.error({ err }, "Unexpected fatal error during startup");
     process.exit(1);
   });
+
+// ── Tool-use & inter-agent comms migrations (idempotent) ──────────────────────
+  // These run as part of the regular runStartupMigrations() call — appended here
+  // to keep migrations self-contained.
