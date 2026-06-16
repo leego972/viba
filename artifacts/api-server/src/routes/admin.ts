@@ -255,7 +255,7 @@ router.get("/health", async (req, res): Promise<void> => {
 
 // ─── POST /api/admin/circuit/:provider/reset (destructive) ───────────────────
 router.post("/circuit/:provider/reset", requireConfirmation, async (req, res): Promise<void> => {
-  const provider = (req.params.provider ?? "").trim().toLowerCase();
+  const provider = String(req.params.provider ?? "").trim().toLowerCase();
   if (!provider) { res.status(400).json({ error: "provider required" }); return; }
   await db.execute(
     sql`UPDATE circuit_state SET consecutive_failures = 0, opened_at = NULL, updated_at = NOW()
