@@ -11,7 +11,7 @@ export function Navbar() {
         {/* Logo — always visible */}
         <Link href="/" className="flex items-center space-x-2 shrink-0">
           <Cpu className="h-6 w-6 text-primary" />
-          <span className="font-bold hidden sm:inline-block">BridgeAI</span>
+          <span className="font-bold hidden sm:inline-block">VIBA</span>
         </Link>
 
         {/* Desktop nav */}
