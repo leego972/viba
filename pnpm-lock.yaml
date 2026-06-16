@@ -200,6 +200,9 @@ importers:
       express:
         specifier: ^5
         version: 5.2.1
+      helmet:
+        specifier: ^8
+        version: 8.2.0
       nodemailer:
         specifier: ^8.0.7
         version: 8.0.7
@@ -212,6 +215,9 @@ importers:
       pino-http:
         specifier: ^10
         version: 10.5.0
+      stripe:
+        specifier: ^17
+        version: 17.7.0
       zod:
         specifier: 'catalog:'
         version: 3.25.76
@@ -700,6 +706,9 @@ importers:
       pg:
         specifier: ^8.20.0
         version: 8.20.0
+      stripe:
+        specifier: ^17
+        version: 17.7.0
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -2581,6 +2590,10 @@ packages:
   hast-util-whitespace@3.0.0:
     resolution: {integrity: sha512-88JUN06ipLwsnv+dVn+OIYOvAuvBMy/Qoi6O7mQHxdPXpjy+Cd6xRkWwux7DKO+4sYILtLBRIKgsdpS2gQc7qw==}
 
+  helmet@8.2.0:
+    resolution: {integrity: sha512-DRgTIUgnWcJ62KyarxxziuqYxKGnR6Rgg19BlbucN/dpmJbl1XOit6qvoOX0ZT+HhWe5OUVhU/a1zpGyc1xA0Q==}
+    engines: {node: '>=18.0.0'}
+
   help-me@5.0.0:
     resolution: {integrity: sha512-7xgomUX6ADmcYzFik0HzAxh/73YlKR9bmFzf51CZwR+b6YtzU2m0u49hQCqV6SvlqIqsaxovfwdvbnsw3b/zpg==}
 
@@ -3497,6 +3510,10 @@ packages:
     resolution: {integrity: sha512-Bkbih3k+IX/GugN8bKWNpwDiI2xkSLOAR+P34W7pjaR8fXyVay/QqztbrvbHZcU1JlfXncmBhuODY5TYY6DXlw==}
     peerDependencies:
       stripe: '> 11'
+
+  stripe@17.7.0:
+    resolution: {integrity: sha512-aT2BU9KkizY9SATf14WhhYVv2uOapBWX0OFWF4xvcj1mPaNotlSc2CsxpS4DS46ZueSppmCF5BX1sNYBtwBvfw==}
+    engines: {node: '>=12.*'}
 
   stripe@20.0.0:
     resolution: {integrity: sha512-EaZeWpbJOCcDytdjKSwdrL5BxzbDGNueiCfHjHXlPdBQvLqoxl6AAivC35SPzTmVXJb5duXQlXFGS45H0+e6Gg==}
@@ -5833,6 +5850,8 @@ snapshots:
     dependencies:
       '@types/hast': 3.0.4
 
+  helmet@8.2.0: {}
+
   help-me@5.0.0: {}
 
   html-url-attributes@3.0.1: {}
@@ -6968,6 +6987,11 @@ snapshots:
       - bufferutil
       - pg-native
       - utf-8-validate
+
+  stripe@17.7.0:
+    dependencies:
+      '@types/node': 25.3.5
+      qs: 6.15.0
 
   stripe@20.0.0(@types/node@25.3.5):
     dependencies:
