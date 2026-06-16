@@ -1,102 +1,141 @@
-# BridgeAI
+# BridgeAI — Multi-AI Orchestration Platform
 
-**Plug-and-play AI-to-AI integration platform.** Connect multiple AI providers, assign a project goal, and watch them collaborate autonomously — no glue code required.
+  > Connect ChatGPT, Claude, Gemini, Perplexity, Manus, and Replit in one session. Assign them roles, give them a goal, and watch them collaborate autonomously.
 
-## What It Does
+  [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
+  [![Express](https://img.shields.io/badge/Express-5.x-green)](https://expressjs.com/)
+  [![React](https://img.shields.io/badge/React-19-61DAFB)](https://reactjs.org/)
 
-BridgeAI orchestrates multi-agent AI workflows. You pick a goal, configure which AI providers join the session, and the platform routes tasks between them: a Strategist plans, a Builder implements, a Reviewer critiques, and QA signs off. Every step is logged, every decision is traceable, and human approval gates are enforced when needed.
+  ---
 
-## Features
+  ## What is BridgeAI?
 
-| Feature | Details |
-|---|---|
-| **6 AI Providers** | OpenAI (GPT-4o), Anthropic (Claude 3.5), Google (Gemini 1.5), Perplexity, Manus, Replit — all via mock adapters out of the box; real OpenAI calls when `OPENAI_API_KEY` is provided |
-| **Role-based orchestration** | Strategist → Builder → Reviewer → QA pipeline with automatic role assignment |
-| **Run Next / Run Full** | Step through one agent turn at a time or trigger an 8-turn autonomous workflow |
-| **Live task board** | Tasks move from Planned → In Progress → Review → Complete in real time (2 s polling) |
-| **Shared conversation** | Full message thread visible to all agents, colour-coded by provider |
-| **Shared memory** | Persistent key-value memory store per session; agents read & write context |
-| **Approval modal** | Human-in-the-loop gate: blocked actions surface a modal before proceeding |
-| **Audit log** | Every agent action, task transition, and approval is time-stamped and stored |
-| **Estimated cost display** | Per-session cost estimate shown on session cards |
-| **Three autonomy modes** | Manual (step-only), Supervised (approval gates), Autonomous (fully automatic) |
+  BridgeAI is a **plug-and-play multi-agent orchestration platform**. You set a project goal, choose which AI providers to use, assign each one a role (Strategist, Builder, Researcher, Reviewer, etc.), and BridgeAI runs them through a structured collaboration workflow — automatically routing tasks to the most capable agent, retrying on failure, and surfacing the output in a clean real-time interface.
 
-## Tech Stack
+  **Key capabilities:**
 
-- **Frontend** — React 18 + Vite 7, TailwindCSS v4, shadcn/ui, TanStack Query, Wouter
-- **Backend** — Express 5, Node 24, Pino logging
-- **Database** — PostgreSQL + Drizzle ORM
-- **API contract** — OpenAPI 3.1 spec → Orval codegen (React Query hooks + Zod schemas)
-- **Monorepo** — pnpm workspaces
+  - 🔀 **Multi-provider** — OpenAI, Anthropic, Google Gemini, Perplexity, Replit, and Manus
+  - 🛡️ **Circuit breaker** — automatically bypasses failing providers and falls back to alternatives
+  - 📊 **Usage analytics** — tracks per-provider token spend, cost estimates, and fallback rates
+  - 🔔 **Spike alerts** — email or webhook notifications when costs spike unexpectedly
+  - 🧪 **AI Trainer Workbench** — analyse and score AI-labelling tasks with multi-model review
+  - 💾 **Session export** — download any session as a full Markdown transcript
+  - 🔁 **Simulation mode** — run sessions without real API keys using built-in mock agents
 
-## Project Structure
+  ---
 
-```
-artifacts/
-  bridge-ai/        # React + Vite frontend (served at /)
-  api-server/       # Express 5 API server (served at /api)
-lib/
-  db/               # Drizzle schema + migrations
-  api-spec/         # OpenAPI spec + Orval config
-  api-zod/          # Generated Zod schemas
-  api-client-react/ # Generated React Query hooks
-```
+  ## Quick Start
 
-## Pages
+  ### 1. Clone & install
 
-| Route | Page |
-|---|---|
-| `/` | Landing — hero, how-it-works, feature grid, CTA |
-| `/dashboard` | All sessions with status badges and cost estimates |
-| `/sessions/new` | Create session wizard — goal, autonomy mode, provider selection |
-| `/sessions/:id` | Live workspace — conversation thread, task board, agent panel, approval modal |
-| `/settings` | API key management per provider |
+  ```bash
+  git clone https://github.com/leego972/bridge-ai.git
+  cd bridge-ai
+  pnpm install
+  ```
 
-## Running Locally
+  ### 2. Set up the database
 
-The app is fully functional with mock agents — no API keys needed.
+  ```bash
+  # Provision a PostgreSQL database (Neon, Supabase, or local)
+  export DATABASE_URL="postgres://..."
 
-```bash
-# Start API server
-pnpm --filter @workspace/api-server run dev
+  # Push the schema
+  pnpm --filter @workspace/db run push
+  ```
 
-# Start frontend
-pnpm --filter @workspace/bridge-ai run dev
-```
+  ### 3. Add your API keys
 
-Both are also wired as Replit workflows and start automatically.
+  Open **Settings** in the app and enter the keys for the providers you want to use. You only need keys for the providers you select — unused providers run in simulation mode automatically.
 
-## Using a Real OpenAI Key
+  | Provider   | Key name              | Get key at                          |
+  |------------|-----------------------|-------------------------------------|
+  | OpenAI     | `OPENAI_API_KEY`      | platform.openai.com                 |
+  | Anthropic  | `ANTHROPIC_API_KEY`   | console.anthropic.com               |
+  | Google     | `GEMINI_API_KEY`      | aistudio.google.com                 |
+  | Perplexity | `PERPLEXITY_API_KEY`  | perplexity.ai/settings/api          |
+  | Replit     | `REPLIT_API_KEY`      | replit.com/account                  |
+  | Manus      | `MANUS_API_KEY`       | manus.im                            |
 
-1. Go to `/settings` in the app.
-2. Enter your `OPENAI_API_KEY`.
-3. When creating a session, add an agent with provider `openai` — it will use the real API instead of the mock adapter.
+  ### 4. Run the server
 
-## API Overview
+  ```bash
+  pnpm --filter @workspace/api-server run dev
+  ```
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/api/sessions` | List all sessions |
-| `POST` | `/api/sessions` | Create a session |
-| `GET` | `/api/sessions/:id` | Get session detail |
-| `POST` | `/api/sessions/:id/agents` | Add an agent |
-| `POST` | `/api/sessions/:id/run-next` | Run one agent step |
-| `POST` | `/api/sessions/:id/run-full` | Run full workflow (up to 8 turns) |
-| `POST` | `/api/sessions/:id/send` | Inject a user message |
-| `POST` | `/api/sessions/:id/approve/:approvalId` | Approve a pending action |
-| `POST` | `/api/sessions/:id/stop` | Stop an active session |
-| `GET` | `/api/sessions/:id/tasks` | List tasks |
-| `GET` | `/api/sessions/:id/messages` | List conversation |
-| `GET` | `/api/sessions/:id/memory` | Get shared memory |
-| `GET` | `/api/sessions/:id/audit-logs` | Get audit trail |
-| `GET` | `/api/sessions/:id/approvals` | List approval requests |
-| `GET/POST` | `/api/settings` | Read/write API key settings |
+  ---
 
-## Key Commands
+  ## Architecture
 
-```bash
-pnpm run typecheck                          # Full typecheck across all packages
-pnpm run build                              # Typecheck + build all packages
-pnpm --filter @workspace/api-spec run codegen   # Regenerate hooks from OpenAPI spec
-pnpm --filter @workspace/db run push        # Push DB schema changes (dev only)
-```
+  ```
+  artifacts/
+    api-server/        Express 5 API — agent loop, adapters, circuit breaker
+    bridge-ai/         React + Vite frontend
+  lib/
+    api-spec/          OpenAPI 3.1 spec (source of truth)
+    api-client-react/  Auto-generated React Query hooks (from spec)
+    api-zod/           Auto-generated Zod schemas (from spec)
+    db/                Drizzle ORM schema + migrations
+  ```
+
+  **Request flow:**
+
+  1. Frontend calls `POST /api/sessions` to create a session with selected agents
+  2. Agent loop assigns tasks to agents via the task router (capability + role affinity scoring)
+  3. Each agent runs through its adapter with retry + circuit breaker protection
+  4. Results are streamed to the frontend via SSE (`/api/sessions/:id/stream`)
+  5. Session state (messages, tasks, memory, audit log) is persisted in PostgreSQL
+
+  ---
+
+  ## Environment Variables
+
+  See [docs/environment-variables.md](docs/environment-variables.md) for the full reference.
+
+  **Required:**
+
+  | Variable         | Description                  |
+  |------------------|------------------------------|
+  | `DATABASE_URL`   | PostgreSQL connection string |
+  | `SESSION_SECRET` | Secret for signing sessions  |
+
+  **Optional (provider API keys — set via UI Settings page):**
+
+  `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `PERPLEXITY_API_KEY`, `REPLIT_API_KEY`, `MANUS_API_KEY`
+
+  **Optional (circuit breaker tuning):**
+
+  | Variable                  | Default | Description                              |
+  |---------------------------|---------|------------------------------------------|
+  | `CIRCUIT_OPEN_THRESHOLD` | `5`     | Failures before a circuit opens         |
+  | `CIRCUIT_TIMEOUT_MS`     | `300000`| How long a circuit stays open (ms)      |
+
+  ---
+
+  ## Development
+
+  ```bash
+  pnpm run typecheck          # Full typecheck across all packages
+  pnpm run build              # Typecheck + build all packages
+  pnpm --filter @workspace/api-spec run codegen   # Regenerate API hooks & Zod schemas
+  pnpm --filter @workspace/db run push            # Push DB schema (dev only)
+  ```
+
+  ---
+
+  ## Deployment
+
+  Deploy to any platform that supports Node.js 20+:
+
+  1. Set `DATABASE_URL` and `SESSION_SECRET` as environment variables
+  2. Run `pnpm install && pnpm run build`
+  3. Start: `pnpm --filter @workspace/api-server run start`
+
+  For Replit deployments, the app auto-serves the frontend dist in production mode.
+
+  ---
+
+  ## License
+
+  MIT
+  
