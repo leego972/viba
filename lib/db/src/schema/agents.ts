@@ -13,6 +13,8 @@ export const agentsTable = pgTable("agents", {
   role: text("role").notNull(),
   capabilities: text("capabilities").array().notNull().default([]),
   isMock: boolean("is_mock").notNull().default(true),
+  /** True for Replit and Manus — agents that can execute tools, run code, clone repos, etc. */
+  canUseTools: boolean("can_use_tools").notNull().default(false),
   lastUsedModel: text("last_used_model"),
   // MIGRATION NOTE: ALTER TABLE agents ADD COLUMN created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
