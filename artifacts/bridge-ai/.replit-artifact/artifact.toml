@@ -1,6 +1,6 @@
 kind = "web"
 previewPath = "/"
-title = "VIBA - AI Manager"
+title = "VIBA — Collaborative Multi-Agent Orchestration System"
 version = "1.0.0"
 id = "artifacts/bridge-ai"
 router = "path"
