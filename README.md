@@ -1,4 +1,4 @@
-# BridgeAI — Multi-AI Orchestration Platform
+# VIBA - AI Manager — Multi-AI Orchestration Platform
 
   > Connect ChatGPT, Claude, Gemini, Perplexity, Manus, and Replit in one session. Assign them roles, give them a goal, and watch them collaborate autonomously.
 
@@ -8,9 +8,9 @@
 
   ---
 
-  ## What is BridgeAI?
+  ## What is VIBA - AI Manager?
 
-  BridgeAI is a **plug-and-play multi-agent orchestration platform**. You set a project goal, choose which AI providers to use, assign each one a role (Strategist, Builder, Researcher, Reviewer, etc.), and BridgeAI runs them through a structured collaboration workflow — automatically routing tasks to the most capable agent, retrying on failure, and surfacing the output in a clean real-time interface.
+  VIBA - AI Manager is a **plug-and-play multi-agent orchestration platform**. You set a project goal, choose which AI providers to use, assign each one a role (Strategist, Builder, Researcher, Reviewer, etc.), and VIBA runs them through a structured collaboration workflow — automatically routing tasks to the most capable agent, retrying on failure, and surfacing the output in a clean real-time interface.
 
   **Key capabilities:**
 
