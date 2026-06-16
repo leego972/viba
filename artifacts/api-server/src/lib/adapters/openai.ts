@@ -8,6 +8,7 @@ export class OpenAIAdapter implements AgentAdapter {
   capabilities = ["planning", "reasoning", "creative_direction", "code_review", "final_qa"];
   role: string;
   isMock = false;
+  canUseTools = false;
 
   private apiKey: string;
   model: string;
