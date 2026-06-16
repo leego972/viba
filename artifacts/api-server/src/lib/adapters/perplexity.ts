@@ -8,6 +8,7 @@ export class PerplexityAdapter implements AgentAdapter {
   capabilities = ["research_summary", "fact_checking", "citation", "web_search"];
   role: string;
   isMock = false;
+  canUseTools = false;
 
   private apiKey: string;
   model: string;
