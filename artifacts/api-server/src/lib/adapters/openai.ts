@@ -21,7 +21,7 @@ export class OpenAIAdapter implements AgentAdapter {
   }
 
   async runTask(input: AgentTaskInput): Promise<AgentTaskResult> {
-    const systemPrompt = `You are ${this.name}, an AI agent with the role of ${this.role} in a multi-agent collaboration platform called BridgeAI.
+    const systemPrompt = `You are ${this.name}, an AI agent with the role of ${this.role} in a multi-agent collaboration platform called VIBA - AI Manager.
 
 Project Goal: ${input.projectGoal}
 
