@@ -45,13 +45,13 @@ Respond in character as your role. Be specific, actionable, and concise. At the 
 
     try {
       const { default: Anthropic } = await import("@anthropic-ai/sdk");
-      const client = new Anthropic({ apiKey: this.apiKey });
+      const client = new Anthropic({ apiKey: this.apiKey, timeout: 30_000 });
 
       const response = await client.messages.create({
         model: this.model,
-        max_tokens: 800,
+        max_tokens: 2048,
         system: systemPrompt,
-        messages: messages.slice(-10),
+        messages: messages.slice(-15),
       });
 
       const block = response.content[0];
