@@ -11,6 +11,7 @@ function makeAgent(overrides: Partial<Agent> = {}): Agent {
     role: "Strategist",
     capabilities: ["planning", "strategy"],
     isMock: false,
+    canUseTools: false,
     lastUsedModel: null,
     createdAt: new Date(),
     ...overrides,
@@ -28,6 +29,9 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     assignedAgentId: null,
     costEstimate: null,
     dependencyTaskId: null,
+    blockedReason: null,
+    partialWork: null,
+    toolRequirements: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
@@ -58,10 +62,39 @@ describe("routeTask", () => {
     expect(result?.id).toBe(1);
   });
 
-  it("routes build tasks to Builder via role affinity", () => {
-    const builder = makeAgent({ id: 1, role: "Builder", capabilities: [] });
-    const researcher = makeAgent({ id: 2, role: "Researcher", capabilities: [] });
+  it("routes build tasks to Builder via role affinity (no tool-capable agents present)", () => {
+    const builder = makeAgent({ id: 1, role: "Builder", capabilities: [], canUseTools: false });
+    const researcher = makeAgent({ id: 2, role: "Researcher", capabilities: [], canUseTools: false });
     const result = routeTask(makeTask({ type: "build" }), [builder, researcher]);
+    expect(result?.id).toBe(1);
+  });
+
+  it("routes build tasks to tool-capable agent over non-tool Builder by score", () => {
+    const toolBuilder = makeAgent({ id: 1, role: "Builder", capabilities: ["build", "code"], canUseTools: true });
+    const textBuilder = makeAgent({ id: 2, role: "Builder", capabilities: ["build", "code"], canUseTools: false });
+    const result = routeTask(makeTask({ type: "build" }), [textBuilder, toolBuilder]);
+    // toolBuilder gets +5 bonus for canUseTools on a requiresTools task
+    expect(result?.id).toBe(1);
+  });
+
+  it("only uses tool-capable pool when tool agents are available for requiresTools tasks", () => {
+    const replit = makeAgent({ id: 1, name: "Replit", provider: "replit", role: "Builder", capabilities: ["build"], canUseTools: true });
+    const gpt = makeAgent({ id: 2, name: "ChatGPT", provider: "openai", role: "Strategist", capabilities: [], canUseTools: false });
+    const result = routeTask(makeTask({ type: "build" }), [gpt, replit]);
+    expect(result?.id).toBe(1);
+  });
+
+  it("falls back to full pool when no tool-capable agents exist for requiresTools task", () => {
+    const gpt = makeAgent({ id: 2, name: "ChatGPT", provider: "openai", role: "Builder", capabilities: ["build"], canUseTools: false });
+    const result = routeTask(makeTask({ type: "build" }), [gpt]);
+    expect(result?.id).toBe(2);
+  });
+
+  it("task with explicit toolRequirements prefers tool-capable agents", () => {
+    const replit = makeAgent({ id: 1, provider: "replit", role: "Builder", capabilities: ["build"], canUseTools: true });
+    const gpt = makeAgent({ id: 2, provider: "openai", role: "Builder", capabilities: ["build"], canUseTools: false });
+    const task = makeTask({ type: "build", toolRequirements: ["git_clone", "run_tests"] });
+    const result = routeTask(task, [gpt, replit]);
     expect(result?.id).toBe(1);
   });
 
@@ -73,27 +106,15 @@ describe("routeTask", () => {
   });
 
   it("routes by capability match when role affinity is absent", () => {
-    const capable = makeAgent({
-      id: 1,
-      role: "Unknown",
-      capabilities: ["code_review", "logic_critique"],
-    });
+    const capable = makeAgent({ id: 1, role: "Unknown", capabilities: ["code_review", "logic_critique"] });
     const incapable = makeAgent({ id: 2, role: "Unknown2", capabilities: [] });
     const result = routeTask(makeTask({ type: "code_review" }), [capable, incapable]);
     expect(result?.id).toBe(1);
   });
 
   it("prefers agent with both capability match and role affinity (highest combined score)", () => {
-    const wellMatched = makeAgent({
-      id: 1,
-      role: "Researcher",
-      capabilities: ["research", "research_summary"],
-    });
-    const partial = makeAgent({
-      id: 2,
-      role: "Unknown",
-      capabilities: ["research"],
-    });
+    const wellMatched = makeAgent({ id: 1, role: "Researcher", capabilities: ["research", "research_summary"] });
+    const partial = makeAgent({ id: 2, role: "Unknown", capabilities: ["research"] });
     const result = routeTask(makeTask({ type: "research" }), [wellMatched, partial]);
     expect(result?.id).toBe(1);
   });
