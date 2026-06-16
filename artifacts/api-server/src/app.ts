@@ -7,7 +7,9 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 import { createRateLimiter } from "./middlewares/rateLimiter";
 import { accessTokenMiddleware } from "./middlewares/accessToken";
+import { requireAdmin } from "./middlewares/adminAuth";
 import { webhookHandler } from "./routes/stripeWebhook";
+import adminRouter from "./routes/admin";
 
 const app: Express = express();
 
@@ -72,6 +74,11 @@ app.use(express.urlencoded({ limit: "512kb", extended: true }));
 
 // Apply strict rate limit to AI session execution paths before the main router
 app.use("/api/sessions", agentLimiter);
+
+// ─── Admin router — uses its own ADMIN_TOKEN auth, bypass ACCESS_TOKEN gate ──
+// Mounted before the main router so it is never blocked by accessTokenMiddleware.
+// requireAdmin is the sole auth guard for all /api/admin/* routes.
+app.use("/api/admin", apiLimiter, requireAdmin, adminRouter);
 
 // General rate limit + optional ACCESS_TOKEN gate + main router
 app.use(
