@@ -436,7 +436,8 @@ export default function SessionWorkspace() {
     planned: tasks.filter(t => t.status === "planned"),
     in_progress: tasks.filter(t => t.status === "in_progress"),
     review: tasks.filter(t => t.status === "review"),
-    complete: tasks.filter(t => t.status === "complete")
+    complete: tasks.filter(t => t.status === "complete"),
+    blocked_needs_tools: tasks.filter(t => t.status === "blocked_needs_tools")
   };
 
   const liveAgentCount = agents.filter(a => !a.isMock).length;
@@ -681,11 +682,18 @@ export default function SessionWorkspace() {
                 messages.map(msg => {
                   const isUser = msg.role === "user";
                   const isSimulated = !isUser && msg.content?.startsWith(SIMULATED_PREFIX);
+                  const msgType = (msg as unknown as { messageType?: string }).messageType ?? "output";
                   const colorClass = isUser
                     ? AGENT_COLORS["user"]
-                    : isSimulated
-                      ? "bg-amber-500/10 text-amber-200 border-amber-500/30"
-                      : (msg.provider ? AGENT_COLORS[msg.provider] : "bg-muted text-foreground border-border");
+                    : msgType === "handoff"
+                      ? "bg-orange-500/10 text-orange-200 border-orange-500/30"
+                      : msgType === "question"
+                        ? "bg-blue-500/10 text-blue-200 border-blue-500/30"
+                        : msgType === "answer"
+                          ? "bg-emerald-500/10 text-emerald-200 border-emerald-500/30"
+                          : isSimulated
+                            ? "bg-amber-500/10 text-amber-200 border-amber-500/30"
+                            : (msg.provider ? AGENT_COLORS[msg.provider] : "bg-muted text-foreground border-border");
 
                   const displayContent = isSimulated
                     ? msg.content.replace(/^⚠️ \[Simulated — live \S+ API unavailable\] /, "")
@@ -702,6 +710,21 @@ export default function SessionWorkspace() {
                         {isSimulated && (
                           <Badge variant="outline" className="text-[10px] h-4 px-1.5 gap-0.5 text-amber-400 border-amber-500/40">
                             <FlaskConical className="h-2.5 w-2.5" /> Simulated
+                          </Badge>
+                        )}
+                        {msgType === "handoff" && (
+                          <Badge variant="outline" className="text-[10px] h-4 px-1.5 gap-0.5 text-orange-400 border-orange-500/40">
+                            🔄 Handoff
+                          </Badge>
+                        )}
+                        {msgType === "question" && (
+                          <Badge variant="outline" className="text-[10px] h-4 px-1.5 gap-0.5 text-blue-400 border-blue-500/40">
+                            ❓ Question
+                          </Badge>
+                        )}
+                        {msgType === "answer" && (
+                          <Badge variant="outline" className="text-[10px] h-4 px-1.5 gap-0.5 text-emerald-400 border-emerald-500/40">
+                            ✅ Answer
                           </Badge>
                         )}
                         <span className="text-[10px] opacity-50 ml-auto">{format(new Date(msg.createdAt), "HH:mm:ss")}</span>
@@ -777,9 +800,9 @@ export default function SessionWorkspace() {
                 </CardTitle>
               </CardHeader>
               <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-4">
-                {(['planned', 'in_progress', 'review', 'complete'] as const).map(status => {
+                {(['planned', 'in_progress', 'review', 'complete', 'blocked_needs_tools'] as const).map(status => {
                   const columnTasks = tasksByStatus[status];
-                  if (columnTasks.length === 0 && status !== 'planned') return null;
+                  if (columnTasks.length === 0 && status !== 'planned' && status !== 'blocked_needs_tools') return null;
 
                   return (
                     <div key={status} className="flex flex-col gap-2">
