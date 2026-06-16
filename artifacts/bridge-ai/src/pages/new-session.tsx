@@ -125,8 +125,8 @@ export default function NewSession() {
     <AppLayout>
       <div className="max-w-4xl mx-auto space-y-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">New Bridge Session</h1>
-          <p className="text-muted-foreground">Configure your AI team and project goals</p>
+          <h1 className="text-3xl font-bold tracking-tight">New Session</h1>
+          <p className="text-muted-foreground">Configure your agents and project goal</p>
         </div>
 
         <Card>
@@ -256,7 +256,7 @@ export default function NewSession() {
 
         <div className="flex justify-end pt-2">
           <Button size="lg" className="px-8 gap-2" onClick={handleSubmit} disabled={createSession.isPending || isSettingsLoading}>
-            {createSession.isPending ? "Starting..." : "Start Bridge Session"} <ArrowRight className="h-4 w-4" />
+            {createSession.isPending ? "Starting..." : "Start Session"} <ArrowRight className="h-4 w-4" />
           </Button>
         </div>
       </div>
