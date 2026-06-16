@@ -8,6 +8,7 @@ export class GeminiAdapter implements AgentAdapter {
   capabilities = ["multimodal", "contextual_analysis", "summarization", "creative"];
   role: string;
   isMock = false;
+  canUseTools = false;
 
   private apiKey: string;
   model: string;
