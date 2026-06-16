@@ -38,7 +38,8 @@ import {
   Play, FastForward, Square, Send, CheckCircle2, Clock, Bot,
   Crosshair, LineChart, Zap, FlaskConical, RotateCcw, X,
   RefreshCw, History, ShieldCheck, TrendingDown, AlertTriangle,
-  Download, Brain, Copy,
+  Download, Brain, Copy, ArrowRight, GitBranch, ChevronDown,
+  ChevronUp, Globe, Wrench,
 } from "lucide-react";
 import { useSessionStream } from "@/hooks/useSessionStream";
 import { MarkdownContent } from "@/components/MarkdownContent";
@@ -104,6 +105,7 @@ export default function SessionWorkspace() {
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [pendingApproval, setPendingApproval] = useState<Approval | null>(null);
+  const [expandedAnswers, setExpandedAnswers] = useState<Record<number, boolean>>({});
 
   // Prune stale keys from localStorage once on mount (#47)
   useEffect(() => {
@@ -319,6 +321,11 @@ export default function SessionWorkspace() {
     });
   }, [toast]);
 
+  const getRecipientName = (toAgentId: number | null | undefined): string | null => {
+    if (toAgentId == null) return null;
+    return agents.find(a => a.id === toAgentId)?.name ?? null;
+  };
+
   const handleRunNext = () => {
     runNext.mutate({ id: sessionId }, {
       onSuccess: () => invalidateAll(),
@@ -507,7 +514,8 @@ export default function SessionWorkspace() {
         )}
 
         {/* Header Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 bg-card border rounded-lg p-4 shadow-sm shrink-0">
+        <div className="flex flex-col gap-2 bg-card border rounded-lg p-4 shadow-sm shrink-0">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
           <div className="flex items-center gap-3 flex-wrap min-w-0 flex-1">
             <h1 className="font-bold text-lg truncate max-w-[240px] sm:max-w-[300px]" title={session.goal}>{session.goal}</h1>
             <Badge variant="outline" className="capitalize shrink-0">{session.status}</Badge>
@@ -554,6 +562,32 @@ export default function SessionWorkspace() {
               <Badge variant="secondary">Session {session.status}</Badge>
             )}
           </div>
+          </div>
+          {(session.repoUrl || session.workspaceEnv) && (
+            <div className="flex items-center gap-3 pt-1.5 border-t border-border/40 flex-wrap">
+              {session.repoUrl && (
+                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <GitBranch className="h-3.5 w-3.5 shrink-0" />
+                  <a
+                    href={session.repoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="truncate max-w-[200px] hover:text-foreground transition-colors underline underline-offset-2"
+                  >
+                    {session.repoUrl.replace(/^https?://(github.com/)?/, "")}
+                  </a>
+                  {session.repoBranch && (
+                    <span className="text-muted-foreground/50">@ {session.repoBranch}</span>
+                  )}
+                </span>
+              )}
+              {session.workspaceEnv && (
+                <span className="flex items-center gap-1 text-xs rounded px-1.5 py-0.5 bg-muted border border-border/50 font-mono text-muted-foreground">
+                  <Globe className="h-3 w-3" /> {session.workspaceEnv}
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Completion summary banner */}
@@ -699,6 +733,7 @@ export default function SessionWorkspace() {
                     ? msg.content.replace(/^⚠️ \[Simulated — live \S+ API unavailable\] /, "")
                     : msg.content;
 
+                  const recipientName = (msg as {toAgentName?: string | null}).toAgentName ?? getRecipientName(msg.toAgentId);
                   return (
                     <div key={msg.id} className={`group flex flex-col max-w-[85%] rounded-lg border p-3 ${colorClass} ${isUser ? "self-end" : "self-start"}`}>
                       <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -737,6 +772,47 @@ export default function SessionWorkspace() {
                           <Copy className="h-3 w-3" />
                         </button>
                       </div>
+                      {/* Question: show recipient prominently */}
+                      {msgType === "question" && recipientName && (
+                        <div className="flex items-center gap-1.5 text-[11px] mb-2 pb-2 border-b border-current/20 font-semibold">
+                          <ArrowRight className="h-3 w-3 shrink-0" />
+                          <span>To: {recipientName}</span>
+                        </div>
+                      )}
+                      {/* Answer: collapsible thread link */}
+                      {msgType === "answer" && (
+                        <button
+                          type="button"
+                          className="flex items-center gap-1.5 text-[11px] mb-2 pb-2 border-b border-current/20 text-left w-full opacity-75 hover:opacity-100 transition-opacity"
+                          onClick={() => setExpandedAnswers(prev => ({ ...prev, [msg.id]: !prev[msg.id] }))}
+                        >
+                          <span className="flex-1">
+                            {"↩"} Answering {recipientName ? `${recipientName}'s` : "a"} question
+                            {(msg as {metadata?: Record<string, unknown>}).metadata?.questionRef !== undefined && (
+                              <span className="opacity-50 font-normal ml-1">
+                                (#{String((msg as {metadata?: Record<string, unknown>}).metadata?.questionRef)})
+                              </span>
+                            )}
+                          </span>
+                          {expandedAnswers[msg.id]
+                            ? <ChevronUp className="h-3 w-3 shrink-0" />
+                            : <ChevronDown className="h-3 w-3 shrink-0" />}
+                        </button>
+                      )}
+                      {/* Handoff: two-column completed/continuing layout */}
+                      {msgType === "handoff" && (
+                        <div className="flex gap-1.5 mb-2 pb-2 border-b border-current/20 text-[11px]">
+                          <div className="flex-1 rounded px-2 py-1.5 bg-black/15">
+                            <div className="opacity-60 font-medium mb-0.5">Completed by</div>
+                            <div className="font-semibold">{msg.agentName || "Unknown"}</div>
+                          </div>
+                          <div className="flex items-center text-orange-400/70 font-bold text-sm px-1">{"→"}</div>
+                          <div className="flex-1 rounded px-2 py-1.5 bg-black/15">
+                            <div className="opacity-60 font-medium mb-0.5">Continuing as</div>
+                            <div className="font-semibold">{recipientName || "Tool-capable agent"}</div>
+                          </div>
+                        </div>
+                      )}
                       {isUser ? (
                         <div className="text-sm whitespace-pre-wrap leading-relaxed">{displayContent}</div>
                       ) : (
@@ -811,8 +887,26 @@ export default function SessionWorkspace() {
                         <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">{columnTasks.length}</Badge>
                       </div>
                       {columnTasks.map(task => (
-                        <div key={task.id} className="bg-card border rounded p-2 text-sm shadow-sm">
+                        <div key={task.id} className={`bg-card border rounded p-2 text-sm shadow-sm ${task.status === 'blocked_needs_tools' ? 'border-orange-500/30 bg-orange-500/5' : ''}`}>
                           <div className="font-medium line-clamp-2 leading-tight">{task.title}</div>
+                          {task.status === 'blocked_needs_tools' && (
+                            <>
+                              {task.blockedReason && (
+                                <p className="mt-1.5 text-[10px] text-orange-400/80 leading-snug border-l-2 border-orange-500/40 pl-2 italic">
+                                  {task.blockedReason}
+                                </p>
+                              )}
+                              {task.toolRequirements && task.toolRequirements.length > 0 && (
+                                <div className="mt-1.5 flex flex-wrap gap-1">
+                                  {task.toolRequirements.map(tool => (
+                                    <Badge key={tool} variant="outline" className="text-[9px] h-4 px-1.5 gap-0.5 text-orange-400 border-orange-500/40">
+                                      <Wrench className="h-2 w-2" /> {tool}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              )}
+                            </>
+                          )}
                           {task.assignedAgentId && (() => {
                             const assignedAgent = agents.find(a => a.id === task.assignedAgentId);
                             return (
