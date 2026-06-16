@@ -47,7 +47,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
     const circuitQuery = useGetCircuitStatus();
 
     const stats = statsQuery.data;
-    const circuits = circuitQuery.data?.circuits;
+    const circuits = circuitQuery.data?.entries;
 
     return (
       <AppLayout>
@@ -63,8 +63,8 @@ import { AppLayout } from "@/components/layout/AppLayout";
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {[
               { label: "Total Sessions", value: stats?.totalSessions ?? null },
-              { label: "Total Steps", value: stats?.totalSteps ?? null },
-              { label: "Provider Fallbacks", value: stats?.providerFallbackCounts?.reduce((a, b) => a + b.count, 0) ?? null },
+              { label: "Fallback Events", value: stats?.fallbackEvents ?? null },
+              { label: "Provider Fallbacks", value: stats?.fallbacksByProvider?.reduce((acc: number, b) => acc + b.count, 0) ?? null },
               { label: "Models Used", value: stats?.modelUsageBreakdown?.length ?? null },
             ].map(({ label, value }) => (
               <Card key={label}>
