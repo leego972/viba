@@ -102,6 +102,7 @@ function makeLiveAdapter(runTask: () => Promise<AgentTaskResult>): AgentAdapter 
     capabilities: [],
     role: "engineer",
     isMock: false,
+    canUseTools: false,
     runTask,
   };
 }
@@ -115,6 +116,7 @@ function makeFallbackAdapter(): AgentAdapter {
     capabilities: [],
     role: "engineer",
     isMock: true,
+    canUseTools: false,
     runTask: vi.fn().mockResolvedValue({
       ...SUCCESS_RESULT,
       messageText: "simulated",
