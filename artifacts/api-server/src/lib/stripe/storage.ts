@@ -1,4 +1,4 @@
-import { db, subscribers } from "@workspace/db";
+import { db, subscribersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import crypto from "node:crypto";
 
@@ -9,16 +9,16 @@ export function generateAccessToken(): string {
 export async function getSubscriberByToken(token: string) {
   const [sub] = await db
     .select()
-    .from(subscribers)
-    .where(eq(subscribers.accessToken, token));
+    .from(subscribersTable)
+    .where(eq(subscribersTable.accessToken, token));
   return sub ?? null;
 }
 
 export async function getSubscriberByCustomerId(customerId: string) {
   const [sub] = await db
     .select()
-    .from(subscribers)
-    .where(eq(subscribers.stripeCustomerId, customerId));
+    .from(subscribersTable)
+    .where(eq(subscribersTable.stripeCustomerId, customerId));
   return sub ?? null;
 }
 
@@ -32,10 +32,10 @@ export async function createSubscriber(data: {
 }) {
   const token = generateAccessToken();
   const [sub] = await db
-    .insert(subscribers)
+    .insert(subscribersTable)
     .values({ ...data, accessToken: token })
     .onConflictDoUpdate({
-      target: subscribers.stripeCustomerId,
+      target: subscribersTable.stripeCustomerId,
       set: {
         stripeSubscriptionId: data.stripeSubscriptionId,
         status: data.status,
@@ -57,9 +57,9 @@ export async function updateSubscriberBySubscriptionId(
   },
 ) {
   const [sub] = await db
-    .update(subscribers)
+    .update(subscribersTable)
     .set({ ...updates, updatedAt: new Date() })
-    .where(eq(subscribers.stripeSubscriptionId, subscriptionId))
+    .where(eq(subscribersTable.stripeSubscriptionId, subscriptionId))
     .returning();
   return sub ?? null;
 }
