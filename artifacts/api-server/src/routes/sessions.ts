@@ -257,8 +257,10 @@ router.get("/sessions/:id", async (req, res): Promise<void> => {
 
   const agentRows = await db.select().from(agentsTable).where(eq(agentsTable.sessionId, session.id));
   const agents = await withActiveModels(agentRows);
+  const agentNameMap = new Map(agentRows.map(a => [a.id, a.name ?? '']));
   const tasks = await db.select().from(tasksTable).where(eq(tasksTable.sessionId, session.id)).orderBy(asc(tasksTable.id));
-  const messages = await db.select().from(messagesTable).where(eq(messagesTable.sessionId, session.id)).orderBy(asc(messagesTable.id));
+  const rawMessages = await db.select().from(messagesTable).where(eq(messagesTable.sessionId, session.id)).orderBy(asc(messagesTable.id));
+  const messages = rawMessages.map(m => ({ ...m, toAgentName: m.toAgentId != null ? agentNameMap.get(m.toAgentId) ?? null : null }));
   const [memory] = await db.select().from(memoryTable).where(eq(memoryTable.sessionId, session.id));
   const approvals = await db.select().from(approvalsTable).where(eq(approvalsTable.sessionId, session.id));
 
@@ -469,10 +471,12 @@ router.get("/sessions/:id/stream", async (req, res): Promise<void> => {
 
       const agentRows = await db.select().from(agentsTable).where(eq(agentsTable.sessionId, sessionId));
       const agents = await withActiveModels(agentRows);
-      const messages = await db
+      const agentNameMap = new Map(agentRows.map(a => [a.id, a.name ?? '']));
+      const rawMessages = await db
         .select().from(messagesTable)
         .where(eq(messagesTable.sessionId, sessionId))
         .orderBy(asc(messagesTable.id));
+      const messages = rawMessages.map(m => ({ ...m, toAgentName: m.toAgentId != null ? agentNameMap.get(m.toAgentId) ?? null : null }));
       const tasks = await db
         .select().from(tasksTable)
         .where(eq(tasksTable.sessionId, sessionId))
@@ -544,10 +548,12 @@ router.get("/sessions/:id/messages", async (req, res): Promise<void> => {
     return;
   }
   const msgTypeFilter = typeof req.query["type"] === "string" ? req.query["type"] : undefined;
-  const msgRows = db.select().from(messagesTable).where(eq(messagesTable.sessionId, params.data.id)).orderBy(asc(messagesTable.id));
-  const messages = msgTypeFilter
+  const msgAgentRows = await db.select().from(agentsTable).where(eq(agentsTable.sessionId, params.data.id));
+  const msgAgentNameMap = new Map(msgAgentRows.map(a => [a.id, a.name ?? '']));
+  const rawMsgRows = msgTypeFilter
     ? await db.select().from(messagesTable).where(and(eq(messagesTable.sessionId, params.data.id), eq(messagesTable.messageType, msgTypeFilter))).orderBy(asc(messagesTable.id))
     : await db.select().from(messagesTable).where(eq(messagesTable.sessionId, params.data.id)).orderBy(asc(messagesTable.id));
+  const messages = rawMsgRows.map(m => ({ ...m, toAgentName: m.toAgentId != null ? msgAgentNameMap.get(m.toAgentId) ?? null : null }));
   res.json(serialize(messages));
 });
 
