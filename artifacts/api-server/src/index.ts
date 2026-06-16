@@ -2,11 +2,10 @@ import type { Server } from "http";
 import type { AddressInfo } from "net";
 import app from "./app";
 import { logger } from "./lib/logger";
+import { pool } from "@workspace/db";
 import { loadCircuitStateFromDb, validateCircuitBreakerEnv } from "./lib/adapterRetry";
 
 // Fail fast if circuit breaker env vars are set to invalid values.
-// This must run before any other startup logic so misconfigured deployments
-// surface a clear error immediately rather than behaving unpredictably.
 validateCircuitBreakerEnv();
 
 if (!process.env["DATABASE_URL"]) {
@@ -14,17 +13,33 @@ if (!process.env["DATABASE_URL"]) {
 }
 
 const rawPort = process.env["PORT"];
-
 if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
+  throw new Error("PORT environment variable is required but was not provided.");
 }
 
 const port = Number(rawPort);
-
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
+}
+
+// Create the subscribers table if it doesn't exist yet.
+// This is idempotent — safe to run on every startup.
+async function ensureSubscribersTable(): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS subscribers (
+      id                     SERIAL      PRIMARY KEY,
+      email                  TEXT        NOT NULL,
+      stripe_customer_id     TEXT        UNIQUE,
+      stripe_subscription_id TEXT        UNIQUE,
+      access_token           TEXT        UNIQUE NOT NULL,
+      status                 TEXT        NOT NULL DEFAULT 'pending',
+      trial_end              TIMESTAMPTZ,
+      current_period_end     TIMESTAMPTZ,
+      created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  logger.info("Subscribers table ready");
 }
 
 // Bind the server with one EADDRINUSE retry to survive workflow restart races
@@ -52,10 +67,8 @@ function listenWithRetry(attemptNumber: number): void {
   });
 }
 
-// loadCircuitStateFromDb is best-effort: DB errors are logged as warnings
-// and the server starts with a clean (all-circuits-closed) state. The
-// .catch here guards against unexpected programming errors only.
 loadCircuitStateFromDb()
+  .then(() => ensureSubscribersTable())
   .then(() => {
     listenWithRetry(1);
   })
