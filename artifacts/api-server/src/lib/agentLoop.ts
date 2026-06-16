@@ -6,6 +6,8 @@ import { routeTask } from "./taskRouter";
 import { logger } from "./logger";
 import type { AgentTaskResult } from "./adapters/interface";
 import { runAdapterWithRetry } from "./adapterRetry";
+import { handleToolHandoff } from "./toolHandoff";
+import { processPendingQuestions, persistOutboundQuestions, persistAnswers } from "./agentComms";
 
 const APPROVAL_TASK_TYPES = new Set(["final_qa"]);
 const MAX_TURNS = 12;
@@ -23,17 +25,13 @@ async function logAudit(sessionId: number, eventType: string, description: strin
 async function updateMemory(sessionId: number, newMessages: Message[], agentName: string, taskTitle: string) {
   const [mem] = await db.select().from(memoryTable).where(eq(memoryTable.sessionId, sessionId));
 
-  // Build a clean bullet-list summary — one line per completed task, max 10 entries
   const newEntry = `• [${agentName}] completed "${taskTitle}"`;
-
   const existingLines = (mem?.summary ?? "")
     .split("\n")
     .filter((l) => l.trim().startsWith("•"))
-    .slice(0, 9); // keep last 9, we'll prepend the new one
-
+    .slice(0, 9);
   const summary = [newEntry, ...existingLines].join("\n");
 
-  // Update decisions array with key agent outputs
   const existingDecisions = mem?.decisions ?? [];
   const lastContent = newMessages[0]?.content?.substring(0, 120) ?? "";
   const newDecisions = existingDecisions.length < 12
@@ -63,7 +61,7 @@ export async function runNextAgentStep(sessionId: number): Promise<{
     return { newMessages: [], updatedTasks: [], approvalRequired: false, approval: null };
   }
 
-  // Only pick tasks that are still in "planned" state — prevents re-running the same task
+  // Find the next "planned" task — skip blocked_needs_tools tasks that already have siblings
   const allTasks = await db
     .select()
     .from(tasksTable)
@@ -73,16 +71,19 @@ export async function runNextAgentStep(sessionId: number): Promise<{
   const nextTask = allTasks.find((t) => t.status === "planned");
 
   if (!nextTask) {
-    // All tasks done — mark session complete
     const hasActiveTasks = allTasks.some((t) => t.status === "in_progress");
     if (!hasActiveTasks) {
-      await db.update(sessionsTable).set({ status: "completed" }).where(eq(sessionsTable.id, sessionId));
-      await logAudit(sessionId, "session_completed", "All tasks completed, session marked complete");
+      // Only complete if there are no blocked tasks without a tool-capable agent available
+      const hasBlocked = allTasks.some((t) => t.status === "blocked_needs_tools");
+      if (!hasBlocked) {
+        await db.update(sessionsTable).set({ status: "completed" }).where(eq(sessionsTable.id, sessionId));
+        await logAudit(sessionId, "session_completed", "All tasks completed, session marked complete");
+      }
     }
     return { newMessages: [], updatedTasks: [], approvalRequired: false, approval: null };
   }
 
-  // Check if approval required before this task (only for supervised sessions)
+  // Check if approval required before this task (Supervised mode only)
   if (APPROVAL_TASK_TYPES.has(nextTask.type) && session.autonomyMode === "Supervised") {
     const [existingApproval] = await db
       .select()
@@ -103,18 +104,13 @@ export async function runNextAgentStep(sessionId: number): Promise<{
         taskId: nextTask.id,
         taskType: nextTask.type,
       });
-      return {
-        newMessages: [],
-        updatedTasks: [],
-        approvalRequired: true,
-        approval: approval ?? null,
-      };
+      return { newMessages: [], updatedTasks: [], approvalRequired: true, approval: approval ?? null };
     } else if (existingApproval.status === "pending") {
       return { newMessages: [], updatedTasks: [], approvalRequired: true, approval: existingApproval };
     }
   }
 
-  // Route to the best-fit agent
+  // Route to the best-fit agent (tool-aware)
   const assignedAgent = routeTask(nextTask, agents);
   if (!assignedAgent) {
     return { newMessages: [], updatedTasks: [], approvalRequired: false, approval: null };
@@ -125,36 +121,43 @@ export async function runNextAgentStep(sessionId: number): Promise<{
   await logAudit(sessionId, "task_assigned", `Task "${nextTask.title}" assigned to ${assignedAgent.name}`, {
     taskId: nextTask.id,
     agentId: assignedAgent.id,
+    canUseTools: assignedAgent.canUseTools,
   });
 
-  // Get last 6 messages as conversation context (keep prompt lean)
+  // Get conversation context
   const previousMessages = await db
     .select()
     .from(messagesTable)
     .where(eq(messagesTable.sessionId, sessionId))
     .orderBy(asc(messagesTable.id));
+  const recentMessages = previousMessages.slice(-12);
 
-  const recentMessages = previousMessages.slice(-12); // adapters support up to 15; 12 gives rich context without over-bloating the prompt
   const [memory] = await db.select().from(memoryTable).where(eq(memoryTable.sessionId, sessionId));
 
-  // Build adapter and run task — retry once before falling back to simulation
-  const taskInput = {
-    systemRole: assignedAgent.role,
-    projectGoal: session.goal,
-    memorySummary: memory?.summary ?? "",
-    taskInstruction: nextTask.description || nextTask.title,
-    previousMessages: recentMessages.map((m) => ({
-      role: m.role,
-      content: m.content,
-      agentName: m.agentName ?? undefined,
-    })),
-    taskType: nextTask.type,
-  };
+  // Fetch pending questions directed at this agent (task-scoped)
+  const pendingQuestions = await processPendingQuestions(sessionId, assignedAgent.id);
 
+  // Build adapter — mock adapters inherit canUseTools from their class
   const retryOutcome = await runAdapterWithRetry({
     buildLiveAdapter: () => buildAdapter(assignedAgent),
     buildFallbackAdapter: () => buildMockAdapter(assignedAgent),
-    taskInput,
+    taskInput: {
+      systemRole: assignedAgent.role,
+      projectGoal: session.goal,
+      memorySummary: memory?.summary ?? "",
+      taskInstruction: nextTask.description || nextTask.title,
+      previousMessages: recentMessages.map((m) => ({
+        role: m.role,
+        content: m.content,
+        agentName: m.agentName ?? undefined,
+      })),
+      taskType: nextTask.type,
+      canUseTools: assignedAgent.canUseTools,
+      repoUrl: session.repoUrl ?? undefined,
+      repoBranch: session.repoBranch ?? undefined,
+      workspaceEnv: session.workspaceEnv ?? undefined,
+      pendingQuestions,
+    },
     retryDelayMs: RETRY_DELAY_MS,
     logAudit: (eventType, description, metadata) =>
       logAudit(sessionId, eventType, description, metadata),
@@ -169,7 +172,7 @@ export async function runNextAgentStep(sessionId: number): Promise<{
 
   let result: AgentTaskResult = retryOutcome.result;
   const usedFallback = retryOutcome.usedFallback;
-  let usedModel: string | null = retryOutcome.usedModel || null;
+  const usedModel: string | null = retryOutcome.usedModel || null;
 
   if (usedFallback) {
     result = {
@@ -178,12 +181,45 @@ export async function runNextAgentStep(sessionId: number): Promise<{
     };
   }
 
-  // Persist the model that was actually used onto the agent record
   if (usedModel) {
     await db.update(agentsTable).set({ lastUsedModel: usedModel }).where(eq(agentsTable.id, assignedAgent.id));
   }
 
-  // Save message
+  // ── Tool handoff: text-only agent hit a tool blocker ──────────────────────
+  if (result.blockedReason && !assignedAgent.canUseTools) {
+    logger.info(
+      { sessionId, taskId: nextTask.id, agentId: assignedAgent.id, blockedReason: result.blockedReason },
+      "Agent blocked — initiating tool handoff",
+    );
+
+    const { handoffMessage, siblingTask } = await handleToolHandoff(
+      sessionId,
+      nextTask,
+      result,
+      assignedAgent,
+    );
+
+    await logAudit(sessionId, "tool_handoff", `${assignedAgent.name} blocked — tool handoff to capable agent`, {
+      originalTaskId: nextTask.id,
+      siblingTaskId: siblingTask.id,
+      blockedReason: result.blockedReason,
+    });
+
+    // Update session cost
+    const updatedCost = (session.estimatedCost ?? 0) + result.estimatedCost;
+    await db.update(sessionsTable).set({ estimatedCost: updatedCost }).where(eq(sessionsTable.id, sessionId));
+
+    return {
+      newMessages: [handoffMessage],
+      updatedTasks: [{ ...nextTask, status: "blocked_needs_tools" } as Task, siblingTask],
+      approvalRequired: false,
+      approval: null,
+    };
+  }
+
+  // ── Normal completion path ─────────────────────────────────────────────────
+
+  // Save the main output message
   const [newMsg] = await db
     .insert(messagesTable)
     .values({
@@ -196,6 +232,7 @@ export async function runNextAgentStep(sessionId: number): Promise<{
       taskId: nextTask.id,
       agentName: assignedAgent.name,
       agentRole: assignedAgent.role,
+      messageType: "output",
     })
     .returning();
 
@@ -208,14 +245,38 @@ export async function runNextAgentStep(sessionId: number): Promise<{
     agentId: assignedAgent.id,
   });
 
-  // Each agent completes a task in one step — map completionStatus to final task state
+  // ── Inter-agent communications ─────────────────────────────────────────────
+  // Persist answers to pending questions
+  const answerMessages = await persistAnswers(
+    sessionId,
+    assignedAgent,
+    result.answersToQuestions ?? [],
+    nextTask.id,
+  );
+
+  // Persist outbound questions (cap enforced inside persistOutboundQuestions)
+  const questionMessages = await persistOutboundQuestions(
+    sessionId,
+    assignedAgent,
+    result.outboundQuestions ?? [],
+    nextTask.id,
+    agents,
+  );
+
+  if (questionMessages.length > 0) {
+    await logAudit(sessionId, "agent_questions_sent", `${assignedAgent.name} sent ${questionMessages.length} question(s)`, {
+      taskId: nextTask.id,
+      questionCount: questionMessages.length,
+    });
+  }
+
+  // ── Update task status ─────────────────────────────────────────────────────
   let newTaskStatus: string;
   if (result.completionStatus === "complete") {
     newTaskStatus = "complete";
   } else if (result.completionStatus === "needs_review") {
     newTaskStatus = "review";
   } else {
-    // "in_progress" or anything else → mark review so it doesn't get re-run
     newTaskStatus = "review";
   }
 
@@ -225,16 +286,16 @@ export async function runNextAgentStep(sessionId: number): Promise<{
     .where(eq(tasksTable.id, nextTask.id))
     .returning();
 
-  // Update session cost
   const updatedCost = (session.estimatedCost ?? 0) + result.estimatedCost;
   await db.update(sessionsTable).set({ estimatedCost: updatedCost }).where(eq(sessionsTable.id, sessionId));
 
-  // Update memory cleanly
   await updateMemory(sessionId, [newMsg], assignedAgent.name, nextTask.title);
   await logAudit(sessionId, "memory_updated", "Shared memory updated");
 
+  const allNewMessages: Message[] = [newMsg, ...answerMessages, ...questionMessages];
+
   return {
-    newMessages: [newMsg],
+    newMessages: allNewMessages,
     updatedTasks: updatedTask ? [updatedTask] : [],
     approvalRequired: false,
     approval: null,
@@ -266,12 +327,10 @@ export async function runFullWorkflow(sessionId: number): Promise<{
       break;
     }
 
-    // No progress — no more planned tasks
     if (result.newMessages.length === 0 && result.updatedTasks.length === 0) {
       break;
     }
 
-    // Check if session completed
     const [session] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, sessionId));
     if (session?.status !== "active") break;
   }
