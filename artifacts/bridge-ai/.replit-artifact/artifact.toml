@@ -1,6 +1,6 @@
 kind = "web"
 previewPath = "/"
-title = "BridgeAI"
+title = "VIBA - AI Manager"
 version = "1.0.0"
 id = "artifacts/bridge-ai"
 router = "path"
