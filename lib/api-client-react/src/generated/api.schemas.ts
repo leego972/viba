@@ -1,1 +1,471 @@
-LyoqCiAqIEdlbmVyYXRlZCBieSBvcnZhbCB2OC45LjEg8J+NugogKiBEbyBub3QgZWRpdCBtYW51YWxseS4KICogQXBpCiAqIFZJQkEgLSBDb2xsYWJvcmF0aXZlIE11bHRpLUFnZW50IE9yY2hlc3RyYXRpb24gU3lzdGVtIEFQSQogKiBPcGVuQVBJIHNwZWMgdmVyc2lvbjogMC4xLjAKICovCmV4cG9ydCBpbnRlcmZhY2UgSGVhbHRoU3RhdHVzIHsKICBzdGF0dXM6IHN0cmluZzsKfQoKZXhwb3J0IGludGVyZmFjZSBFcnJvclJlc3BvbnNlIHsKICBlcnJvcjogc3RyaW5nOwp9CgpleHBvcnQgaW50ZXJmYWNlIEFnZW50TW9kZVN1bW1hcnkgewogIG5hbWU6IHN0cmluZzsKICBwcm92aWRlcjogc3RyaW5nOwogIGlzTW9jazogYm9vbGVhbjsKfQoKZXhwb3J0IHR5cGUgU2Vzc2lvbk1vZGUgPSB0eXBlb2YgU2Vzc2lvbk1vZGVba2V5b2YgdHlwZW9mIFNlc3Npb25Nb2RlXTsKCgpleHBvcnQgY29uc3QgU2Vzc2lvbk1vZGUgPSB7CiAgbGl2ZTogJ2xpdmUnLAogIHNpbXVsYXRpb246ICdzaW11bGF0aW9uJywKICBtaXhlZDogJ21peGVkJywKfSBhcyBjb25zdDsKCmV4cG9ydCBpbnRlcmZhY2UgU2Vzc2lvbiB7CiAgaWQ6IG51bWJlcjsKICBnb2FsOiBzdHJpbmc7CiAgc3RhdHVzOiBzdHJpbmc7CiAgYXV0b25vbXlNb2RlOiBzdHJpbmc7CiAgbW9kZTogU2Vzc2lvbk1vZGU7CiAgZXN0aW1hdGVkQ29zdDogbnVtYmVyIHwgbnVsbDsKICBmaW5hbE91dHB1dDogc3RyaW5nIHwgbnVsbDsKICAvKiogR2l0IHJlcG9zaXRvcnkgVVJMIGNvbm5lY3RlZCB0byB0aGlzIHNlc3Npb24gKG9wdGlvbmFsKSAqLwogIHJlcG9Vcmw/OiBzdHJpbmcgfCBudWxsOwogIC8qKiBUYXJnZXQgYnJhbmNoIOKAlCBkZWZhdWx0cyB0byBtYWluIHdoZW4gbm90IHNwZWNpZmllZCAqLwogIHJlcG9CcmFuY2g/OiBzdHJpbmcgfCBudWxsOwogIC8qKiBFbnZpcm9ubWVudCBsYWJlbDogZGV2ZWxvcG1lbnQgfCBzdGFnaW5nIHwgcHJvZHVjdGlvbiAqLwogIHdvcmtzcGFjZUVudj86IHN0cmluZyB8IG51bGw7CiAgY3JlYXRlZEF0OiBzdHJpbmc7CiAgdXBkYXRlZEF0OiBzdHJpbmc7CiAgYWdlbnRNb2RlczogQWdlbnRNb2RlU3VtbWFyeVtdOwp9CgpleHBvcnQgaW50ZXJmYWNlIEFnZW50IHsKICBpZDogbnVtYmVyOwogIHNlc3Npb25JZDogbnVtYmVyOwogIG5hbWU6IHN0cmluZzsKICBwcm92aWRlcjogc3RyaW5nOwogIHJvbGU6IHN0cmluZzsKICBjYXBhYmlsaXRpZXM6IHN0cmluZ1tdOwogIGlzTW9jazogYm9vbGVhbjsKICAvKiogVHJ1ZSBmb3IgUmVwbGl0IGFuZCBNYW51cyDigJQgYWdlbnRzIHRoYXQgY2FuIGV4ZWN1dGUgdG9vbHMsIHJ1biBjb2RlLCBjbG9uZSByZXBvcywgZXRjLiAqLwogIGNhblVzZVRvb2xzOiBib29sZWFuOwogIGxhc3RVc2VkTW9kZWw6IHN0cmluZyB8IG51bGw7CiAgLyoqIE1vZGVsIG5hbWUgZGVyaXZlZCBhdCBxdWVyeSB0aW1lIGZyb20gdGhlIGFnZW50J3MgbW9zdCByZWNlbnQgbWVzc2FnZSAqLwogIGFjdGl2ZU1vZGVsPzogc3RyaW5nIHwgbnVsbDsKfQoKZXhwb3J0IGludGVyZmFjZSBUYXNrIHsKICBpZDogbnVtYmVyOwogIHNlc3Npb25JZDogbnVtYmVyOwogIHRpdGxlOiBzdHJpbmc7CiAgZGVzY3JpcHRpb246IHN0cmluZzsKICB0eXBlOiBzdHJpbmc7CiAgLyoqIHBsYW5uZWQgfCBpbl9wcm9ncmVzcyB8IGNvbXBsZXRlIHwgcmV2aWV3IHwgYmxvY2tlZF9uZWVkc190b29scyAqLwogIHN0YXR1czogc3RyaW5nOwogIGFzc2lnbmVkQWdlbnRJZDogbnVtYmVyIHwgbnVsbDsKICBjb3N0RXN0aW1hdGU6IG51bWJlciB8IG51bGw7CiAgZGVwZW5kZW5jeVRhc2tJZDogbnVtYmVyIHwgbnVsbDsKICAvKiogV2h5IGEgdGV4dC1vbmx5IGFnZW50IGNvdWxkIG5vdCBjb21wbGV0ZSB0aGlzIHRhc2sgKHRvb2wgbGltaXRhdGlvbikgKi8KICBibG9ja2VkUmVhc29uPzogc3RyaW5nIHwgbnVsbDsKICAvKiogV29yayB0aGUgdGV4dC1vbmx5IGFnZW50IGNvbXBsZXRlZCBiZWZvcmUgaGl0dGluZyB0aGUgdG9vbCBibG9ja2VyICovCiAgcGFydGlhbFdvcms/OiBzdHJpbmcgfCBudWxsOwogIC8qKiBUb29sIG5hbWVzIHJlcXVpcmVkIHRvIGZpbmlzaCB0aGlzIHRhc2sgKGUuZy4gZ2l0X2Nsb25lLCBydW5fdGVzdHMpICovCiAgdG9vbFJlcXVpcmVtZW50cz86IHN0cmluZ1tdIHwgbnVsbDsKICBjcmVhdGVkQXQ6IHN0cmluZzsKICB1cGRhdGVkQXQ6IHN0cmluZzsKfQoKLyoqCiAqIEludGVyLWFnZW50IG1lc3NhZ2UgdHlwZTogb3V0cHV0IHwgcXVlc3Rpb24gfCBhbnN3ZXIgfCBoYW5kb2ZmIHwgY29udGV4dAogKi8KZXhwb3J0IHR5cGUgTWVzc2FnZU1lc3NhZ2VUeXBlID0gdHlwZW9mIE1lc3NhZ2VNZXNzYWdlVHlwZVtrZXlvZiB0eXBlb2YgTWVzc2FnZU1lc3NhZ2VUeXBlXTsKCgpleHBvcnQgY29uc3QgTWVzc2FnZU1lc3NhZ2VUeXBlID0gewogIG91dHB1dDogJ291dHB1dCcsCiAgcXVlc3Rpb246ICdxdWVzdGlvbicsCiAgYW5zd2VyOiAnYW5zd2VyJywKICBoYW5kb2ZmOiAnaGFuZG9mZicsCiAgY29udGV4dDogJ2NvbnRleHQnLAp9IGFzIGNvbnN0OwoKLyoqCiAqIEV4dHJhIHN0cnVjdHVyZWQgZGF0YSAoZS5nLiBwYXJ0aWFsV29yaywgcmVtYWluaW5nV29yaywgcXVlc3Rpb25SZWYpCiAqLwpleHBvcnQgdHlwZSBNZXNzYWdlTWV0YWRhdGEgPSB7IFtrZXk6IHN0cmluZ106IHVua25vd24gfSB8IG51bGw7CgpleHBvcnQgaW50ZXJmYWNlIE1lc3NhZ2UgewogIGlkOiBudW1iZXI7CiAgc2Vzc2lvbklkOiBudW1iZXI7CiAgYWdlbnRJZDogbnVtYmVyIHwgbnVsbDsKICByb2xlOiBzdHJpbmc7CiAgcHJvdmlkZXI6IHN0cmluZyB8IG51bGw7CiAgbW9kZWw6IHN0cmluZyB8IG51bGw7CiAgY29udGVudDogc3RyaW5nOwogIHRhc2tJZDogbnVtYmVyIHwgbnVsbDsKICBhZ2VudE5hbWU6IHN0cmluZyB8IG51bGw7CiAgYWdlbnRSb2xlOiBzdHJpbmcgfCBudWxsOwogIC8qKiBJbnRlci1hZ2VudCBtZXNzYWdlIHR5cGU6IG91dHB1dCB8IHF1ZXN0aW9uIHwgYW5zd2VyIHwgaGFuZG9mZiB8IGNvbnRleHQgKi8KICBtZXNzYWdlVHlwZTogTWVzc2FnZU1lc3NhZ2VUeXBlOwogIC8qKiBGb3IgcXVlc3Rpb24vYW5zd2VyL2hhbmRvZmYgbWVzc2FnZXMg4oCUIHRoZSByZWNlaXZpbmcgYWdlbnQncyBpZCAqLwogIHRvQWdlbnRJZD86IG51bWJlciB8IG51bGw7CiAgLyoqIEV4dHJhIHN0cnVjdHVyZWQgZGF0YSAoZS5nLiBwYXJ0aWFsV29yaywgcmVtYWluaW5nV29yaywgcXVlc3Rpb25SZWYpICovCiAgbWV0YWRhdGE/OiBNZXNzYWdlTWV0YWRhdGE7CiAgY3JlYXRlZEF0OiBzdHJpbmc7Cn0KCmV4cG9ydCBpbnRlcmZhY2UgTWVtb3J5IHsKICBpZDogbnVtYmVyOwogIHNlc3Npb25JZDogbnVtYmVyOwogIHN1bW1hcnk6IHN0cmluZzsKICBkZWNpc2lvbnM6IHN0cmluZ1tdOwogIHVwZGF0ZWRBdDogc3RyaW5nOwp9CgpleHBvcnQgaW50ZXJmYWNlIEFwcHJvdmFsIHsKICBpZDogbnVtYmVyOwogIHNlc3Npb25JZDogbnVtYmVyOwogIHR5cGU6IHN0cmluZzsKICBkZXNjcmlwdGlvbjogc3RyaW5nOwogIHN0YXR1czogc3RyaW5nOwogIGNyZWF0ZWRBdDogc3RyaW5nOwogIGFwcHJvdmVkQXQ6IHN0cmluZyB8IG51bGw7Cn0KCmV4cG9ydCB0eXBlIFNlc3Npb25EZXRhaWxNb2RlID0gdHlwZW9mIFNlc3Npb25EZXRhaWxNb2RlW2tleW9mIHR5cGVvZiBTZXNzaW9uRGV0YWlsTW9kZV07CgoKZXhwb3J0IGNvbnN0IFNlc3Npb25EZXRhaWxNb2RlID0gewogIGxpdmU6ICdsaXZlJywKICBzaW11bGF0aW9uOiAnc2ltdWxhdGlvbicsCiAgbWl4ZWQ6ICdtaXhlZCcsCn0gYXMgY29uc3Q7CgpleHBvcnQgaW50ZXJmYWNlIFNlc3Npb25EZXRhaWwgewogIGlkOiBudW1iZXI7CiAgZ29hbDogc3RyaW5nOwogIHN0YXR1czogc3RyaW5nOwogIGF1dG9ub215TW9kZTogc3RyaW5nOwogIG1vZGU6IFNlc3Npb25EZXRhaWxNb2RlOwogIGVzdGltYXRlZENvc3Q6IG51bWJlciB8IG51bGw7CiAgZmluYWxPdXRwdXQ6IHN0cmluZyB8IG51bGw7CiAgLyoqIEdpdCByZXBvc2l0b3J5IFVSTCBjb25uZWN0ZWQgdG8gdGhpcyBzZXNzaW9uIChvcHRpb25hbCkgKi8KICByZXBvVXJsPzogc3RyaW5nIHwgbnVsbDsKICAvKiogVGFyZ2V0IGJyYW5jaCDigJQgZGVmYXVsdHMgdG8gbWFpbiB3aGVuIG5vdCBzcGVjaWZpZWQgKi8KICByZXBvQnJhbmNoPzogc3RyaW5nIHwgbnVsbDsKICAvKiogRW52aXJvbm1lbnQgbGFiZWw6IGRldmVsb3BtZW50IHwgc3RhZ2luZyB8IHByb2R1Y3Rpb24gKi8KICB3b3Jrc3BhY2VFbnY/OiBzdHJpbmcgfCBudWxsOwogIGNyZWF0ZWRBdDogc3RyaW5nOwogIHVwZGF0ZWRBdDogc3RyaW5nOwogIGFnZW50czogQWdlbnRbXTsKICB0YXNrczogVGFza1tdOwogIG1lc3NhZ2VzOiBNZXNzYWdlW107CiAgbWVtb3J5OiBNZW1vcnkgfCBudWxsOwogIGFwcHJvdmFsczogQXBwcm92YWxbXTsKfQoKZXhwb3J0IGludGVyZmFjZSBBZ2VudElucHV0IHsKICBuYW1lOiBzdHJpbmc7CiAgcHJvdmlkZXI6IHN0cmluZzsKICByb2xlOiBzdHJpbmc7CiAgaXNNb2NrOiBib29sZWFuOwp9CgpleHBvcnQgaW50ZXJmYWNlIENyZWF0ZVNlc3Npb25Cb2R5IHsKICBnb2FsOiBzdHJpbmc7CiAgYXV0b25vbXlNb2RlOiBzdHJpbmc7CiAgYWdlbnRzOiBBZ2VudElucHV0W107CiAgLyoqIEdpdCByZXBvc2l0b3J5IFVSTCBmb3IgdG9vbC1jYXBhYmxlIGFnZW50cyB0byBvcGVyYXRlIG9uIChvcHRpb25hbCkgKi8KICByZXBvVXJsPzogc3RyaW5nOwogIC8qKiBCcmFuY2ggdG8gdGFyZ2V0IOKAlCBkZWZhdWx0cyB0byBtYWluIGlmIG5vdCBzcGVjaWZpZWQgKi8KICByZXBvQnJhbmNoPzogc3RyaW5nOwogIC8qKiBFbnZpcm9ubWVudCBsYWJlbDogZGV2ZWxvcG1lbnQgfCBzdGFnaW5nIHwgcHJvZHVjdGlvbiAqLwogIHdvcmtzcGFjZUVudj86IHN0cmluZzsKfQoKZXhwb3J0IGludGVyZmFjZSBSdW5TdGVwUmVzdWx0IHsKICBzZXNzaW9uOiBTZXNzaW9uOwogIG5ld01lc3NhZ2VzOiBNZXNzYWdlW107CiAgdXBkYXRlZFRhc2tzOiBUYXNrW107CiAgYXBwcm92YWxSZXF1aXJlZDogYm9vbGVhbjsKICBhcHByb3ZhbDogQXBwcm92YWwgfCBudWxsOwogIHN0ZXBzUnVuOiBudW1iZXI7Cn0KCmV4cG9ydCB0eXBlIEF1ZGl0TG9nTWV0YWRhdGEgPSB7IFtrZXk6IHN0cmluZ106IHVua25vd24gfTsKCmV4cG9ydCBpbnRlcmZhY2UgQXVkaXRMb2cgewogIGlkOiBudW1iZXI7CiAgc2Vzc2lvbklkOiBudW1iZXI7CiAgZXZlbnRUeXBlOiBzdHJpbmc7CiAgZGVzY3JpcHRpb246IHN0cmluZzsKICBtZXRhZGF0YTogQXVkaXRMb2dNZXRhZGF0YTsKICBjcmVhdGVkQXQ6IHN0cmluZzsKfQoKZXhwb3J0IGludGVyZmFjZSBTZXR0aW5nIHsKICBpZDogbnVtYmVyOwogIGtleTogc3RyaW5nOwogIHZhbHVlOiBzdHJpbmc7CiAgY3JlYXRlZEF0OiBzdHJpbmc7CiAgdXBkYXRlZEF0OiBzdHJpbmc7Cn0KCmV4cG9ydCB0eXBlIFNldHRpbmdSZXN1bHRTdGF0dXMgPSB0eXBlb2YgU2V0dGluZ1Jlc3VsdFN0YXR1c1trZXlvZiB0eXBlb2YgU2V0dGluZ1Jlc3VsdFN0YXR1c107CgoKZXhwb3J0IGNvbnN0IFNldHRpbmdSZXN1bHRTdGF0dXMgPSB7CiAgc2F2ZWQ6ICdzYXZlZCcsCiAgc2tpcHBlZDogJ3NraXBwZWQnLAogIGRlbGV0ZWQ6ICdkZWxldGVkJywKfSBhcyBjb25zdDsKCmV4cG9ydCBpbnRlcmZhY2UgU2V0dGluZ1Jlc3VsdCB7CiAga2V5OiBzdHJpbmc7CiAgc3RhdHVzOiBTZXR0aW5nUmVzdWx0U3RhdHVzOwp9CgpleHBvcnQgaW50ZXJmYWNlIFNhdmVTZXR0aW5nc1Jlc3BvbnNlIHsKICBzZXR0aW5nczogU2V0dGluZ1tdOwogIHJlc3VsdHM6IFNldHRpbmdSZXN1bHRbXTsKfQoKZXhwb3J0IHR5cGUgU2F2ZVNldHRpbmdzQm9keVNldHRpbmdzSXRlbSA9IHsKICBrZXk6IHN0cmluZzsKICB2YWx1ZTogc3RyaW5nOwp9OwoKZXhwb3J0IGludGVyZmFjZSBTYXZlU2V0dGluZ3NCb2R5IHsKICBzZXR0aW5nczogU2F2ZVNldHRpbmdzQm9keVNldHRpbmdzSXRlbVtdOwp9CgpleHBvcnQgaW50ZXJmYWNlIFNlbmRNZXNzYWdlQm9keSB7CiAgY29udGVudDogc3RyaW5nOwp9CgpleHBvcnQgaW50ZXJmYWNlIEFwcHJvdmVBY3Rpb25Cb2R5IHsKICBhcHByb3ZhbElkOiBudW1iZXI7Cn0KCmV4cG9ydCBpbnRlcmZhY2UgQmFubmVyRGlzbWlzc2FsIHsKICBzZXNzaW9uSWQ6IG51bWJlcjsKICBkaXNtaXNzZWRBdDogc3RyaW5nIHwgbnVsbDsKfQoKZXhwb3J0IGludGVyZmFjZSBEaXNtaXNzQmFubmVyQm9keSB7CiAgLyoqIE9wdGlvbmFsIElTTyA4NjAxIHRpbWVzdGFtcCB0byB1c2UgYXMgdGhlIGRpc21pc3NhbCB0aW1lLiBXaGVuIG9taXR0ZWQgdGhlIHNlcnZlciB1c2VzIHRoZSBjdXJyZW50IHRpbWUuIFBhc3MgdGhlIG9yaWdpbmFsIGxvY2FsU3RvcmFnZSB0aW1lc3RhbXAgZHVyaW5nIG1pZ3JhdGlvbiBzbyB0aGUgYmFubmVyIHJlLXNob3cgbG9naWMgKGJhc2VkIG9uIHRpbWVzdGFtcCBjb21wYXJpc29uKSBpcyBwcmVzZXJ2ZWQgY29ycmVjdGx5LgogICAqLwogIGRpc21pc3NlZEF0Pzogc3RyaW5nOwp9CgpleHBvcnQgaW50ZXJmYWNlIFByb3ZpZGVyRmFsbGJhY2tDb3VudCB7CiAgcHJvdmlkZXI6IHN0cmluZzsKICBjb3VudDogbnVtYmVyOwp9CgpleHBvcnQgaW50ZXJmYWNlIEZhbGxiYWNrVHJlbmRQb2ludCB7CiAgZGF5OiBzdHJpbmc7CiAgY291bnQ6IG51bWJlcjsKfQoKZXhwb3J0IGludGVyZmFjZSBNb2RlbFVzYWdlQ291bnQgewogIG1vZGVsOiBzdHJpbmc7CiAgY291bnQ6IG51bWJlcjsKICAvKiogTnVtYmVyIG9mIG1lc3NhZ2VzIGdlbmVyYXRlZCBieSB0aGUgbGl2ZSBBUEkgKi8KICBsaXZlQ291bnQ6IG51bWJlcjsKICAvKiogTnVtYmVyIG9mIG1lc3NhZ2VzIGdlbmVyYXRlZCBieSB0aGUgc2ltdWxhdGlvbiBmYWxsYmFjayAqLwogIHNpbXVsYXRlZENvdW50OiBudW1iZXI7Cn0KCmV4cG9ydCB0eXBlIE1vZGVsVXNhZ2VCcmVha2Rvd25Nb2RlID0gdHlwZW9mIE1vZGVsVXNhZ2VCcmVha2Rvd25Nb2RlW2tleW9mIHR5cGVvZiBNb2RlbFVzYWdlQnJlYWtkb3duTW9kZV07CgoKZXhwb3J0IGNvbnN0IE1vZGVsVXNhZ2VCcmVha2Rvd25Nb2RlID0gewogIGxpdmU6ICdsaXZlJywKICBzaW11bGF0ZWQ6ICdzaW11bGF0ZWQnLAp9IGFzIGNvbnN0OwoKZXhwb3J0IGludGVyZmFjZSBNb2RlbFVzYWdlQnJlYWtkb3duIHsKICBtb2RlbDogc3RyaW5nOwogIHByb3ZpZGVyOiBzdHJpbmc7CiAgbW9kZTogTW9kZWxVc2FnZUJyZWFrZG93bk1vZGU7CiAgY291bnQ6IG51bWJlcjsKfQoKLyoqCiAqIERldGFpbHMgb2YgdGhlIGxhc3Qgb3V0LW9mLWJhbmQgc3Bpa2Ugbm90aWZpY2F0aW9uIHRoYXQgd2FzIGRpc3BhdGNoZWQsIG9yIG51bGwgaWYgbm9uZSBoYXMgYmVlbiBzZW50IHNpbmNlIHNlcnZlciBzdGFydAogKi8KZXhwb3J0IHR5cGUgQnJpZGdlU3RhdHNMYXN0U3Bpa2VOb3RpZmljYXRpb24gPSB7CiAgLyoqIFVuaXggbXMgdGltZXN0YW1wIHdoZW4gdGhlIG5vdGlmaWNhdGlvbiB3YXMgc2VudCAqLwogIHNlbnRBdD86IG51bWJlcjsKICBwcm92aWRlcnM/OiBzdHJpbmdbXTsKICBjaGFubmVscz86IHN0cmluZ1tdOwogIGVtYWlsQWRkcmVzc2VzPzogc3RyaW5nW107Cn0gfCBudWxsOwoKZXhwb3J0IGludGVyZmFjZSBCcmlkZ2VTdGF0cyB7CiAgdG90YWxTZXNzaW9uczogbnVtYmVyOwogIGFjdGl2ZVNlc3Npb25zOiBudW1iZXI7CiAgY29tcGxldGVkU2Vzc2lvbnM6IG51bWJlcjsKICBmYWxsYmFja0V2ZW50czogbnVtYmVyOwogIGZhbGxiYWNrc0J5UHJvdmlkZXI6IFByb3ZpZGVyRmFsbGJhY2tDb3VudFtdOwogIGZhbGxiYWNrVHJlbmQ6IEZhbGxiYWNrVHJlbmRQb2ludFtdOwogIG1vZGVsVXNhZ2U6IE1vZGVsVXNhZ2VDb3VudFtdOwogIC8qKiBQZXItbW9kZWwgbWVzc2FnZSBjb3VudHMgc3BsaXQgYnkgbGl2ZSB2cy4gc2ltdWxhdGVkLCBncm91cGVkIGJ5IHByb3ZpZGVyICovCiAgbW9kZWxVc2FnZUJyZWFrZG93bjogTW9kZWxVc2FnZUJyZWFrZG93bltdOwogIHNwaWtlUHJvdmlkZXJzOiBzdHJpbmdbXTsKICAvKiogUHJvdmlkZXJzIHRoYXQgZXhjZWVkZWQgdGhlIGFsZXJ0IHRocmVzaG9sZCBpbiB0aGUgcm9sbGluZyB3aW5kb3cgKi8KICByZWNlbnRTcGlrZVByb3ZpZGVyczogc3RyaW5nW107CiAgLyoqIENvbmZpZ3VyZWQgZmFsbGJhY2sgYWxlcnQgdGhyZXNob2xkICovCiAgcmVjZW50U3Bpa2VUaHJlc2hvbGQ6IG51bWJlcjsKICAvKiogV2hldGhlciBmYWxsYmFjayBzcGlrZSBhbGVydHMgYXJlIGVuYWJsZWQgKi8KICBhbGVydEVuYWJsZWQ6IGJvb2xlYW47CiAgLyoqIERldGFpbHMgb2YgdGhlIGxhc3Qgb3V0LW9mLWJhbmQgc3Bpa2Ugbm90aWZpY2F0aW9uIHRoYXQgd2FzIGRpc3BhdGNoZWQsIG9yIG51bGwgaWYgbm9uZSBoYXMgYmVlbiBzZW50IHNpbmNlIHNlcnZlciBzdGFydCAqLwogIGxhc3RTcGlrZU5vdGlmaWNhdGlvbj86IEJyaWRnZVN0YXRzTGFzdFNwaWtlTm90aWZpY2F0aW9uOwp9CgpleHBvcnQgaW50ZXJmYWNlIFRlc3ROb3RpZmljYXRpb25SZXN1bHQgewogIG9rOiBib29sZWFuOwogIG1lc3NhZ2U6IHN0cmluZzsKICAvKiogV2hldGhlciBhIHRlc3QgZW1haWwgd2FzIGFjdHVhbGx5IGRlbGl2ZXJlZC4gRmFsc2Ugd2hlbiBTTVRQIGlzIG5vdCBjb25maWd1cmVkIG9yIGRlbGl2ZXJ5IGZhaWxlZC4gKi8KICBlbWFpbFNlbnQ/OiBib29sZWFuOwp9CgpleHBvcnQgaW50ZXJmYWNlIFJlc2V0Q2lyY3VpdFJlc3VsdCB7CiAgb2s6IGJvb2xlYW47CiAgcHJvdmlkZXI6IHN0cmluZzsKfQoKZXhwb3J0IHR5cGUgQ2lyY3VpdEJyZWFrZXJFbnRyeVN0YXRlID0gdHlwZW9mIENpcmN1aXRCcmVha2VyRW50cnlTdGF0ZVtrZXlvZiB0eXBlb2YgQ2lyY3VpdEJyZWFrZXJFbnRyeVN0YXRlXTsKCgpleHBvcnQgY29uc3QgQ2lyY3VpdEJyZWFrZXJFbnRyeVN0YXRlID0gewogIG9wZW46ICdvcGVuJywKICAnaGFsZi1vcGVuJzogJ2hhbGYtb3BlbicsCiAgY2xvc2VkOiAnY2xvc2VkJywKfSBhcyBjb25zdDsKCmV4cG9ydCBpbnRlcmZhY2UgQ2lyY3VpdEJyZWFrZXJFbnRyeSB7CiAgcHJvdmlkZXI6IHN0cmluZzsKICBzdGF0ZTogQ2lyY3VpdEJyZWFrZXJFbnRyeVN0YXRlOwogIGNvbnNlY3V0aXZlRmFpbHVyZXM6IG51bWJlcjsKICAvKiogVW5peCBtcyB0aW1lc3RhbXAgd2hlbiB0aGUgY2lyY3VpdCBvcGVuZWQsIG9yIG51bGwgaWYgY2xvc2VkICovCiAgb3BlbmVkQXQ6IG51bWJlciB8IG51bGw7CiAgLyoqIE1pbGxpc2Vjb25kcyByZW1haW5pbmcgdW50aWwgdGhlIGNpcmN1aXQgYWxsb3dzIGEgcHJvYmUsIG9yIG51bGwgaWYgY2xvc2VkICovCiAgbXNVbnRpbFJlc2V0OiBudW1iZXIgfCBudWxsOwogIC8qKiBVbml4IG1zIHRpbWVzdGFtcCBvZiB0aGUgbGFzdCB0aW1lIHRoaXMgc3RhdGUgd2FzIHdyaXR0ZW4gdG8gdGhlIGRhdGFiYXNlLCBvciBudWxsIGlmIG5vdCB5ZXQgcGVyc2lzdGVkICovCiAgcGVyc2lzdGVkQXQ6IG51bWJlciB8IG51bGw7CiAgLyoqIE51bWJlciBvZiBjb25zZWN1dGl2ZSBmYWlsdXJlcyByZXF1aXJlZCB0byBvcGVuIHRoZSBjaXJjdWl0IChDSVJDVUlUX09QRU5fVEhSRVNIT0xEKSAqLwogIG9wZW5UaHJlc2hvbGQ6IG51bWJlcjsKICAvKiogQ29vbGRvd24gd2luZG93IGluIG1pbGxpc2Vjb25kcyBiZWZvcmUgYSBoYWxmLW9wZW4gcHJvYmUgaXMgYWxsb3dlZCAoQ0lSQ1VJVF9USU1FT1VUX01TKSAqLwogIHRpbWVvdXRNczogbnVtYmVyOwp9CgpleHBvcnQgaW50ZXJmYWNlIENpcmN1aXRTdGF0dXNSZXNwb25zZSB7CiAgZW50cmllczogQ2lyY3VpdEJyZWFrZXJFbnRyeVtdOwogIC8qKiBVbml4IG1zIHRpbWVzdGFtcCB3aGVuIGNpcmN1aXQgc3RhdGUgd2FzIGxhc3QgbG9hZGVkIGZyb20gREIgYXQgc3RhcnR1cCwgb3IgbnVsbCBpZiBsb2FkQ2lyY3VpdFN0YXRlRnJvbURiIGhhcyBub3QgcnVuIHlldCAqLwogIGxhc3RMb2FkZWRBdDogbnVtYmVyIHwgbnVsbDsKICAvKiogTnVtYmVyIG9mIGNpcmN1aXQgZW50cmllcyByZXN0b3JlZCBmcm9tIERCIGR1cmluZyB0aGUgbGFzdCBzdGFydHVwIGxvYWQgKDAgaWYgREIgd2FzIGVtcHR5IG9yIGxvYWQgaGFzIG5vdCBydW4pICovCiAgcmVzdG9yZWRDb3VudDogbnVtYmVyOwp9CgpleHBvcnQgaW50ZXJmYWNlIFdvcmtiZW5jaEhlYWx0aFJlc3BvbnNlIHsKICBzdGF0dXM6IHN0cmluZzsKICBtb2R1bGU6IHN0cmluZzsKICB2ZXJzaW9uOiBzdHJpbmc7Cn0KCmV4cG9ydCB0eXBlIFdvcmtiZW5jaEFuYWx5emVSZXF1ZXN0UGxhdGZvcm0gPSB0eXBlb2YgV29ya2JlbmNoQW5hbHl6ZVJlcXVlc3RQbGF0Zm9ybVtrZXlvZiB0eXBlb2YgV29ya2JlbmNoQW5hbHl6ZVJlcXVlc3RQbGF0Zm9ybV07CgoKZXhwb3J0IGNvbnN0IFdvcmtiZW5jaEFuYWx5emVSZXF1ZXN0UGxhdGZvcm0gPSB7CiAgYWxpZ25lcnI6ICdhbGlnbmVycicsCiAgb3V0bGllcjogJ291dGxpZXInLAogIGRhdGFhbm5vdGF0aW9uOiAnZGF0YWFubm90YXRpb24nLAogIHRvbG9rYTogJ3RvbG9rYScsCiAgcmVtb3Rhc2tzOiAncmVtb3Rhc2tzJywKICBtaW5kcmlmdDogJ21pbmRyaWZ0JywKICBvdGhlcjogJ290aGVyJywKfSBhcyBjb25zdDsKCmV4cG9ydCB0eXBlIFdvcmtiZW5jaEFuYWx5emVSZXF1ZXN0VGFza1R5cGUgPSB0eXBlb2YgV29ya2JlbmNoQW5hbHl6ZVJlcXVlc3RUYXNrVHlwZVtrZXlvZiB0eXBlb2YgV29ya2JlbmNoQW5hbHl6ZVJlcXVlc3RUYXNrVHlwZV07CgoKZXhwb3J0IGNvbnN0IFdvcmtiZW5jaEFuYWx5emVSZXF1ZXN0VGFza1R5cGUgPSB7CiAgZ3JhbW1hcl9jbGVhbnVwOiAnZ3JhbW1hcl9jbGVhbnVwJywKICBjbGFzc2lmaWNhdGlvbjogJ2NsYXNzaWZpY2F0aW9uJywKICBzZW50aW1lbnRfbGFiZWxpbmc6ICdzZW50aW1lbnRfbGFiZWxpbmcnLAogIHJlc3BvbnNlX2NvbXBhcmlzb246ICdyZXNwb25zZV9jb21wYXJpc29uJywKICBmYWN0dWFsaXR5X2NoZWNrOiAnZmFjdHVhbGl0eV9jaGVjaycsCiAgbWF0aF9yZWFzb25pbmc6ICdtYXRoX3JlYXNvbmluZycsCiAgY29kaW5nOiAnY29kaW5nJywKICBleHBlcnRfZG9tYWluOiAnZXhwZXJ0X2RvbWFpbicsCiAgc3ViamVjdGl2ZV9qdWRnbWVudDogJ3N1YmplY3RpdmVfanVkZ21lbnQnLAogIHVua25vd246ICd1bmtub3duJywKfSBhcyBjb25zdDsKCmV4cG9ydCB0eXBlIFdvcmtiZW5jaEFuYWx5emVSZXF1ZXN0Um91dGluZ01vZGUgPSB0eXBlb2YgV29ya2JlbmNoQW5hbHl6ZVJlcXVlc3RSb3V0aW5nTW9kZVtrZXlvZiB0eXBlb2YgV29ya2JlbmNoQW5hbHl6ZVJlcXVlc3RSb3V0aW5nTW9kZV07CgoKZXhwb3J0IGNvbnN0IFdvcmtiZW5jaEFuYWx5emVSZXF1ZXN0Um91dGluZ01vZGUgPSB7CiAgZmFzdDogJ2Zhc3QnLAogIGJhbGFuY2VkOiAnYmFsYW5jZWQnLAogIHF1YWxpdHk6ICdxdWFsaXR5JywKfSBhcyBjb25zdDsKCmV4cG9ydCBpbnRlcmZhY2UgV29ya2JlbmNoQW5hbHl6ZVJlcXVlc3QgewogIHBsYXRmb3JtOiBXb3JrYmVuY2hBbmFseXplUmVxdWVzdFBsYXRmb3JtOwogIHRhc2tUeXBlPzogV29ya2JlbmNoQW5hbHl6ZVJlcXVlc3RUYXNrVHlwZTsKICBpbnN0cnVjdGlvbnM6IHN0cmluZzsKICBydWJyaWM/OiBzdHJpbmc7CiAgdGFza0NvbnRlbnQ6IHN0cmluZzsKICBhbnN3ZXJPcHRpb25zPzogc3RyaW5nW107CiAgdXNlck5vdGVzPzogc3RyaW5nOwogIGJ1ZGdldExpbWl0VXNkPzogbnVtYmVyOwogIHJvdXRpbmdNb2RlPzogV29ya2JlbmNoQW5hbHl6ZVJlcXVlc3RSb3V0aW5nTW9kZTsKfQoKZXhwb3J0IHR5cGUgV29ya2JlbmNoQW5hbHl6ZVJlc3BvbnNlUmV2aWV3TGV2ZWwgPSB0eXBlb2YgV29ya2JlbmNoQW5hbHl6ZVJlc3BvbnNlUmV2aWV3TGV2ZWxba2V5b2YgdHlwZW9mIFdvcmtiZW5jaEFuYWx5emVSZXNwb25zZVJldmlld0xldmVsXTsKCgpleHBvcnQgY29uc3QgV29ya2JlbmNoQW5hbHl6ZVJlc3BvbnNlUmV2aWV3TGV2ZWwgPSB7CiAgcXVpY2tfcmV2aWV3OiAncXVpY2tfcmV2aWV3JywKICBjYXJlZnVsX3JldmlldzogJ2NhcmVmdWxfcmV2aWV3JywKICBodW1hbl9vbmx5OiAnaHVtYW5fb25seScsCn0gYXMgY29uc3Q7CgpleHBvcnQgdHlwZSBXb3JrYmVuY2hBbmFseXplUmVzcG9uc2VSb3V0aW5nUmVjZWlwdCA9IHsgW2tleTogc3RyaW5nXTogdW5rbm93biB9IHwgbnVsbDsKCmV4cG9ydCBpbnRlcmZhY2UgV29ya2JlbmNoQW5hbHl6ZVJlc3BvbnNlIHsKICB0YXNrSWQ6IHN0cmluZzsKICBwbGF0Zm9ybTogc3RyaW5nOwogIHRhc2tUeXBlOiBzdHJpbmc7CiAgcmVjb21tZW5kZWRBbnN3ZXI6IHN0cmluZzsKICBjb25maWRlbmNlOiBudW1iZXI7CiAgcmVhc29uaW5nU3VtbWFyeTogc3RyaW5nOwogIHJpc2tGbGFnczogc3RyaW5nW107CiAgcnVicmljQ2hlY2tsaXN0OiBzdHJpbmdbXTsKICByZXZpZXdMZXZlbDogV29ya2JlbmNoQW5hbHl6ZVJlc3BvbnNlUmV2aWV3TGV2ZWw7CiAgaHVtYW5SZXZpZXdSZXF1aXJlZDogYm9vbGVhbjsKICByb3V0aW5nUmVjZWlwdD86IFdvcmtiZW5jaEFuYWx5emVSZXNwb25zZVJvdXRpbmdSZWNlaXB0Owp9CgpleHBvcnQgaW50ZXJmYWNlIFdvcmtiZW5jaFJlZnVzZUNoZWNrUmVxdWVzdCB7CiAgcmVxdWVzdFRleHQ6IHN0cmluZzsKfQoKZXhwb3J0IGludGVyZmFjZSBXb3JrYmVuY2hSZWZ1c2VDaGVja1Jlc3BvbnNlIHsKICBhbGxvd2VkOiBib29sZWFuOwogIHJlYXNvbjogc3RyaW5nIHwgbnVsbDsKfQoK
+/**
+ * Generated by orval v8.9.1 🍺
+ * Do not edit manually.
+ * Api
+ * VIBA - Collaborative Multi-Agent Orchestration System API
+ * OpenAPI spec version: 0.1.0
+ */
+export interface HealthStatus {
+  status: string;
+}
+
+export interface ErrorResponse {
+  error: string;
+}
+
+export interface AgentModeSummary {
+  name: string;
+  provider: string;
+  isMock: boolean;
+}
+
+export type SessionMode = typeof SessionMode[keyof typeof SessionMode];
+
+
+export const SessionMode = {
+  live: 'live',
+  simulation: 'simulation',
+  mixed: 'mixed',
+} as const;
+
+export interface Session {
+  id: number;
+  goal: string;
+  status: string;
+  autonomyMode: string;
+  mode: SessionMode;
+  estimatedCost: number | null;
+  finalOutput: string | null;
+  /** Git repository URL connected to this session (optional) */
+  repoUrl?: string | null;
+  /** Target branch — defaults to main when not specified */
+  repoBranch?: string | null;
+  /** Environment label: development | staging | production */
+  workspaceEnv?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  agentModes: AgentModeSummary[];
+}
+
+export interface Agent {
+  id: number;
+  sessionId: number;
+  name: string;
+  provider: string;
+  role: string;
+  capabilities: string[];
+  isMock: boolean;
+  /** True for Replit and Manus — agents that can execute tools, run code, clone repos, etc. */
+  canUseTools: boolean;
+  lastUsedModel: string | null;
+  /** Model name derived at query time from the agent's most recent message */
+  activeModel?: string | null;
+}
+
+export interface Task {
+  id: number;
+  sessionId: number;
+  title: string;
+  description: string;
+  type: string;
+  /** planned | in_progress | complete | review | blocked_needs_tools */
+  status: string;
+  assignedAgentId: number | null;
+  costEstimate: number | null;
+  dependencyTaskId: number | null;
+  /** Why a text-only agent could not complete this task (tool limitation) */
+  blockedReason?: string | null;
+  /** Work the text-only agent completed before hitting the tool blocker */
+  partialWork?: string | null;
+  /** Tool names required to finish this task (e.g. git_clone, run_tests) */
+  toolRequirements?: string[] | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Inter-agent message type: output | question | answer | handoff | context
+ */
+export type MessageMessageType = typeof MessageMessageType[keyof typeof MessageMessageType];
+
+
+export const MessageMessageType = {
+  output: 'output',
+  question: 'question',
+  answer: 'answer',
+  handoff: 'handoff',
+  context: 'context',
+} as const;
+
+/**
+ * Extra structured data (e.g. partialWork, remainingWork, questionRef)
+ */
+export type MessageMetadata = { [key: string]: unknown } | null;
+
+export interface Message {
+  id: number;
+  sessionId: number;
+  agentId: number | null;
+  role: string;
+  provider: string | null;
+  model: string | null;
+  content: string;
+  taskId: number | null;
+  agentName: string | null;
+  agentRole: string | null;
+  /** Inter-agent message type: output | question | answer | handoff | context */
+  messageType: MessageMessageType;
+  /** For question/answer/handoff messages — the receiving agent's id */
+  toAgentId?: number | null;
+  /** Resolved display name of the receiving agent (derived at query time from toAgentId) */
+  toAgentName?: string | null;
+  /** Extra structured data (e.g. partialWork, remainingWork, questionRef) */
+  metadata?: MessageMetadata;
+  createdAt: string;
+}
+
+export interface Memory {
+  id: number;
+  sessionId: number;
+  summary: string;
+  decisions: string[];
+  updatedAt: string;
+}
+
+export interface Approval {
+  id: number;
+  sessionId: number;
+  type: string;
+  description: string;
+  status: string;
+  createdAt: string;
+  approvedAt: string | null;
+}
+
+export type SessionDetailMode = typeof SessionDetailMode[keyof typeof SessionDetailMode];
+
+
+export const SessionDetailMode = {
+  live: 'live',
+  simulation: 'simulation',
+  mixed: 'mixed',
+} as const;
+
+export interface SessionDetail {
+  id: number;
+  goal: string;
+  status: string;
+  autonomyMode: string;
+  mode: SessionDetailMode;
+  estimatedCost: number | null;
+  finalOutput: string | null;
+  /** Git repository URL connected to this session (optional) */
+  repoUrl?: string | null;
+  /** Target branch — defaults to main when not specified */
+  repoBranch?: string | null;
+  /** Environment label: development | staging | production */
+  workspaceEnv?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  agents: Agent[];
+  tasks: Task[];
+  messages: Message[];
+  memory: Memory | null;
+  approvals: Approval[];
+}
+
+export interface AgentInput {
+  name: string;
+  provider: string;
+  role: string;
+  isMock: boolean;
+}
+
+export interface CreateSessionBody {
+  goal: string;
+  autonomyMode: string;
+  agents: AgentInput[];
+  /** Git repository URL for tool-capable agents to operate on (optional) */
+  repoUrl?: string;
+  /** Branch to target — defaults to main if not specified */
+  repoBranch?: string;
+  /** Environment label: development | staging | production */
+  workspaceEnv?: string;
+}
+
+export interface RunStepResult {
+  session: Session;
+  newMessages: Message[];
+  updatedTasks: Task[];
+  approvalRequired: boolean;
+  approval: Approval | null;
+  stepsRun: number;
+}
+
+export type AuditLogMetadata = { [key: string]: unknown };
+
+export interface AuditLog {
+  id: number;
+  sessionId: number;
+  eventType: string;
+  description: string;
+  metadata: AuditLogMetadata;
+  createdAt: string;
+}
+
+export interface Setting {
+  id: number;
+  key: string;
+  value: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type SettingResultStatus = typeof SettingResultStatus[keyof typeof SettingResultStatus];
+
+
+export const SettingResultStatus = {
+  saved: 'saved',
+  skipped: 'skipped',
+  deleted: 'deleted',
+} as const;
+
+export interface SettingResult {
+  key: string;
+  status: SettingResultStatus;
+}
+
+export interface SaveSettingsResponse {
+  settings: Setting[];
+  results: SettingResult[];
+}
+
+export type SaveSettingsBodySettingsItem = {
+  key: string;
+  value: string;
+};
+
+export interface SaveSettingsBody {
+  settings: SaveSettingsBodySettingsItem[];
+}
+
+export interface SendMessageBody {
+  content: string;
+}
+
+export interface ApproveActionBody {
+  approvalId: number;
+}
+
+export interface BannerDismissal {
+  sessionId: number;
+  dismissedAt: string | null;
+}
+
+export interface DismissBannerBody {
+  /** Optional ISO 8601 timestamp to use as the dismissal time. When omitted the server uses the current time. Pass the original localStorage timestamp during migration so the banner re-show logic (based on timestamp comparison) is preserved correctly.
+   */
+  dismissedAt?: string;
+}
+
+export interface ProviderFallbackCount {
+  provider: string;
+  count: number;
+}
+
+export interface FallbackTrendPoint {
+  day: string;
+  count: number;
+}
+
+export interface ModelUsageCount {
+  model: string;
+  count: number;
+  /** Number of messages generated by the live API */
+  liveCount: number;
+  /** Number of messages generated by the simulation fallback */
+  simulatedCount: number;
+}
+
+export type ModelUsageBreakdownMode = typeof ModelUsageBreakdownMode[keyof typeof ModelUsageBreakdownMode];
+
+
+export const ModelUsageBreakdownMode = {
+  live: 'live',
+  simulated: 'simulated',
+} as const;
+
+export interface ModelUsageBreakdown {
+  model: string;
+  provider: string;
+  mode: ModelUsageBreakdownMode;
+  count: number;
+}
+
+/**
+ * Details of the last out-of-band spike notification that was dispatched, or null if none has been sent since server start
+ */
+export type BridgeStatsLastSpikeNotification = {
+  /** Unix ms timestamp when the notification was sent */
+  sentAt?: number;
+  providers?: string[];
+  channels?: string[];
+  emailAddresses?: string[];
+} | null;
+
+export interface BridgeStats {
+  totalSessions: number;
+  activeSessions: number;
+  completedSessions: number;
+  fallbackEvents: number;
+  fallbacksByProvider: ProviderFallbackCount[];
+  fallbackTrend: FallbackTrendPoint[];
+  modelUsage: ModelUsageCount[];
+  /** Per-model message counts split by live vs. simulated, grouped by provider */
+  modelUsageBreakdown: ModelUsageBreakdown[];
+  spikeProviders: string[];
+  /** Providers that exceeded the alert threshold in the rolling window */
+  recentSpikeProviders: string[];
+  /** Configured fallback alert threshold */
+  recentSpikeThreshold: number;
+  /** Whether fallback spike alerts are enabled */
+  alertEnabled: boolean;
+  /** Details of the last out-of-band spike notification that was dispatched, or null if none has been sent since server start */
+  lastSpikeNotification?: BridgeStatsLastSpikeNotification;
+}
+
+export interface TestNotificationResult {
+  ok: boolean;
+  message: string;
+  /** Whether a test email was actually delivered. False when SMTP is not configured or delivery failed. */
+  emailSent?: boolean;
+}
+
+export interface ResetCircuitResult {
+  ok: boolean;
+  provider: string;
+}
+
+export type CircuitBreakerEntryState = typeof CircuitBreakerEntryState[keyof typeof CircuitBreakerEntryState];
+
+
+export const CircuitBreakerEntryState = {
+  open: 'open',
+  'half-open': 'half-open',
+  closed: 'closed',
+} as const;
+
+export interface CircuitBreakerEntry {
+  provider: string;
+  state: CircuitBreakerEntryState;
+  consecutiveFailures: number;
+  /** Unix ms timestamp when the circuit opened, or null if closed */
+  openedAt: number | null;
+  /** Milliseconds remaining until the circuit allows a probe, or null if closed */
+  msUntilReset: number | null;
+  /** Unix ms timestamp of the last time this state was written to the database, or null if not yet persisted */
+  persistedAt: number | null;
+  /** Number of consecutive failures required to open the circuit (CIRCUIT_OPEN_THRESHOLD) */
+  openThreshold: number;
+  /** Cooldown window in milliseconds before a half-open probe is allowed (CIRCUIT_TIMEOUT_MS) */
+  timeoutMs: number;
+}
+
+export interface CircuitStatusResponse {
+  entries: CircuitBreakerEntry[];
+  /** Unix ms timestamp when circuit state was last loaded from DB at startup, or null if loadCircuitStateFromDb has not run yet */
+  lastLoadedAt: number | null;
+  /** Number of circuit entries restored from DB during the last startup load (0 if DB was empty or load has not run) */
+  restoredCount: number;
+}
+
+export interface WorkbenchHealthResponse {
+  status: string;
+  module: string;
+  version: string;
+}
+
+export type WorkbenchAnalyzeRequestPlatform = typeof WorkbenchAnalyzeRequestPlatform[keyof typeof WorkbenchAnalyzeRequestPlatform];
+
+
+export const WorkbenchAnalyzeRequestPlatform = {
+  alignerr: 'alignerr',
+  outlier: 'outlier',
+  dataannotation: 'dataannotation',
+  toloka: 'toloka',
+  remotasks: 'remotasks',
+  mindrift: 'mindrift',
+  other: 'other',
+} as const;
+
+export type WorkbenchAnalyzeRequestTaskType = typeof WorkbenchAnalyzeRequestTaskType[keyof typeof WorkbenchAnalyzeRequestTaskType];
+
+
+export const WorkbenchAnalyzeRequestTaskType = {
+  grammar_cleanup: 'grammar_cleanup',
+  classification: 'classification',
+  sentiment_labeling: 'sentiment_labeling',
+  response_comparison: 'response_comparison',
+  factuality_check: 'factuality_check',
+  math_reasoning: 'math_reasoning',
+  coding: 'coding',
+  expert_domain: 'expert_domain',
+  subjective_judgment: 'subjective_judgment',
+  unknown: 'unknown',
+} as const;
+
+export type WorkbenchAnalyzeRequestRoutingMode = typeof WorkbenchAnalyzeRequestRoutingMode[keyof typeof WorkbenchAnalyzeRequestRoutingMode];
+
+
+export const WorkbenchAnalyzeRequestRoutingMode = {
+  fast: 'fast',
+  balanced: 'balanced',
+  quality: 'quality',
+} as const;
+
+export interface WorkbenchAnalyzeRequest {
+  platform: WorkbenchAnalyzeRequestPlatform;
+  taskType?: WorkbenchAnalyzeRequestTaskType;
+  instructions: string;
+  rubric?: string;
+  taskContent: string;
+  answerOptions?: string[];
+  userNotes?: string;
+  budgetLimitUsd?: number;
+  routingMode?: WorkbenchAnalyzeRequestRoutingMode;
+}
+
+export type WorkbenchAnalyzeResponseReviewLevel = typeof WorkbenchAnalyzeResponseReviewLevel[keyof typeof WorkbenchAnalyzeResponseReviewLevel];
+
+
+export const WorkbenchAnalyzeResponseReviewLevel = {
+  quick_review: 'quick_review',
+  careful_review: 'careful_review',
+  human_only: 'human_only',
+} as const;
+
+export type WorkbenchAnalyzeResponseRoutingReceipt = { [key: string]: unknown } | null;
+
+export interface WorkbenchAnalyzeResponse {
+  taskId: string;
+  platform: string;
+  taskType: string;
+  recommendedAnswer: string;
+  confidence: number;
+  reasoningSummary: string;
+  riskFlags: string[];
+  rubricChecklist: string[];
+  reviewLevel: WorkbenchAnalyzeResponseReviewLevel;
+  humanReviewRequired: boolean;
+  routingReceipt?: WorkbenchAnalyzeResponseRoutingReceipt;
+}
+
+export interface WorkbenchRefuseCheckRequest {
+  requestText: string;
+}
+
+export interface WorkbenchRefuseCheckResponse {
+  allowed: boolean;
+  reason: string | null;
+}
+
