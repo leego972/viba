@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { useCreateSession, getListSessionsQueryKey, useGetSettings } from "@workspace/api-client-react";
+import { useCreateSession, getListSessionsQueryKey, useGetSettings, type CreateSessionBody } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -120,13 +120,13 @@ export default function NewSession() {
       return;
     }
 
-    const sessionData: Record<string, unknown> = { goal, autonomyMode, agents: agentsList };
-    if (repoUrl.trim())      sessionData["repoUrl"]      = repoUrl.trim();
-    if (repoBranch.trim())   sessionData["repoBranch"]   = repoBranch.trim();
-    if (workspaceEnv)        sessionData["workspaceEnv"] = workspaceEnv;
+    const sessionData: CreateSessionBody = { goal, autonomyMode, agents: agentsList };
+    if (repoUrl.trim())      sessionData.repoUrl      = repoUrl.trim();
+    if (repoBranch.trim())   sessionData.repoBranch   = repoBranch.trim();
+    if (workspaceEnv)        sessionData.workspaceEnv = workspaceEnv;
 
     createSession.mutate(
-      { data: sessionData as unknown as Parameters<typeof createSession.mutate>[0]["data"] },
+      { data: sessionData },
       {
         onSuccess: (session) => {
           queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
