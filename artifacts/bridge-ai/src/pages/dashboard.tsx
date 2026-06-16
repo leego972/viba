@@ -33,7 +33,8 @@ import {
   Plus, Activity, Clock, DollarSign, Layers, Zap, RotateCcw,
   Wifi, WifiOff, AlertTriangle, TrendingDown, Search, Trash2,
   ShieldCheck, ShieldAlert, ShieldOff, RefreshCw, DatabaseZap,
-  Bell, Mail, Webhook,
+  Bell, Mail, Webhook, Settings2, HelpCircle, User, ExternalLink,
+  Brain, ChevronRight,
 } from "lucide-react";
 import { format, subDays } from "date-fns";
 import {
@@ -224,7 +225,6 @@ export default function Dashboard() {
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-
   const [resettingProvider, setResettingProvider] = useState<string | null>(null);
   const [sessionToDelete, setSessionToDelete] = useState<{ id: number; goal?: string | null } | null>(null);
 
@@ -276,29 +276,7 @@ export default function Dashboard() {
     return matchesSearch && matchesStatus;
   });
 
-  const statCards = [
-    {
-      label: "Total Sessions",
-      value: stats?.totalSessions ?? "—",
-      icon: Layers,
-      desc: "All-time bridge sessions",
-    },
-    {
-      label: "Active Now",
-      value: stats?.activeSessions ?? "—",
-      icon: Zap,
-      desc: "Sessions currently running",
-      highlight: (stats?.activeSessions ?? 0) > 0,
-    },
-    {
-      label: "API Fallbacks",
-      value: stats?.fallbackEvents ?? "—",
-      icon: RotateCcw,
-      desc: "Times a live call fell back to simulation",
-      warn: (stats?.fallbackEvents ?? 0) > 0,
-    },
-  ];
-
+  // Derived stats
   const hasFallbacks = (stats?.fallbackEvents ?? 0) > 0;
   const fallbacksByProvider = stats?.fallbacksByProvider ?? [];
   const spikeProviders = stats?.spikeProviders ?? [];
@@ -319,13 +297,34 @@ export default function Dashboard() {
     return acc;
   }, {});
 
+  // System health derived values
+  const hasOpenCircuits = circuitEntries.some(e => e.state === "open");
+  const hasHalfOpenCircuits = circuitEntries.some(e => e.state === "half-open");
+  const hasAnyAlert = alertEnabled && (recentSpikeProviders.length > 0 || spikeProviders.length > 0);
+
+  // Cost summary
+  const totalCost = (sessions ?? []).reduce((sum, s) => sum + (s.estimatedCost ?? 0), 0);
+  const totalSessions = stats?.totalSessions ?? 0;
+  const avgCostPerSession = totalSessions > 0 ? totalCost / totalSessions : 0;
+
+  // Recent activity: latest 5 sessions
+  const recentSessions = (sessions ?? []).slice(0, 5);
+
+  const systemStatus = hasOpenCircuits || hasAnyAlert
+    ? "error"
+    : hasHalfOpenCircuits
+    ? "warning"
+    : "healthy";
+
   return (
     <AppLayout>
-      <div className="flex flex-col space-y-8">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col space-y-6">
+
+        {/* ── Header ── */}
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-            <p className="text-muted-foreground">Manage your AI bridge sessions</p>
+            <p className="text-muted-foreground">Your operational control center</p>
           </div>
           <Link href="/sessions/new">
             <Button className="gap-2">
@@ -335,7 +334,114 @@ export default function Dashboard() {
           </Link>
         </div>
 
-        {/* Rolling-window spike alert */}
+        {/* ── System status bar ── */}
+        <div className={`flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border px-5 py-3 ${
+          systemStatus === "error"
+            ? "border-red-500/30 bg-red-500/5"
+            : systemStatus === "warning"
+            ? "border-amber-500/30 bg-amber-500/5"
+            : "border-emerald-500/20 bg-emerald-500/5"
+        }`}>
+          <div className="flex items-center gap-2 shrink-0">
+            {systemStatus === "error" ? (
+              <ShieldOff className="h-4 w-4 text-red-400 shrink-0" />
+            ) : systemStatus === "warning" ? (
+              <ShieldAlert className="h-4 w-4 text-amber-400 shrink-0" />
+            ) : (
+              <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0" />
+            )}
+            <span className={`text-sm font-semibold ${
+              systemStatus === "error" ? "text-red-300" :
+              systemStatus === "warning" ? "text-amber-300" :
+              "text-emerald-300"
+            }`}>
+              {systemStatus === "error" ? "Issues detected" :
+               systemStatus === "warning" ? "Monitoring providers" :
+               "All systems operational"}
+            </span>
+          </div>
+          <div className="hidden sm:block h-4 w-px bg-border" />
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Layers className="h-3.5 w-3.5" />
+            <span>{totalSessions} session{totalSessions !== 1 ? "s" : ""}</span>
+          </div>
+          {(stats?.activeSessions ?? 0) > 0 && (
+            <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-medium">
+              <Zap className="h-3.5 w-3.5" />
+              <span>{stats?.activeSessions} active now</span>
+            </div>
+          )}
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <DollarSign className="h-3.5 w-3.5" />
+            <span>${totalCost.toFixed(4)} total spend</span>
+          </div>
+          <Link href="/settings" className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+            <Settings2 className="h-3.5 w-3.5" />
+            Configure APIs
+          </Link>
+        </div>
+
+        {/* ── Quick actions ── */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            {
+              href: "/sessions/new",
+              icon: Plus,
+              label: "New Session",
+              sub: "Start collaboration",
+              accent: true,
+            },
+            {
+              href: "/workbench",
+              icon: Brain,
+              label: "Workbench",
+              sub: "AI task analysis",
+              accent: false,
+            },
+            {
+              href: "/settings",
+              icon: Settings2,
+              label: "Configure APIs",
+              sub: "Manage API keys",
+              accent: false,
+            },
+          ].map(({ href, icon: Icon, label, sub, accent }) => (
+            <Link href={href} key={label}>
+              <div className={`flex flex-col items-center gap-2.5 rounded-xl border p-4 cursor-pointer transition-all h-full text-center group ${
+                accent
+                  ? "border-primary/40 bg-primary/5 hover:bg-primary/10"
+                  : "hover:border-primary/30 hover:bg-primary/5"
+              }`}>
+                <div className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${
+                  accent
+                    ? "bg-primary/20 group-hover:bg-primary/30"
+                    : "bg-muted group-hover:bg-primary/15"
+                }`}>
+                  <Icon className={`h-5 w-5 transition-colors ${
+                    accent ? "text-primary" : "text-muted-foreground group-hover:text-primary"
+                  }`} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold leading-tight">{label}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>
+                </div>
+              </div>
+            </Link>
+          ))}
+          <a href="https://github.com/leego972/bridge-ai" target="_blank" rel="noopener noreferrer">
+            <div className="flex flex-col items-center gap-2.5 rounded-xl border p-4 cursor-pointer transition-all h-full text-center group hover:border-primary/30 hover:bg-primary/5">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted group-hover:bg-primary/15 transition-colors">
+                <HelpCircle className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold leading-tight">Help & Docs</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">GitHub · Support</p>
+              </div>
+            </div>
+          </a>
+        </div>
+
+        {/* ── Spike alerts ── */}
         {alertEnabled && recentSpikeProviders.length > 0 && (
           <div className="flex items-start gap-3 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
             <TrendingDown className="h-5 w-5 shrink-0 mt-0.5 text-red-400" />
@@ -355,8 +461,6 @@ export default function Dashboard() {
             </div>
           </div>
         )}
-
-        {/* Legacy all-time spike alert */}
         {alertEnabled && recentSpikeProviders.length === 0 && spikeProviders.length > 0 && (
           <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
             <TrendingDown className="h-5 w-5 shrink-0 mt-0.5 text-amber-400" />
@@ -377,9 +481,30 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Stats row */}
+        {/* ── Stats row ── */}
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
-          {statCards.map(({ label, value, icon: Icon, desc, highlight, warn }) => (
+          {[
+            {
+              label: "Total Sessions",
+              value: stats?.totalSessions ?? "—",
+              icon: Layers,
+              desc: "All sessions created",
+            },
+            {
+              label: "Active Now",
+              value: stats?.activeSessions ?? "—",
+              icon: Zap,
+              desc: "Currently running",
+              highlight: (stats?.activeSessions ?? 0) > 0,
+            },
+            {
+              label: "API Fallbacks",
+              value: stats?.fallbackEvents ?? "—",
+              icon: RotateCcw,
+              desc: "Live calls fell back to simulation",
+              warn: (stats?.fallbackEvents ?? 0) > 0,
+            },
+          ].map(({ label, value, icon: Icon, desc, highlight, warn }) => (
             <Card
               key={label}
               className={
@@ -412,258 +537,375 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {/* Provider Health — circuit breaker status */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <ShieldCheck className="h-4 w-4 text-emerald-400" />
-              Provider Health
-              {circuitLastLoadedAt !== null && (
-                <Badge
-                  variant="outline"
-                  className="gap-1 text-[10px] font-normal border-sky-500/40 text-sky-400 bg-sky-500/10"
-                  title={`Circuit state loaded from database at ${format(new Date(circuitLastLoadedAt), "HH:mm:ss")} — ${circuitRestoredCount} circuit${circuitRestoredCount !== 1 ? "s" : ""} restored`}
-                >
-                  <DatabaseZap className="h-3 w-3" />
-                  {circuitRestoredCount > 0
-                    ? `Restored ${circuitRestoredCount} from DB`
-                    : "Loaded from DB"}
-                </Badge>
-              )}
-              <span className="ml-auto text-[11px] font-normal text-muted-foreground flex items-center gap-1">
-                <RefreshCw className="h-3 w-3" />
-                {circuitUpdatedAt
-                  ? `Updated ${format(new Date(circuitUpdatedAt), "HH:mm:ss")}`
-                  : "Auto-refreshes every 10s"}
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <ProviderHealthPanel
-              entries={circuitEntries}
-              onReset={handleResetCircuit}
-              resetting={resettingProvider}
-            />
-            {circuitLastLoadedAt !== null && (
-              <p className="text-[11px] text-sky-400/70 mt-2">
-                State loaded from database at startup ·{" "}
-                {circuitRestoredCount > 0
-                  ? `${circuitRestoredCount} circuit${circuitRestoredCount !== 1 ? "s" : ""} restored`
-                  : "no circuits were persisted"}{" "}
-                · {format(new Date(circuitLastLoadedAt), "HH:mm:ss")}
-              </p>
+        {/* ── Two-column layout: main content + sidebar ── */}
+        <div className="grid gap-6 lg:grid-cols-3">
+
+          {/* Main column */}
+          <div className="lg:col-span-2 space-y-6">
+
+            {/* Recent activity */}
+            {recentSessions.length > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Activity className="h-4 w-4 text-primary" />
+                    Recent Activity
+                    <span className="ml-auto text-[11px] font-normal text-muted-foreground">Latest {recentSessions.length} sessions</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="flex flex-col divide-y divide-border">
+                    {recentSessions.map(session => (
+                      <Link href={`/sessions/${session.id}`} key={session.id}>
+                        <div className="flex items-center gap-3 py-2.5 hover:bg-muted/30 -mx-2 px-2 rounded transition-colors group">
+                          <Badge variant={getStatusColor(session.status)} className="capitalize shrink-0 text-[10px] h-5 px-1.5">
+                            {session.status}
+                          </Badge>
+                          <span className="text-sm font-medium flex-1 truncate min-w-0">
+                            {session.goal || "Untitled Session"}
+                          </span>
+                          <span className="text-xs text-muted-foreground shrink-0 font-mono tabular-nums">
+                            ${session.estimatedCost?.toFixed(4) || "0.0000"}
+                          </span>
+                          <span className="text-xs text-muted-foreground shrink-0 hidden sm:block">
+                            {format(new Date(session.createdAt), "MMM d, h:mm a")}
+                          </span>
+                          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                  {sessions && sessions.length > 5 && (
+                    <p className="text-[11px] text-muted-foreground mt-3 pt-3 border-t">
+                      Showing 5 of {sessions.length} sessions — scroll down to browse all.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
             )}
-            <p className="text-[11px] text-muted-foreground mt-3">
-              <span className="font-medium text-red-400">Open</span> — provider is blocked (cooldown active).{" "}
-              <span className="font-medium text-amber-400">Half-open</span> — cooldown elapsed, next call is a probe.{" "}
-              <span className="font-medium text-emerald-400">Closed</span> — provider is healthy.
-            </p>
-          </CardContent>
-        </Card>
 
-        {/* Last spike notification status */}
-        {lastSpikeNotification && (
-          <Card className="border-sky-500/20 bg-sky-500/5">
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-sm text-sky-300">
-                <Bell className="h-4 w-4" />
-                Last Alert Notification
-                <span className="ml-auto text-[11px] font-normal text-sky-400/70">
-                  {formatTimeAgo(lastSpikeNotification.sentAt)}
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0 space-y-2">
-              <div className="flex flex-wrap gap-2">
-                {lastSpikeNotification.channels.includes("webhook") && (
-                  <Badge variant="outline" className="gap-1 text-xs border-sky-500/40 text-sky-300 bg-sky-500/10">
-                    <Webhook className="h-3 w-3" />
-                    Webhook
-                  </Badge>
-                )}
-                {lastSpikeNotification.channels.includes("email") && (
-                  <Badge variant="outline" className="gap-1 text-xs border-sky-500/40 text-sky-300 bg-sky-500/10">
-                    <Mail className="h-3 w-3" />
-                    Email
-                  </Badge>
-                )}
-              </div>
-              <p className="text-xs text-sky-400/70">
-                Providers alerted:{" "}
-                <span className="font-medium text-sky-300">
-                  {lastSpikeNotification.providers.join(", ")}
-                </span>
-                {lastSpikeNotification.emailAddresses.length > 0 && (
-                  <> · sent to {lastSpikeNotification.emailAddresses.join(", ")}</>
-                )}
-              </p>
-              <p className="text-[11px] text-sky-400/50">
-                Sent at {format(new Date(lastSpikeNotification.sentAt), "MMM d, HH:mm:ss")} · Resets on server restart
-              </p>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Per-provider fallback breakdown */}
-        {hasFallbacks && fallbacksByProvider.length > 0 && (
-          <Card className="border-amber-500/30 bg-amber-500/5">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base text-amber-400">
-                <AlertTriangle className="h-4 w-4" />
-                Fallbacks by Provider
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <div className="flex flex-wrap gap-3">
-                {fallbacksByProvider.map(({ provider, count }) => (
-                  <div
-                    key={provider}
-                    className="flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2"
-                  >
-                    <WifiOff className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-                    <span className="text-sm font-medium capitalize">{provider}</span>
-                    <Badge variant="outline" className="text-amber-400 border-amber-500/30 bg-amber-500/10 text-xs px-1.5 py-0 h-5">
-                      {count} {count === 1 ? "fallback" : "fallbacks"}
+            {/* Provider Health */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                  Provider Health
+                  {circuitLastLoadedAt !== null && (
+                    <Badge
+                      variant="outline"
+                      className="gap-1 text-[10px] font-normal border-sky-500/40 text-sky-400 bg-sky-500/10"
+                      title={`Circuit state loaded from database at ${format(new Date(circuitLastLoadedAt), "HH:mm:ss")} — ${circuitRestoredCount} circuit${circuitRestoredCount !== 1 ? "s" : ""} restored`}
+                    >
+                      <DatabaseZap className="h-3 w-3" />
+                      {circuitRestoredCount > 0
+                        ? `Restored ${circuitRestoredCount} from DB`
+                        : "Loaded from DB"}
                     </Badge>
+                  )}
+                  <span className="ml-auto text-[11px] font-normal text-muted-foreground flex items-center gap-1">
+                    <RefreshCw className="h-3 w-3" />
+                    {circuitUpdatedAt
+                      ? `Updated ${format(new Date(circuitUpdatedAt), "HH:mm:ss")}`
+                      : "Auto-refreshes every 10s"}
+                  </span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <ProviderHealthPanel
+                  entries={circuitEntries}
+                  onReset={handleResetCircuit}
+                  resetting={resettingProvider}
+                />
+                {circuitLastLoadedAt !== null && (
+                  <p className="text-[11px] text-sky-400/70 mt-2">
+                    State loaded from database at startup ·{" "}
+                    {circuitRestoredCount > 0
+                      ? `${circuitRestoredCount} circuit${circuitRestoredCount !== 1 ? "s" : ""} restored`
+                      : "no circuits were persisted"}{" "}
+                    · {format(new Date(circuitLastLoadedAt), "HH:mm:ss")}
+                  </p>
+                )}
+                <p className="text-[11px] text-muted-foreground mt-3">
+                  <span className="font-medium text-red-400">Open</span> — provider is blocked (cooldown active).{" "}
+                  <span className="font-medium text-amber-400">Half-open</span> — cooldown elapsed, next call is a probe.{" "}
+                  <span className="font-medium text-emerald-400">Closed</span> — provider is healthy.
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Per-provider fallback breakdown */}
+            {hasFallbacks && fallbacksByProvider.length > 0 && (
+              <Card className="border-amber-500/30 bg-amber-500/5">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base text-amber-400">
+                    <AlertTriangle className="h-4 w-4" />
+                    Fallbacks by Provider
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="flex flex-wrap gap-3">
+                    {fallbacksByProvider.map(({ provider, count }) => (
+                      <div
+                        key={provider}
+                        className="flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2"
+                      >
+                        <WifiOff className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                        <span className="text-sm font-medium capitalize">{provider}</span>
+                        <Badge variant="outline" className="text-amber-400 border-amber-500/30 bg-amber-500/10 text-xs px-1.5 py-0 h-5">
+                          {count} {count === 1 ? "fallback" : "fallbacks"}
+                        </Badge>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-              <p className="text-[11px] text-muted-foreground mt-3">
-                These providers had live API calls fail and fall back to simulation. Check your API keys in{" "}
-                <Link href="/settings" className="underline underline-offset-2 hover:text-foreground">
-                  Settings
-                </Link>
-                .
-              </p>
-            </CardContent>
-          </Card>
-        )}
+                  <p className="text-[11px] text-muted-foreground mt-3">
+                    These providers had live API calls fail and fall back to simulation. Check your API keys in{" "}
+                    <Link href="/settings" className="underline underline-offset-2 hover:text-foreground">
+                      Settings
+                    </Link>
+                    .
+                  </p>
+                </CardContent>
+              </Card>
+            )}
 
-        {/* Fallback trend chart */}
-        {hasTrendData && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <RotateCcw className="h-4 w-4 text-amber-400" />
-                Fallback Trend — Last 14 Days
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <ResponsiveContainer width="100%" height={160}>
-                <AreaChart data={trendData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="fallbackGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                  <XAxis
-                    dataKey="day"
-                    tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-                    tickLine={false}
-                    axisLine={false}
-                    interval={3}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-                    tickLine={false}
-                    axisLine={false}
-                    allowDecimals={false}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      background: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "6px",
-                      fontSize: "12px",
-                    }}
-                    labelStyle={{ color: "hsl(var(--foreground))" }}
-                    itemStyle={{ color: "#f59e0b" }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="count"
-                    name="Fallbacks"
-                    stroke="#f59e0b"
-                    strokeWidth={2}
-                    fill="url(#fallbackGrad)"
-                    dot={false}
-                    activeDot={{ r: 4, fill: "#f59e0b" }}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        )}
+            {/* Fallback trend chart */}
+            {hasTrendData && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <RotateCcw className="h-4 w-4 text-amber-400" />
+                    Fallback Trend — Last 14 Days
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <ResponsiveContainer width="100%" height={160}>
+                    <AreaChart data={trendData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="fallbackGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                      <XAxis
+                        dataKey="day"
+                        tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                        tickLine={false}
+                        axisLine={false}
+                        interval={3}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                        tickLine={false}
+                        axisLine={false}
+                        allowDecimals={false}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          background: "hsl(var(--card))",
+                          border: "1px solid hsl(var(--border))",
+                          borderRadius: "6px",
+                          fontSize: "12px",
+                        }}
+                        labelStyle={{ color: "hsl(var(--foreground))" }}
+                        itemStyle={{ color: "#f59e0b" }}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="count"
+                        name="Fallbacks"
+                        stroke="#f59e0b"
+                        strokeWidth={2}
+                        fill="url(#fallbackGrad)"
+                        dot={false}
+                        activeDot={{ r: 4, fill: "#f59e0b" }}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            )}
 
-        {/* Model usage breakdown by provider */}
-        {modelUsageBreakdown.length > 0 ? (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Zap className="h-4 w-4 text-emerald-400" />
-                Model Usage
-                <span className="ml-auto text-[11px] font-normal text-muted-foreground flex items-center gap-3">
-                  <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />Live</span>
-                  <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-amber-400" />Simulated</span>
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0 space-y-4">
-              {Object.entries(breakdownByProvider).map(([provider, { live, simulated }]) => (
-                <div key={provider}>
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">{provider}</p>
+            {/* Model usage */}
+            {modelUsageBreakdown.length > 0 ? (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Zap className="h-4 w-4 text-emerald-400" />
+                    Model Usage
+                    <span className="ml-auto text-[11px] font-normal text-muted-foreground flex items-center gap-3">
+                      <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />Live</span>
+                      <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-amber-400" />Simulated</span>
+                    </span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0 space-y-4">
+                  {Object.entries(breakdownByProvider).map(([provider, { live, simulated }]) => (
+                    <div key={provider}>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">{provider}</p>
+                      <div className="flex flex-wrap gap-2">
+                        {live.map(({ model, count }) => (
+                          <div key={`${model}-live`} className="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5">
+                            <span className="text-xs font-mono">{model}</span>
+                            <Badge variant="secondary" className="text-[10px] px-1.5 h-4 bg-emerald-500/20 text-emerald-300 border-0">{count} live</Badge>
+                          </div>
+                        ))}
+                        {simulated.map(({ model, count }) => (
+                          <div key={`${model}-sim`} className="flex items-center gap-2 rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-1.5">
+                            <span className="text-xs font-mono">{model}</span>
+                            <Badge variant="secondary" className="text-[10px] px-1.5 h-4 bg-amber-400/20 text-amber-300 border-0">{count} sim</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            ) : modelUsage.length > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Zap className="h-4 w-4 text-emerald-400" />
+                    Model Usage
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
                   <div className="flex flex-wrap gap-2">
-                    {live.map(({ model, count }) => (
-                      <div key={`${model}-live`} className="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5">
+                    {modelUsage.map(({ model, count, liveCount, simulatedCount }) => (
+                      <div key={model} className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-1.5">
                         <span className="text-xs font-mono">{model}</span>
-                        <Badge variant="secondary" className="text-[10px] px-1.5 h-4 bg-emerald-500/20 text-emerald-300 border-0">{count} live</Badge>
-                      </div>
-                    ))}
-                    {simulated.map(({ model, count }) => (
-                      <div key={`${model}-sim`} className="flex items-center gap-2 rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-1.5">
-                        <span className="text-xs font-mono">{model}</span>
-                        <Badge variant="secondary" className="text-[10px] px-1.5 h-4 bg-amber-400/20 text-amber-300 border-0">{count} sim</Badge>
+                        <Badge variant="secondary" className="text-[10px] px-1.5 h-4">{count} msg{count !== 1 ? "s" : ""}</Badge>
+                        {liveCount > 0 && (
+                          <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-emerald-500/40 text-emerald-400 bg-emerald-500/10">
+                            {liveCount} live
+                          </Badge>
+                        )}
+                        {simulatedCount > 0 && (
+                          <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-amber-500/40 text-amber-400 bg-amber-500/10">
+                            {simulatedCount} sim
+                          </Badge>
+                        )}
                       </div>
                     ))}
                   </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        ) : modelUsage.length > 0 && (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Zap className="h-4 w-4 text-emerald-400" />
-                Model Usage
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <div className="flex flex-wrap gap-2">
-                {modelUsage.map(({ model, count, liveCount, simulatedCount }) => (
-                  <div key={model} className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-1.5">
-                    <span className="text-xs font-mono">{model}</span>
-                    <Badge variant="secondary" className="text-[10px] px-1.5 h-4">{count} msg{count !== 1 ? "s" : ""}</Badge>
-                    {liveCount > 0 && (
-                      <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-emerald-500/40 text-emerald-400 bg-emerald-500/10">
-                        {liveCount} live
-                      </Badge>
-                    )}
-                    {simulatedCount > 0 && (
-                      <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-amber-500/40 text-amber-400 bg-amber-500/10">
-                        {simulatedCount} sim
-                      </Badge>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+                </CardContent>
+              </Card>
+            )}
 
-        {/* Sessions list with search + filter */}
+          </div>
+
+          {/* Sidebar */}
+          <div className="space-y-6">
+
+            {/* Account / Plan card */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <User className="h-4 w-4" />
+                  Account
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 pt-0">
+                <div className="rounded-lg border bg-muted/30 px-3 py-2.5">
+                  <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Plan</p>
+                  <p className="text-sm font-semibold mt-0.5">BYOK — Self-hosted</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                    No subscription required. Connect your own API keys to run live sessions.
+                  </p>
+                </div>
+                <Link href="/settings">
+                  <Button variant="outline" size="sm" className="w-full gap-2 mt-1">
+                    <Settings2 className="h-3.5 w-3.5" />
+                    API Key Settings
+                  </Button>
+                </Link>
+                <Link href="/workbench">
+                  <Button variant="ghost" size="sm" className="w-full gap-2 justify-start text-muted-foreground hover:text-foreground">
+                    <Brain className="h-3.5 w-3.5" />
+                    Open Workbench
+                  </Button>
+                </Link>
+                <a href="https://github.com/leego972/bridge-ai" target="_blank" rel="noopener noreferrer">
+                  <Button variant="ghost" size="sm" className="w-full gap-2 justify-start text-muted-foreground hover:text-foreground">
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Help &amp; Documentation
+                  </Button>
+                </a>
+              </CardContent>
+            </Card>
+
+            {/* Cost summary */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <DollarSign className="h-4 w-4" />
+                  Usage &amp; Cost
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 pt-0">
+                <div>
+                  <p className="text-2xl font-bold tabular-nums">${totalCost.toFixed(4)}</p>
+                  <p className="text-[11px] text-muted-foreground">Total estimated spend across all sessions</p>
+                </div>
+                {totalSessions > 0 && (
+                  <div className="rounded-lg border bg-muted/20 px-3 py-2 flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Avg per session</span>
+                    <span className="text-xs font-mono font-medium tabular-nums">${avgCostPerSession.toFixed(4)}</span>
+                  </div>
+                )}
+                <p className="text-[10px] text-muted-foreground leading-relaxed">
+                  Based on token counts from live API calls. Simulated calls cost $0.
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Last alert notification */}
+            {lastSpikeNotification && (
+              <Card className="border-sky-500/20 bg-sky-500/5">
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-sm text-sky-300">
+                    <Bell className="h-4 w-4" />
+                    Last Alert
+                    <span className="ml-auto text-[11px] font-normal text-sky-400/70">
+                      {formatTimeAgo(lastSpikeNotification.sentAt)}
+                    </span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0 space-y-2">
+                  <div className="flex flex-wrap gap-2">
+                    {lastSpikeNotification.channels.includes("webhook") && (
+                      <Badge variant="outline" className="gap-1 text-xs border-sky-500/40 text-sky-300 bg-sky-500/10">
+                        <Webhook className="h-3 w-3" />
+                        Webhook
+                      </Badge>
+                    )}
+                    {lastSpikeNotification.channels.includes("email") && (
+                      <Badge variant="outline" className="gap-1 text-xs border-sky-500/40 text-sky-300 bg-sky-500/10">
+                        <Mail className="h-3 w-3" />
+                        Email
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-sky-400/70">
+                    Providers:{" "}
+                    <span className="font-medium text-sky-300">
+                      {lastSpikeNotification.providers.join(", ")}
+                    </span>
+                    {lastSpikeNotification.emailAddresses.length > 0 && (
+                      <> · {lastSpikeNotification.emailAddresses.join(", ")}</>
+                    )}
+                  </p>
+                  <p className="text-[11px] text-sky-400/50">
+                    {format(new Date(lastSpikeNotification.sentAt), "MMM d, HH:mm:ss")} · Resets on server restart
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
+          </div>
+        </div>
+
+        {/* ── Full sessions list ── */}
         {isLoading ? (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {[...Array(3)].map((_, i) => (
@@ -688,9 +930,9 @@ export default function Dashboard() {
               <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted">
                 <Activity className="h-10 w-10 text-muted-foreground" />
               </div>
-              <h2 className="mt-6 text-xl font-semibold">No sessions created</h2>
+              <h2 className="mt-6 text-xl font-semibold">No sessions yet</h2>
               <p className="mb-8 mt-2 text-center text-sm font-normal leading-6 text-muted-foreground">
-                You haven't created any bridge sessions yet. Start by creating a new session and assigning agents.
+                Start by creating a new session and assigning agents to collaborate on your goal.
               </p>
               <Link href="/sessions/new">
                 <Button>Start a Session</Button>
@@ -699,6 +941,10 @@ export default function Dashboard() {
           </div>
         ) : (
           <div className="space-y-4">
+            <div>
+              <h2 className="text-lg font-semibold">All Sessions</h2>
+              <p className="text-sm text-muted-foreground">Browse, search, and manage all your collaboration sessions.</p>
+            </div>
             {/* Search + filter bar */}
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative flex-1">
@@ -792,7 +1038,9 @@ export default function Dashboard() {
             )}
           </div>
         )}
+
       </div>
+
       {/* Delete confirmation dialog */}
       <AlertDialog open={!!sessionToDelete} onOpenChange={(open) => { if (!open) setSessionToDelete(null); }}>
         <AlertDialogContent>
