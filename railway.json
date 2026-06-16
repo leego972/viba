@@ -5,7 +5,7 @@
     "buildCommand": "pnpm install --no-frozen-lockfile && NODE_ENV=production BASE_PATH=/ PORT=8080 pnpm --filter @workspace/bridge-ai run build && pnpm --filter @workspace/api-server run build"
   },
   "deploy": {
-    "startCommand": "pnpm --filter @workspace/db run push-force && node artifacts/api-server/dist/index.mjs",
+    "startCommand": "pnpm --filter @workspace/db run push && node artifacts/api-server/dist/index.mjs",
     "healthcheckPath": "/api/healthz",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
