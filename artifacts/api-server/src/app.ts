@@ -1,5 +1,6 @@
 import express, { type Express, type ErrorRequestHandler } from "express";
 import cors from "cors";
+import helmet from "helmet";
 import pinoHttp from "pino-http";
 import path from "path";
 import { existsSync } from "fs";
@@ -13,32 +14,83 @@ import adminRouter from "./routes/admin";
 
 const app: Express = express();
 
-// General API rate limiter — 300 req per minute per IP
+// ─── Trust proxy — required on Railway (traffic arrives via load-balancer) ────
+// Without this req.ip returns the proxy IP and rate-limiting is ineffective.
+app.set("trust proxy", 1);
+
+// ─── Security headers (helmet) ────────────────────────────────────────────────
+// contentSecurityPolicy: false — API returns JSON; static-file CSP handled separately.
+// crossOriginEmbedderPolicy: false — VIBA is embedded via iframe in Archibald Titan AI.
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  }),
+);
+
+// ─── CORS ─────────────────────────────────────────────────────────────────────
+// Production: only allow viba.guru and any extras listed in CORS_ALLOWED_ORIGINS.
+// Development: allow all origins for convenience.
+// To add Archibald's domain: set CORS_ALLOWED_ORIGINS=https://archibald.example.com in Railway.
+const PRODUCTION_ALLOWED_ORIGINS = new Set([
+  "https://viba.guru",
+  ...(process.env.CORS_ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
+]);
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Requests with no Origin header (mobile apps, curl, server-to-server) are allowed.
+      if (!origin) return callback(null, true);
+      // In development, allow any origin so hot-reload proxies work.
+      if (process.env.NODE_ENV !== "production") return callback(null, true);
+      if (PRODUCTION_ALLOWED_ORIGINS.has(origin)) return callback(null, true);
+      callback(new Error(`CORS: origin "${origin}" is not permitted`));
+    },
+    credentials: true,
+  }),
+);
+
+// ─── Rate limiters ────────────────────────────────────────────────────────────
+
+// General: 300 req/min per IP across all /api routes
 const apiLimiter = createRateLimiter({
   windowMs: 60_000,
   max: 300,
   message: "Too many requests. Please slow down.",
 });
 
-// Strict limiter for expensive AI agent execution endpoints
+// Strict: 30 req/min for expensive AI session execution paths
 const agentLimiter = createRateLimiter({
   windowMs: 60_000,
   max: 30,
   message: "Agent execution rate limit reached. Wait before running more steps.",
 });
 
-// ─── Stripe webhook — MUST be registered BEFORE express.json() ───────────────
-// Stripe's signature verification requires the raw request body as a Buffer.
-// Any body-parsing middleware running before this will break signature checks.
+// Very strict: 5 req/min for endpoints that fire outbound HTTP/email
+const notificationLimiter = createRateLimiter({
+  windowMs: 60_000,
+  max: 5,
+  message: "Notification test rate limit reached. Wait before sending another test.",
+});
+
+// ─── Stripe webhook — MUST be before express.json() ──────────────────────────
+// Stripe signature verification requires the raw body Buffer.
 app.post(
   "/api/stripe/webhook",
   express.raw({ type: "application/json" }),
   webhookHandler,
 );
 
-// These paths bypass the ACCESS_TOKEN gate so the frontend can bootstrap
-// before it has a token. Stripe paths are always public — they are part of
-// the subscription flow that grants access.
+// ─── Outbound-triggering endpoint — strict limiter applied first ──────────────
+// This route fires HTTP webhooks and SMTP emails; rate-limit tightly to prevent abuse.
+app.post("/api/stats/test-notification", notificationLimiter);
+
+// ─── Exempt paths — bypass ACCESS_TOKEN gate ─────────────────────────────────
+// These paths must be reachable before the user has a token (bootstrap + subscription flow).
 const AUTH_EXEMPT_PATHS = new Set([
   "/auth/config",
   "/auth/verify",
@@ -50,6 +102,7 @@ const AUTH_EXEMPT_PATHS = new Set([
   "/healthz",
 ]);
 
+// ─── Request logging ──────────────────────────────────────────────────────────
 app.use(
   pinoHttp({
     logger,
@@ -58,6 +111,7 @@ app.use(
         return {
           id: req.id,
           method: req.method,
+          // Strip query string from logs — query params may contain tokens
           url: req.url?.split("?")[0],
         };
       },
@@ -67,31 +121,32 @@ app.use(
     },
   }),
 );
-app.use(cors());
-// Limit request body size to guard against memory-exhaustion via large payloads
+
+// ─── Body parsing ─────────────────────────────────────────────────────────────
+// 512 kb cap guards against memory-exhaustion via large payloads.
 app.use(express.json({ limit: "512kb" }));
 app.use(express.urlencoded({ limit: "512kb", extended: true }));
 
-// Apply strict rate limit to AI session execution paths before the main router
+// ─── Route-specific middleware ────────────────────────────────────────────────
+
+// AI session execution: 30 req/min
 app.use("/api/sessions", agentLimiter);
 
-// ─── Admin router — uses its own ADMIN_TOKEN auth, bypass ACCESS_TOKEN gate ──
-// Mounted before the main router so it is never blocked by accessTokenMiddleware.
-// requireAdmin is the sole auth guard for all /api/admin/* routes.
+// Admin panel: ADMIN_TOKEN required — completely separate from ACCESS_TOKEN
 app.use("/api/admin", apiLimiter, requireAdmin, adminRouter);
 
-// General rate limit + optional ACCESS_TOKEN gate + main router
+// All other /api routes: general rate limit + optional ACCESS_TOKEN gate
 app.use(
   "/api",
   apiLimiter,
   (req, res, next) => {
-    // Auth bootstrap and Stripe subscription-flow endpoints are always reachable
     if (AUTH_EXEMPT_PATHS.has(req.path)) { next(); return; }
     accessTokenMiddleware(req, res, next);
   },
   router,
 );
 
+// ─── Static frontend (production only) ───────────────────────────────────────
 if (process.env.NODE_ENV === "production") {
   const frontendDist = path.resolve(
     process.cwd(),
@@ -105,9 +160,9 @@ if (process.env.NODE_ENV === "production") {
   }
 }
 
-// Global error handler — catches unhandled async errors from route handlers.
-// Express identifies error handlers by the 4-argument signature; it must be
-// registered after all routes and middleware.
+// ─── Global error handler ─────────────────────────────────────────────────────
+// Express 5 forwards async errors here automatically.
+// Never expose stack traces or internal details in production.
 const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   req.log?.error?.({ err }, "Unhandled route error");
   const isDev = process.env.NODE_ENV !== "production";
