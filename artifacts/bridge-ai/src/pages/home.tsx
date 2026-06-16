@@ -22,7 +22,6 @@ export default function Home() {
       
       <main className="flex-1">
         <section className="w-full py-24 md:py-32 lg:py-48 xl:py-56 bg-background relative overflow-hidden">
-          <div className="absolute inset-0 bg-[url('https://transparenttextures.com/patterns/cubes.png')] opacity-5" />
           <div className="absolute inset-0 bg-gradient-to-tr from-primary/10 via-background to-background" />
           
           <div className="container px-4 md:px-6 relative z-10">
@@ -36,13 +35,13 @@ export default function Home() {
                   <span className="text-primary">Let them work together.</span>
                 </h1>
                 <p className="mx-auto max-w-[700px] text-muted-foreground md:text-xl lg:text-2xl leading-relaxed">
-                  VIBA - Collaborative Multi-Agent Orchestration System is a powerful orchestration platform. Connect ChatGPT, Claude, Manus, Replit, Gemini, and Perplexity. Give them a project goal, assign roles, and watch them collaborate autonomously.
+                  Connect ChatGPT, Claude, Gemini, Perplexity, Manus, and Replit in one session. Give each model a role — Strategist, Builder, Researcher — and watch them collaborate autonomously to deliver the output.
                 </p>
               </div>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                 <Link href="/dashboard">
                   <Button size="lg" className="w-full sm:w-auto h-12 px-8 text-lg font-medium gap-2">
-                    Start a Bridge Session <ArrowRight className="h-5 w-5" />
+                    Start a Session <ArrowRight className="h-5 w-5" />
                   </Button>
                 </Link>
                 <Link href="/settings">
@@ -138,7 +137,7 @@ export default function Home() {
       <footer className="w-full border-t py-6 md:py-0">
         <div className="container flex flex-col items-center justify-between gap-4 md:h-24 md:flex-row">
           <p className="text-center text-sm leading-loose text-muted-foreground md:text-left">
-            Built for developers. VIBA - Collaborative Multi-Agent Orchestration System is an open architecture project.
+            VIBA · Collaborative Multi-Agent Orchestration System
           </p>
         </div>
       </footer>
