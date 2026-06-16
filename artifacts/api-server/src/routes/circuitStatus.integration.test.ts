@@ -52,6 +52,7 @@ function makeFallbackAdapter(): AgentAdapter {
     capabilities: [],
     role: "assistant",
     isMock: true,
+    canUseTools: false,
     runTask: async () => DUMMY_RESULT,
   };
 }
