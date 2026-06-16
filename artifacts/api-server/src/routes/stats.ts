@@ -1,11 +1,19 @@
 import { Router, type IRouter } from "express";
+import { createRateLimiter } from "../middlewares/rateLimiter";
 import { db, auditLogsTable, sessionsTable, messagesTable, settingsTable } from "@workspace/db";
 import { eq, sql, desc } from "drizzle-orm";
 import { detectSpikeProviders, type ProviderCount } from "../lib/spikeDetect";
 import { sendSpikeNotifications, sendTestWebhookNotification, getLastNotification } from "../lib/spikeNotify";
 import { sendTestEmail } from "../lib/emailNotify";
 
-const router: IRouter = Router();
+// 5 req/min — this route fires outbound HTTP and SMTP; keep tight
+  const testNotificationLimiter = createRateLimiter({
+    windowMs: 60_000,
+    max: 5,
+    message: "Notification test rate limit reached. Please wait before retrying.",
+  });
+
+  const router: IRouter = Router();
 
 const DEFAULT_ALERT_THRESHOLD = 5;
 const ALERT_WINDOW_HOURS = 1;
@@ -219,7 +227,7 @@ export function buildTestNotificationMessage(
   return parts.length > 0 ? parts.join("; ") + "." : "Test notification sent.";
 }
 
-router.post("/stats/test-notification", async (req, res): Promise<void> => {
+router.post("/stats/test-notification", testNotificationLimiter, async (req, res): Promise<void> => {
   const notificationSettings = await db
     .select({ key: settingsTable.key, value: settingsTable.value })
     .from(settingsTable)
