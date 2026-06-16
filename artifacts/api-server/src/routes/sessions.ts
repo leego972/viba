@@ -666,7 +666,7 @@ router.delete("/sessions/:id/banner-dismissal", async (req, res): Promise<void> 
     );
 
     const lines = [
-      `# VIBA - AI Manager Session Transcript`,
+      `# VIBA - Collaborative Multi-Agent Orchestration System Session Transcript`,
       ``,
       `**Goal:** ${session.goal}`,
       `**Mode:** ${session.mode}`,
@@ -685,7 +685,7 @@ router.delete("/sessions/:id/banner-dismissal", async (req, res): Promise<void> 
       ``,
       ...messageLines,
       `---`,
-      `*Exported from VIBA - AI Manager*`,
+      `*Exported from VIBA - Collaborative Multi-Agent Orchestration System*`,
     ];
 
     const markdown = lines.join("\n");
