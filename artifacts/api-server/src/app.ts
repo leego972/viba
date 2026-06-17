@@ -231,7 +231,7 @@ app.use(
 // ─── Session: reject approval ─────────────────────────────────────────────────
 // Sets approval to rejected, pauses the session for human review.
 app.post("/api/sessions/:id/reject-approval", apiLimiter, requireSession, async (req, res): Promise<void> => {
-  const sessionId = parseInt(req.params.id, 10);
+  const sessionId = parseInt(String(req.params.id ?? ""), 10);
   const body = req.body as { approvalId?: unknown; rejectedReason?: unknown };
   const approvalId = typeof body.approvalId === "number" ? body.approvalId : null;
   const reason = typeof body.rejectedReason === "string" ? body.rejectedReason.trim().slice(0, 1000) : "";
@@ -260,7 +260,7 @@ app.post("/api/sessions/:id/reject-approval", apiLimiter, requireSession, async 
 
 // ─── Session: reopen (resume completed session) ───────────────────────────────
 app.post("/api/sessions/:id/reopen", apiLimiter, requireSession, async (req, res): Promise<void> => {
-  const sessionId = parseInt(req.params.id, 10);
+  const sessionId = parseInt(String(req.params.id ?? ""), 10);
   if (!sessionId) { res.status(400).json({ error: "invalid session id" }); return; }
   try {
     await pool.query(
