@@ -301,6 +301,16 @@ const AUTH_EXEMPT_PATHS = new Set([
   "/healthz",
 ]);
 
+// GET /api/healthz — DB liveness probe (runs before auth middleware)
+app.get("/api/healthz", async (_req, res): Promise<void> => {
+  try {
+    await pool.query("SELECT 1");
+    res.json({ ok: true, db: "connected", uptime: Math.floor(process.uptime()) });
+  } catch {
+    res.status(503).json({ ok: false, db: "error" });
+  }
+});
+
 // All other /api routes: general rate limit + session gate
 app.use(
   "/api",
