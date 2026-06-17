@@ -1,0 +1,14 @@
+# Docs and dev assets not needed in Railway build context
+docs/
+attached_assets/
+examples/
+*.md
+!README.md
+
+# Replit internals
+.agents/
+.local/
+.replit
+.replitignore
+replit.nix
+.tool-versions
