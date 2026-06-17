@@ -340,21 +340,26 @@ export default function Billing() {
           </>
         )}
         {/* Credit Usage History */}
-        {(transactions.length > 0 || txnLoading) && (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <History className="w-4 h-4 text-muted-foreground" />
-              <h2 className="font-semibold">Credit Usage History</h2>
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <History className="w-4 h-4 text-muted-foreground" />
+            <h2 className="font-semibold">Credit Usage History</h2>
+          </div>
+          {txnLoading ? (
+            <div className="space-y-2">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="h-11 rounded-lg bg-muted/30 animate-pulse" />
+              ))}
             </div>
-            {txnLoading ? (
-              <div className="space-y-2">
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="h-11 rounded-lg bg-muted/30 animate-pulse" />
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-xl border border-border bg-card divide-y divide-border overflow-hidden">
-                {transactions.map((txn) => {
+          ) : transactions.length === 0 ? (
+            <div className="rounded-xl border border-border bg-muted/10 px-6 py-8 text-center">
+              <History className="w-6 h-6 text-muted-foreground/50 mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">No credit transactions yet.</p>
+              <p className="text-xs text-muted-foreground/70 mt-1">Usage will appear here once you start running sessions.</p>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-border bg-card divide-y divide-border overflow-hidden">
+              {transactions.map((txn) => {
                   const isGrant = txn.amount > 0;
                   const label = txn.reason === "agent_run"
                     ? txn.sessionId ? `Agent run · session #${txn.sessionId}` : "Agent run"
@@ -389,7 +394,7 @@ export default function Billing() {
               </div>
             )}
           </div>
-        )}
+        </div>
       </div>
     </AppLayout>
   );

@@ -15,7 +15,7 @@ import { webhookHandler } from "./routes/stripeWebhook";
 import adminRouter from "./routes/admin";
 import { pool } from "@workspace/db";
 import { getBillingStatus, deductCredits, isStripeConfigured } from "./lib/billing";
-import { sendCreditsExhaustedReminder } from "./lib/billingEmail";
+import { sendCreditsExhaustedReminder, sendLowCreditsWarningIfNeeded } from "./lib/billingEmail";
 
 const PgStore = connectPgSimple(session);
 
@@ -110,6 +110,13 @@ const notificationLimiter = createRateLimiter({
   message: "Notification test rate limit reached. Wait before sending another test.",
 });
 
+// Auth: 10 req/min — brute-force protection for login / register / password reset
+const authLimiter = createRateLimiter({
+  windowMs: 60_000,
+  max: 10,
+  message: "Too many auth attempts. Please wait before trying again.",
+});
+
 // ─── Stripe webhook — MUST be before express.json() ──────────────────────────
 // Stripe signature verification requires the raw body Buffer.
 app.post(
@@ -121,6 +128,14 @@ app.post(
 // ─── Outbound-triggering endpoint — strict limiter applied first ──────────────
 // This route fires HTTP webhooks and SMTP emails; rate-limit tightly to prevent abuse.
 app.post("/api/stats/test-notification", notificationLimiter);
+
+// ─── Auth endpoints — brute-force protection ──────────────────────────────────
+// Applied before the general /api block so these paths get the tighter limit.
+app.post("/api/auth/login", authLimiter);
+app.post("/api/auth/register", authLimiter);
+app.post("/api/auth/forgot-password", authLimiter);
+app.post("/api/auth/reset-password", authLimiter);
+app.post("/api/auth/verify-email", authLimiter);
 
 // ─── Request logging ──────────────────────────────────────────────────────────
 app.use(
@@ -163,7 +178,7 @@ app.use("/api/admin", apiLimiter, requireAdmin, adminRouter);
 // Bypass users (Archibald embed) and unconfigured Stripe skip this gate.
 // Service is SUSPENDED (402) when:
 //   - No active subscription (canceled / none)
-//   - Credits have run out (past the top of a billing period with no top-up)
+//   - Credits have run out (past the top of a billing period with no no top-up)
 // User data is NEVER deleted due to payment issues — only access is suspended.
 app.use(
   ["/api/sessions/:id/run-next", "/api/sessions/:id/run-full"],
@@ -202,6 +217,9 @@ app.use(
         return;
       }
 
+      // Fire-and-forget low-credit warning (throttled to once per 7 days)
+      sendLowCreditsWarningIfNeeded(userId).catch(() => {});
+
       next();
     } catch (err) {
       logger.error({ err }, "Credit gate error — failing open to avoid blocking users");
@@ -209,6 +227,54 @@ app.use(
     }
   },
 );
+
+// ─── Session: reject approval ─────────────────────────────────────────────────
+// Sets approval to rejected, pauses the session for human review.
+app.post("/api/sessions/:id/reject-approval", apiLimiter, requireSession, async (req, res): Promise<void> => {
+  const sessionId = parseInt(req.params.id, 10);
+  const body = req.body as { approvalId?: unknown; rejectedReason?: unknown };
+  const approvalId = typeof body.approvalId === "number" ? body.approvalId : null;
+  const reason = typeof body.rejectedReason === "string" ? body.rejectedReason.trim().slice(0, 1000) : "";
+  if (!sessionId || !approvalId) {
+    res.status(400).json({ error: "sessionId and approvalId required" });
+    return;
+  }
+  try {
+    await pool.query(
+      `UPDATE approvals
+         SET status = 'rejected', rejected_at = NOW(), rejected_reason = $1, updated_at = NOW()
+       WHERE id = $2 AND session_id = $3`,
+      [reason || null, approvalId, sessionId],
+    );
+    await pool.query(
+      `UPDATE sessions SET status = 'paused', updated_at = NOW() WHERE id = $1`,
+      [sessionId],
+    );
+    req.log?.info?.({ sessionId, approvalId }, "Approval rejected — session paused");
+    res.json({ ok: true });
+  } catch (err) {
+    req.log?.error?.({ err }, "reject-approval error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── Session: reopen (resume completed session) ───────────────────────────────
+app.post("/api/sessions/:id/reopen", apiLimiter, requireSession, async (req, res): Promise<void> => {
+  const sessionId = parseInt(req.params.id, 10);
+  if (!sessionId) { res.status(400).json({ error: "invalid session id" }); return; }
+  try {
+    await pool.query(
+      `UPDATE sessions SET status = 'active', updated_at = NOW()
+       WHERE id = $1 AND status IN ('completed', 'paused', 'stopped')`,
+      [sessionId],
+    );
+    req.log?.info?.({ sessionId }, "Session reopened");
+    res.json({ ok: true });
+  } catch (err) {
+    req.log?.error?.({ err }, "reopen session error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 // ─── Auth-exempt paths — no session required ──────────────────────────────────
 // These paths must be reachable before the user has authenticated:
@@ -224,6 +290,9 @@ const AUTH_EXEMPT_PATHS = new Set([
   "/auth/google/callback",
   "/auth/github",
   "/auth/github/callback",
+  "/auth/forgot-password",
+  "/auth/reset-password",
+  "/auth/verify-email",
   "/stripe/config",
   "/stripe/checkout",
   "/stripe/subscription",

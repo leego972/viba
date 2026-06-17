@@ -656,6 +656,26 @@ export default function Dashboard() {
               </Card>
             )}
 
+            {/* Empty state — shown when loaded but no sessions exist */}
+            {!isLoading && !isError && (sessions ?? []).length === 0 && (
+              <Card>
+                <CardContent className="pt-10 pb-10 flex flex-col items-center gap-3 text-center">
+                  <div className="h-10 w-10 rounded-xl border bg-muted flex items-center justify-center">
+                    <Activity className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">No sessions yet</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Start your first session to orchestrate AI agents</p>
+                  </div>
+                  <Link href="/sessions/new">
+                    <Button size="sm" className="mt-1 gap-1.5">
+                      <Plus className="h-3.5 w-3.5" /> Start First Session
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Provider Health */}
             <Card>
               <CardHeader className="pb-3">

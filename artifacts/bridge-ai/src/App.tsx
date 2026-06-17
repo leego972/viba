@@ -19,6 +19,7 @@ import LoginPage from "@/pages/login";
 import SignUpPage from "@/pages/signup";
 import ForgotPassword from "@/pages/forgot-password";
 import ResetPassword from "@/pages/reset-password";
+import VerifyEmail from "@/pages/verify-email";
 import Billing from "@/pages/billing";
 import { useAuth } from "@/hooks/useAuth";
 import { isBypassValid, setBypassValid } from "@/lib/auth";
@@ -120,6 +121,7 @@ function App() {
               <Route path="/signup" component={SignUpPage} />
               <Route path="/forgot-password" component={ForgotPassword} />
               <Route path="/reset-password" component={ResetPassword} />
+              <Route path="/verify-email" component={VerifyEmail} />
               <Route path="/pricing" component={Pricing} />
               <Route path="/checkout/success" component={CheckoutSuccess} />
               {/* Admin — self-gated by ADMIN_TOKEN, no session required */}

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   getGetSessionQueryKey,
@@ -10,19 +10,27 @@ import {
 } from "@workspace/api-client-react";
 import { SIMULATED_PREFIX } from "../lib/bannerLogic";
 
-export function useSessionStream(sessionId: number) {
+const RECONNECT_DELAY_MS = 3_000;
+const MAX_RECONNECT_ATTEMPTS = 10;
+
+export function useSessionStream(sessionId: number): { isReconnecting: boolean } {
   const queryClient = useQueryClient();
   const latestSimulatedTimestampRef = useRef<string | null>(null);
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isReconnecting, setIsReconnecting] = useState(false);
 
-  useEffect(() => {
-    // Reset tracked timestamp whenever the session changes so a new session
-    // with earlier timestamps doesn't suppress banner invalidation.
-    latestSimulatedTimestampRef.current = null;
-
-    if (!sessionId) return;
+  const connect = useCallback(() => {
+    if (!sessionId) return () => {};
 
     const url = `/api/sessions/${sessionId}/stream`;
     const es = new EventSource(url);
+
+    es.onopen = () => {
+      // Successfully connected — clear reconnecting state
+      reconnectAttemptsRef.current = 0;
+      setIsReconnecting(false);
+    };
 
     es.onmessage = (e: MessageEvent) => {
       try {
@@ -67,9 +75,47 @@ export function useSessionStream(sessionId: number) {
     };
 
     es.onerror = () => {
-      // EventSource reconnects automatically
+      // EventSource reconnects automatically, but we track state for UI feedback
+      es.close();
+      if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+        reconnectAttemptsRef.current += 1;
+        setIsReconnecting(true);
+        reconnectTimerRef.current = setTimeout(() => {
+          connect();
+        }, RECONNECT_DELAY_MS);
+      } else {
+        setIsReconnecting(false);
+      }
     };
 
-    return () => es.close();
+    return () => {
+      es.close();
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, queryClient]);
+
+  useEffect(() => {
+    // Reset tracked timestamp whenever the session changes so a new session
+    // with earlier timestamps doesn't suppress banner invalidation.
+    latestSimulatedTimestampRef.current = null;
+    reconnectAttemptsRef.current = 0;
+    setIsReconnecting(false);
+
+    if (!sessionId) return;
+
+    const cleanup = connect();
+    return () => {
+      cleanup();
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+    };
+  }, [sessionId, connect]);
+
+  return { isReconnecting };
 }

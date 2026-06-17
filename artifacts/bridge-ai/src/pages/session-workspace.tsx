@@ -134,6 +134,8 @@ export default function SessionWorkspace() {
   // Inline reply state for user-directed questions
   const [replyingToId, setReplyingToId] = useState<number | null>(null);
   const [replyText, setReplyText] = useState("");
+  const [rejectFeedback, setRejectFeedback] = useState("");
+  const [isRejectingApproval, setIsRejectingApproval] = useState(false);
 
   // Prune stale keys from localStorage once on mount (#47)
   useEffect(() => {
@@ -195,7 +197,7 @@ export default function SessionWorkspace() {
 
   // Real-time SSE stream — pushes all session data updates at ~800 ms intervals,
   // populating the React Query cache so all queries below stay fresh without polling.
-  useSessionStream(sessionId);
+  const { isReconnecting } = useSessionStream(sessionId);
 
   // Queries — no refetchInterval needed; SSE keeps the cache fresh
   // Stats are polled every 30 s so the spike threshold and recentSpikeProviders
@@ -408,6 +410,29 @@ export default function SessionWorkspace() {
     });
   };
 
+  const handleReject = async () => {
+    if (!pendingApproval) return;
+    setIsRejectingApproval(true);
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/reject-approval`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ approvalId: pendingApproval.id, rejectedReason: rejectFeedback }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      setShowApprovalModal(false);
+      setPendingApproval(null);
+      setRejectFeedback("");
+      invalidateAll();
+      toast({ title: "Rejected", description: "Approval rejected — session paused for review." });
+    } catch {
+      toast({ title: "Error", description: "Failed to reject approval.", variant: "destructive" });
+    } finally {
+      setIsRejectingApproval(false);
+    }
+  };
+
   const handleExport = () => {
     if (!session) return;
     const lines: string[] = [];
@@ -572,6 +597,14 @@ export default function SessionWorkspace() {
             >
               <X className="h-4 w-4 text-amber-400" />
             </button>
+          </div>
+        )}
+
+        {/* SSE Reconnecting banner */}
+        {isReconnecting && (
+          <div className="flex items-center gap-3 rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-2.5 text-sm text-sky-300 shrink-0">
+            <RefreshCw className="h-4 w-4 shrink-0 text-sky-400 animate-spin" />
+            <span>Reconnecting to live feed… updates may be delayed.</span>
           </div>
         )}
 
@@ -1118,9 +1151,18 @@ export default function SessionWorkspace() {
             {/* Input Area */}
             <div className="p-4 border-t shrink-0 bg-muted/10">
               {!isSessionActive && (
-                <p className="text-xs text-muted-foreground text-center mb-2">
-                  {isSessionComplete ? "Session completed — export the transcript above." : `Session is ${session.status}.`}
-                </p>
+                <div className="flex flex-col items-center gap-2 mb-2">
+                  <p className="text-xs text-muted-foreground text-center">
+                    {isSessionComplete ? "Session completed — export the transcript above." : `Session is ${session.status}.`}
+                  </p>
+                  {isSessionComplete && (
+                    <Link href="/sessions/new">
+                      <Button size="sm" variant="outline" className="text-xs h-7 gap-1.5">
+                        <RefreshCw className="h-3 w-3" /> Start follow-up session
+                      </Button>
+                    </Link>
+                  )}
+                </div>
               )}
               <div className="flex gap-2">
                 <Textarea
@@ -1312,12 +1354,24 @@ export default function SessionWorkspace() {
               The agents have requested approval before proceeding.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
+          <div className="py-4 space-y-3">
             <div className="font-semibold text-sm mb-1">{pendingApproval?.type || 'Action'}</div>
             <div className="text-sm bg-muted p-3 rounded-md">{pendingApproval?.description}</div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Rejection feedback (optional)</label>
+              <Textarea
+                placeholder="Explain why this action should not proceed…"
+                className="min-h-[64px] resize-none text-sm"
+                value={rejectFeedback}
+                onChange={(e) => setRejectFeedback(e.target.value)}
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowApprovalModal(false)}>Review Manually</Button>
+            <Button variant="destructive" onClick={handleReject} disabled={isRejectingApproval}>
+              {isRejectingApproval ? "Rejecting…" : "Reject"}
+            </Button>
             <Button onClick={handleApprove} disabled={approve.isPending}>
               {approve.isPending ? "Approving..." : "Approve & Continue"}
             </Button>

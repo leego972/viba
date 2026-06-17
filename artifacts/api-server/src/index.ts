@@ -222,6 +222,31 @@ async function runStartupMigrations(): Promise<void> {
     )
   `);
 
+  // ── DB indexes ────────────────────────────────────────────────────────────
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_credit_transactions_user_id ON credit_transactions(user_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_id ON password_reset_tokens(user_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_token ON password_reset_tokens(token)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_audit_logs_session_id ON audit_logs(session_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id)`);
+
+  // ── email_verification_tokens table ───────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS email_verification_tokens (
+      id         SERIAL      PRIMARY KEY,
+      user_id    INTEGER     NOT NULL,
+      token      TEXT        NOT NULL UNIQUE,
+      expires_at TIMESTAMPTZ NOT NULL,
+      used_at    TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  // ── users: email_verified column ──────────────────────────────────────────
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT false`);
+
+  // ── users: low_credits_notified_at column ─────────────────────────────────
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS low_credits_notified_at TIMESTAMPTZ`);
+
   logger.info("Startup migrations complete");
 }
 
@@ -287,6 +312,31 @@ loadCircuitStateFromDb()
   .then(() => provisionStripeProducts())
   .then(() => {
     listenWithRetry(1);
+
+    // Periodic cleanup of expired/used password_reset_tokens (every 6 hours)
+    const TOKEN_CLEANUP_MS = 6 * 60 * 60 * 1000;
+    setInterval(() => {
+      pool.query(
+        `DELETE FROM password_reset_tokens
+         WHERE expires_at < NOW() - INTERVAL '1 day'
+            OR (used_at IS NOT NULL AND used_at < NOW() - INTERVAL '1 day')`
+      ).then(({ rowCount }) => {
+        if ((rowCount ?? 0) > 0) {
+          logger.info({ rowCount }, "Cleaned up expired password_reset_tokens");
+        }
+      }).catch((err: unknown) => {
+        logger.error({ err }, "password_reset_tokens cleanup failed");
+      });
+
+      // Also clean up expired email_verification_tokens
+      pool.query(
+        `DELETE FROM email_verification_tokens
+         WHERE expires_at < NOW() - INTERVAL '1 day'
+            OR (used_at IS NOT NULL AND used_at < NOW() - INTERVAL '1 day')`
+      ).catch((err: unknown) => {
+        logger.error({ err }, "email_verification_tokens cleanup failed");
+      });
+    }, TOKEN_CLEANUP_MS);
   })
   .catch((err) => {
     logger.error({ err }, "Unexpected fatal error during startup");

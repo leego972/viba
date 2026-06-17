@@ -1,259 +1,130 @@
 # Environment Variables
 
-  All env vars are **server-only** (never sent to the browser) unless noted.
-  API keys can also be set via the **Admin → Config** panel — the DB value takes priority over the env var.
+All environment variables supported by the VIBA API server. Variables can be set as OS environment variables or stored in the `settings` table via the admin panel (DB-stored settings take precedence over env vars for API keys).
 
-  > **Never commit real secrets.** Copy `.env.example` to `.env` (gitignored) for local work.
+---
 
-  ---
+## Required
 
-  ## Quick reference
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string (required for all DB operations). |
 
-  | Variable | Required | Default | Group |
-  |---|---|---|---|
-  | `DATABASE_URL` | ✅ Yes | — | Database |
-  | `SESSION_SECRET` | ✅ Yes | — | Server |
-  | `ADMIN_TOKEN` | ✅ Yes | — | Access control |
-  | `PORT` | auto | — | Server |
-  | `ACCESS_TOKEN` | No | (open) | Access control |
-  | `ARCHIBALD_BYPASS_TOKEN` | No | — | Access control |
-  | `VIBA_PUBLIC_URL` | No | `https://viba.guru` | Server |
-  | `OPENAI_API_KEY` | No | (simulation) | AI providers |
-  | `ANTHROPIC_API_KEY` | No | (simulation) | AI providers |
-  | `GEMINI_API_KEY` | No | (simulation) | AI providers |
-  | `PERPLEXITY_API_KEY` | No | (simulation) | AI providers |
-  | `REPLIT_API_KEY` | No | (simulation) | AI providers |
-  | `MANUS_API_KEY` | No | (simulation) | AI providers |
-  | `OPENAI_MODEL` | No | `gpt-4.1-mini` | Model overrides |
-  | `ANTHROPIC_MODEL` | No | `claude-sonnet-4-5` | Model overrides |
-  | `GEMINI_MODEL` | No | `gemini-2.0-flash` | Model overrides |
-  | `PERPLEXITY_MODEL` | No | `sonar` | Model overrides |
-  | `STRIPE_SECRET_KEY` | Stripe only | — | Stripe |
-  | `STRIPE_PUBLISHABLE_KEY` | Stripe only | — | Stripe |
-  | `STRIPE_PRICE_ID` | Stripe only | — | Stripe |
-  | `STRIPE_WEBHOOK_SECRET` | Stripe only | — | Stripe |
-  | `SMTP_HOST` | Email only | — | Email |
-  | `SMTP_PORT` | No | `587` | Email |
-  | `SMTP_USER` | Email only | — | Email |
-  | `SMTP_PASS` | Email only | — | Email |
-  | `SMTP_FROM` | No | `SMTP_USER` | Email |
-  | `CIRCUIT_OPEN_THRESHOLD` | No | `5` | Circuit breaker |
-  | `CIRCUIT_TIMEOUT_MS` | No | `300000` | Circuit breaker |
-  | `NODE_ENV` | auto | — | Runtime |
+---
 
-  ---
+## Security & Access Control
 
-  ## Database
+| Variable | Description |
+|---|---|
+| `SESSION_SECRET` | Secret used to sign session cookies. **Required in production** — a random 32+ character string. Defaults to `dev-secret-change-me-in-production` which must never be used in production. |
+| `PUBLIC_ORIGIN` | Full public URL of the deployed API (e.g. `https://viba.guru`). Used in OAuth callbacks, password reset links, and email verification URLs. Defaults to the request's protocol + hostname if not set. |
+| `ACCESS_TOKEN` | Bearer token that gates all `/api` routes. If unset, the API is open. Auth bootstrap endpoints are always exempt. |
+| `ADMIN_TOKEN` | Bearer token for admin panel routes (`/admin`). Required to access agent settings, circuit breakers, and destructive operations. |
+| `ARCHIBALD_BYPASS_TOKEN` | Token accepted by the access gate for the embedded Archibald Titan AI integration. Allows the Archibald host to call VIBA without the user-facing ACCESS_TOKEN. |
 
-  ### `DATABASE_URL`
-  - **Required** · Server-only
-  - Full PostgreSQL connection string. The API server and Drizzle ORM both read this on startup. If absent, the process exits immediately with a clear error.
-  - **Example:** `postgresql://user:password@host:5432/dbname`
-  - Railway: copy from the **Variables** tab of your Postgres plugin.
+---
 
-  ---
+## Email (SMTP)
 
-  ## Server
+Transactional emails (welcome, password reset, email verification, billing alerts). All five variables must be set together for emails to send; if any is missing, email is silently skipped.
 
-  ### `PORT`
-  - **Auto-set** · Server-only
-  - The port the Express server binds to. Set automatically by Railway and Replit via the workflow runner. **Do not set manually** — misconfigured values conflict with the proxy.
-  - **Example:** `5000` (Replit default)
+| Variable | Description |
+|---|---|
+| `SMTP_HOST` | SMTP server hostname (e.g. `smtp.sendgrid.net`, `smtp.mailgun.org`). |
+| `SMTP_USER` | SMTP authentication username (often the sending email address). |
+| `SMTP_PASS` | SMTP authentication password or API key. Store as a Railway secret. |
+| `SMTP_FROM` | "From" address for outbound emails (e.g. `noreply@viba.guru`). Defaults to `SMTP_USER` if not set. |
+| `SMTP_PORT` | SMTP port (default: `587`). Use `465` for SSL; the server will enable `secure: true` automatically when port is 465. |
 
-  ### `SESSION_SECRET`
-  - **Required** · Server-only
-  - Random secret used to sign express-session cookies. Must be long, random, and stable across deploys (changing it invalidates all active sessions).
-  - **Generate:** `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
-  - **Example:** `a3f8d2...64-char-hex`
+---
 
-  ### `VIBA_PUBLIC_URL`
-  - **Optional** · Server-only
-  - Public HTTPS base URL of this deployment. Used to build links in outgoing access-token emails. Must not have a trailing slash.
-  - **Default:** `https://viba.guru`
-  - **Example:** `https://viba.guru`
+## Stripe (Monetization)
 
-  ### `NODE_ENV`
-  - **Auto-set** · Server-only
-  - Controls logging format (JSON in production, pretty in development) and error detail in API responses.
-  - **Default (Railway):** `production`
+| Variable | Description |
+|---|---|
+| `STRIPE_SECRET_KEY` | Stripe secret key for creating checkout sessions and managing subscriptions. |
+| `STRIPE_PUBLISHABLE_KEY` | Stripe publishable key exposed to the frontend for Stripe.js. |
+| `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret for verifying incoming events. |
+| `STRIPE_PRICE_ID` | _(legacy)_ The Stripe Price ID for the subscription plan. Now auto-provisioned at startup if not set. |
 
-  ---
+Products and prices are **auto-provisioned at startup** when `STRIPE_SECRET_KEY` is set. Individual price IDs are stored in the `billing_price_ids` DB table and do not need to be set manually.
 
-  ## Access Control
+---
 
-  ### `ACCESS_TOKEN`
-  - **Optional** · Server-only
-  - A single static bearer token for the legacy access gate. When set, every `/api/*` request must include `Authorization: Bearer <token>` or `X-Access-Token: <token>`. When absent, the API operates in **open mode**.
-  - Intended for low-traffic deployments or development. **Prefer Stripe subscriptions for production.**
-  - Routes `/api/auth/config` and `/api/auth/verify` are always exempt (they bootstrap the gate).
-  - **Example:** `viba_abc123...`
+## Admin Bootstrap
 
-  ### `ADMIN_TOKEN`
-  - **Required** · Server-only
-  - Bearer token protecting all `/api/admin/*` endpoints. Without it, every admin request returns `503 Admin not configured`.
-  - Keep this distinct from `ACCESS_TOKEN` — it has wider destructive permissions.
-  - **Generate:** `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
-  - **Example:** `a9f2b1...64-char-hex`
+| Variable | Description |
+|---|---|
+| `ADMIN_BOOTSTRAP_EMAIL` | Email of the admin account to create/update at startup. Bootstrap is skipped if this is not set. |
+| `ADMIN_BOOTSTRAP_PASSWORD` | Password for the admin account. Only used when creating the account; never overwrites an existing password on update. Bootstrap is skipped if this is not set. |
 
-  ### `ARCHIBALD_BYPASS_TOKEN`
-  - **Optional** · Server-only
-  - Shared secret between VIBA and Archibald Titan AI (which embeds VIBA at the `/bridge` route). When a request includes this token, it skips subscriber access checks — useful so Archibald's own users don't need a separate VIBA subscription.
-  - Must match the `VIBA_BYPASS_TOKEN` (or equivalent) env var set in the Archibald environment.
-  - **Example:** `bypass_abc123...`
+Both variables must be set together to enable admin bootstrapping. The bootstrapped account receives `subscription_status = active` and unlimited credits (`999999999`). Omit both in environments where no privileged bootstrap account is needed.
 
-  ---
+---
 
-  ## AI Provider API Keys
+## Agent API Keys (LLM Inference)
 
-  All provider keys are **optional**. Without a key, that provider automatically runs in **simulation (mock) mode** — responses are plausible-looking fakes, no API credit is spent. This keeps the app runnable during development and demos.
+These keys power the LLM chat completion calls made by each provider adapter. They can alternatively be stored in the `settings` table via the admin panel.
 
-  Keys can be set via env var **or** via the Admin → Config panel. The DB value takes priority when both are present.
+| Variable | Description |
+|---|---|
+| `OPENAI_API_KEY` | OpenAI API key (ChatGPT adapter). |
+| `OPENAI_MODEL` | Override the default OpenAI model (default: `gpt-4o-mini`). |
+| `ANTHROPIC_API_KEY` | Anthropic API key (Claude adapter). |
+| `ANTHROPIC_MODEL` | Override the default Anthropic model (default: `claude-3-5-haiku-20241022`). |
+| `GEMINI_API_KEY` | Google Gemini API key. **Note: this is `GEMINI_API_KEY`, NOT `GOOGLE_API_KEY`.** |
+| `GEMINI_MODEL` | Override the default Gemini model (default: `gemini-1.5-flash`). |
+| `PERPLEXITY_API_KEY` | Perplexity API key. |
+| `PERPLEXITY_MODEL` | Override the default Perplexity model (default: `llama-3.1-sonar-small-128k-online`). |
+| `REPLIT_API_KEY` | Replit AI API key (used for the LLM chat completion fallback path). |
+| `REPLIT_MODEL` | Override the default Replit model (default: `replit-code-v1-3b`). |
+| `MANUS_API_KEY` | Manus API key (used for the LLM chat completion fallback path). |
+| `MANUS_MODEL` | Override the default Manus model (default: `manus-deep-research-1`). |
 
-  ### `OPENAI_API_KEY`
-  - **Optional** · Server-only · Admin-configurable
-  - Enables the ChatGPT / OpenAI provider with real API calls.
-  - Create at: <https://platform.openai.com/api-keys>
-  - **Example:** `sk-proj-...`
+---
 
-  ### `ANTHROPIC_API_KEY`
-  - **Optional** · Server-only · Admin-configurable
-  - Enables the Claude / Anthropic provider.
-  - Create at: <https://console.anthropic.com/settings/keys>
-  - **Example:** `sk-ant-api03-...`
+## Real Code Execution (Tool-Capable Agents)
 
-  ### `GEMINI_API_KEY`
-  - **Optional** · Server-only · Admin-configurable
-  - Enables the Gemini / Google provider.
-  - ⚠️ **The variable name is `GEMINI_API_KEY`** — not `GOOGLE_API_KEY`.
-  - Create at: <https://aistudio.google.com/app/apikey>
-  - **Example:** `AIzaSy...`
+These variables unlock real code and git execution for Replit and Manus adapters when a repo is connected to a session. Without them, both adapters fall back to LLM-only responses.
 
-  ### `PERPLEXITY_API_KEY`
-  - **Optional** · Server-only · Admin-configurable
-  - Enables the Perplexity research and web-search provider.
-  - Create at: <https://www.perplexity.ai/settings/api>
-  - **Example:** `pplx-...`
+| Variable | Description |
+|---|---|
+| `REPLIT_AGENT_URL` | Base URL of the Replit Agent execution API (e.g. `https://replit.com/api/v0/agent`). When set **and** a session has a `repoUrl`, the ReplitAdapter submits tasks to this API for real code execution (clone, test, build, deploy) instead of using LLM chat only. Supports POST `/tasks` to submit and GET `/tasks/{taskId}` to poll. |
+| `MANUS_WORKSPACE_API_KEY` | API key for the Manus Workspace Task API — distinct from the LLM inference key (`MANUS_API_KEY`). When set, the ManusAdapter submits multi-step executable workflows to `https://api.manus.im/v1/tasks` for real web browsing, data gathering, and code execution. |
 
-  ### `REPLIT_API_KEY`
-  - **Optional** · Server-only · Admin-configurable
-  - Enables the Replit agent provider.
-  - **Example:** `r_...`
+| `REPLIT_AGENT_TIMEOUT_MS` | Total polling budget in milliseconds for Replit Agent task execution (default: `60000` = 60s). The adapter polls every 4s; max attempts = `ceil(budget / 4000)`. On timeout, any partial result already received is persisted rather than discarded. |
+| `MANUS_TASK_TIMEOUT_MS` | Total polling budget in milliseconds for Manus Workspace task execution (default: `60000` = 60s). The adapter polls every 5s; max attempts = `ceil(budget / 5000)`. On timeout, any partial result already received is persisted rather than discarded. |
 
-  ### `MANUS_API_KEY`
-  - **Optional** · Server-only · Admin-configurable
-  - Enables the Manus agent provider.
+### How real execution works
 
-  ---
+1. If `REPLIT_AGENT_URL` is set and the session has a `repoUrl`, the ReplitAdapter POSTs a task to the agent API with the task description, repo URL, branch, and environment. It then polls every 4 seconds up to `REPLIT_AGENT_TIMEOUT_MS` (default 60s).
+2. During polling, the adapter emits a `agent_running` audit log event on every poll cycle with the current status and elapsed time, giving the session feed live progress indicators.
+3. If the polling budget is exhausted, any partial outputs or summary already received are persisted with `completionStatus: "in_progress"` rather than discarded. The task can be retried on the next run.
+4. Structured outputs (file diffs, test results, build logs, deployment URLs) are returned by the agent API and stored in the `metadata.toolOutputs` field of the message record.
+5. If the agent API call fails (not times out), the adapter falls back to LLM-only mode transparently.
+6. The same pattern applies to ManusAdapter with `MANUS_WORKSPACE_API_KEY` and `MANUS_TASK_TIMEOUT_MS`.
 
-  ## Model Overrides
+---
 
-  Override the default model used per provider. Can also be changed via Admin → Config (DB takes priority).
+## Circuit Breaker
 
-  ### `OPENAI_MODEL`
-  - **Optional** · Server-only · Admin-configurable · Default: `gpt-4.1-mini`
-  - **Example:** `gpt-4o`
+| Variable | Description |
+|---|---|
+| `CIRCUIT_BREAKER_THRESHOLD` | Number of consecutive failures before opening the circuit for a provider (default: `3`). |
+| `CIRCUIT_BREAKER_RESET_MS` | Milliseconds before a tripped circuit enters half-open state (default: `60000`). |
 
-  ### `ANTHROPIC_MODEL`
-  - **Optional** · Server-only · Admin-configurable · Default: `claude-sonnet-4-5`
-  - **Example:** `claude-opus-4-5`
+---
 
-  ### `GEMINI_MODEL`
-  - **Optional** · Server-only · Admin-configurable · Default: `gemini-2.0-flash`
-  - **Example:** `gemini-2.5-pro`
+## Session Defaults
 
-  ### `PERPLEXITY_MODEL`
-  - **Optional** · Server-only · Admin-configurable · Default: `sonar`
-  - **Example:** `sonar-pro`
+| Variable | Description |
+|---|---|
+| `DEFAULT_AUTONOMY_MODE` | Default autonomy mode for new sessions: `Autonomous` or `Supervised` (default: `Autonomous`). |
 
-  ---
+---
 
-  ## Stripe Payments
+## Deployment Notes
 
-  All four Stripe variables are **optional as a group**. When `STRIPE_SECRET_KEY` is absent, the pricing page shows a coming-soon state and the access gate falls back to `ACCESS_TOKEN` mode.
-
-  All four must be set together for live subscriptions to work.
-
-  ### `STRIPE_SECRET_KEY`
-  - **Required for Stripe** · Server-only
-  - Stripe secret key. Use `sk_test_...` for development, `sk_live_...` for production.
-  - Dashboard: <https://dashboard.stripe.com/apikeys>
-  - **Example:** `sk_test_51...`
-
-  ### `STRIPE_PUBLISHABLE_KEY`
-  - **Required for Stripe** · Server-only (proxied to browser via `/api/stripe/config`, never via VITE env)
-  - Stripe publishable key.
-  - Dashboard: <https://dashboard.stripe.com/apikeys>
-  - **Example:** `pk_test_51...`
-
-  ### `STRIPE_PRICE_ID`
-  - **Required for Stripe** · Server-only
-  - ID of the recurring `$50/month` Stripe Price. Create the product and price in the Stripe Dashboard, then paste the `price_...` ID here.
-  - Dashboard: <https://dashboard.stripe.com/products>
-  - **Example:** `price_1ABC...`
-
-  ### `STRIPE_WEBHOOK_SECRET`
-  - **Required for Stripe** · Server-only
-  - Signing secret from the Stripe webhook endpoint configuration. Used to verify that incoming webhook events are genuinely from Stripe.
-  - Create a webhook at <https://dashboard.stripe.com/webhooks> pointing to `https://viba.guru/api/stripe/webhook`.
-  - **Events to enable:** `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`, `invoice.payment_succeeded`
-  - **Example:** `whsec_...`
-
-  ---
-
-  ## Email (SMTP)
-
-  Used to deliver the access token to new subscribers immediately after Stripe checkout completes. All SMTP variables are **optional as a group**. When absent, the server logs a warning and skips sending — the token is still visible in the admin **Users** tab.
-
-  ### `SMTP_HOST`
-  - **Required for email** · Server-only
-  - SMTP server hostname.
-  - **Examples:** `smtp.sendgrid.net` · `smtp.mailgun.org` · `smtp.postmarkapp.com`
-
-  ### `SMTP_PORT`
-  - **Optional** · Server-only · Default: `587`
-  - SMTP port. Use `465` for SSL, `587` for STARTTLS.
-
-  ### `SMTP_USER`
-  - **Required for email** · Server-only
-  - SMTP authentication username. For SendGrid this is the literal string `apikey`.
-
-  ### `SMTP_PASS`
-  - **Required for email** · Server-only
-  - SMTP authentication password or API key value. Keep this secret.
-
-  ### `SMTP_FROM`
-  - **Optional** · Server-only · Default: value of `SMTP_USER`
-  - The `From:` address shown to recipients.
-  - **Example:** `noreply@viba.guru`
-
-  ---
-
-  ## Circuit Breaker
-
-  The circuit breaker automatically falls back a provider to simulation mode after repeated failures, then probes it again after a timeout. State is **persisted in the `circuit_state` DB table** so it survives restarts. You can reset circuits via the Admin → Health panel.
-
-  ### `CIRCUIT_OPEN_THRESHOLD`
-  - **Optional** · Server-only · Default: `5`
-  - Number of consecutive provider failures before the circuit opens (trips to simulation).
-  - The server **fails fast at startup** if this is set to a non-positive integer.
-  - **Example:** `3`
-
-  ### `CIRCUIT_TIMEOUT_MS`
-  - **Optional** · Server-only · Default: `300000` (5 minutes)
-  - Milliseconds the circuit stays open before a single half-open probe is allowed.
-  - The server **fails fast at startup** if this is set to a non-positive integer.
-  - **Example:** `120000` (2 minutes)
-
-  ---
-
-  ## Notes
-
-  ### No VITE_ client-side env vars
-  The frontend reads all configuration through API endpoints — there are no `VITE_*` environment variables in this repository. The Stripe publishable key is returned by `GET /api/stripe/config`; auth mode is returned by `GET /api/auth/config`.
-
-  ### The `VITE_BRIDGE_AI_URL` variable
-  This variable belongs to the **Archibald Titan AI** repo (leego972/archibald-titan-ai), not to this repo. After deploying VIBA, update `VITE_BRIDGE_AI_URL` in the Archibald Railway environment to point to the VIBA production URL (`https://viba.guru/`).
-
-  ### Admin-configurable keys
-  `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `PERPLEXITY_API_KEY`, and the `*_MODEL` overrides can be set in the **Admin → Config** panel after deployment. The DB value takes priority over the environment variable, so you can rotate keys without redeploying.
-  
+- Set all secrets as Railway environment variables, not in `.env` files committed to source control.
+- After changing `REPLIT_AGENT_URL` or `MANUS_WORKSPACE_API_KEY`, restart the API server — they are read at adapter call time, not at startup.
+- `VITE_BRIDGE_AI_URL` must be set in the **frontend** environment (Archibald Titan AI on Railway) pointing to `https://viba.guru/`. It is not an API server variable.

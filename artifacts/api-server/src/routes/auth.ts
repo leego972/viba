@@ -2,7 +2,13 @@ import { Router, type IRouter } from "express";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { pool } from "@workspace/db";
+import { sendWelcomeEmail, sendVerificationEmail } from "../lib/billingEmail";
 
+declare module "express-session" {
+  interface SessionData {
+    oauthNonce?: string;
+  }
+}
 
 interface UserRow {
   id: number;
@@ -24,6 +30,20 @@ function timingSafeEqual(a: string, b: string): boolean {
 function getBaseUrl(req: { protocol: string; hostname: string }): string {
   const host = process.env["PUBLIC_ORIGIN"] ?? `${req.protocol}://${req.hostname}`;
   return host;
+}
+
+function encodeOAuthState(returnPath: string, nonce: string): string {
+  return Buffer.from(JSON.stringify({ r: returnPath, n: nonce })).toString("base64url");
+}
+
+function decodeOAuthState(state: string): { r: string; n: string } | null {
+  try {
+    const parsed = JSON.parse(Buffer.from(state, "base64url").toString()) as { r?: string; n?: string };
+    if (typeof parsed.r !== "string" || typeof parsed.n !== "string") return null;
+    return { r: parsed.r, n: parsed.n };
+  } catch {
+    return null;
+  }
 }
 
 const router: IRouter = Router();
@@ -81,14 +101,22 @@ router.post("/auth/login", async (req, res): Promise<void> => {
       return;
     }
 
-    req.session.userId = user.id;
-    req.session.save((err) => {
-      if (err) {
-        req.log?.error?.({ err }, "session save error");
+    // Session fixation protection: regenerate session ID before assigning user
+    req.session.regenerate((regenErr) => {
+      if (regenErr) {
+        req.log?.error?.({ err: regenErr }, "session regenerate error on login");
         res.status(500).json({ error: "Internal server error" });
         return;
       }
-      res.json({ user: { id: user.id, email: user.email, name: user.name } });
+      req.session.userId = user.id;
+      req.session.save((saveErr) => {
+        if (saveErr) {
+          req.log?.error?.({ err: saveErr }, "session save error on login");
+          res.status(500).json({ error: "Internal server error" });
+          return;
+        }
+        res.json({ user: { id: user.id, email: user.email, name: user.name } });
+      });
     });
   } catch (err) {
     req.log?.error?.({ err }, "auth/login error");
@@ -126,14 +154,28 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     );
     const user = rows[0]!;
 
-    req.session.userId = user.id;
-    req.session.save((err) => {
-      if (err) {
-        req.log?.error?.({ err }, "session save error");
+    // Send verification email (fire-and-forget)
+    sendVerificationEmail(user.id, email, name ?? undefined, getBaseUrl(req)).catch(() => {});
+
+    // Send welcome email (fire-and-forget)
+    sendWelcomeEmail(email, name ?? undefined).catch(() => {});
+
+    // Session fixation protection: regenerate session ID before assigning user
+    req.session.regenerate((regenErr) => {
+      if (regenErr) {
+        req.log?.error?.({ err: regenErr }, "session regenerate error on register");
         res.status(500).json({ error: "Internal server error" });
         return;
       }
-      res.status(201).json({ user: { id: user.id, email: user.email, name: user.name } });
+      req.session.userId = user.id;
+      req.session.save((saveErr) => {
+        if (saveErr) {
+          req.log?.error?.({ err: saveErr }, "session save error on register");
+          res.status(500).json({ error: "Internal server error" });
+          return;
+        }
+        res.status(201).json({ user: { id: user.id, email: user.email, name: user.name } });
+      });
     });
   } catch (err) {
     req.log?.error?.({ err }, "auth/register error");
@@ -160,16 +202,23 @@ router.get("/auth/google", (req, res): void => {
   const baseUrl = getBaseUrl(req);
   const redirectUri = `${baseUrl}/api/auth/google/callback`;
 
-  const params = new URLSearchParams({
-    client_id: clientId,
-    redirect_uri: redirectUri,
-    response_type: "code",
-    scope: "email profile",
-    state: returnPath,
-    access_type: "online",
-    prompt: "select_account",
+  // CSRF protection: embed a nonce in the state param
+  const nonce = crypto.randomBytes(16).toString("hex");
+  const state = encodeOAuthState(returnPath, nonce);
+  req.session.oauthNonce = nonce;
+
+  req.session.save(() => {
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      response_type: "code",
+      scope: "email profile",
+      state,
+      access_type: "online",
+      prompt: "select_account",
+    });
+    res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
   });
-  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
 });
 
 router.get("/auth/google/callback", async (req, res): Promise<void> => {
@@ -181,11 +230,21 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
   }
 
   const code = typeof req.query["code"] === "string" ? req.query["code"] : null;
-  const returnPath = typeof req.query["state"] === "string" ? req.query["state"] : "/dashboard";
+  const stateStr = typeof req.query["state"] === "string" ? req.query["state"] : "";
+
   if (!code) {
     res.redirect(`/login?error=google_cancelled`);
     return;
   }
+
+  // Verify CSRF nonce
+  const stateData = decodeOAuthState(stateStr);
+  if (!stateData || stateData.n !== req.session.oauthNonce) {
+    res.redirect(`/login?error=oauth_csrf`);
+    return;
+  }
+  const returnPath = stateData.r;
+  delete req.session.oauthNonce;
 
   try {
     const baseUrl = getBaseUrl(req);
@@ -231,18 +290,27 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
         await pool.query("UPDATE users SET google_id = $1 WHERE id = $2", [googleUser.id, emailCheck.rows[0].id]);
         user = { ...emailCheck.rows[0], google_id: googleUser.id };
       } else {
-        // Create new user
+        // Create new user (OAuth emails are pre-verified)
         const insertResult = await pool.query<UserRow>(
-          "INSERT INTO users (email, name, google_id) VALUES ($1, $2, $3) RETURNING *",
+          "INSERT INTO users (email, name, google_id, email_verified) VALUES ($1, $2, $3, true) RETURNING *",
           [googleUser.email.toLowerCase(), googleUser.name ?? null, googleUser.id],
         );
         user = insertResult.rows[0]!;
+        // Send welcome email (fire-and-forget)
+        sendWelcomeEmail(user.email, user.name ?? undefined).catch(() => {});
       }
     }
 
-    req.session.userId = user.id;
-    req.session.save(() => {
-      res.redirect(returnPath.startsWith("/") ? returnPath : "/dashboard");
+    // Session fixation protection on OAuth login
+    req.session.regenerate((regenErr) => {
+      if (regenErr) {
+        res.redirect(`/login?error=google_failed`);
+        return;
+      }
+      req.session.userId = user!.id;
+      req.session.save(() => {
+        res.redirect(returnPath.startsWith("/") ? returnPath : "/dashboard");
+      });
     });
   } catch (err) {
     req.log?.error?.({ err }, "Google OAuth callback error");
@@ -261,13 +329,20 @@ router.get("/auth/github", (req, res): void => {
   const baseUrl = getBaseUrl(req);
   const redirectUri = `${baseUrl}/api/auth/github/callback`;
 
-  const params = new URLSearchParams({
-    client_id: clientId,
-    redirect_uri: redirectUri,
-    scope: "user:email",
-    state: returnPath,
+  // CSRF protection: embed a nonce in the state param
+  const nonce = crypto.randomBytes(16).toString("hex");
+  const state = encodeOAuthState(returnPath, nonce);
+  req.session.oauthNonce = nonce;
+
+  req.session.save(() => {
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      scope: "user:email",
+      state,
+    });
+    res.redirect(`https://github.com/login/oauth/authorize?${params.toString()}`);
   });
-  res.redirect(`https://github.com/login/oauth/authorize?${params.toString()}`);
 });
 
 router.get("/auth/github/callback", async (req, res): Promise<void> => {
@@ -279,11 +354,21 @@ router.get("/auth/github/callback", async (req, res): Promise<void> => {
   }
 
   const code = typeof req.query["code"] === "string" ? req.query["code"] : null;
-  const returnPath = typeof req.query["state"] === "string" ? req.query["state"] : "/dashboard";
+  const stateStr = typeof req.query["state"] === "string" ? req.query["state"] : "";
+
   if (!code) {
     res.redirect(`/login?error=github_cancelled`);
     return;
   }
+
+  // Verify CSRF nonce
+  const stateData = decodeOAuthState(stateStr);
+  if (!stateData || stateData.n !== req.session.oauthNonce) {
+    res.redirect(`/login?error=oauth_csrf`);
+    return;
+  }
+  const returnPath = stateData.r;
+  delete req.session.oauthNonce;
 
   try {
     const baseUrl = getBaseUrl(req);
@@ -335,17 +420,27 @@ router.get("/auth/github/callback", async (req, res): Promise<void> => {
         await pool.query("UPDATE users SET github_id = $1 WHERE id = $2", [githubIdStr, emailCheck.rows[0].id]);
         user = { ...emailCheck.rows[0], github_id: githubIdStr };
       } else {
+        // Create new user (GitHub OAuth emails are verified by GitHub)
         const insertResult = await pool.query<UserRow>(
-          "INSERT INTO users (email, name, github_id) VALUES ($1, $2, $3) RETURNING *",
+          "INSERT INTO users (email, name, github_id, email_verified) VALUES ($1, $2, $3, true) RETURNING *",
           [email.toLowerCase(), ghUser.name ?? ghUser.login ?? null, githubIdStr],
         );
         user = insertResult.rows[0]!;
+        // Send welcome email (fire-and-forget)
+        sendWelcomeEmail(user.email, user.name ?? undefined).catch(() => {});
       }
     }
 
-    req.session.userId = user.id;
-    req.session.save(() => {
-      res.redirect(returnPath.startsWith("/") ? returnPath : "/dashboard");
+    // Session fixation protection on OAuth login
+    req.session.regenerate((regenErr) => {
+      if (regenErr) {
+        res.redirect(`/login?error=github_failed`);
+        return;
+      }
+      req.session.userId = user!.id;
+      req.session.save(() => {
+        res.redirect(returnPath.startsWith("/") ? returnPath : "/dashboard");
+      });
     });
   } catch (err) {
     req.log?.error?.({ err }, "GitHub OAuth callback error");
@@ -441,6 +536,44 @@ router.post("/auth/reset-password", async (req, res): Promise<void> => {
     res.json({ ok: true });
   } catch (err) {
     req.log?.error?.({ err }, "reset-password error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── POST /auth/verify-email ──────────────────────────────────────────────────
+router.post("/auth/verify-email", async (req, res): Promise<void> => {
+  const body = req.body as { token?: unknown };
+  const token = typeof body.token === "string" ? body.token.trim() : "";
+
+  if (!token) {
+    res.status(400).json({ error: "Verification token is required." });
+    return;
+  }
+
+  try {
+    const { rows } = await pool.query<{ id: number; user_id: number; expires_at: Date; used_at: Date | null }>(
+      `SELECT id, user_id, expires_at, used_at FROM email_verification_tokens WHERE token = $1`,
+      [token],
+    );
+    const row = rows[0];
+
+    if (!row || row.used_at || row.expires_at < new Date()) {
+      res.status(400).json({ error: "This verification link is invalid or has expired." });
+      return;
+    }
+
+    await pool.query(
+      `UPDATE users SET email_verified = true, updated_at = NOW() WHERE id = $1`,
+      [row.user_id],
+    );
+    await pool.query(
+      `UPDATE email_verification_tokens SET used_at = NOW() WHERE id = $1`,
+      [row.id],
+    );
+
+    res.json({ ok: true });
+  } catch (err) {
+    req.log?.error?.({ err }, "verify-email error");
     res.status(500).json({ error: "Internal server error" });
   }
 });

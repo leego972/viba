@@ -77,13 +77,78 @@ router.get("/overview", async (req, res): Promise<void> => {
 
 // ─── GET /api/admin/users ─────────────────────────────────────────────────────
 router.get("/users", async (req, res): Promise<void> => {
+  const emailSearch = String(req.query.email ?? "").trim().toLowerCase();
+  const emailClause = emailSearch ? sql` AND LOWER(email) LIKE ${"%" + emailSearch + "%"}` : sql``;
   const rows = await db.execute(
     sql`SELECT id, email, status, stripe_customer_id, stripe_subscription_id,
                right(access_token, 8) AS token_suffix,
                trial_end, current_period_end, created_at, updated_at
-        FROM subscribers ORDER BY created_at DESC LIMIT 500`
+        FROM subscribers WHERE 1=1 ${emailClause} ORDER BY created_at DESC LIMIT 500`
   );
   res.json({ users: rows.rows });
+});
+
+// ─── GET /api/admin/users/:id/credits ────────────────────────────────────────
+router.get("/users/:id/credits", async (req, res): Promise<void> => {
+  const id = safeInt(req.params.id, 0);
+  if (!id) { res.status(400).json({ error: "invalid id" }); return; }
+
+  const userRows = await db.execute(
+    sql`SELECT id, email, credits_remaining, credits_period_end FROM users WHERE id = ${id}`
+  );
+  if (!userRows.rows.length) { res.status(404).json({ error: "user not found" }); return; }
+
+  const txnRows = await db.execute(
+    sql`SELECT id, amount, balance_after, reason, session_id, created_at
+        FROM credit_transactions WHERE user_id = ${id}
+        ORDER BY created_at DESC LIMIT 200`
+  );
+
+  res.json({
+    user: userRows.rows[0],
+    transactions: txnRows.rows,
+  });
+});
+
+// ─── POST /api/admin/users/:id/credits ───────────────────────────────────────
+router.post("/users/:id/credits", requireConfirmation, async (req, res): Promise<void> => {
+  const id = safeInt(req.params.id, 0);
+  if (!id) { res.status(400).json({ error: "invalid id" }); return; }
+
+  const body = req.body as { amount?: unknown; reason?: unknown };
+  const amount = typeof body.amount === "number" ? Math.round(body.amount) : null;
+  const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 200) : "";
+
+  if (amount === null || !Number.isFinite(amount)) {
+    res.status(400).json({ error: "amount (integer) required" });
+    return;
+  }
+  if (!reason) {
+    res.status(400).json({ error: "reason required" });
+    return;
+  }
+
+  // Update credits and record transaction atomically
+  const updated = await db.execute(
+    sql`UPDATE users
+        SET credits_remaining = GREATEST(0, credits_remaining + ${amount}),
+            updated_at = NOW()
+        WHERE id = ${id}
+        RETURNING credits_remaining`
+  );
+  if (!updated.rows.length) { res.status(404).json({ error: "user not found" }); return; }
+
+  const balanceAfter = (updated.rows[0] as { credits_remaining: number }).credits_remaining;
+  await db.execute(
+    sql`INSERT INTO credit_transactions (user_id, amount, balance_after, reason)
+        VALUES (${id}, ${amount}, ${balanceAfter}, ${reason})`
+  );
+
+  req.log.warn(
+    { adminAction: "adjust_credits", targetId: id, amount, reason, balanceAfter },
+    "Admin adjusted user credits",
+  );
+  res.json({ ok: true, balanceAfter });
 });
 
 // ─── POST /api/admin/users/:id/revoke (destructive) ──────────────────────────
@@ -158,6 +223,18 @@ router.delete("/sessions/:id", requireConfirmation, async (req, res): Promise<vo
   await db.execute(sql`DELETE FROM sessions WHERE id = ${id}`);
   req.log.warn({ adminAction: "delete_session", targetId: id }, "Admin deleted session");
   res.json({ ok: true, message: `Session ${id} deleted` });
+});
+
+// ─── POST /api/admin/sessions/:id/abort (force-stop) ─────────────────────────
+router.post("/sessions/:id/abort", requireConfirmation, async (req, res): Promise<void> => {
+  const id = safeInt(req.params.id, 0);
+  if (!id) { res.status(400).json({ error: "invalid id" }); return; }
+
+  await db.execute(
+    sql`UPDATE sessions SET status = 'stopped', updated_at = NOW() WHERE id = ${id}`
+  );
+  req.log.warn({ adminAction: "abort_session", targetId: id }, "Admin force-stopped session");
+  res.json({ ok: true, message: `Session ${id} force-stopped` });
 });
 
 // ─── GET /api/admin/requests ──────────────────────────────────────────────────
@@ -326,8 +403,19 @@ router.get("/logs", async (req, res): Promise<void> => {
   const limit = safeInt(req.query.limit, 100, 500);
   const offset = safeInt(req.query.offset, 0);
   const eventType = String(req.query.type ?? "").trim();
+  const sessionIdFilter = safeInt(req.query.session, 0);
 
-  const whereClause = eventType ? sql`WHERE event_type = ${eventType}` : sql``;
+  // Build WHERE clause supporting both filters
+  let whereClause;
+  if (eventType && sessionIdFilter) {
+    whereClause = sql`WHERE event_type = ${eventType} AND session_id = ${sessionIdFilter}`;
+  } else if (eventType) {
+    whereClause = sql`WHERE event_type = ${eventType}`;
+  } else if (sessionIdFilter) {
+    whereClause = sql`WHERE session_id = ${sessionIdFilter}`;
+  } else {
+    whereClause = sql``;
+  }
 
   const rows = await db.execute(
     sql`SELECT id, session_id, event_type, description, metadata, created_at
