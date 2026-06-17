@@ -53,7 +53,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
       <AppLayout>
         <div className="p-6 max-w-5xl mx-auto space-y-8">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Bridge Connections</h1>
+            <h1 className="text-2xl font-bold tracking-tight">AI Provider Connections</h1>
             <p className="text-sm text-muted-foreground mt-1">
               Live status of all AI provider connections and circuit breakers.
             </p>

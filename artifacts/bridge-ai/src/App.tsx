@@ -1,9 +1,9 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { useEffect, type ReactNode } from "react";
+import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { AccessGate } from "@/components/AccessGate";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import Dashboard from "@/pages/dashboard";
@@ -15,46 +15,113 @@ import Bridge from "@/pages/bridge";
 import Pricing from "@/pages/pricing";
 import CheckoutSuccess from "@/pages/checkout-success";
 import Admin from "@/pages/admin";
-import { initAuth } from "@/lib/auth";
-
-// Register the stored access token as the bearer for every API request
-initAuth();
+import LoginPage from "@/pages/login";
+import SignUpPage from "@/pages/signup";
+import Billing from "@/pages/billing";
+import { useAuth } from "@/hooks/useAuth";
+import { isBypassValid, setBypassValid } from "@/lib/auth";
 
 const queryClient = new QueryClient();
 
-function GatedRouter() {
+function Spinner() {
   return (
-    <Switch>
-      <Route path="/" component={Home} />
-      <Route path="/dashboard" component={Dashboard} />
-      <Route path="/sessions/new" component={NewSession} />
-      <Route path="/sessions/:id" component={SessionWorkspace} />
-      <Route path="/settings" component={Settings} />
-      <Route path="/workbench" component={Workbench} />
-      <Route path="/bridge" component={Bridge} />
-      <Route component={NotFound} />
-    </Switch>
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="flex items-center gap-3 text-muted-foreground">
+        <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+        </svg>
+        <span className="text-sm">Loading…</span>
+      </div>
+    </div>
   );
 }
 
+function AuthGuard({ children }: { children: ReactNode }) {
+  const [, setLocation] = useLocation();
+  const { isAuthenticated, isLoading } = useAuth();
+
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated && !isBypassValid()) {
+      setLocation("/login");
+    }
+  }, [isLoading, isAuthenticated, setLocation]);
+
+  // Archibald Titan AI embedded bypass — skip auth entirely
+  if (isBypassValid()) return <>{children}</>;
+
+  if (isLoading) return <Spinner />;
+
+  if (!isAuthenticated) return <Spinner />;
+
+  return <>{children}</>;
+}
+
+function GatedRouter() {
+  return (
+    <AuthGuard>
+      <Switch>
+        <Route path="/" component={Home} />
+        <Route path="/dashboard" component={Dashboard} />
+        <Route path="/sessions/new" component={NewSession} />
+        <Route path="/sessions/:id" component={SessionWorkspace} />
+        <Route path="/settings" component={Settings} />
+        <Route path="/billing" component={Billing} />
+        <Route path="/workbench" component={Workbench} />
+        <Route path="/bridge" component={Bridge} />
+        <Route component={NotFound} />
+      </Switch>
+    </AuthGuard>
+  );
+}
+
+// Handles ?bypass= param at app startup (Archibald Titan AI embed)
+function BypassHandler() {
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const bypassParam = urlParams.get("bypass");
+    if (!bypassParam || isBypassValid()) return;
+
+    fetch("/api/auth/verify-bypass", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ token: bypassParam }),
+    })
+      .then(async (res) => {
+        if (res.ok) {
+          setBypassValid();
+          const cleanUrl = window.location.pathname + window.location.hash;
+          window.history.replaceState(null, "", cleanUrl);
+          // Force re-render so AuthGuard picks up the new bypass state
+          queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  return null;
+}
+
 function App() {
+  const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+        <WouterRouter base={basePath}>
+          <BypassHandler />
           <ErrorBoundary>
             <Switch>
-              {/* Public / self-authenticated routes — bypass AccessGate entirely */}
+              {/* Public routes */}
+              <Route path="/login" component={LoginPage} />
+              <Route path="/signup" component={SignUpPage} />
               <Route path="/pricing" component={Pricing} />
               <Route path="/checkout/success" component={CheckoutSuccess} />
-              {/* Admin — self-gated by ADMIN_TOKEN, never behind AccessGate */}
+              {/* Admin — self-gated by ADMIN_TOKEN, no session required */}
               <Route path="/admin" component={Admin} />
-              {/* All other routes — gated by AccessGate */}
-              <Route>
-                <AccessGate>
-                  <GatedRouter />
-                </AccessGate>
-              </Route>
+              {/* All other routes — gated by AuthGuard */}
+              <Route component={GatedRouter} />
             </Switch>
           </ErrorBoundary>
         </WouterRouter>

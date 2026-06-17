@@ -2,15 +2,22 @@ import express, { type Express, type ErrorRequestHandler } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import pinoHttp from "pino-http";
+import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
 import path from "path";
 import { existsSync } from "fs";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { createRateLimiter } from "./middlewares/rateLimiter";
-import { accessTokenMiddleware } from "./middlewares/accessToken";
+import { requireSession } from "./middlewares/requireSession";
 import { requireAdmin } from "./middlewares/adminAuth";
 import { webhookHandler } from "./routes/stripeWebhook";
 import adminRouter from "./routes/admin";
+import { pool } from "@workspace/db";
+import { getBillingStatus, deductCredits, isStripeConfigured } from "./lib/billing";
+import { sendCreditsExhaustedReminder } from "./lib/billingEmail";
+
+const PgStore = connectPgSimple(session);
 
 const app: Express = express();
 
@@ -54,6 +61,32 @@ app.use(
   }),
 );
 
+// ─── Session middleware ────────────────────────────────────────────────────────
+// Must be before body parsers and route handlers.
+// Sessions are stored in PostgreSQL via connect-pg-simple.
+const isProd = process.env.NODE_ENV === "production";
+app.use(
+  session({
+    store: new PgStore({
+      pool,
+      tableName: "user_sessions",
+      createTableIfMissing: true,
+    }),
+    name: "viba.sid",
+    secret: process.env.SESSION_SECRET ?? "dev-secret-change-me-in-production",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      secure: isProd,
+      // sameSite: "none" allows the cookie to be sent in cross-site iframe contexts
+      // (Archibald Titan AI embeds VIBA via iframe). Requires secure: true in prod.
+      sameSite: isProd ? "none" : "lax",
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+    },
+  }),
+);
+
 // ─── Rate limiters ────────────────────────────────────────────────────────────
 
 // General: 300 req/min per IP across all /api routes
@@ -89,19 +122,6 @@ app.post(
 // This route fires HTTP webhooks and SMTP emails; rate-limit tightly to prevent abuse.
 app.post("/api/stats/test-notification", notificationLimiter);
 
-// ─── Exempt paths — bypass ACCESS_TOKEN gate ─────────────────────────────────
-// These paths must be reachable before the user has a token (bootstrap + subscription flow).
-const AUTH_EXEMPT_PATHS = new Set([
-  "/auth/config",
-  "/auth/verify",
-  "/auth/verify-bypass",
-  "/stripe/config",
-  "/stripe/checkout",
-  "/stripe/subscription",
-  "/stripe/portal",
-  "/healthz",
-]);
-
 // ─── Request logging ──────────────────────────────────────────────────────────
 app.use(
   pinoHttp({
@@ -129,19 +149,96 @@ app.use(express.urlencoded({ limit: "512kb", extended: true }));
 
 // ─── Route-specific middleware ────────────────────────────────────────────────
 
-// AI session execution: 30 req/min
-app.use("/api/sessions", agentLimiter);
+// AI session execution: 30 req/min — ONLY on expensive run endpoints.
+// All other /api/sessions/* reads (messages, tasks, agents, stream, etc.) are
+// covered by the general apiLimiter below and must NOT get 429s under normal UI traffic.
+app.post("/api/sessions/:id/run-next", agentLimiter);
+app.post("/api/sessions/:id/run-full", agentLimiter);
 
-// Admin panel: ADMIN_TOKEN required — completely separate from ACCESS_TOKEN
+// Admin panel: ADMIN_TOKEN required — completely separate from session auth
 app.use("/api/admin", apiLimiter, requireAdmin, adminRouter);
 
-// All other /api routes: general rate limit + optional ACCESS_TOKEN gate
+// ─── Credit gate — AI execution endpoints ─────────────────────────────────────
+// Checks subscription status and deducts 1 credit per run.
+// Bypass users (Archibald embed) and unconfigured Stripe skip this gate.
+// Service is SUSPENDED (402) when:
+//   - No active subscription (canceled / none)
+//   - Credits have run out (past the top of a billing period with no top-up)
+// User data is NEVER deleted due to payment issues — only access is suspended.
+app.use(
+  ["/api/sessions/:id/run-next", "/api/sessions/:id/run-full"],
+  async (req, res, next): Promise<void> => {
+    // Archibald Titan AI embedded bypass — unlimited access
+    if (req.session?.bypass) { next(); return; }
+
+    const userId = req.session?.userId;
+    if (!userId) { next(); return; } // requireSession handles the auth 401
+
+    if (!isStripeConfigured()) { next(); return; } // No Stripe → open access
+
+    try {
+      const { subscriptionStatus } = await getBillingStatus(userId);
+
+      // Suspended states — service halted until resubscription
+      if (subscriptionStatus === "canceled" || subscriptionStatus === "none") {
+        res.status(402).json({
+          error: "subscription_required",
+          message: "An active VIBA membership is required. Visit /pricing to subscribe.",
+          subscriptionUrl: "/pricing",
+        });
+        return;
+      }
+
+      // Atomically deduct 1 credit — returns false when balance is already 0
+      const deducted = await deductCredits(userId, 1);
+      if (!deducted) {
+        // Fire-and-forget email reminder (throttled to once per 24 h)
+        sendCreditsExhaustedReminder(userId).catch(() => {});
+        res.status(402).json({
+          error: "out_of_credits",
+          message: "You've used all your credits for this period. Top up to continue.",
+          topUpUrl: "/billing",
+        });
+        return;
+      }
+
+      next();
+    } catch (err) {
+      logger.error({ err }, "Credit gate error — failing open to avoid blocking users");
+      next(); // Fail open — billing errors must not block legitimate users
+    }
+  },
+);
+
+// ─── Auth-exempt paths — no session required ──────────────────────────────────
+// These paths must be reachable before the user has authenticated:
+// login / register / oauth flows, stripe checkout, bypass, healthcheck.
+const AUTH_EXEMPT_PATHS = new Set([
+  "/auth/config",
+  "/auth/verify-bypass",
+  "/auth/login",
+  "/auth/register",
+  "/auth/logout",
+  "/auth/me",
+  "/auth/google",
+  "/auth/google/callback",
+  "/auth/github",
+  "/auth/github/callback",
+  "/stripe/config",
+  "/stripe/checkout",
+  "/stripe/subscription",
+  "/stripe/portal",
+  "/billing/plans", // Public — pricing page reads this without auth
+  "/healthz",
+]);
+
+// All other /api routes: general rate limit + session gate
 app.use(
   "/api",
   apiLimiter,
   (req, res, next) => {
     if (AUTH_EXEMPT_PATHS.has(req.path)) { next(); return; }
-    accessTokenMiddleware(req, res, next);
+    requireSession(req, res, next);
   },
   router,
 );

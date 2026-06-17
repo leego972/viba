@@ -1,6 +1,15 @@
 import nodemailer from "nodemailer";
 import { logger } from "../logger";
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;");
+}
+
 export async function sendAccessTokenEmail(
   to: string,
   accessToken: string,
@@ -17,6 +26,8 @@ export async function sendAccessTokenEmail(
   }
 
   const vibaUrl = process.env["VIBA_PUBLIC_URL"] ?? "https://viba.guru";
+  const safeAccessToken = escapeHtml(accessToken);
+  const safeVibaUrl = escapeHtml(vibaUrl);
   const subject = "Your VIBA Access Token";
 
   const text = [
@@ -41,15 +52,15 @@ export async function sendAccessTokenEmail(
   <h2 style="color:#2563eb">Welcome to VIBA</h2>
   <p>Your subscription is active. Here is your access token:</p>
   <div style="background:#f3f4f6;border-radius:8px;padding:16px 20px;margin:16px 0;text-align:center;border:1px solid #e5e7eb">
-    <code style="font-size:15px;word-break:break-all;color:#1d4ed8;letter-spacing:0.03em">${accessToken}</code>
+    <code style="font-size:15px;word-break:break-all;color:#1d4ed8;letter-spacing:0.03em">${safeAccessToken}</code>
   </div>
   <ol style="padding-left:20px;line-height:1.8">
-    <li>Visit <a href="${vibaUrl}">${vibaUrl}</a></li>
+    <li>Visit <a href="${safeVibaUrl}">${safeVibaUrl}</a></li>
     <li>Enter your access token when prompted</li>
     <li>Connect your AI providers and start collaborating</li>
   </ol>
   <p style="margin-top:20px">
-    <a href="${vibaUrl}/pricing" style="color:#2563eb;text-decoration:none">Manage your subscription →</a>
+    <a href="${safeVibaUrl}/pricing" style="color:#2563eb;text-decoration:none">Manage your subscription →</a>
   </p>
   <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0"/>
   <p style="color:#6b7280;font-size:12px">

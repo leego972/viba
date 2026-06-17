@@ -12,6 +12,8 @@ import { processPendingQuestions, persistOutboundQuestions, persistAnswers } fro
 const APPROVAL_TASK_TYPES = new Set(["final_qa"]);
 const MAX_TURNS = 12;
 const RETRY_DELAY_MS = 1_500;
+const LIVE_STEP_TIMEOUT_MS = 120_000; // 2 min for live API calls
+const SIM_STEP_TIMEOUT_MS  = 30_000;  // 30 s for simulation steps
 
 async function logAudit(sessionId: number, eventType: string, description: string, metadata?: Record<string, unknown>) {
   await db.insert(auditLogsTable).values({
@@ -134,41 +136,110 @@ export async function runNextAgentStep(sessionId: number): Promise<{
 
   const [memory] = await db.select().from(memoryTable).where(eq(memoryTable.sessionId, sessionId));
 
-  // Fetch pending questions directed at this agent (task-scoped)
+  // Fetch pending questions directed at this agent — strictly scoped to this task
   const pendingQuestions = await processPendingQuestions(sessionId, assignedAgent.id);
 
-  // Build adapter — mock adapters inherit canUseTools from their class
-  const retryOutcome = await runAdapterWithRetry({
-    buildLiveAdapter: () => buildAdapter(assignedAgent),
-    buildFallbackAdapter: () => buildMockAdapter(assignedAgent),
-    taskInput: {
-      systemRole: assignedAgent.role,
-      projectGoal: session.goal,
-      memorySummary: memory?.summary ?? "",
-      taskInstruction: nextTask.description || nextTask.title,
-      previousMessages: recentMessages.map((m) => ({
-        role: m.role,
-        content: m.content,
-        agentName: m.agentName ?? undefined,
-      })),
-      taskType: nextTask.type,
-      canUseTools: assignedAgent.canUseTools,
-      repoUrl: session.repoUrl ?? undefined,
-      repoBranch: session.repoBranch ?? undefined,
-      workspaceEnv: session.workspaceEnv ?? undefined,
-      pendingQuestions,
-    },
-    retryDelayMs: RETRY_DELAY_MS,
-    logAudit: (eventType, description, metadata) =>
-      logAudit(sessionId, eventType, description, metadata),
-    context: {
+  // Emit a "running" audit event on every poll cycle so the session feed shows live progress
+  const onPollCycle = (info: { attempt: number; maxAttempts: number; status: string; elapsedMs: number }) => {
+    void logAudit(
       sessionId,
-      agentId: assignedAgent.id,
-      provider: assignedAgent.provider,
-      taskId: nextTask.id,
-      taskTitle: nextTask.title,
-    },
+      "agent_running",
+      `${assignedAgent.name} is executing (poll ${info.attempt + 1}/${info.maxAttempts}, status: ${info.status}, elapsed: ${Math.round(info.elapsedMs / 1000)}s)`,
+      {
+        taskId: nextTask.id,
+        agentId: assignedAgent.id,
+        attempt: info.attempt,
+        maxAttempts: info.maxAttempts,
+        status: info.status,
+        elapsedMs: info.elapsedMs,
+      },
+    );
+  };
+
+  // Build adapter — mock adapters inherit canUseTools from their class
+  const stepTimeoutMs = assignedAgent.isMock ? SIM_STEP_TIMEOUT_MS : LIVE_STEP_TIMEOUT_MS;
+  let stepTimeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  const stepTimeoutRace = new Promise<never>((_, reject) => {
+    stepTimeoutHandle = setTimeout(
+      () => reject(new Error("STEP_TIMEOUT")),
+      stepTimeoutMs,
+    );
   });
+
+  let retryOutcome: Awaited<ReturnType<typeof runAdapterWithRetry>>;
+  try {
+    retryOutcome = await Promise.race([
+      runAdapterWithRetry({
+        buildLiveAdapter: () => buildAdapter(assignedAgent),
+        buildFallbackAdapter: () => buildMockAdapter(assignedAgent),
+        taskInput: {
+          systemRole: assignedAgent.role,
+          projectGoal: session.goal,
+          memorySummary: memory?.summary ?? "",
+          taskInstruction: nextTask.description || nextTask.title,
+          previousMessages: recentMessages.map((m) => ({
+            role: m.role,
+            content: m.content,
+            agentName: m.agentName ?? undefined,
+          })),
+          taskType: nextTask.type,
+          canUseTools: assignedAgent.canUseTools,
+          repoUrl: session.repoUrl ?? undefined,
+          repoBranch: session.repoBranch ?? undefined,
+          workspaceEnv: session.workspaceEnv ?? undefined,
+          pendingQuestions,
+          onPollCycle,
+        },
+        retryDelayMs: RETRY_DELAY_MS,
+        logAudit: (eventType, description, metadata) =>
+          logAudit(sessionId, eventType, description, metadata),
+        context: {
+          sessionId,
+          agentId: assignedAgent.id,
+          provider: assignedAgent.provider,
+          taskId: nextTask.id,
+          taskTitle: nextTask.title,
+        },
+      }),
+      stepTimeoutRace,
+    ]);
+  } catch (err) {
+    if (err instanceof Error && err.message === "STEP_TIMEOUT") {
+      // Reset the task so it can be retried on the next run-next call
+      await db
+        .update(tasksTable)
+        .set({ status: "planned", assignedAgentId: null })
+        .where(eq(tasksTable.id, nextTask.id));
+      const [timeoutMsg] = await db
+        .insert(messagesTable)
+        .values({
+          sessionId,
+          role: "assistant",
+          agentId: assignedAgent.id,
+          agentName: assignedAgent.name,
+          provider: assignedAgent.provider,
+          content: `⏱ Step timed out after ${stepTimeoutMs / 1000}s — task reset and queued for retry.`,
+          messageType: "context",
+          taskId: nextTask.id,
+        })
+        .returning();
+      await logAudit(
+        sessionId,
+        "step_timeout",
+        `Step timed out for ${assignedAgent.name} on "${nextTask.title}"`,
+        { taskId: nextTask.id, agentId: assignedAgent.id, timeoutMs: stepTimeoutMs },
+      );
+      return {
+        newMessages: timeoutMsg ? [timeoutMsg] : [],
+        updatedTasks: [],
+        approvalRequired: false,
+        approval: null,
+      };
+    }
+    throw err;
+  } finally {
+    clearTimeout(stepTimeoutHandle);
+  }
 
   let result: AgentTaskResult = retryOutcome.result;
   const usedFallback = retryOutcome.usedFallback;
@@ -219,6 +290,17 @@ export async function runNextAgentStep(sessionId: number): Promise<{
 
   // ── Normal completion path ─────────────────────────────────────────────────
 
+  // Build message metadata — include tool outputs when present
+  const messageMetadata: Record<string, unknown> = {};
+  if (result.toolOutputs && result.toolOutputs.length > 0) {
+    messageMetadata.toolOutputs = result.toolOutputs;
+    await logAudit(sessionId, "tool_outputs_persisted", `${assignedAgent.name} produced ${result.toolOutputs.length} tool output(s)`, {
+      taskId: nextTask.id,
+      agentId: assignedAgent.id,
+      outputTypes: result.toolOutputs.map((o) => o.type),
+    });
+  }
+
   // Save the main output message
   const [newMsg] = await db
     .insert(messagesTable)
@@ -233,6 +315,7 @@ export async function runNextAgentStep(sessionId: number): Promise<{
       agentName: assignedAgent.name,
       agentRole: assignedAgent.role,
       messageType: "output",
+      metadata: Object.keys(messageMetadata).length > 0 ? messageMetadata : undefined,
     })
     .returning();
 

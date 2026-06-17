@@ -14,11 +14,15 @@ import {
 } from "@workspace/db";
 import {
   CreateSessionBody,
+  UpdateSessionParams,
+  UpdateSessionBody,
   GetSessionParams,
   RunNextStepParams,
   RunFullWorkflowParams,
   SendMessageParams,
   SendMessageBody,
+  AnswerQuestionParams,
+  AnswerQuestionBody,
   ApproveActionParams,
   ApproveActionBody,
   StopSessionParams,
@@ -33,6 +37,18 @@ import { runNextAgentStep, runFullWorkflow } from "../lib/agentLoop";
 import { determineTaskSequence, autoAssignRoles } from "../lib/taskRouter";
 
 const router: IRouter = Router();
+
+/**
+ * Extracts toolOutputs from the metadata JSONB field and surfaces it as a top-level
+ * property on the message object, matching the OpenAPI contract.
+ * The agentLoop persists tool outputs inside metadata.toolOutputs; the API contract
+ * exposes them as message.toolOutputs for the frontend to render as rich cards.
+ */
+function formatMessage(msg: typeof messagesTable.$inferSelect): typeof messagesTable.$inferSelect & { toolOutputs: unknown[] | null } {
+  const meta = msg.metadata as Record<string, unknown> | null;
+  const toolOutputs = Array.isArray(meta?.["toolOutputs"]) ? (meta["toolOutputs"] as unknown[]) : null;
+  return { ...msg, toolOutputs };
+}
 
 /** Recursively converts Date objects to ISO strings for JSON serialization */
 function serialize<T>(val: T): T {
@@ -165,10 +181,10 @@ router.post("/sessions", async (req, res): Promise<void> => {
     return;
   }
 
-  const { goal, autonomyMode, agents } = parsed.data;
-  const repoUrl = typeof req.body?.repoUrl === "string" ? req.body.repoUrl.trim() || null : null;
-  const repoBranch = typeof req.body?.repoBranch === "string" ? req.body.repoBranch.trim() || null : null;
-  const workspaceEnv = typeof req.body?.workspaceEnv === "string" ? req.body.workspaceEnv.trim() || null : null;
+  const { goal, autonomyMode, agents, repoUrl: rawRepoUrl, repoBranch: rawRepoBranch, workspaceEnv: rawWorkspaceEnv } = parsed.data;
+  const repoUrl = typeof rawRepoUrl === "string" ? rawRepoUrl.trim() || null : null;
+  const repoBranch = typeof rawRepoBranch === "string" ? rawRepoBranch.trim() || null : null;
+  const workspaceEnv = typeof rawWorkspaceEnv === "string" ? rawWorkspaceEnv.trim() || null : null;
 
   const allMock = agents.every((a) => a.isMock);
   const noneMock = agents.every((a) => !a.isMock);
@@ -257,10 +273,9 @@ router.get("/sessions/:id", async (req, res): Promise<void> => {
 
   const agentRows = await db.select().from(agentsTable).where(eq(agentsTable.sessionId, session.id));
   const agents = await withActiveModels(agentRows);
-  const agentNameMap = new Map(agentRows.map(a => [a.id, a.name ?? '']));
   const tasks = await db.select().from(tasksTable).where(eq(tasksTable.sessionId, session.id)).orderBy(asc(tasksTable.id));
   const rawMessages = await db.select().from(messagesTable).where(eq(messagesTable.sessionId, session.id)).orderBy(asc(messagesTable.id));
-  const messages = rawMessages.map(m => ({ ...m, toAgentName: m.toAgentId != null ? agentNameMap.get(m.toAgentId) ?? null : null }));
+  const messages = rawMessages.map(formatMessage);
   const [memory] = await db.select().from(memoryTable).where(eq(memoryTable.sessionId, session.id));
   const approvals = await db.select().from(approvalsTable).where(eq(approvalsTable.sessionId, session.id));
 
@@ -272,6 +287,47 @@ router.get("/sessions/:id", async (req, res): Promise<void> => {
     memory: memory ?? null,
     approvals,
   }));
+});
+
+// PATCH /sessions/:id — update workspace context fields (repoUrl, repoBranch, workspaceEnv)
+router.patch("/sessions/:id", async (req, res): Promise<void> => {
+  const params = UpdateSessionParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const [session] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, params.data.id));
+  if (!session) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  const parsed = UpdateSessionBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  // Build only the keys that were explicitly sent in the request body
+  const updateData: Record<string, string | null> = {};
+  if ("repoUrl" in req.body) updateData.repoUrl = parsed.data.repoUrl ?? null;
+  if ("repoBranch" in req.body) updateData.repoBranch = parsed.data.repoBranch ?? null;
+  if ("workspaceEnv" in req.body) updateData.workspaceEnv = parsed.data.workspaceEnv ?? null;
+
+  if (Object.keys(updateData).length === 0) {
+    res.json(serialize(await withAgentModes(session)));
+    return;
+  }
+
+  const [updated] = await db
+    .update(sessionsTable)
+    .set(updateData)
+    .where(eq(sessionsTable.id, params.data.id))
+    .returning();
+
+  await logAudit(params.data.id, "session_updated", "Workspace context updated", { changes: updateData });
+  res.json(serialize(updated ? await withAgentModes(updated) : await withAgentModes(session)));
 });
 
 // DELETE /sessions/:id
@@ -312,7 +368,7 @@ router.post("/sessions/:id/run-next", async (req, res): Promise<void> => {
 
   res.json(serialize({
     session: updatedSession ? await withAgentModes(updatedSession) : updatedSession,
-    newMessages: result.newMessages,
+    newMessages: result.newMessages.map(formatMessage),
     updatedTasks: result.updatedTasks,
     approvalRequired: result.approvalRequired,
     approval: result.approval,
@@ -339,7 +395,7 @@ router.post("/sessions/:id/run-full", async (req, res): Promise<void> => {
 
   res.json(serialize({
     session: updatedSession ? await withAgentModes(updatedSession) : updatedSession,
-    newMessages: result.newMessages,
+    newMessages: result.newMessages.map(formatMessage),
     updatedTasks: result.updatedTasks,
     approvalRequired: result.approvalRequired,
     approval: result.approval,
@@ -382,6 +438,66 @@ router.post("/sessions/:id/message", async (req, res): Promise<void> => {
     .returning();
 
   res.status(201).json(serialize(message));
+});
+
+// POST /sessions/:id/messages/:messageId/answer — user answers an agent's question directed at them
+router.post("/sessions/:id/messages/:messageId/answer", async (req, res): Promise<void> => {
+  const params = AnswerQuestionParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const body = AnswerQuestionBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+
+  const [session] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, params.data.id));
+  if (!session) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  const [questionMsg] = await db
+    .select()
+    .from(messagesTable)
+    .where(
+      and(
+        eq(messagesTable.sessionId, params.data.id),
+        eq(messagesTable.id, params.data.messageId),
+      ),
+    );
+
+  if (!questionMsg) {
+    res.status(404).json({ error: "Question message not found" });
+    return;
+  }
+
+  if (questionMsg.messageType !== "question") {
+    res.status(400).json({ error: "Referenced message is not a question" });
+    return;
+  }
+
+  // Store the answer linked to the original question's taskId so it appears in the same thread
+  const [answer] = await db
+    .insert(messagesTable)
+    .values({
+      sessionId: params.data.id,
+      agentId: null,
+      role: "user",
+      provider: null,
+      content: body.data.content,
+      taskId: questionMsg.taskId,
+      agentName: "User",
+      agentRole: "Human",
+      messageType: "answer",
+      metadata: { questionMessageId: params.data.messageId },
+    })
+    .returning();
+
+  res.status(201).json(serialize(answer));
 });
 
 // POST /sessions/:id/approve
@@ -471,12 +587,11 @@ router.get("/sessions/:id/stream", async (req, res): Promise<void> => {
 
       const agentRows = await db.select().from(agentsTable).where(eq(agentsTable.sessionId, sessionId));
       const agents = await withActiveModels(agentRows);
-      const agentNameMap = new Map(agentRows.map(a => [a.id, a.name ?? '']));
       const rawMessages = await db
         .select().from(messagesTable)
         .where(eq(messagesTable.sessionId, sessionId))
         .orderBy(asc(messagesTable.id));
-      const messages = rawMessages.map(m => ({ ...m, toAgentName: m.toAgentId != null ? agentNameMap.get(m.toAgentId) ?? null : null }));
+      const messages = rawMessages.map(formatMessage);
       const tasks = await db
         .select().from(tasksTable)
         .where(eq(tasksTable.sessionId, sessionId))
@@ -548,13 +663,10 @@ router.get("/sessions/:id/messages", async (req, res): Promise<void> => {
     return;
   }
   const msgTypeFilter = typeof req.query["type"] === "string" ? req.query["type"] : undefined;
-  const msgAgentRows = await db.select().from(agentsTable).where(eq(agentsTable.sessionId, params.data.id));
-  const msgAgentNameMap = new Map(msgAgentRows.map(a => [a.id, a.name ?? '']));
-  const rawMsgRows = msgTypeFilter
+  const rawMessages = msgTypeFilter
     ? await db.select().from(messagesTable).where(and(eq(messagesTable.sessionId, params.data.id), eq(messagesTable.messageType, msgTypeFilter))).orderBy(asc(messagesTable.id))
     : await db.select().from(messagesTable).where(eq(messagesTable.sessionId, params.data.id)).orderBy(asc(messagesTable.id));
-  const messages = rawMsgRows.map(m => ({ ...m, toAgentName: m.toAgentId != null ? msgAgentNameMap.get(m.toAgentId) ?? null : null }));
-  res.json(serialize(messages));
+  res.json(serialize(rawMessages.map(formatMessage)));
 });
 
 // GET /sessions/:id/memory

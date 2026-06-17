@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
+import crypto from "node:crypto";
 
 const TOKEN = process.env["ACCESS_TOKEN"]?.trim() || null;
 
@@ -11,12 +12,24 @@ export function isAccessTokenConfigured(): boolean {
 }
 
 /**
+ * Timing-safe string comparison — prevents timing attacks on token values.
+ */
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) {
+    // Still do a dummy comparison to avoid length-based timing leaks
+    crypto.timingSafeEqual(Buffer.from(a), Buffer.from(a));
+    return false;
+  }
+  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
+
+/**
  * Validates a candidate token string against ACCESS_TOKEN.
  * When no token is configured, every candidate is accepted (open mode).
  */
 export function validateToken(candidate: string): boolean {
   if (!TOKEN) return true;
-  return candidate === TOKEN;
+  return timingSafeEqual(candidate, TOKEN);
 }
 
 /**
@@ -51,7 +64,7 @@ export function accessTokenMiddleware(
     provided = xToken.trim();
   }
 
-  if (!provided || provided !== TOKEN) {
+  if (!provided || !timingSafeEqual(provided, TOKEN)) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }

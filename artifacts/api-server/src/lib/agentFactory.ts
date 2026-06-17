@@ -47,7 +47,7 @@ export async function buildAdapter(agent: Agent): Promise<AgentAdapter> {
     const apiKey = await getSetting("OPENAI_API_KEY") ?? process.env["OPENAI_API_KEY"] ?? "";
     if (isValidKey(apiKey)) {
       const model = await getSetting("OPENAI_MODEL") ?? undefined;
-      return new OpenAIAdapter(String(agent.id), agent.name, agent.role, apiKey, model);
+      return new OpenAIAdapter(String(agent.id), agent.name, agent.role, apiKey, model, agent.canUseTools);
     }
     logger.warn({ provider }, "No OpenAI API key found — using simulation mode");
     return new ChatGPTMockAdapter(String(agent.id), agent.name, agent.role);
@@ -57,7 +57,7 @@ export async function buildAdapter(agent: Agent): Promise<AgentAdapter> {
     const apiKey = await getSetting("ANTHROPIC_API_KEY") ?? process.env["ANTHROPIC_API_KEY"] ?? "";
     if (isValidKey(apiKey)) {
       const model = await getSetting("ANTHROPIC_MODEL") ?? undefined;
-      return new AnthropicAdapter(String(agent.id), agent.name, agent.role, apiKey, model);
+      return new AnthropicAdapter(String(agent.id), agent.name, agent.role, apiKey, model, agent.canUseTools);
     }
     logger.warn({ provider }, "No Anthropic API key found — using simulation mode");
     return new ClaudeMockAdapter(String(agent.id), agent.name, agent.role);
@@ -67,7 +67,7 @@ export async function buildAdapter(agent: Agent): Promise<AgentAdapter> {
     const apiKey = await getSetting("GEMINI_API_KEY") ?? process.env["GEMINI_API_KEY"] ?? "";
     if (isValidKey(apiKey)) {
       const model = await getSetting("GEMINI_MODEL") ?? undefined;
-      return new GeminiAdapter(String(agent.id), agent.name, agent.role, apiKey, model);
+      return new GeminiAdapter(String(agent.id), agent.name, agent.role, apiKey, model, agent.canUseTools);
     }
     logger.warn({ provider }, "No Gemini API key found — using simulation mode");
     return new GeminiMockAdapter(String(agent.id), agent.name, agent.role);
@@ -77,7 +77,7 @@ export async function buildAdapter(agent: Agent): Promise<AgentAdapter> {
     const apiKey = await getSetting("PERPLEXITY_API_KEY") ?? process.env["PERPLEXITY_API_KEY"] ?? "";
     if (isValidKey(apiKey)) {
       const model = await getSetting("PERPLEXITY_MODEL") ?? undefined;
-      return new PerplexityAdapter(String(agent.id), agent.name, agent.role, apiKey, model);
+      return new PerplexityAdapter(String(agent.id), agent.name, agent.role, apiKey, model, agent.canUseTools);
     }
     logger.warn({ provider }, "No Perplexity API key found — using simulation mode");
     return new PerplexityMockAdapter(String(agent.id), agent.name, agent.role);

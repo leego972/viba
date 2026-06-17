@@ -7,6 +7,7 @@ import {
   useGetCircuitStatus,
   useDeleteCircuitStatus,
   useDeleteSession,
+  useListGithubRepos,
   getListSessionsQueryKey,
   getGetCircuitStatusQueryKey,
   type AgentModeSummary,
@@ -34,13 +35,27 @@ import {
   Wifi, WifiOff, AlertTriangle, TrendingDown, Search, Trash2,
   ShieldCheck, ShieldAlert, ShieldOff, RefreshCw, DatabaseZap,
   Bell, Mail, Webhook, Settings2, HelpCircle, User, ExternalLink,
-  Brain, ChevronRight,
+  Brain, ChevronRight, GitBranch, Github, Lock,
 } from "lucide-react";
 import { format, subDays } from "date-fns";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
 import { useToast } from "@/hooks/use-toast";
+
+function shortRepoName(url: string): string {
+  try {
+    return new URL(url).pathname.replace(/^\//, "").replace(/\.git$/, "");
+  } catch {
+    return url;
+  }
+}
+
+const ENV_BADGE_STYLES: Record<string, string> = {
+  production: "bg-red-500/10 text-red-400 border-red-500/30",
+  staging: "bg-amber-500/10 text-amber-400 border-amber-500/30",
+  development: "bg-blue-500/10 text-blue-400 border-blue-500/30",
+};
 
 function formatMsRemaining(ms: number | null): string {
   if (ms === null || ms <= 0) return "now";
@@ -217,6 +232,7 @@ export default function Dashboard() {
   const { data: circuitData, dataUpdatedAt: circuitUpdatedAt } = useGetCircuitStatus({
     query: { queryKey: getGetCircuitStatusQueryKey(), refetchInterval: 10_000 },
   });
+  const { data: githubRepos } = useListGithubRepos({ query: { retry: false } as never });
   const circuitEntries: CircuitBreakerEntry[] = circuitData?.entries ?? [];
   const circuitLastLoadedAt: CircuitStatusResponse["lastLoadedAt"] = circuitData?.lastLoadedAt ?? null;
   const circuitRestoredCount: number = circuitData?.restoredCount ?? 0;
@@ -224,6 +240,7 @@ export default function Dashboard() {
   const queryClient = useQueryClient();
 
   const [search, setSearch] = useState("");
+  const [repoSearch, setRepoSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [resettingProvider, setResettingProvider] = useState<string | null>(null);
   const [sessionToDelete, setSessionToDelete] = useState<{ id: number; goal?: string | null } | null>(null);
@@ -271,7 +288,10 @@ export default function Dashboard() {
   };
 
   const filteredSessions = (sessions ?? []).filter(s => {
-    const matchesSearch = search.trim() === "" || s.goal?.toLowerCase().includes(search.toLowerCase());
+    const q = search.toLowerCase().trim();
+    const matchesSearch = q === "" ||
+      (s.goal?.toLowerCase().includes(q) ?? false) ||
+      (s.repoUrl ? shortRepoName(s.repoUrl).toLowerCase().includes(q) : false);
     const matchesStatus = statusFilter === "all" || s.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -381,65 +401,102 @@ export default function Dashboard() {
           </Link>
         </div>
 
-        {/* ── Quick actions ── */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            {
-              href: "/sessions/new",
-              icon: Plus,
-              label: "New Session",
-              sub: "Start collaboration",
-              accent: true,
-            },
-            {
-              href: "/workbench",
-              icon: Brain,
-              label: "Workbench",
-              sub: "AI task analysis",
-              accent: false,
-            },
-            {
-              href: "/settings",
-              icon: Settings2,
-              label: "Configure APIs",
-              sub: "Manage API keys",
-              accent: false,
-            },
-          ].map(({ href, icon: Icon, label, sub, accent }) => (
-            <Link href={href} key={label}>
-              <div className={`flex flex-col items-center gap-2.5 rounded-xl border p-4 cursor-pointer transition-all h-full text-center group ${
-                accent
-                  ? "border-primary/40 bg-primary/5 hover:bg-primary/10"
-                  : "hover:border-primary/30 hover:bg-primary/5"
-              }`}>
-                <div className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${
-                  accent
-                    ? "bg-primary/20 group-hover:bg-primary/30"
-                    : "bg-muted group-hover:bg-primary/15"
-                }`}>
-                  <Icon className={`h-5 w-5 transition-colors ${
-                    accent ? "text-primary" : "text-muted-foreground group-hover:text-primary"
-                  }`} />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold leading-tight">{label}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>
-                </div>
-              </div>
-            </Link>
-          ))}
-          <a href="https://github.com/leego972/bridge-ai" target="_blank" rel="noopener noreferrer">
-            <div className="flex flex-col items-center gap-2.5 rounded-xl border p-4 cursor-pointer transition-all h-full text-center group hover:border-primary/30 hover:bg-primary/5">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted group-hover:bg-primary/15 transition-colors">
-                <HelpCircle className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold leading-tight">Help & Docs</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">GitHub · Support</p>
-              </div>
-            </div>
+        {/* ── Quick links ── */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <Link href="/sessions/new">
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5">
+              <Plus className="h-3 w-3" /> New Session
+            </Button>
+          </Link>
+          <Link href="/workbench">
+            <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground">
+              <Brain className="h-3 w-3" /> Workbench
+            </Button>
+          </Link>
+          <Link href="/settings">
+            <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground">
+              <Settings2 className="h-3 w-3" /> Settings
+            </Button>
+          </Link>
+          <a href="https://viba.guru" target="_blank" rel="noopener noreferrer">
+            <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground">
+              <HelpCircle className="h-3 w-3" /> Help
+            </Button>
           </a>
         </div>
+
+        {/* ── GitHub Repos ── */}
+        {githubRepos && githubRepos.length > 0 && (() => {
+          const visibleRepos = githubRepos.filter(r =>
+            !repoSearch.trim() || r.fullName?.toLowerCase().includes(repoSearch.toLowerCase())
+          );
+          return (
+            <div>
+              <div className="flex items-center gap-3 mb-3 flex-wrap">
+                <h2 className="text-sm font-semibold flex items-center gap-2">
+                  <Github className="h-4 w-4 text-muted-foreground" />
+                  Your Repositories
+                </h2>
+                <span className="text-[11px] text-muted-foreground">{githubRepos.length} connected</span>
+                <div className="relative ml-auto w-48">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                  <Input
+                    placeholder="Filter repos…"
+                    className="pl-8 h-7 text-xs"
+                    value={repoSearch}
+                    onChange={e => setRepoSearch(e.target.value)}
+                  />
+                </div>
+              </div>
+              {visibleRepos.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-2">No repos match your search.</p>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {visibleRepos.map((repo) => {
+                    const params = new URLSearchParams();
+                    if (repo.htmlUrl) params.set("repo", repo.htmlUrl);
+                    if (repo.defaultBranch) params.set("branch", repo.defaultBranch);
+                    const href = `/sessions/new?${params.toString()}`;
+                    return (
+                      <div
+                        key={repo.htmlUrl}
+                        className="flex flex-col gap-2 rounded-xl border bg-card px-4 py-3 hover:border-primary/40 transition-colors"
+                      >
+                        <div className="flex items-start justify-between gap-2 min-w-0">
+                          <a
+                            href={repo.htmlUrl ?? "#"}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={e => e.stopPropagation()}
+                            className="flex items-center gap-1.5 min-w-0 hover:text-primary transition-colors"
+                          >
+                            <Github className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            <span className="text-sm font-medium truncate">{repo.fullName}</span>
+                          </a>
+                          {repo.private && (
+                            <Lock className="h-3 w-3 text-muted-foreground/60 shrink-0 mt-0.5" />
+                          )}
+                        </div>
+                        {repo.defaultBranch && (
+                          <div className="flex items-center gap-1 text-[11px] text-muted-foreground/70">
+                            <GitBranch className="h-3 w-3 shrink-0" />
+                            <span className="font-mono truncate">{repo.defaultBranch}</span>
+                          </div>
+                        )}
+                        <Link href={href}>
+                          <Button size="sm" variant="outline" className="w-full h-7 text-xs gap-1.5 mt-1">
+                            <Plus className="h-3 w-3" />
+                            Start session
+                          </Button>
+                        </Link>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ── Spike alerts ── */}
         {alertEnabled && recentSpikeProviders.length > 0 && (
@@ -561,9 +618,24 @@ export default function Dashboard() {
                           <Badge variant={getStatusColor(session.status)} className="capitalize shrink-0 text-[10px] h-5 px-1.5">
                             {session.status}
                           </Badge>
-                          <span className="text-sm font-medium flex-1 truncate min-w-0">
-                            {session.goal || "Untitled Session"}
-                          </span>
+                          <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+                            <span className="text-sm font-medium truncate">{session.goal || "Untitled Session"}</span>
+                            {(session.repoUrl || session.workspaceEnv) && (
+                              <div className="flex items-center gap-1.5">
+                                {session.repoUrl && (
+                                  <span className="text-[10px] text-muted-foreground/70 font-mono flex items-center gap-0.5 truncate max-w-[160px]">
+                                    <GitBranch className="h-2.5 w-2.5 shrink-0" />
+                                    {shortRepoName(session.repoUrl)}
+                                  </span>
+                                )}
+                                {session.workspaceEnv && (
+                                  <Badge variant="outline" className={`text-[9px] h-3.5 px-1 shrink-0 ${ENV_BADGE_STYLES[session.workspaceEnv] ?? "bg-muted/30 text-muted-foreground border-border/50"}`}>
+                                    {session.workspaceEnv}
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
+                          </div>
                           <span className="text-xs text-muted-foreground shrink-0 font-mono tabular-nums">
                             ${session.estimatedCost?.toFixed(4) || "0.0000"}
                           </span>
@@ -825,7 +897,7 @@ export default function Dashboard() {
                     Open Workbench
                   </Button>
                 </Link>
-                <a href="https://github.com/leego972/bridge-ai" target="_blank" rel="noopener noreferrer">
+                <a href="https://viba.guru" target="_blank" rel="noopener noreferrer">
                   <Button variant="ghost" size="sm" className="w-full gap-2 justify-start text-muted-foreground hover:text-foreground">
                     <ExternalLink className="h-3.5 w-3.5" />
                     Help &amp; Documentation
@@ -867,19 +939,19 @@ export default function Dashboard() {
                     <Bell className="h-4 w-4" />
                     Last Alert
                     <span className="ml-auto text-[11px] font-normal text-sky-400/70">
-                      {formatTimeAgo(lastSpikeNotification.sentAt)}
+                      {formatTimeAgo(lastSpikeNotification.sentAt ?? null)}
                     </span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0 space-y-2">
                   <div className="flex flex-wrap gap-2">
-                    {lastSpikeNotification.channels.includes("webhook") && (
+                    {lastSpikeNotification.channels?.includes("webhook") && (
                       <Badge variant="outline" className="gap-1 text-xs border-sky-500/40 text-sky-300 bg-sky-500/10">
                         <Webhook className="h-3 w-3" />
                         Webhook
                       </Badge>
                     )}
-                    {lastSpikeNotification.channels.includes("email") && (
+                    {lastSpikeNotification.channels?.includes("email") && (
                       <Badge variant="outline" className="gap-1 text-xs border-sky-500/40 text-sky-300 bg-sky-500/10">
                         <Mail className="h-3 w-3" />
                         Email
@@ -889,14 +961,14 @@ export default function Dashboard() {
                   <p className="text-xs text-sky-400/70">
                     Providers:{" "}
                     <span className="font-medium text-sky-300">
-                      {lastSpikeNotification.providers.join(", ")}
+                      {lastSpikeNotification.providers?.join(", ")}
                     </span>
-                    {lastSpikeNotification.emailAddresses.length > 0 && (
-                      <> · {lastSpikeNotification.emailAddresses.join(", ")}</>
+                    {(lastSpikeNotification.emailAddresses?.length ?? 0) > 0 && (
+                      <> · {lastSpikeNotification.emailAddresses?.join(", ")}</>
                     )}
                   </p>
                   <p className="text-[11px] text-sky-400/50">
-                    {format(new Date(lastSpikeNotification.sentAt), "MMM d, HH:mm:ss")} · Resets on server restart
+                    {lastSpikeNotification.sentAt ? format(new Date(lastSpikeNotification.sentAt), "MMM d, HH:mm:ss") : "—"} · Resets on server restart
                   </p>
                 </CardContent>
               </Card>
@@ -950,7 +1022,7 @@ export default function Dashboard() {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                 <Input
-                  placeholder="Search sessions by goal..."
+                  placeholder="Search by goal or repo…"
                   className="pl-9"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
@@ -1015,6 +1087,42 @@ export default function Dashboard() {
                         </div>
                       </CardHeader>
                       <CardContent className="pb-3 flex-1">
+                        {(session.repoUrl || session.workspaceEnv) && (
+                          <div className="flex items-center gap-1.5 flex-wrap mb-3">
+                            {session.repoUrl && (
+                              <>
+                                <a
+                                  href={session.repoUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={e => e.stopPropagation()}
+                                  className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-muted/40 px-2 py-0.5 font-mono text-[11px] text-muted-foreground max-w-full hover:border-primary/40 hover:text-foreground transition-colors"
+                                >
+                                  <Github className="h-3 w-3 shrink-0" />
+                                  <span className="truncate max-w-[180px]">{shortRepoName(session.repoUrl)}</span>
+                                  {session.repoBranch && (
+                                    <span className="truncate max-w-[80px] opacity-60">:{session.repoBranch}</span>
+                                  )}
+                                </a>
+                                <Badge
+                                  variant="outline"
+                                  className="gap-0.5 text-[10px] h-5 px-1.5 shrink-0 border-violet-500/40 text-violet-400 bg-violet-500/10"
+                                >
+                                  <Zap className="h-2.5 w-2.5" />
+                                  Real execution
+                                </Badge>
+                              </>
+                            )}
+                            {session.workspaceEnv && (
+                              <Badge
+                                variant="outline"
+                                className={`text-[10px] h-5 px-1.5 shrink-0 ${ENV_BADGE_STYLES[session.workspaceEnv] ?? "bg-muted/30 text-muted-foreground border-border/50"}`}
+                              >
+                                {session.workspaceEnv}
+                              </Badge>
+                            )}
+                          </div>
+                        )}
                         <div className="flex flex-col space-y-2 text-sm text-muted-foreground">
                           <div className="flex items-center gap-2">
                             <Clock className="h-4 w-4" />

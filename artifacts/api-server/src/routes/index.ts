@@ -7,6 +7,8 @@ import circuitStatusRouter from "./circuitStatus";
 import workbenchRouter from "../workbench/serverRoutes";
 import authRouter from "./auth";
 import stripeRouter from "./stripe";
+import billingRouter from "./billing";
+import githubRouter from "./github";
 
 const router: IRouter = Router();
 
@@ -19,5 +21,7 @@ router.use(statsRouter);
 router.use(circuitStatusRouter);
 router.use(workbenchRouter);
 router.use(stripeRouter);
+router.use(billingRouter);
+router.use(githubRouter);
 
 export default router;

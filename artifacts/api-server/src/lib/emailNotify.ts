@@ -1,6 +1,15 @@
 import nodemailer from "nodemailer";
 import { logger } from "./logger";
 
+function escapeHtml(value: string | number): string {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;");
+}
+
 export interface SpikeEmailOptions {
   to: string;
   providers: Array<{ provider: string; count: number }>;
@@ -33,9 +42,11 @@ function buildEmailBody(opts: SpikeEmailOptions): { subject: string; text: strin
   const providerHtmlRows = providers
     .map(
       (p) =>
-        `<tr><td style="padding:4px 8px;font-family:monospace">${p.provider}</td><td style="padding:4px 8px">${p.count}</td><td style="padding:4px 8px">${threshold}</td></tr>`
+        `<tr><td style="padding:4px 8px;font-family:monospace">${escapeHtml(p.provider)}</td><td style="padding:4px 8px">${escapeHtml(p.count)}</td><td style="padding:4px 8px">${escapeHtml(threshold)}</td></tr>`
     )
     .join("");
+
+  const safeSettingsUrl = escapeHtml(settingsUrl);
 
   const html = `
 <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
@@ -52,7 +63,7 @@ function buildEmailBody(opts: SpikeEmailOptions): { subject: string; text: strin
     <tbody>${providerHtmlRows}</tbody>
   </table>
   <p style="margin-top:16px">
-    <a href="${settingsUrl}" style="color:#2563eb">View alert settings</a>
+    <a href="${safeSettingsUrl}" style="color:#2563eb">View alert settings</a>
   </p>
   <p style="color:#6b7280;font-size:12px">
     You are receiving this because an alert email address is configured in VIBA Settings.
@@ -77,7 +88,7 @@ function getSmtpTransport(
   const port = portStr ? parseInt(portStr, 10) : 587;
   const user = resolveSmtpValue("SMTP_USER", smtpSettings);
   const pass = resolveSmtpValue("SMTP_PASS", smtpSettings);
-  const from = resolveSmtpValue("SMTP_FROM", smtpSettings) ?? user ?? "noreply@bridgeai.local";
+  const from = resolveSmtpValue("SMTP_FROM", smtpSettings) ?? user ?? "noreply@viba.guru";
 
   if (!host || !user || !pass) return null;
 

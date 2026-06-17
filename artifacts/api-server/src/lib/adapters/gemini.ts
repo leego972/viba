@@ -1,5 +1,6 @@
 import type { AgentAdapter, AgentTaskInput, AgentTaskResult } from "./interface";
 import { logger } from "../logger";
+import { buildAdapterJsonSchema, parseAdapterJson } from "./shared";
 
 export class GeminiAdapter implements AgentAdapter {
   id: string;
@@ -8,17 +9,18 @@ export class GeminiAdapter implements AgentAdapter {
   capabilities = ["multimodal", "contextual_analysis", "summarization", "creative"];
   role: string;
   isMock = false;
-  canUseTools = false;
+  canUseTools: boolean;
 
   private apiKey: string;
   model: string;
 
-  constructor(id: string, name: string, role: string, apiKey: string, model?: string) {
+  constructor(id: string, name: string, role: string, apiKey: string, model?: string, canUseTools = false) {
     this.id = id;
     this.name = name;
     this.role = role;
     this.apiKey = apiKey;
     this.model = model ?? process.env.GEMINI_MODEL ?? "gemini-2.0-flash";
+    this.canUseTools = canUseTools;
   }
 
   async runTask(input: AgentTaskInput): Promise<AgentTaskResult> {
@@ -29,13 +31,7 @@ Project Goal: ${input.projectGoal}
 Shared Memory Summary: ${input.memorySummary || "No previous context."}
 
 Your task: ${input.taskInstruction}
-
-Respond in character as your role. Be specific, actionable, and concise. At the end of your response, include a JSON block (surrounded by \`\`\`json ... \`\`\`) with this structure:
-{
-  "suggestedNextTasks": ["string"],
-  "completionStatus": "in_progress" | "complete" | "needs_review" | "approval_required",
-  "confidence": 0.0-1.0
-}`;
+${buildAdapterJsonSchema(this.canUseTools, input.pendingQuestions)}`;
 
     const messages = input.previousMessages.map((m) => ({
       role: (m.role === "user" ? "user" : "assistant") as "user" | "assistant",
@@ -67,25 +63,7 @@ Respond in character as your role. Be specific, actionable, and concise. At the 
       const outputCost = ((usage?.completion_tokens ?? 0) / 1_000_000) * 0.40;
       const cost = inputCost + outputCost;
 
-      let suggestedNextTasks: string[] = [];
-      let completionStatus: AgentTaskResult["completionStatus"] = "in_progress";
-      let confidence = 0.7;
-      let messageText = text;
-
-      const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/);
-      if (jsonMatch) {
-        try {
-          const parsed = JSON.parse(jsonMatch[1]);
-          suggestedNextTasks = parsed.suggestedNextTasks ?? [];
-          completionStatus = parsed.completionStatus ?? "in_progress";
-          confidence = parsed.confidence ?? 0.7;
-          messageText = text.replace(/```json\n[\s\S]*?\n```/, "").trim();
-        } catch {
-          // ignore parse errors
-        }
-      }
-
-      return { messageText, suggestedNextTasks, completionStatus, confidence, estimatedCost: cost };
+      return parseAdapterJson(text, cost);
     } catch (err) {
       logger.error({ err }, "Gemini API call failed");
       throw err;

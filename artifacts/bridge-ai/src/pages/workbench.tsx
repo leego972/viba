@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { useAnalyzeWorkbenchTask } from "@workspace/api-client-react";
+import { useWorkbenchAnalyze } from "@workspace/api-client-react";
 import type { WorkbenchAnalyzeRequest } from "@workspace/api-client-react";
 import {
   FlaskConical,
@@ -108,7 +108,7 @@ interface WorkbenchHistoryEntry {
   result: WorkbenchResult;
 }
 
-const HISTORY_KEY = "bridge_workbench_history";
+const HISTORY_KEY = "viba_workbench_history";
 const MAX_HISTORY = 20;
 
 function loadHistory(): WorkbenchHistoryEntry[] {
@@ -147,7 +147,7 @@ function ConfidenceBar({ value }: { value: number }) {
 
 export default function Workbench() {
   const { toast } = useToast();
-  const analyzeMutation = useAnalyzeWorkbenchTask();
+  const analyzeMutation = useWorkbenchAnalyze();
 
   const [platform, setPlatform] = useState<WorkbenchAnalyzeRequest["platform"]>("alignerr");
   const [taskType, setTaskType] = useState<WorkbenchAnalyzeRequest["taskType"]>("unknown");
@@ -565,7 +565,7 @@ export default function Workbench() {
                     </CardHeader>
                     <CardContent>
                       <ul className="space-y-1.5">
-                        {result.rubricChecklist.map((item, i) => {
+                        {result.rubricChecklist.map((item: string, i: number) => {
                           const isPass = /^pass|✓|ok/i.test(item) || /:\s*pass/i.test(item);
                           const isFail = /^fail|✗|error/i.test(item) || /:\s*fail/i.test(item);
                           return (
@@ -601,7 +601,7 @@ export default function Workbench() {
                     </CardHeader>
                     <CardContent>
                       <ul className="space-y-1">
-                        {result.riskFlags.map((flag, i) => (
+                        {result.riskFlags.map((flag: string, i: number) => (
                           <li key={i} className="text-xs text-yellow-600">
                             • {flag}
                           </li>

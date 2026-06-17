@@ -7,6 +7,20 @@ import {
 } from "../lib/stripe/storage";
 import { sendAccessTokenEmail } from "../lib/stripe/email";
 import { logger } from "../lib/logger";
+import {
+  isWebhookProcessed,
+  markWebhookProcessed,
+  getUserByStripeCustomer,
+  linkSubscription,
+  refreshMonthlyCredits,
+  updateSubscriptionStatus,
+  grantCredits,
+  VIBA_PLAN,
+} from "../lib/billing";
+import {
+  sendPaymentFailedEmail,
+  sendSubscriptionCanceledEmail,
+} from "../lib/billingEmail";
 
 function tsToDate(ts: number | null | undefined): Date | null {
   return ts != null ? new Date(ts * 1000) : null;
@@ -31,99 +45,157 @@ export const webhookHandler: RequestHandler = async (req, res): Promise<void> =>
 
   const sigStr = Array.isArray(sig) ? sig[0]! : sig;
 
-  let event;
+  let event: import("stripe").Stripe.Event;
   try {
     const stripe = getStripeClient();
-    event = stripe.webhooks.constructEvent(
-      req.body as Buffer,
-      sigStr,
-      webhookSecret,
-    );
+    event = stripe.webhooks.constructEvent(req.body as Buffer, sigStr, webhookSecret);
   } catch (err) {
     logger.error({ err }, "Stripe webhook signature verification failed");
     res.status(400).json({ error: "Webhook signature invalid" });
     return;
   }
 
+  // Idempotency — skip duplicate deliveries
+  if (isWebhookProcessed(event.id)) {
+    logger.info({ eventId: event.id }, "Webhook already processed — skipping");
+    res.json({ received: true, duplicate: true });
+    return;
+  }
+
   try {
     switch (event.type) {
+
+      // ── checkout.session.completed ─────────────────────────────────────────
       case "checkout.session.completed": {
-        const session = event.data.object as any;
-        if (session.mode !== "subscription") break;
+        const session = event.data.object as import("stripe").Stripe.Checkout.Session;
+        const meta = session.metadata ?? {};
 
-        const customerId = session.customer as string;
-        const subscriptionId = session.subscription as string;
-        const email: string =
-          (session.customer_details as any)?.email ??
-          (session.customer_email as string | null) ??
-          "";
+        if (meta["system"] === "viba_billing") {
+          // New billing system — linked to users table via userId in metadata
+          const userId = Number(meta["userId"]);
+          const customerId = session.customer as string;
 
-        // Idempotency: skip if subscriber already exists for this customer
-        const existing = await getSubscriberByCustomerId(customerId);
-        if (existing) {
-          logger.info({ customerId }, "Subscriber already exists — skipping creation");
-          break;
+          if (meta["type"] === "subscription") {
+            const subscriptionId = session.subscription as string;
+            const stripe = getStripeClient();
+            const sub = await stripe.subscriptions.retrieve(subscriptionId);
+            const periodEnd = tsToDate(sub.current_period_end);
+            await linkSubscription(userId, customerId, subscriptionId, sub.status, periodEnd);
+            // Grant the first month's credits immediately
+            await grantCredits(userId, VIBA_PLAN.monthlyCredits, "new subscription — initial credit grant");
+            logger.info({ userId, subscriptionId, status: sub.status }, "Billing: subscription linked");
+
+          } else if (meta["type"] === "credit_pack") {
+            const credits = Number(meta["credits"]);
+            if (credits > 0) {
+              await grantCredits(userId, credits, `credit pack purchase: ${meta["packKey"] ?? "unknown"}`);
+              logger.info({ userId, credits }, "Billing: credit pack granted");
+            }
+          }
+
+        } else if (session.mode === "subscription") {
+          // Legacy subscriber system (access-token flow)
+          const customerId = session.customer as string;
+          const subscriptionId = session.subscription as string;
+          const email: string =
+            (session.customer_details as { email?: string } | null)?.email ??
+            (session.customer_email as string | null) ??
+            "";
+
+          const existing = await getSubscriberByCustomerId(customerId);
+          if (existing) {
+            logger.info({ customerId }, "Subscriber already exists — skipping");
+            break;
+          }
+
+          const stripe = getStripeClient();
+          const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+          const sub = await createSubscriber({
+            email,
+            stripeCustomerId: customerId,
+            stripeSubscriptionId: subscriptionId,
+            status: subscription.status,
+            trialEnd: tsToDate(subscription.trial_end),
+            currentPeriodEnd: tsToDate(subscription.current_period_end),
+          });
+
+          logger.info({ email, tokenPrefix: sub.accessToken.slice(0, 16) }, "Subscriber created");
+          sendAccessTokenEmail(email, sub.accessToken).catch((err) => {
+            logger.error({ err, email }, "Failed to send access token email");
+          });
         }
-
-        const stripe = getStripeClient();
-        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-
-        const sub = await createSubscriber({
-          email,
-          stripeCustomerId: customerId,
-          stripeSubscriptionId: subscriptionId,
-          status: subscription.status,
-          trialEnd: tsToDate(subscription.trial_end),
-          currentPeriodEnd: tsToDate(subscription.current_period_end),
-        });
-
-        logger.info(
-          { email, tokenPrefix: sub.accessToken.slice(0, 16) },
-          "Subscriber created",
-        );
-
-        // Fire-and-forget — don't block the webhook response on email delivery
-        sendAccessTokenEmail(email, sub.accessToken).catch((err) => {
-          logger.error({ err, email }, "Failed to send access token email");
-        });
         break;
       }
 
+      // ── invoice.payment_succeeded — monthly renewal grants fresh credits ────
+      case "invoice.payment_succeeded": {
+        const invoice = event.data.object as import("stripe").Stripe.Invoice;
+        const subId = invoice.subscription as string | undefined;
+        if (!subId) break;
+
+        const customerId = invoice.customer as string;
+        const user = await getUserByStripeCustomer(customerId);
+        if (user) {
+          const periodEnd = tsToDate((invoice as import("stripe").Stripe.Invoice & { period_end?: number }).period_end);
+          await refreshMonthlyCredits(user.id, periodEnd);
+          logger.info({ userId: user.id }, "Billing: monthly credits refreshed on renewal");
+        }
+
+        // Legacy
+        await updateSubscriberBySubscriptionId(subId, { status: "active" });
+        logger.info({ subscriptionId: subId }, "Invoice payment succeeded");
+        break;
+      }
+
+      // ── customer.subscription.updated ──────────────────────────────────────
       case "customer.subscription.updated": {
-        const sub = event.data.object as any;
-        await updateSubscriberBySubscriptionId(sub.id as string, {
-          status: sub.status as string,
+        const sub = event.data.object as import("stripe").Stripe.Subscription;
+        const periodEnd = tsToDate(sub.current_period_end);
+        await updateSubscriptionStatus(sub.id, sub.status, periodEnd);
+        await updateSubscriberBySubscriptionId(sub.id, {
+          status: sub.status,
           trialEnd: tsToDate(sub.trial_end),
-          currentPeriodEnd: tsToDate(sub.current_period_end),
+          currentPeriodEnd: periodEnd,
         });
         logger.info({ subscriptionId: sub.id, status: sub.status }, "Subscription updated");
         break;
       }
 
+      // ── customer.subscription.deleted — service suspended, data preserved ───
       case "customer.subscription.deleted": {
-        const sub = event.data.object as any;
-        await updateSubscriberBySubscriptionId(sub.id as string, { status: "canceled" });
-        logger.info({ subscriptionId: sub.id }, "Subscription cancelled");
+        const sub = event.data.object as import("stripe").Stripe.Subscription;
+        await updateSubscriptionStatus(sub.id, "canceled", null);
+        await updateSubscriberBySubscriptionId(sub.id, { status: "canceled" });
+        logger.info({ subscriptionId: sub.id }, "Subscription canceled");
+
+        // Notify user — data is NEVER deleted, service resumes on resubscribe
+        const user = await getUserByStripeCustomer(sub.customer as string);
+        if (user) {
+          sendSubscriptionCanceledEmail(user.email).catch((err) =>
+            logger.error({ err }, "sendSubscriptionCanceledEmail failed"),
+          );
+        }
         break;
       }
 
+      // ── invoice.payment_failed — warn user, service remains on past_due ─────
       case "invoice.payment_failed": {
-        const invoice = event.data.object as any;
+        const invoice = event.data.object as import("stripe").Stripe.Invoice;
         const subId = invoice.subscription as string | undefined;
-        if (subId) {
-          await updateSubscriberBySubscriptionId(subId, { status: "past_due" });
-          logger.warn({ subscriptionId: subId }, "Invoice payment failed — marked past_due");
-        }
-        break;
-      }
+        if (!subId) break;
 
-      case "invoice.payment_succeeded": {
-        const invoice = event.data.object as any;
-        const subId = invoice.subscription as string | undefined;
-        if (subId) {
-          await updateSubscriberBySubscriptionId(subId, { status: "active" });
-          logger.info({ subscriptionId: subId }, "Invoice payment succeeded — marked active");
+        const customerId = invoice.customer as string;
+        const user = await getUserByStripeCustomer(customerId);
+        if (user) {
+          await updateSubscriptionStatus(subId, "past_due", null);
+          // Send payment-failed reminder — never delete their data
+          sendPaymentFailedEmail(user.email).catch((err) =>
+            logger.error({ err }, "sendPaymentFailedEmail failed"),
+          );
         }
+
+        await updateSubscriberBySubscriptionId(subId, { status: "past_due" });
+        logger.warn({ subscriptionId: subId }, "Invoice payment failed — marked past_due, user notified");
         break;
       }
 
@@ -131,6 +203,7 @@ export const webhookHandler: RequestHandler = async (req, res): Promise<void> =>
         logger.debug({ type: event.type }, "Unhandled Stripe webhook event");
     }
 
+    markWebhookProcessed(event.id);
     res.json({ received: true });
   } catch (err) {
     logger.error({ err, eventType: event.type }, "Webhook handler error");

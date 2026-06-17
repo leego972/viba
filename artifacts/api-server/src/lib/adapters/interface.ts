@@ -18,6 +18,32 @@ export interface AgentTaskInput {
    * before running its own task. Strictly about the current task only.
    */
   pendingQuestions?: Array<{ fromAgent: string; question: string; messageId: number }>;
+  /**
+   * Called by tool-capable adapters (Replit, Manus) on each poll cycle during
+   * long-running task execution, so the agent loop can emit live "running"
+   * audit events and show progress in the session feed.
+   */
+  onPollCycle?: (info: {
+    attempt: number;
+    maxAttempts: number;
+    status: string;
+    elapsedMs: number;
+  }) => void;
+}
+
+/**
+ * A single structured output from a tool-capable agent execution.
+ * Persisted in message metadata and surfaced in the session feed.
+ */
+export interface ToolOutput {
+  /** Category of the output for UI rendering. */
+  type: "file_diff" | "test_result" | "deployment_url" | "command_output" | "git_operation" | "build_log";
+  /** Short human-readable title (e.g. "Ran tests", "Modified src/index.ts"). */
+  title: string;
+  /** Full content: diff text, log lines, URL, etc. */
+  content: string;
+  /** Extra provider-specific data (e.g. exit code, commit SHA, pass/fail counts). */
+  metadata?: Record<string, unknown>;
 }
 
 export interface AgentTaskResult {
@@ -47,6 +73,13 @@ export interface AgentTaskResult {
    * Each answer is saved as an "answer" message linking back to the question.
    */
   answersToQuestions?: Array<{ messageId: number; answer: string }>;
+  /**
+   * Structured outputs from real tool execution (file diffs, test results,
+   * deployment URLs, build logs). Populated by tool-capable adapters when
+   * REPLIT_AGENT_URL / MANUS_WORKSPACE_API_KEY are configured and repoUrl is set.
+   * Persisted in message metadata for display in the session feed.
+   */
+  toolOutputs?: ToolOutput[];
 }
 
 export interface AgentAdapter {

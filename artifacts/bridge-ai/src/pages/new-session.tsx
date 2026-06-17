@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { useCreateSession, getListSessionsQueryKey, useGetSettings, type CreateSessionBody } from "@workspace/api-client-react";
+import { useCreateSession, getListSessionsQueryKey, useGetSettings, useListGithubRepos, useGetGithubRepo, type CreateSessionBody } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowRight, Bot, Target, ShieldCheck, Zap, AlertTriangle, FlaskConical, GitBranch, ChevronDown, Wrench } from "lucide-react";
+import { ArrowRight, Bot, Target, ShieldCheck, Zap, AlertTriangle, FlaskConical, GitBranch, ChevronDown, Wrench, CheckCircle2, Loader2 } from "lucide-react";
 
 const AVAILABLE_PROVIDERS = [
   { id: "openai",     name: "ChatGPT",    provider: "OpenAI",     defaultRole: "Strategist",    color: "bg-green-500",  apiKey: "OPENAI_API_KEY",     canUseTools: false },
@@ -36,6 +36,12 @@ const ROLES = [
 
 const WORKSPACE_ENVS = ["development", "staging", "production"];
 
+function parseGithubUrl(url: string): { owner: string; repo: string } | null {
+  const m = url.trim().match(/^https?:\/\/github\.com\/([^/]+)\/([^/?.]+?)(?:\.git)?(?:\/.*)?$/);
+  if (!m || !m[1] || !m[2]) return null;
+  return { owner: m[1], repo: m[2] };
+}
+
 export default function NewSession() {
   const [, setLocation] = useLocation();
   const createSession = useCreateSession();
@@ -43,12 +49,73 @@ export default function NewSession() {
   const { toast } = useToast();
   const { data: settings, isLoading: isSettingsLoading } = useGetSettings();
 
+  const searchParams = new URLSearchParams(window.location.search);
+  const initRepo = searchParams.get("repo") ?? "";
+  const initBranch = searchParams.get("branch") ?? "";
+  // Fall back to last-used values when no URL params are present
+  const lastRepo   = !initRepo   ? (localStorage.getItem("viba_last_repo")   ?? "") : "";
+  const lastBranch = !initBranch ? (localStorage.getItem("viba_last_branch") ?? "") : "";
+  const lastEnv    = localStorage.getItem("viba_last_env") ?? "";
+
   const [goal, setGoal] = useState("");
   const [autonomyMode, setAutonomyMode] = useState("Supervised");
-  const [repoUrl, setRepoUrl] = useState("");
-  const [repoBranch, setRepoBranch] = useState("");
-  const [workspaceEnv, setWorkspaceEnv] = useState("");
-  const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const [repoUrl, setRepoUrl] = useState(initRepo || lastRepo);
+  const [repoBranch, setRepoBranch] = useState(initBranch || lastBranch);
+  const [workspaceEnv, setWorkspaceEnv] = useState(lastEnv);
+  const [workspaceOpen, setWorkspaceOpen] = useState(!!(initRepo || initBranch || lastRepo));
+  const { data: githubRepos } = useListGithubRepos({ query: { enabled: workspaceOpen, retry: false } as never });
+
+  const [manualRepoParams, setManualRepoParams] = useState<{ owner: string; repo: string } | null>(() => {
+    if (initRepo && !initBranch) return parseGithubUrl(initRepo);
+    return null;
+  });
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastDropdownUrl = useRef<string>(initRepo || lastRepo);
+
+  const { data: fetchedRepo, isFetching: isFetchingRepo } = useGetGithubRepo(
+    manualRepoParams ?? { owner: "", repo: "" },
+    { query: { enabled: !!manualRepoParams, retry: false } as never }
+  );
+
+  useEffect(() => {
+    if (fetchedRepo) {
+      if (!repoBranch) setRepoBranch(fetchedRepo.defaultBranch ?? "main");
+      if (!workspaceEnv) setWorkspaceEnv("development");
+    }
+  }, [fetchedRepo]);
+
+  const handleRepoUrlChange = (url: string) => {
+    setRepoUrl(url);
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    const trimmed = url.trim();
+
+    if (!trimmed || trimmed === lastDropdownUrl.current) {
+      setManualRepoParams(null);
+      return;
+    }
+
+    const parsed = parseGithubUrl(trimmed);
+    if (!parsed) {
+      setManualRepoParams(null);
+      return;
+    }
+
+    if (githubRepos) {
+      const found = githubRepos.find(r => r.htmlUrl === trimmed);
+      if (found) {
+        if (!repoBranch) setRepoBranch(found.defaultBranch ?? "main");
+        if (!workspaceEnv) setWorkspaceEnv("development");
+        setManualRepoParams(null);
+        return;
+      }
+    }
+
+    debounceRef.current = setTimeout(() => {
+      setManualRepoParams(parsed);
+    }, 600);
+  };
 
   const [selectedAgents, setSelectedAgents] = useState<Record<string, { selected: boolean; role: string }>>(() => {
     const initial: Record<string, { selected: boolean; role: string }> = {};
@@ -77,6 +144,8 @@ export default function NewSession() {
   const selectedToolCapable = AVAILABLE_PROVIDERS
     .filter(p => selectedAgents[p.id]!.selected && p.canUseTools)
     .map(p => p.name);
+
+  const hasRealExecution = repoUrl.trim() !== "" && selectedToolCapable.length > 0;
 
   const handleAgentToggle = (id: string) => {
     setSelectedAgents(prev => ({
@@ -130,6 +199,11 @@ export default function NewSession() {
       {
         onSuccess: (session) => {
           queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
+          try {
+            if (repoUrl.trim()) localStorage.setItem("viba_last_repo", repoUrl.trim());
+            if (repoBranch.trim()) localStorage.setItem("viba_last_branch", repoBranch.trim());
+            if (workspaceEnv) localStorage.setItem("viba_last_env", workspaceEnv);
+          } catch {}
           setLocation(`/sessions/${session.id}`);
         },
         onError: () => {
@@ -171,9 +245,13 @@ export default function NewSession() {
                   <GitBranch className="h-4 w-4" />
                   Workspace Context
                   <span className="text-xs font-normal text-muted-foreground ml-1">(optional)</span>
-                  {(repoUrl || repoBranch || workspaceEnv) && (
+                  {hasRealExecution ? (
+                    <Badge className="text-[10px] h-4 px-1.5 bg-emerald-500/15 text-emerald-600 border-emerald-500/30 gap-0.5">
+                      <Zap className="h-2.5 w-2.5" /> Real execution
+                    </Badge>
+                  ) : (repoUrl || repoBranch || workspaceEnv) ? (
                     <Badge variant="secondary" className="text-[10px] h-4 px-1.5">configured</Badge>
-                  )}
+                  ) : null}
                   <ChevronDown className={`h-4 w-4 ml-auto transition-transform ${workspaceOpen ? "rotate-180" : ""}`} />
                 </CardTitle>
                 <CardDescription className="text-xs">
@@ -185,12 +263,43 @@ export default function NewSession() {
               <CardContent className="pt-0 grid sm:grid-cols-3 gap-4">
                 <div className="sm:col-span-2 flex flex-col gap-1.5">
                   <Label className="text-xs">Repository URL</Label>
-                  <Input
-                    placeholder="https://github.com/owner/repo"
-                    value={repoUrl}
-                    onChange={(e) => setRepoUrl(e.target.value)}
-                    className="h-8 text-sm"
-                  />
+                  {githubRepos && githubRepos.length > 0 && (
+                    <Select
+                      value={repoUrl}
+                      onValueChange={(val) => {
+                        const repo = githubRepos.find(r => r.htmlUrl === val);
+                        lastDropdownUrl.current = val;
+                        setRepoUrl(val);
+                        setManualRepoParams(null);
+                        if (repo) {
+                          if (!repoBranch) setRepoBranch(repo.defaultBranch ?? "main");
+                          if (!workspaceEnv) setWorkspaceEnv("development");
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-8 text-sm">
+                        <SelectValue placeholder="Pick from your GitHub repos…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {githubRepos.map(r => (
+                          <SelectItem key={r.htmlUrl} value={r.htmlUrl ?? ""} className="text-xs">
+                            {r.fullName}{r.private ? " 🔒" : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <div className="relative">
+                    <Input
+                      placeholder={githubRepos && githubRepos.length > 0 ? "Or paste URL directly…" : "https://github.com/owner/repo"}
+                      value={repoUrl}
+                      onChange={(e) => handleRepoUrlChange(e.target.value)}
+                      className="h-8 text-sm pr-8"
+                    />
+                    {isFetchingRepo && (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    )}
+                  </div>
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <Label className="text-xs">Branch</Label>
@@ -320,6 +429,21 @@ export default function NewSession() {
             </CardContent>
           </Card>
         </div>
+
+        {hasRealExecution && (
+          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 flex gap-3">
+            <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-semibold text-emerald-700 dark:text-emerald-300 text-sm flex items-center gap-1.5">
+                <Zap className="h-3.5 w-3.5" /> Real execution enabled
+              </h3>
+              <p className="text-sm text-emerald-700/80 dark:text-emerald-300/80 mt-0.5">
+                <strong>{selectedToolCapable.join(", ")}</strong> will clone <strong>{repoUrl.replace("https://github.com/", "")}</strong>{repoBranch ? ` (${repoBranch})` : ""} and run code directly.{" "}
+                {workspaceEnv && <span>Environment: <strong className="capitalize">{workspaceEnv}</strong>.</span>}
+              </p>
+            </div>
+          </div>
+        )}
 
         {simulatedSelected.length > 0 && (
           <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 flex gap-3">

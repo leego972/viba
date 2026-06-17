@@ -1,6 +1,18 @@
 import type { RequestHandler } from "express";
+import crypto from "node:crypto";
 
 const ADMIN_TOKEN = process.env["ADMIN_TOKEN"]?.trim() || null;
+
+/**
+ * Timing-safe string comparison — prevents timing attacks on token values.
+ */
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) {
+    crypto.timingSafeEqual(Buffer.from(a), Buffer.from(a));
+    return false;
+  }
+  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
 
 /**
  * Middleware: requires a valid ADMIN_TOKEN bearer token.
@@ -16,7 +28,7 @@ export const requireAdmin: RequestHandler = (req, res, next) => {
   }
   const auth = req.headers["authorization"] ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-  if (!token || token !== ADMIN_TOKEN) {
+  if (!token || !timingSafeEqual(token, ADMIN_TOKEN)) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }

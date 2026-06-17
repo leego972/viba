@@ -11,11 +11,13 @@ import {
   useSendMessage,
   useStopSession,
   useApproveAction,
+  useUpdateSession,
   useListApprovals,
   useListAuditLogs,
   useGetStats,
   useGetBannerDismissal,
   useDismissBanner,
+  useAnswerQuestion,
   getGetSessionQueryKey,
   getListMessagesQueryKey,
   getListTasksQueryKey,
@@ -31,6 +33,8 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -38,11 +42,11 @@ import {
   Play, FastForward, Square, Send, CheckCircle2, Clock, Bot,
   Crosshair, LineChart, Zap, FlaskConical, RotateCcw, X,
   RefreshCw, History, ShieldCheck, TrendingDown, AlertTriangle,
-  Download, Brain, Copy, ArrowRight, GitBranch, ChevronDown,
-  ChevronUp, Globe, Wrench,
+  Download, Brain, Copy, GitBranch, ExternalLink, Server, Pencil, Wrench,
 } from "lucide-react";
 import { useSessionStream } from "@/hooks/useSessionStream";
 import { MarkdownContent } from "@/components/MarkdownContent";
+import { ToolOutputCards, type ToolOutput } from "@/components/ToolOutputCards";
 import {
   SIMULATED_PREFIX,
   pruneStaleLocalStorageKeys,
@@ -56,6 +60,21 @@ import {
   broadcastSpikeDismissal,
   subscribeToSpikeDismissals,
 } from "@/lib/spikeAlertLogic";
+
+function shortRepoName(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return parsed.pathname.replace(/^\//, "").replace(/\.git$/, "");
+  } catch {
+    return url;
+  }
+}
+
+const ENV_BADGE_STYLES: Record<string, string> = {
+  production: "bg-red-500/10 text-red-400 border-red-500/30",
+  staging: "bg-amber-500/10 text-amber-400 border-amber-500/30",
+  development: "bg-blue-500/10 text-blue-400 border-blue-500/30",
+};
 
 const AGENT_COLORS: Record<string, string> = {
   "openai": "bg-green-500/10 text-green-400 border-green-500/20",
@@ -105,7 +124,16 @@ export default function SessionWorkspace() {
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [pendingApproval, setPendingApproval] = useState<Approval | null>(null);
-  const [expandedAnswers, setExpandedAnswers] = useState<Record<number, boolean>>({});
+
+  // Workspace context edit modal (#14)
+  const [showEditCtxModal, setShowEditCtxModal] = useState(false);
+  const [editRepoUrl, setEditRepoUrl] = useState("");
+  const [editRepoBranch, setEditRepoBranch] = useState("");
+  const [editWorkspaceEnv, setEditWorkspaceEnv] = useState("");
+
+  // Inline reply state for user-directed questions
+  const [replyingToId, setReplyingToId] = useState<number | null>(null);
+  const [replyText, setReplyText] = useState("");
 
   // Prune stale keys from localStorage once on mount (#47)
   useEffect(() => {
@@ -137,7 +165,7 @@ export default function SessionWorkspace() {
     if (!sessionId) return;
     if (bannerDismissalData === undefined) return;
     if (bannerDismissalData.dismissedAt !== null) return;
-    const storageKey = `bridge_fallback_banner_${sessionId}`;
+    const storageKey = `viba_fallback_banner_${sessionId}`;
     try {
       const stored = localStorage.getItem(storageKey);
       if (stored && !isNaN(Date.parse(stored))) {
@@ -180,7 +208,7 @@ export default function SessionWorkspace() {
     query: { enabled: !!sessionId, queryKey: getGetSessionQueryKey(sessionId) }
   });
 
-  const { data: messages = [] } = useListMessages(sessionId, {
+  const { data: messages = [] } = useListMessages(sessionId, undefined, {
     query: { enabled: !!sessionId, queryKey: getListMessagesQueryKey(sessionId) }
   });
 
@@ -206,6 +234,8 @@ export default function SessionWorkspace() {
   const stopSess = useStopSession();
   const sendMsg = useSendMessage();
   const approve = useApproveAction();
+  const updateCtx = useUpdateSession();
+  const answerQ = useAnswerQuestion();
 
   const isSessionActive = session?.status === "active";
   const isSessionComplete = session?.status === "completed";
@@ -321,11 +351,6 @@ export default function SessionWorkspace() {
     });
   }, [toast]);
 
-  const getRecipientName = (toAgentId: number | null | undefined): string | null => {
-    if (toAgentId == null) return null;
-    return agents.find(a => a.id === toAgentId)?.name ?? null;
-  };
-
   const handleRunNext = () => {
     runNext.mutate({ id: sessionId }, {
       onSuccess: () => invalidateAll(),
@@ -355,6 +380,18 @@ export default function SessionWorkspace() {
         invalidateAll();
       },
       onError: (err: unknown) => toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to send message", variant: "destructive" })
+    });
+  };
+
+  const handleReplySubmit = (questionMessageId: number) => {
+    if (!replyText.trim()) return;
+    answerQ.mutate({ id: sessionId, messageId: questionMessageId, data: { content: replyText.trim() } }, {
+      onSuccess: () => {
+        setReplyingToId(null);
+        setReplyText("");
+        invalidateAll();
+      },
+      onError: (err: unknown) => toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to post answer", variant: "destructive" }),
     });
   };
 
@@ -423,7 +460,7 @@ export default function SessionWorkspace() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `bridge-session-${sessionId}-${format(new Date(), "yyyy-MM-dd")}.md`;
+    a.download = `viba-session-${sessionId}-${format(new Date(), "yyyy-MM-dd")}.md`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -437,6 +474,31 @@ export default function SessionWorkspace() {
     queryClient.invalidateQueries({ queryKey: getListTasksQueryKey(sessionId) });
     queryClient.invalidateQueries({ queryKey: getListApprovalsQueryKey(sessionId) });
     queryClient.invalidateQueries({ queryKey: getListAuditLogsQueryKey(sessionId) });
+  };
+
+  const openEditCtxModal = () => {
+    setEditRepoUrl(session?.repoUrl ?? "");
+    setEditRepoBranch(session?.repoBranch ?? "");
+    setEditWorkspaceEnv(session?.workspaceEnv ?? "");
+    setShowEditCtxModal(true);
+  };
+
+  const handleSaveCtx = () => {
+    updateCtx.mutate(
+      { id: sessionId, data: {
+        repoUrl: editRepoUrl.trim() || null,
+        repoBranch: editRepoBranch.trim() || null,
+        workspaceEnv: editWorkspaceEnv || null,
+      }},
+      {
+        onSuccess: () => {
+          setShowEditCtxModal(false);
+          queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(sessionId) });
+          toast({ title: "Saved", description: "Workspace context updated." });
+        },
+        onError: () => toast({ title: "Error", description: "Failed to update context.", variant: "destructive" }),
+      }
+    );
   };
 
   const tasksByStatus = {
@@ -514,8 +576,7 @@ export default function SessionWorkspace() {
         )}
 
         {/* Header Bar */}
-        <div className="flex flex-col gap-2 bg-card border rounded-lg p-4 shadow-sm shrink-0">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 bg-card border rounded-lg p-4 shadow-sm shrink-0">
           <div className="flex items-center gap-3 flex-wrap min-w-0 flex-1">
             <h1 className="font-bold text-lg truncate max-w-[240px] sm:max-w-[300px]" title={session.goal}>{session.goal}</h1>
             <Badge variant="outline" className="capitalize shrink-0">{session.status}</Badge>
@@ -530,6 +591,32 @@ export default function SessionWorkspace() {
                 {simAgentCount > 0 && (
                   <Badge variant="outline" className="text-[11px] h-5 px-2 gap-1 text-muted-foreground">
                     <FlaskConical className="h-3 w-3" /> {simAgentCount} Sim
+                  </Badge>
+                )}
+              </div>
+            )}
+            {(session.repoUrl || session.repoBranch || session.workspaceEnv) && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {session.repoUrl && (
+                  <a
+                    href={session.repoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors max-w-[160px] truncate"
+                    title={session.repoUrl}
+                  >
+                    <ExternalLink className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{shortRepoName(session.repoUrl)}</span>
+                  </a>
+                )}
+                {session.repoBranch && (
+                  <Badge variant="outline" className="text-[11px] h-5 px-2 gap-1 font-mono text-muted-foreground shrink-0">
+                    <GitBranch className="h-3 w-3" />{session.repoBranch}
+                  </Badge>
+                )}
+                {session.workspaceEnv && (
+                  <Badge variant="outline" className={`text-[11px] h-5 px-2 gap-1 shrink-0 ${ENV_BADGE_STYLES[session.workspaceEnv] ?? "bg-muted/30 text-muted-foreground border-border/50"}`}>
+                    <Server className="h-3 w-3" />{session.workspaceEnv}
                   </Badge>
                 )}
               </div>
@@ -562,32 +649,6 @@ export default function SessionWorkspace() {
               <Badge variant="secondary">Session {session.status}</Badge>
             )}
           </div>
-          </div>
-          {(session.repoUrl || session.workspaceEnv) && (
-            <div className="flex items-center gap-3 pt-1.5 border-t border-border/40 flex-wrap">
-              {session.repoUrl && (
-                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <GitBranch className="h-3.5 w-3.5 shrink-0" />
-                  <a
-                    href={session.repoUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="truncate max-w-[200px] hover:text-foreground transition-colors underline underline-offset-2"
-                  >
-                    {session.repoUrl.replace(/^https?://(github.com/)?/, "")}
-                  </a>
-                  {session.repoBranch && (
-                    <span className="text-muted-foreground/50">@ {session.repoBranch}</span>
-                  )}
-                </span>
-              )}
-              {session.workspaceEnv && (
-                <span className="flex items-center gap-1 text-xs rounded px-1.5 py-0.5 bg-muted border border-border/50 font-mono text-muted-foreground">
-                  <Globe className="h-3 w-3" /> {session.workspaceEnv}
-                </span>
-              )}
-            </div>
-          )}
         </div>
 
         {/* Completion summary banner */}
@@ -618,6 +679,71 @@ export default function SessionWorkspace() {
                 {session.goal}
               </CardContent>
             </Card>
+
+            {/* Workspace Context — repo, branch, environment */}
+            {(session.repoUrl || session.repoBranch || session.workspaceEnv) ? (
+              <details className="group/wctx shrink-0">
+                <summary className="cursor-pointer select-none list-none flex items-center gap-2 rounded-lg border bg-card px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors">
+                  <GitBranch className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <span className="flex-1">Workspace Context</span>
+                  <span className="text-[10px] text-muted-foreground transition-transform group-open/wctx:rotate-180 inline-block">▼</span>
+                </summary>
+                <div className="mt-1 rounded-lg border bg-card p-4 flex flex-col gap-3">
+                  {session.repoUrl && (
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Repository</span>
+                      <a
+                        href={session.repoUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 text-xs text-primary hover:underline break-all"
+                        title={session.repoUrl}
+                      >
+                        <ExternalLink className="h-3 w-3 shrink-0" />
+                        {session.repoUrl}
+                      </a>
+                    </div>
+                  )}
+                  {session.repoBranch && (
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Branch</span>
+                      <span className="flex items-center gap-1.5 text-xs font-mono text-foreground">
+                        <GitBranch className="h-3 w-3 shrink-0 text-muted-foreground" />
+                        {session.repoBranch}
+                      </span>
+                    </div>
+                  )}
+                  {session.workspaceEnv && (
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Environment</span>
+                      <span className="flex items-center gap-1.5">
+                        <Server className="h-3 w-3 shrink-0 text-muted-foreground" />
+                        <Badge variant="outline" className={`text-[11px] h-5 px-2 ${ENV_BADGE_STYLES[session.workspaceEnv] ?? "bg-muted/30 text-muted-foreground border-border/50"}`}>
+                          {session.workspaceEnv}
+                        </Badge>
+                      </span>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={openEditCtxModal}
+                    className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground self-start mt-1 transition-colors"
+                  >
+                    <Pencil className="h-3 w-3" /> Edit context
+                  </button>
+                </div>
+              </details>
+            ) : (
+              <button
+                type="button"
+                onClick={openEditCtxModal}
+                className="shrink-0 flex items-center gap-2 rounded-lg border border-dashed bg-card/50 px-4 py-3 text-sm text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-colors w-full"
+              >
+                <GitBranch className="w-4 h-4 shrink-0" />
+                <span>Set workspace context (repo, branch, env)</span>
+                <Pencil className="w-3.5 h-3.5 ml-auto shrink-0" />
+              </button>
+            )}
 
             {/* Memory panel — shows AI working memory and key decisions */}
             {sessionMemory && (
@@ -661,29 +787,31 @@ export default function SessionWorkspace() {
                   {agents.map(agent => {
                     const isLive = !agent.isMock;
                     return (
-                      <div key={agent.id} className="flex flex-col p-2 rounded border bg-muted/30">
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="font-semibold text-sm truncate">{agent.name}</span>
-                          {isLive ? (
-                            <Badge className="text-[10px] h-4 px-1.5 gap-0.5 bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20 shrink-0">
-                              <Zap className="h-2.5 w-2.5" /> Live
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-[10px] h-4 px-1.5 gap-0.5 text-muted-foreground shrink-0">
-                              <FlaskConical className="h-2.5 w-2.5" /> Sim
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="flex justify-between items-center mt-1">
-                          <Badge variant="outline" className="text-[10px] h-4">{agent.provider}</Badge>
-                          <span className="text-xs text-muted-foreground">{agent.role}</span>
-                        </div>
-                        {agent.activeModel && (
-                          <div className="mt-1.5 pt-1.5 border-t border-border/50">
-                            <span className="text-[10px] text-muted-foreground font-mono bg-muted/60 rounded px-1.5 py-0.5">
-                              {agent.activeModel}
+                      <div key={agent.id} className="flex items-center gap-2.5 p-2.5 rounded border bg-muted/30">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1">
+                            <span
+                              className="font-semibold text-xs truncate"
+                              title={[agent.role, agent.activeModel].filter(Boolean).join(" · ")}
+                            >
+                              {agent.name}
                             </span>
+                            {agent.canUseTools && (
+                              <span title="Can execute tools" className="text-violet-400 text-[10px] shrink-0">🔧</span>
+                            )}
                           </div>
+                          <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+                            {agent.provider}{agent.activeModel ? ` · ${agent.activeModel}` : ""}
+                          </p>
+                        </div>
+                        {isLive ? (
+                          <Badge className="text-[10px] h-4 px-1.5 gap-0.5 bg-emerald-500/15 text-emerald-400 border-emerald-500/30 shrink-0">
+                            <Zap className="h-2.5 w-2.5" /> Live
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] h-4 px-1.5 gap-0.5 text-muted-foreground shrink-0">
+                            <FlaskConical className="h-2.5 w-2.5" /> Sim
+                          </Badge>
                         )}
                       </div>
                     );
@@ -713,35 +841,75 @@ export default function SessionWorkspace() {
                   No messages yet. Start the session to see collaboration.
                 </div>
               ) : (
-                messages.map(msg => {
+                (() => {
+                  // Pre-build: map questionMessageId → answer message for O(1) lookup
+                  const answerByQuestionId = new Map<number, typeof messages[number]>();
+                  for (const m of messages) {
+                    if ((m.messageType ?? "output") === "answer") {
+                      const meta = m.metadata as { questionMessageId?: number } | null;
+                      if (typeof meta?.questionMessageId === "number") {
+                        answerByQuestionId.set(meta.questionMessageId, m);
+                      }
+                    }
+                  }
+                  // Skip standalone answer messages — they're rendered inline below their question
+                  const answeredIds = new Set(answerByQuestionId.keys());
+                  const answerMessageIds = new Set(
+                    [...answerByQuestionId.values()].map(m => m.id)
+                  );
+
+                  return messages
+                    .filter(msg => !answerMessageIds.has(msg.id))
+                    .map(msg => {
                   const isUser = msg.role === "user";
                   const isSimulated = !isUser && msg.content?.startsWith(SIMULATED_PREFIX);
                   const msgType = msg.messageType ?? "output";
+                  const isAnswered = msgType === "question" && answeredIds.has(msg.id);
+                  const inlineAnswer = msgType === "question" ? answerByQuestionId.get(msg.id) : undefined;
+
+                  // A question is "for the user" when toAgentId is absent/null and it's from an agent
+                  const isQuestionForUser = msgType === "question" && !isUser && !msg.toAgentId;
+
                   const colorClass = isUser
                     ? AGENT_COLORS["user"]
                     : msgType === "handoff"
                       ? "bg-orange-500/10 text-orange-200 border-orange-500/30"
                       : msgType === "question"
-                        ? "bg-blue-500/10 text-blue-200 border-blue-500/30"
+                        ? isQuestionForUser
+                          ? isAnswered
+                            ? "bg-violet-500/5 text-violet-200/70 border-violet-500/20"
+                            : "bg-violet-500/10 text-violet-200 border-violet-500/40"
+                          : isAnswered
+                            ? "bg-blue-500/5 text-blue-200/70 border-blue-500/20"
+                            : "bg-blue-500/10 text-blue-200 border-blue-500/30"
                         : msgType === "answer"
                           ? "bg-emerald-500/10 text-emerald-200 border-emerald-500/30"
-                          : isSimulated
-                            ? "bg-amber-500/10 text-amber-200 border-amber-500/30"
-                            : (msg.provider ? AGENT_COLORS[msg.provider] : "bg-muted text-foreground border-border");
+                          : msgType === "context"
+                            ? "bg-muted/40 text-muted-foreground border-border/50"
+                            : isSimulated
+                              ? "bg-amber-500/10 text-amber-200 border-amber-500/30"
+                              : (msg.provider ? AGENT_COLORS[msg.provider] : "bg-muted text-foreground border-border");
 
                   const displayContent = isSimulated
                     ? msg.content.replace(/^⚠️ \[Simulated — live \S+ API unavailable\] /, "")
                     : msg.content;
 
-                  const recipientName = (msg as {toAgentName?: string | null}).toAgentName ?? getRecipientName(msg.toAgentId);
+                  // Parse handoff metadata for structured rendering
+                  const handoffMeta = msgType === "handoff"
+                    ? (msg.metadata as { blockedReason?: string; partialWork?: string; toolRequirements?: string[] } | null)
+                    : null;
+
+                  const isReplying = replyingToId === msg.id;
+
                   return (
-                    <div key={msg.id} className={`group flex flex-col max-w-[85%] rounded-lg border p-3 ${colorClass} ${isUser ? "self-end" : "self-start"}`}>
+                    <div key={msg.id} className={`group flex flex-col max-w-[85%] rounded-lg border p-3 ${colorClass} ${isUser ? "self-end" : "self-start"}${msgType === "question" && !isAnswered ? " ring-2 ring-blue-500/50 shadow-[0_0_14px_rgba(59,130,246,0.18)]" : ""}`}>
                       <div className="flex items-center gap-2 mb-2 flex-wrap">
-                        <span className="font-semibold text-xs">{isUser ? "You" : msg.agentName || "System"}</span>
-                        {!isUser && msg.agentRole && <span className="text-[10px] opacity-70">| {msg.agentRole}</span>}
-                        {!isUser && msg.model && (
-                          <span className="text-[10px] opacity-60 font-mono bg-black/10 rounded px-1">{msg.model}</span>
-                        )}
+                        <span
+                          className="font-semibold text-xs"
+                          title={!isUser && msg.agentRole ? `${msg.agentRole}${msg.model ? ` · ${msg.model}` : ""}` : undefined}
+                        >
+                          {isUser ? "You" : msg.agentName || "System"}
+                        </span>
                         {isSimulated && (
                           <Badge variant="outline" className="text-[10px] h-4 px-1.5 gap-0.5 text-amber-400 border-amber-500/40">
                             <FlaskConical className="h-2.5 w-2.5" /> Simulated
@@ -752,15 +920,50 @@ export default function SessionWorkspace() {
                             🔄 Handoff
                           </Badge>
                         )}
-                        {msgType === "question" && (
-                          <Badge variant="outline" className="text-[10px] h-4 px-1.5 gap-0.5 text-blue-400 border-blue-500/40">
-                            ❓ Question
+                        {msgType === "handoff" && msg.toAgentName && (
+                          <span className="text-[10px] text-orange-300/80 flex items-center gap-1">
+                            <span className="opacity-60">{msg.agentName || "Agent"}</span>
+                            <span>→</span>
+                            <span className="font-semibold">{msg.toAgentName}</span>
+                          </span>
+                        )}
+                        {msgType === "context" && (
+                          <Badge variant="outline" className="text-[10px] h-4 px-1.5 gap-0.5 text-muted-foreground border-border/60">
+                            📋 Context
                           </Badge>
+                        )}
+                        {msgType === "question" && isQuestionForUser && (
+                          <Badge variant="outline" className={`text-[10px] h-4 px-1.5 gap-0.5 ${isAnswered ? "text-emerald-400 border-emerald-500/40" : "text-violet-400 border-violet-500/40"}`}>
+                            {isAnswered ? "✅ Answered" : "💬 Needs your input"}
+                          </Badge>
+                        )}
+                        {msgType === "question" && !isQuestionForUser && (
+                          <Badge variant="outline" className={`text-[10px] h-4 px-1.5 gap-0.5 ${isAnswered ? "text-emerald-400 border-emerald-500/40" : "text-blue-400 border-blue-500/40"}`}>
+                            {isAnswered ? "✅ Answered" : "❓ Question"}
+                          </Badge>
+                        )}
+                        {msgType === "question" && !isQuestionForUser && msg.toAgentName && (
+                          <span className="text-[10px] text-blue-300/80 flex items-center gap-0.5">
+                            <span className="opacity-50">→</span>
+                            <span className="font-semibold">{msg.toAgentName}</span>
+                          </span>
+                        )}
+                        {msgType === "question" && isQuestionForUser && (
+                          <span className="text-[10px] text-violet-300/80 flex items-center gap-0.5">
+                            <span className="opacity-50">→</span>
+                            <span className="font-semibold">You</span>
+                          </span>
                         )}
                         {msgType === "answer" && (
                           <Badge variant="outline" className="text-[10px] h-4 px-1.5 gap-0.5 text-emerald-400 border-emerald-500/40">
                             ✅ Answer
                           </Badge>
+                        )}
+                        {msgType === "answer" && msg.toAgentName && (
+                          <span className="text-[10px] text-emerald-300/80 flex items-center gap-0.5">
+                            <span className="opacity-50">↩</span>
+                            <span className="font-semibold">{msg.toAgentName}</span>
+                          </span>
                         )}
                         <span className="text-[10px] opacity-50 ml-auto">{format(new Date(msg.createdAt), "HH:mm:ss")}</span>
                         <button
@@ -772,55 +975,133 @@ export default function SessionWorkspace() {
                           <Copy className="h-3 w-3" />
                         </button>
                       </div>
-                      {/* Question: show recipient prominently */}
-                      {msgType === "question" && recipientName && (
-                        <div className="flex items-center gap-1.5 text-[11px] mb-2 pb-2 border-b border-current/20 font-semibold">
-                          <ArrowRight className="h-3 w-3 shrink-0" />
-                          <span>To: {recipientName}</span>
-                        </div>
+
+                      {/* Context: muted aside */}
+                      {msgType === "context" && (
+                        <p className="text-xs italic text-muted-foreground/80 leading-relaxed">
+                          {displayContent}
+                        </p>
                       )}
-                      {/* Answer: collapsible thread link */}
-                      {msgType === "answer" && (
-                        <button
-                          type="button"
-                          className="flex items-center gap-1.5 text-[11px] mb-2 pb-2 border-b border-current/20 text-left w-full opacity-75 hover:opacity-100 transition-opacity"
-                          onClick={() => setExpandedAnswers(prev => ({ ...prev, [msg.id]: !prev[msg.id] }))}
-                        >
-                          <span className="flex-1">
-                            {"↩"} Answering {recipientName ? `${recipientName}'s` : "a"} question
-                            {(msg as {metadata?: Record<string, unknown>}).metadata?.questionRef !== undefined && (
-                              <span className="opacity-50 font-normal ml-1">
-                                (#{String((msg as {metadata?: Record<string, unknown>}).metadata?.questionRef)})
+
+                      {/* Handoff: structured collapsible sections */}
+                      {msgType === "handoff" && handoffMeta ? (
+                        <div className="flex flex-col gap-2 text-sm">
+                          {handoffMeta.blockedReason && (
+                            <p className="text-xs text-orange-300/80 italic">
+                              Blocked: {handoffMeta.blockedReason}
+                            </p>
+                          )}
+                          {handoffMeta.partialWork && (
+                            <details open className="group/det rounded border border-orange-500/20 bg-black/10">
+                              <summary className="cursor-pointer select-none px-3 py-1.5 text-xs font-semibold text-orange-300 list-none flex items-center gap-1.5">
+                                <span className="transition-transform group-open/det:rotate-90 inline-block">▶</span>
+                                What was completed
+                              </summary>
+                              <div className="px-3 pb-2 pt-1 border-t border-orange-500/20">
+                                <MarkdownContent content={handoffMeta.partialWork} />
+                              </div>
+                            </details>
+                          )}
+                          <details className="group/det2 rounded border border-orange-500/20 bg-black/10">
+                            <summary className="cursor-pointer select-none px-3 py-1.5 text-xs font-semibold text-orange-300 list-none flex items-center gap-1.5">
+                              <span className="transition-transform group-open/det2:rotate-90 inline-block">▶</span>
+                              What remains (requires tools)
+                            </summary>
+                            <div className="px-3 pb-2 pt-1 border-t border-orange-500/20 text-xs text-orange-200/80">
+                              {handoffMeta.toolRequirements && handoffMeta.toolRequirements.length > 0
+                                ? <ul className="list-disc list-inside space-y-0.5">{handoffMeta.toolRequirements.map((r, i) => <li key={i}>{r}</li>)}</ul>
+                                : <span className="italic opacity-70">See sibling task for full context.</span>
+                              }
+                            </div>
+                          </details>
+                        </div>
+                      ) : isUser ? (
+                        <div className="text-sm whitespace-pre-wrap leading-relaxed">{displayContent}</div>
+                      ) : msgType !== "context" ? (
+                        <MarkdownContent content={displayContent || ""} />
+                      ) : null}
+
+                      {/* Tool outputs — diffs, test results, deployment links, etc. */}
+                      {Array.isArray(msg.toolOutputs) && msg.toolOutputs.length > 0 && (
+                        <ToolOutputCards outputs={msg.toolOutputs as ToolOutput[]} />
+                      )}
+
+                      {/* Threaded answer — rendered inline below the question */}
+                      {msgType === "question" && inlineAnswer && (
+                        <div className="mt-2 ml-3 pl-3 border-l-2 border-emerald-500/40 flex flex-col gap-1">
+                          <span className="text-[10px] font-semibold text-emerald-400 flex items-center gap-1">
+                            ↳ {inlineAnswer.agentName || "You"} answered
+                            {inlineAnswer.toAgentName && (
+                              <span className="font-normal text-emerald-300/70 flex items-center gap-0.5">
+                                <span className="opacity-60">↩</span>
+                                <span>{inlineAnswer.toAgentName}</span>
                               </span>
                             )}
                           </span>
-                          {expandedAnswers[msg.id]
-                            ? <ChevronUp className="h-3 w-3 shrink-0" />
-                            : <ChevronDown className="h-3 w-3 shrink-0" />}
-                        </button>
-                      )}
-                      {/* Handoff: two-column completed/continuing layout */}
-                      {msgType === "handoff" && (
-                        <div className="flex gap-1.5 mb-2 pb-2 border-b border-current/20 text-[11px]">
-                          <div className="flex-1 rounded px-2 py-1.5 bg-black/15">
-                            <div className="opacity-60 font-medium mb-0.5">Completed by</div>
-                            <div className="font-semibold">{msg.agentName || "Unknown"}</div>
-                          </div>
-                          <div className="flex items-center text-orange-400/70 font-bold text-sm px-1">{"→"}</div>
-                          <div className="flex-1 rounded px-2 py-1.5 bg-black/15">
-                            <div className="opacity-60 font-medium mb-0.5">Continuing as</div>
-                            <div className="font-semibold">{recipientName || "Tool-capable agent"}</div>
+                          <div className="text-xs text-emerald-200/80">
+                            <MarkdownContent content={inlineAnswer.content || ""} />
                           </div>
                         </div>
                       )}
-                      {isUser ? (
-                        <div className="text-sm whitespace-pre-wrap leading-relaxed">{displayContent}</div>
-                      ) : (
-                        <MarkdownContent content={displayContent || ""} />
+
+                      {/* Inline reply box — shown only for unanswered user-directed questions */}
+                      {isQuestionForUser && !isAnswered && (
+                        <div className="mt-3 flex flex-col gap-2 border-t border-violet-500/20 pt-3">
+                          {isReplying ? (
+                            <>
+                              <Textarea
+                                autoFocus
+                                placeholder="Type your answer…"
+                                className="min-h-[56px] resize-none text-xs bg-black/20 border-violet-500/30 focus:border-violet-400"
+                                value={replyText}
+                                onChange={(e) => setReplyText(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" && !e.shiftKey) {
+                                    e.preventDefault();
+                                    handleReplySubmit(msg.id);
+                                  }
+                                  if (e.key === "Escape") {
+                                    setReplyingToId(null);
+                                    setReplyText("");
+                                  }
+                                }}
+                              />
+                              <div className="flex gap-1.5 justify-end">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 px-2 text-[11px] text-muted-foreground"
+                                  onClick={() => { setReplyingToId(null); setReplyText(""); }}
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  className="h-6 px-2 text-[11px] bg-violet-600 hover:bg-violet-500 text-white"
+                                  disabled={!replyText.trim() || answerQ.isPending}
+                                  onClick={() => handleReplySubmit(msg.id)}
+                                >
+                                  {answerQ.isPending ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3 mr-1" />}
+                                  Reply
+                                </Button>
+                              </div>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              className="self-start text-[11px] text-violet-400 hover:text-violet-300 font-medium flex items-center gap-1 transition-colors"
+                              onClick={() => { setReplyingToId(msg.id); setReplyText(""); }}
+                            >
+                              <Send className="h-3 w-3" />
+                              Reply to this question
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   );
-                })
+                  })
+                })()
               )}
               {(runNext.isPending || runFull.isPending) && (
                 <div className="flex self-start items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 mt-1">
@@ -887,25 +1168,23 @@ export default function SessionWorkspace() {
                         <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">{columnTasks.length}</Badge>
                       </div>
                       {columnTasks.map(task => (
-                        <div key={task.id} className={`bg-card border rounded p-2 text-sm shadow-sm ${task.status === 'blocked_needs_tools' ? 'border-orange-500/30 bg-orange-500/5' : ''}`}>
+                        <div key={task.id} className={`bg-card border rounded p-2 text-sm shadow-sm ${task.status === "blocked_needs_tools" ? "border-amber-500/30 bg-amber-500/5" : ""}`}>
                           <div className="font-medium line-clamp-2 leading-tight">{task.title}</div>
-                          {task.status === 'blocked_needs_tools' && (
-                            <>
-                              {task.blockedReason && (
-                                <p className="mt-1.5 text-[10px] text-orange-400/80 leading-snug border-l-2 border-orange-500/40 pl-2 italic">
-                                  {task.blockedReason}
-                                </p>
-                              )}
-                              {task.toolRequirements && task.toolRequirements.length > 0 && (
-                                <div className="mt-1.5 flex flex-wrap gap-1">
-                                  {task.toolRequirements.map(tool => (
-                                    <Badge key={tool} variant="outline" className="text-[9px] h-4 px-1.5 gap-0.5 text-orange-400 border-orange-500/40">
-                                      <Wrench className="h-2 w-2" /> {tool}
-                                    </Badge>
-                                  ))}
-                                </div>
-                              )}
-                            </>
+                          {task.status === "blocked_needs_tools" && task.blockedReason && (
+                            <div className="flex items-start gap-1 mt-1.5 text-[10px] text-amber-400/90">
+                              <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
+                              <span className="leading-tight">{task.blockedReason}</span>
+                            </div>
+                          )}
+                          {task.status === "blocked_needs_tools" && task.toolRequirements && task.toolRequirements.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {task.toolRequirements.map((req, i) => (
+                                <span key={i} className="inline-flex items-center gap-0.5 text-[9px] font-mono bg-violet-500/10 text-violet-300 border border-violet-500/25 rounded px-1.5 py-0.5">
+                                  <Wrench className="h-2 w-2 shrink-0" />
+                                  {req}
+                                </span>
+                              ))}
+                            </div>
                           )}
                           {task.assignedAgentId && (() => {
                             const assignedAgent = agents.find(a => a.id === task.assignedAgentId);
@@ -969,6 +1248,58 @@ export default function SessionWorkspace() {
           </div>
         </div>
       </div>
+
+      {/* Edit Workspace Context Modal (#14) */}
+      <Dialog open={showEditCtxModal} onOpenChange={setShowEditCtxModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <GitBranch className="h-4 w-4" /> Edit Workspace Context
+            </DialogTitle>
+            <DialogDescription>
+              Connect a repository so tool-capable agents can clone, run, and deploy code.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 py-2">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium">Repository URL</label>
+              <Input
+                placeholder="https://github.com/owner/repo"
+                value={editRepoUrl}
+                onChange={e => setEditRepoUrl(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium">Branch</label>
+              <Input
+                placeholder="main"
+                value={editRepoBranch}
+                onChange={e => setEditRepoBranch(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium">Environment</label>
+              <Select value={editWorkspaceEnv} onValueChange={setEditWorkspaceEnv}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select environment…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">None</SelectItem>
+                  {["development", "staging", "production"].map(env => (
+                    <SelectItem key={env} value={env} className="capitalize">{env}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditCtxModal(false)}>Cancel</Button>
+            <Button onClick={handleSaveCtx} disabled={updateCtx.isPending}>
+              {updateCtx.isPending ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Approval Modal */}
       <Dialog open={showApprovalModal} onOpenChange={setShowApprovalModal}>

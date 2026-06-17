@@ -1,4 +1,4 @@
-import type { AgentAdapter, AgentTaskInput, AgentTaskResult } from "./interface";
+import type { AgentAdapter, AgentTaskInput, AgentTaskResult, ToolOutput } from "./interface";
 
 function randomCost(): number {
   return Math.round((0.001 + Math.random() * 0.006) * 10000) / 10000;
@@ -107,6 +107,135 @@ abstract class TextOnlyMockAdapter extends MockAdapter {
 }
 
 // ── Tool-capable mock base ────────────────────────────────────────────────────
+
+/**
+ * Generates representative simulated tool outputs for tool-capable mock adapters.
+ * Ensures tool output cards appear in the session feed even in simulation mode,
+ * letting users experience the full UI without needing real API keys configured.
+ *
+ * Objects are shaped to match the frontend ToolOutput discriminated union
+ * (ToolOutputCards.tsx). The JSONB column passes them through as-is, so
+ * type-specific fields (filename, diff, url, command, etc.) reach the renderer.
+ */
+function simulateToolOutputs(taskType: string, repoUrl?: string, branch?: string): ToolOutput[] {
+  const branchName = branch ?? "main";
+
+  if (taskType === "build" || taskType === "code") {
+    const filenames = ["src/index.ts", "src/lib/utils.ts", "src/components/App.tsx"];
+    const filename = filenames[Math.floor(Math.random() * filenames.length)] ?? "src/index.ts";
+    const additions = 12 + Math.floor(Math.random() * 30);
+    const deletions = Math.floor(Math.random() * 8);
+    const diffLines = [
+      `--- a/${filename}`,
+      `+++ b/${filename}`,
+      `@@ -1,${deletions + 3} +1,${additions + 3} @@`,
+      ...Array.from({ length: deletions }, (_, i) => `-  const oldValue${i} = null;`),
+      ...Array.from({ length: additions }, (_, i) => `+  const newValue${i} = computeValue(${i});`),
+      `   export default main;`,
+    ].join("\n");
+
+    return [
+      // git_operation — frontend expects: operation, branch, commitSha?, commitMessage?
+      {
+        type: "git_operation",
+        title: "Cloned repository",
+        content: `Cloned repository @ ${branchName}`,
+        operation: "clone",
+        branch: branchName,
+      } as unknown as ToolOutput,
+      // file_diff — frontend expects: filename, diff, additions?, deletions?
+      {
+        type: "file_diff",
+        title: `Modified ${filename}`,
+        content: diffLines,
+        filename,
+        diff: diffLines,
+        additions,
+        deletions,
+      } as unknown as ToolOutput,
+      // command_output — frontend expects: command, output, exitCode?
+      {
+        type: "command_output",
+        title: "Ran tests",
+        content: "pnpm test — all passed",
+        command: "pnpm test",
+        output: `✓ 14 tests passed\n✓ 0 failures\nAll test suites passed in 2.3s`,
+        exitCode: 0,
+      } as unknown as ToolOutput,
+      // build_log — frontend expects: log, success, duration?
+      {
+        type: "build_log",
+        title: "Build succeeded",
+        content: "Build succeeded",
+        log: `> pnpm build\nCompiling TypeScript...\nBundle: dist/index.js (42.1 kB)\nBuild completed in 3.8s`,
+        success: true,
+        duration: 3.8,
+      } as unknown as ToolOutput,
+    ];
+  }
+
+  if (taskType === "deployment_approval") {
+    const env = "staging";
+    return [
+      {
+        type: "command_output",
+        title: "Ran smoke tests",
+        content: "Smoke tests passed",
+        command: "pnpm test:smoke",
+        output: `✓ /health → 200\n✓ /api/sessions → 200\n✓ All smoke tests passed`,
+        exitCode: 0,
+      } as unknown as ToolOutput,
+      // deployment_url — frontend expects: url, environment?, label?
+      {
+        type: "deployment_url",
+        title: "Preview deployed",
+        content: `https://${env}.example.com`,
+        url: `https://${env}.example.com`,
+        environment: env,
+        label: "Preview deployment",
+      } as unknown as ToolOutput,
+    ];
+  }
+
+  if (taskType === "code_review") {
+    return [
+      {
+        type: "command_output",
+        title: "Ran linter",
+        content: "Lint check passed with warnings",
+        command: "pnpm lint",
+        output: `✓ 0 errors, 2 warnings\nWarning: unused import in src/lib/utils.ts:12\nWarning: prefer const in src/index.ts:34`,
+        exitCode: 0,
+      } as unknown as ToolOutput,
+    ];
+  }
+
+  if (taskType === "research" || taskType === "data_gathering") {
+    return [
+      {
+        type: "command_output",
+        title: "Data gathered",
+        content: "Data gathering complete",
+        command: "manus.gather_data",
+        output: `Executed 3 web searches\nProcessed 12 sources\nExtracted 847 data points\nSummary written to analysis.md`,
+        exitCode: 0,
+      } as unknown as ToolOutput,
+    ];
+  }
+
+  // Generic fallback for any other task type
+  return [
+    {
+      type: "command_output",
+      title: "Task executed",
+      content: "Task executed successfully",
+      command: "agent.run_task",
+      output: `Agent executed task successfully.\nAll steps completed without errors.`,
+      exitCode: 0,
+    } as unknown as ToolOutput,
+  ];
+}
+
 abstract class ToolCapableMockAdapter extends MockAdapter {
   canUseTools = true;
 
@@ -124,6 +253,12 @@ abstract class ToolCapableMockAdapter extends MockAdapter {
       ? pick(["complete", "needs_review"])
       : "needs_review";
 
+    const toolOutputs = simulateToolOutputs(
+      input.taskType ?? "build",
+      input.repoUrl,
+      input.repoBranch,
+    );
+
     return {
       messageText,
       suggestedNextTasks: [],
@@ -132,6 +267,7 @@ abstract class ToolCapableMockAdapter extends MockAdapter {
       estimatedCost: randomCost(),
       answersToQuestions,
       outboundQuestions: [],
+      toolOutputs,
     };
   }
 }

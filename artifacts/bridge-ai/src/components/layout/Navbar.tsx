@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Cpu, Settings, Activity, FlaskConical } from "lucide-react";
+import { Settings, Activity, FlaskConical, CreditCard } from "lucide-react";
 
 export function Navbar() {
   const [location] = useLocation();
@@ -9,9 +9,12 @@ export function Navbar() {
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 max-w-screen-2xl items-center gap-3">
         {/* Logo — always visible */}
-        <Link href="/" className="flex items-center space-x-2 shrink-0">
-          <Cpu className="h-6 w-6 text-primary" />
-          <span className="font-bold hidden sm:inline-block">VIBA</span>
+        <Link href="/" className="flex items-center shrink-0">
+          <img
+            src="/viba-logo.png"
+            alt="VIBA"
+            className="h-9 w-auto object-contain"
+          />
         </Link>
 
         {/* Desktop nav */}
@@ -34,6 +37,15 @@ export function Navbar() {
           >
             <FlaskConical className="h-3.5 w-3.5" />
             Workbench
+          </Link>
+          <Link
+            href="/billing"
+            className={`transition-colors hover:text-foreground/80 flex items-center gap-1.5 ${
+              location.startsWith("/billing") || location.startsWith("/pricing") ? "text-foreground" : "text-foreground/60"
+            }`}
+          >
+            <CreditCard className="h-3.5 w-3.5" />
+            Billing
           </Link>
           <Link
             href="/settings"
@@ -71,6 +83,18 @@ export function Navbar() {
             >
               <FlaskConical className="h-3.5 w-3.5 shrink-0" />
               <span>Workbench</span>
+            </Button>
+          </Link>
+          <Link href="/billing">
+            <Button
+              variant="ghost"
+              size="sm"
+              className={`h-8 px-2 gap-1 text-xs ${
+                location.startsWith("/billing") || location.startsWith("/pricing") ? "text-foreground" : "text-foreground/60"
+              }`}
+            >
+              <CreditCard className="h-3.5 w-3.5 shrink-0" />
+              <span>Billing</span>
             </Button>
           </Link>
           <Link href="/settings">

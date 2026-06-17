@@ -4,6 +4,8 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { pool } from "@workspace/db";
 import { loadCircuitStateFromDb, validateCircuitBreakerEnv } from "./lib/adapterRetry";
+import { provisionStripeProducts } from "./lib/billing";
+import bcrypt from "bcryptjs";
 
 // Fail fast if circuit breaker env vars are set to invalid values.
 validateCircuitBreakerEnv();
@@ -48,14 +50,9 @@ async function runStartupMigrations(): Promise<void> {
   // ── subscribers: email unique constraint (safe to add if missing) ──────────
   await pool.query(`
     DO $$ BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conname = 'subscribers_email_unique'
-          AND conrelid = 'subscribers'::regclass
-      ) THEN
-        ALTER TABLE subscribers
-          ADD CONSTRAINT subscribers_email_unique UNIQUE (email);
-      END IF;
+      ALTER TABLE subscribers ADD CONSTRAINT subscribers_email_unique UNIQUE (email);
+    EXCEPTION WHEN duplicate_table OR duplicate_object OR unique_violation THEN
+      NULL; -- already exists, skip
     END $$
   `);
 
@@ -143,52 +140,95 @@ async function runStartupMigrations(): Promise<void> {
     END $$
   `);
 
-  // sessions: workspace context columns
+  // ── users table (email/password + OAuth accounts) ─────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id            SERIAL      PRIMARY KEY,
+      email         TEXT        NOT NULL,
+      password_hash TEXT,
+      name          TEXT,
+      google_id     TEXT        UNIQUE,
+      github_id     TEXT        UNIQUE,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
   await pool.query(`
     DO $$ BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'sessions' AND column_name = 'repo_url'
-      ) THEN
-        ALTER TABLE sessions
-          ADD COLUMN repo_url TEXT,
-          ADD COLUMN repo_branch TEXT,
-          ADD COLUMN workspace_env TEXT;
-      END IF;
+      ALTER TABLE users ADD CONSTRAINT users_email_unique UNIQUE (email);
+    EXCEPTION WHEN duplicate_table OR duplicate_object OR unique_violation THEN
+      NULL;
     END $$
   `);
 
-  // tasks: tool handoff columns
-  await pool.query(`
-    DO $$ BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'tasks' AND column_name = 'blocked_reason'
-      ) THEN
-        ALTER TABLE tasks
-          ADD COLUMN blocked_reason TEXT,
-          ADD COLUMN partial_work TEXT,
-          ADD COLUMN tool_requirements TEXT[];
-      END IF;
-    END $$
-  `);
+  // sessions: workspace context columns — one guard per column
+  await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS repo_url TEXT`);
+  await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS repo_branch TEXT`);
+  await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS workspace_env TEXT`);
 
-  // messages: inter-agent comms columns
+  // tasks: tool handoff columns — one guard per column
+  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS blocked_reason TEXT`);
+  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS partial_work TEXT`);
+  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS tool_requirements TEXT[]`);
+  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS dependency_task_id INTEGER`);
+
+  // messages: inter-agent comms columns — one guard per column
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_type TEXT NOT NULL DEFAULT 'output'`);
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS to_agent_id INTEGER`);
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS metadata JSONB`);
+
+  // ── users: billing columns ────────────────────────────────────────────────
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_status TEXT NOT NULL DEFAULT 'none'`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS credits_remaining INTEGER NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS credits_period_end TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS credits_exhausted_notified_at TIMESTAMPTZ`);
+
+  // Unique constraints for Stripe IDs (skip if already exist)
   await pool.query(`
     DO $$ BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'messages' AND column_name = 'message_type'
-      ) THEN
-        ALTER TABLE messages
-          ADD COLUMN message_type TEXT NOT NULL DEFAULT 'output',
-          ADD COLUMN to_agent_id INTEGER,
-          ADD COLUMN metadata JSONB;
-      END IF;
-    END $$
+      ALTER TABLE users ADD CONSTRAINT users_stripe_customer_id_unique UNIQUE (stripe_customer_id);
+    EXCEPTION WHEN duplicate_table OR duplicate_object OR unique_violation THEN NULL; END $$
+  `);
+  await pool.query(`
+    DO $$ BEGIN
+      ALTER TABLE users ADD CONSTRAINT users_stripe_subscription_id_unique UNIQUE (stripe_subscription_id);
+    EXCEPTION WHEN duplicate_table OR duplicate_object OR unique_violation THEN NULL; END $$
   `);
 
   logger.info("Startup migrations complete");
+}
+
+/**
+ * Ensures an admin user exists with infinite credits.
+ *
+ * Requires both ADMIN_BOOTSTRAP_EMAIL and ADMIN_BOOTSTRAP_PASSWORD env vars to be set.
+ * If either is missing the step is skipped — no privileged account is created automatically.
+ * On conflict (user already exists) only billing fields are updated; the password is never
+ * overwritten so operators can rotate it independently.
+ */
+async function ensureAdminUser(): Promise<void> {
+  const adminEmail = process.env["ADMIN_BOOTSTRAP_EMAIL"]?.trim();
+  const adminPassword = process.env["ADMIN_BOOTSTRAP_PASSWORD"];
+
+  if (!adminEmail || !adminPassword) {
+    logger.info("Admin bootstrap skipped — ADMIN_BOOTSTRAP_EMAIL / ADMIN_BOOTSTRAP_PASSWORD not set");
+    return;
+  }
+
+  const hash = await bcrypt.hash(adminPassword, 12);
+
+  await pool.query(
+    `INSERT INTO users (email, password_hash, name, subscription_status, credits_remaining)
+     VALUES ($1, $2, 'Admin', 'active', 999999999)
+     ON CONFLICT (email) DO UPDATE SET
+       subscription_status = 'active',
+       credits_remaining   = 999999999,
+       updated_at          = NOW()`,
+    [adminEmail, hash],
+  );
+  logger.info({ email: adminEmail }, "Admin user ensured");
 }
 
 // Bind the server with one EADDRINUSE retry to survive workflow restart races
@@ -218,6 +258,8 @@ function listenWithRetry(attemptNumber: number): void {
 
 loadCircuitStateFromDb()
   .then(() => runStartupMigrations())
+  .then(() => ensureAdminUser())
+  .then(() => provisionStripeProducts())
   .then(() => {
     listenWithRetry(1);
   })
@@ -226,6 +268,3 @@ loadCircuitStateFromDb()
     process.exit(1);
   });
 
-// ── Tool-use & inter-agent comms migrations (idempotent) ──────────────────────
-  // These run as part of the regular runStartupMigrations() call — appended here
-  // to keep migrations self-contained.

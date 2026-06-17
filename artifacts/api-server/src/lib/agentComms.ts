@@ -9,14 +9,17 @@ const MAX_OUTBOUND_QUESTIONS_PER_STEP = 3;
 /**
  * Fetch unanswered question messages directed at the given agent for this session.
  * Returns them as the pendingQuestions array to inject into the adapter's taskInput.
+ *
+ * Scoped by sessionId + toAgentId only — NOT by the recipient's current taskId.
+ * Questions are stored with the *sender's* taskId; the recipient runs their own
+ * task, so filtering by recipient's taskId would permanently hide all questions.
+ * Display-side scoping (which task a question belongs to) is done via the
+ * question's own taskId field, not here in the delivery query.
  */
 export async function processPendingQuestions(
   sessionId: number,
   agentId: number,
 ): Promise<Array<{ fromAgent: string; question: string; messageId: number }>> {
-  // Find question messages directed at this agent that have no answer yet.
-  // An answer is a message with messageType="answer" whose metadata.questionMessageId
-  // matches the question's id.
   const questions = await db
     .select()
     .from(messagesTable)
@@ -126,20 +129,45 @@ export async function persistOutboundQuestions(
 
 /**
  * Persist an agent's answers to pending questions.
- * Each answer is saved as an "answer" message linking back to its question
- * via metadata.questionMessageId.
+ *
+ * Each answer is stored under the *question's original taskId*, not the
+ * responder's current taskId. This keeps the Q/A pair in the same task thread
+ * for display purposes even though the recipient ran on a different task.
+ *
+ * Each answer links back to its question via metadata.questionMessageId.
  */
 export async function persistAnswers(
   sessionId: number,
   fromAgent: Agent,
   answers: NonNullable<AgentTaskResult["answersToQuestions"]>,
-  taskId: number,
+  _responderTaskId: number,
 ): Promise<Message[]> {
   if (answers.length === 0) return [];
+
+  // Look up all referenced question messages in one query so we can resolve
+  // each question's original taskId.
+  const questionIds = answers.map((a) => a.messageId);
+  const questionRows = await db
+    .select({ id: messagesTable.id, taskId: messagesTable.taskId })
+    .from(messagesTable)
+    .where(
+      and(
+        eq(messagesTable.sessionId, sessionId),
+        eq(messagesTable.messageType, "question"),
+      ),
+    );
+
+  const questionTaskMap = new Map<number, number | null>(
+    questionRows.map((r) => [r.id, r.taskId]),
+  );
 
   const saved: Message[] = [];
 
   for (const a of answers) {
+    // Use the originating question's taskId so the answer stays in the same
+    // task thread. Fall back to responder's task only if lookup fails.
+    const originTaskId = questionTaskMap.get(a.messageId) ?? _responderTaskId;
+
     const [msg] = await db
       .insert(messagesTable)
       .values({
@@ -148,16 +176,23 @@ export async function persistAnswers(
         role: "assistant",
         provider: fromAgent.provider,
         content: a.answer,
-        taskId,
+        taskId: originTaskId,
         agentName: fromAgent.name,
         agentRole: fromAgent.role,
         messageType: "answer",
-        metadata: { questionMessageId: a.messageId, taskId },
+        metadata: { questionMessageId: a.messageId, originTaskId },
       })
       .returning();
 
     if (msg) {
       saved.push(msg);
+    }
+  }
+
+  // Warn if any referenced question message IDs were not found
+  for (const id of questionIds) {
+    if (!questionTaskMap.has(id)) {
+      logger.warn({ questionMessageId: id, sessionId }, "persistAnswers: question message not found — using responder taskId as fallback");
     }
   }
 

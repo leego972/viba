@@ -1,14 +1,13 @@
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Cpu, Zap, Shield, Blocks, ArrowRight, LineChart } from "lucide-react";
+import { Zap, Shield, Blocks, ArrowRight, LineChart } from "lucide-react";
 
 export default function Home() {
   return (
     <div className="flex flex-col min-h-screen bg-background">
       <header className="px-6 h-14 flex items-center border-b border-border">
-        <Link href="/" className="flex items-center justify-center gap-2">
-          <Cpu className="h-6 w-6 text-primary" />
-          <span className="font-bold text-lg tracking-tight">VIBA</span>
+        <Link href="/" className="flex items-center justify-center">
+          <img src="/viba-logo.png" alt="VIBA" className="h-9 w-auto object-contain" />
         </Link>
         <nav className="ml-auto flex gap-4 sm:gap-6">
           <Link href="/settings">

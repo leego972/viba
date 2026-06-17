@@ -8,10 +8,6 @@ export const logger = pino({
     "req.headers.authorization",
     "req.headers.cookie",
     "res.headers['set-cookie']",
-    "req.headers['x-access-token']",
-    "req.headers['x-admin-token']",
-    "req.headers['x-bypass-token']",
-    "req.headers['stripe-signature']",
   ],
   ...(isProduction
     ? {}
