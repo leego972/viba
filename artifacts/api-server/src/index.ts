@@ -197,6 +197,31 @@ async function runStartupMigrations(): Promise<void> {
     EXCEPTION WHEN duplicate_table OR duplicate_object OR unique_violation THEN NULL; END $$
   `);
 
+  // ── password_reset_tokens table ───────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id         SERIAL      PRIMARY KEY,
+      user_id    INTEGER     NOT NULL,
+      token      TEXT        NOT NULL UNIQUE,
+      expires_at TIMESTAMPTZ NOT NULL,
+      used_at    TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  // ── credit_transactions table ─────────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS credit_transactions (
+      id            SERIAL      PRIMARY KEY,
+      user_id       INTEGER     NOT NULL,
+      amount        INTEGER     NOT NULL,
+      balance_after INTEGER     NOT NULL,
+      reason        TEXT        NOT NULL,
+      session_id    INTEGER,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
   logger.info("Startup migrations complete");
 }
 

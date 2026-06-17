@@ -353,6 +353,98 @@ router.get("/auth/github/callback", async (req, res): Promise<void> => {
   }
 });
 
+// ─── POST /auth/forgot-password ───────────────────────────────────────────────
+router.post("/auth/forgot-password", async (req, res): Promise<void> => {
+  const body = req.body as { email?: unknown };
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  if (!email) { res.status(400).json({ error: "Email is required." }); return; }
+
+  // Always respond success to prevent email enumeration
+  res.json({ ok: true });
+
+  try {
+    const { rows } = await pool.query<{ id: number }>(
+      "SELECT id FROM users WHERE email = $1",
+      [email],
+    );
+    if (!rows[0]) return; // no user — silently drop
+
+    const userId = rows[0].id;
+    const token = crypto.randomBytes(32).toString("hex");
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await pool.query(
+      `INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)`,
+      [userId, token, expiresAt],
+    );
+
+    const baseUrl = process.env["PUBLIC_ORIGIN"] ?? "https://viba.guru";
+    const resetUrl = `${baseUrl}/reset-password?token=${token}`;
+
+    // Send via SMTP if configured
+    const smtpHost = process.env["SMTP_HOST"];
+    const smtpUser = process.env["SMTP_USER"];
+    const smtpPass = process.env["SMTP_PASS"];
+    const from = process.env["SMTP_FROM"] ?? smtpUser ?? "noreply@viba.guru";
+
+    if (smtpHost && smtpUser && smtpPass) {
+      const nodemailer = await import("nodemailer");
+      const transporter = nodemailer.default.createTransport({
+        host: smtpHost,
+        port: parseInt(process.env["SMTP_PORT"] ?? "587", 10),
+        auth: { user: smtpUser, pass: smtpPass },
+      });
+      await transporter.sendMail({
+        from,
+        to: email,
+        subject: "Reset your VIBA password",
+        text: `Click the link below to reset your password (expires in 1 hour):\n\n${resetUrl}\n\nIf you didn't request this, ignore this email.`,
+        html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto"><h2>Reset your VIBA password</h2><p>Click below to set a new password. This link expires in 1 hour.</p><p><a href="${resetUrl}" style="display:inline-block;background:#6366f1;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600">Reset Password</a></p><p style="color:#6b7280;font-size:12px">If you didn't request this, you can safely ignore this email.</p></div>`,
+      });
+    }
+  } catch (err) {
+    req.log?.error?.({ err }, "forgot-password error");
+  }
+});
+
+// ─── POST /auth/reset-password ────────────────────────────────────────────────
+router.post("/auth/reset-password", async (req, res): Promise<void> => {
+  const body = req.body as { token?: unknown; password?: unknown };
+  const token = typeof body.token === "string" ? body.token.trim() : "";
+  const password = typeof body.password === "string" ? body.password : "";
+
+  if (!token || !password) {
+    res.status(400).json({ error: "Token and password are required." });
+    return;
+  }
+  if (password.length < 8) {
+    res.status(400).json({ error: "Password must be at least 8 characters." });
+    return;
+  }
+
+  try {
+    const { rows } = await pool.query<{ id: number; user_id: number; expires_at: Date; used_at: Date | null }>(
+      `SELECT id, user_id, expires_at, used_at FROM password_reset_tokens WHERE token = $1`,
+      [token],
+    );
+    const row = rows[0];
+
+    if (!row || row.used_at || row.expires_at < new Date()) {
+      res.status(400).json({ error: "This reset link is invalid or has expired." });
+      return;
+    }
+
+    const hash = await bcrypt.hash(password, 12);
+    await pool.query("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2", [hash, row.user_id]);
+    await pool.query("UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1", [row.id]);
+
+    res.json({ ok: true });
+  } catch (err) {
+    req.log?.error?.({ err }, "reset-password error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // ─── Legacy: GET /auth/config ─────────────────────────────────────────────────
 // Kept for backward compat with Stripe flow — always returns "open" now that
 // Clerk / session-based auth is the gate instead of ACCESS_TOKEN.

@@ -140,16 +140,25 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <p className="text-center text-sm text-gray-500 pt-1">
-            Don&apos;t have an account?{" "}
+          <div className="flex items-center justify-between pt-1">
+            <p className="text-sm text-gray-500">
+              Don&apos;t have an account?{" "}
+              <button
+                type="button"
+                onClick={() => setLocation("/signup")}
+                className="text-blue-400 hover:text-blue-300 underline-offset-4 hover:underline transition-colors font-medium"
+              >
+                Sign up free
+              </button>
+            </p>
             <button
               type="button"
-              onClick={() => setLocation("/signup")}
-              className="text-blue-400 hover:text-blue-300 underline-offset-4 hover:underline transition-colors font-medium"
+              onClick={() => setLocation("/forgot-password")}
+              className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
             >
-              Sign up free
+              Forgot password?
             </button>
-          </p>
+          </div>
         </div>
       </div>
     </div>

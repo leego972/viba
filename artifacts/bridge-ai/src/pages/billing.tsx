@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { AlertTriangle, CheckCircle2, Clock, XCircle, Zap, RefreshCw, ExternalLink } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, XCircle, Zap, RefreshCw, ExternalLink, TrendingDown, TrendingUp, History } from "lucide-react";
 
 interface BillingStatus {
   subscriptionStatus: string;
@@ -18,6 +18,15 @@ interface CreditPack {
   credits: number;
   unitAmount: number;
   badge: string | null;
+}
+
+interface CreditTransaction {
+  id: number;
+  amount: number;
+  balanceAfter: number;
+  reason: string;
+  sessionId: number | null;
+  createdAt: string;
 }
 
 function fmt(cents: number) {
@@ -48,10 +57,27 @@ export default function Billing() {
   const [portalLoading, setPortalLoading] = useState(false);
   const [packLoading, setPackLoading] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [transactions, setTransactions] = useState<CreditTransaction[]>([]);
+  const [txnLoading, setTxnLoading] = useState(false);
 
   // Check if we just bought credits (Stripe redirected back with ?credits_added=N)
   const params = new URLSearchParams(window.location.search);
   const creditsAdded = params.get("credits_added");
+
+  const fetchTransactions = useCallback(async () => {
+    setTxnLoading(true);
+    try {
+      const res = await fetch("/api/billing/transactions", { credentials: "include" });
+      if (res.ok) {
+        const d = await res.json() as { transactions: CreditTransaction[] };
+        setTransactions(d.transactions);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setTxnLoading(false);
+    }
+  }, []);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -73,7 +99,8 @@ export default function Billing() {
 
   useEffect(() => {
     fetchStatus();
-  }, [fetchStatus]);
+    fetchTransactions();
+  }, [fetchStatus, fetchTransactions]);
 
   async function handlePortal() {
     setPortalLoading(true);
@@ -311,6 +338,57 @@ export default function Billing() {
               </p>
             </div>
           </>
+        )}
+        {/* Credit Usage History */}
+        {(transactions.length > 0 || txnLoading) && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <History className="w-4 h-4 text-muted-foreground" />
+              <h2 className="font-semibold">Credit Usage History</h2>
+            </div>
+            {txnLoading ? (
+              <div className="space-y-2">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="h-11 rounded-lg bg-muted/30 animate-pulse" />
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-border bg-card divide-y divide-border overflow-hidden">
+                {transactions.map((txn) => {
+                  const isGrant = txn.amount > 0;
+                  const label = txn.reason === "agent_run"
+                    ? txn.sessionId ? `Agent run · session #${txn.sessionId}` : "Agent run"
+                    : txn.reason === "monthly_renewal" ? "Monthly credit refresh"
+                    : txn.reason === "credit_pack" ? "Credit pack purchase"
+                    : txn.reason === "trial_grant" ? "Trial credits"
+                    : txn.reason;
+                  return (
+                    <div key={txn.id} className="flex items-center justify-between px-4 py-3 text-sm">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${isGrant ? "bg-emerald-500/10" : "bg-red-500/10"}`}>
+                          {isGrant
+                            ? <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+                            : <TrendingDown className="w-3.5 h-3.5 text-red-400" />}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-foreground">{label}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(txn.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0 ml-4">
+                        <p className={`font-semibold tabular-nums ${isGrant ? "text-emerald-400" : "text-red-400"}`}>
+                          {isGrant ? "+" : ""}{txn.amount.toLocaleString()}
+                        </p>
+                        <p className="text-xs text-muted-foreground tabular-nums">{txn.balanceAfter.toLocaleString()} left</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         )}
       </div>
     </AppLayout>

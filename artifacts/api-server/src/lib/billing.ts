@@ -208,15 +208,26 @@ export async function grantCredits(
   amount: number,
   reason: string,
 ): Promise<void> {
-  await pool.query(
-    `UPDATE users SET credits_remaining = credits_remaining + $1, updated_at = NOW() WHERE id = $2`,
+  const result = await pool.query(
+    `UPDATE users SET credits_remaining = credits_remaining + $1, updated_at = NOW()
+     WHERE id = $2 RETURNING credits_remaining`,
     [amount, userId],
   );
-  logger.info({ userId, amount, reason }, "Billing: credits granted");
+  const balanceAfter = (result.rows[0]?.credits_remaining as number) ?? 0;
+  await pool.query(
+    `INSERT INTO credit_transactions (user_id, amount, balance_after, reason)
+     VALUES ($1, $2, $3, $4)`,
+    [userId, amount, balanceAfter, reason],
+  );
+  logger.info({ userId, amount, balanceAfter, reason }, "Billing: credits granted");
 }
 
 /** Returns false when insufficient credits — atomically deducts only if balance allows */
-export async function deductCredits(userId: number, amount: number): Promise<boolean> {
+export async function deductCredits(
+  userId: number,
+  amount: number,
+  sessionId?: number,
+): Promise<boolean> {
   const result = await pool.query(
     `UPDATE users SET credits_remaining = credits_remaining - $1, updated_at = NOW()
      WHERE id = $2 AND credits_remaining >= $1
@@ -224,11 +235,34 @@ export async function deductCredits(userId: number, amount: number): Promise<boo
     [amount, userId],
   );
   if ((result.rowCount ?? 0) === 0) return false;
-  logger.info(
-    { userId, amount, remaining: result.rows[0]?.credits_remaining },
-    "Billing: credits deducted",
+  const balanceAfter = (result.rows[0]?.credits_remaining as number) ?? 0;
+  await pool.query(
+    `INSERT INTO credit_transactions (user_id, amount, balance_after, reason, session_id)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [userId, -amount, balanceAfter, "agent_run", sessionId ?? null],
   );
+  logger.info({ userId, amount, balanceAfter, remaining: balanceAfter }, "Billing: credits deducted");
   return true;
+}
+
+export async function getCreditTransactions(
+  userId: number,
+  limit = 50,
+): Promise<Array<{ id: number; amount: number; balanceAfter: number; reason: string; sessionId: number | null; createdAt: string }>> {
+  const result = await pool.query(
+    `SELECT id, amount, balance_after, reason, session_id, created_at
+     FROM credit_transactions WHERE user_id = $1
+     ORDER BY created_at DESC LIMIT $2`,
+    [userId, limit],
+  );
+  return result.rows.map((r) => ({
+    id: r.id as number,
+    amount: r.amount as number,
+    balanceAfter: r.balance_after as number,
+    reason: r.reason as string,
+    sessionId: (r.session_id as number | null) ?? null,
+    createdAt: (r.created_at as Date).toISOString(),
+  }));
 }
 
 export async function getCredits(userId: number): Promise<number> {

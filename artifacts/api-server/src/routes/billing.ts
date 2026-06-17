@@ -5,6 +5,7 @@ import {
   isStripeConfigured,
   getBillingPriceId,
   getBillingStatus,
+  getCreditTransactions,
   VIBA_PLAN,
   CREDIT_PACKS,
 } from "../lib/billing";
@@ -184,6 +185,17 @@ router.post("/billing/portal", async (req, res): Promise<void> => {
     req.log.error({ err }, "billing portal error");
     res.status(500).json({ error: "Failed to create portal session" });
   }
+});
+
+// GET /api/billing/transactions — credit usage history for the current user
+router.get("/billing/transactions", async (req, res): Promise<void> => {
+  const userId = req.session?.userId as number | undefined;
+  if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
+
+  const limitParam = Number(req.query["limit"]);
+  const limit = Number.isFinite(limitParam) && limitParam > 0 && limitParam <= 200 ? limitParam : 50;
+  const txns = await getCreditTransactions(userId, limit);
+  res.json({ transactions: txns });
 });
 
 export default router;
