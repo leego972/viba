@@ -1,8 +1,8 @@
 // Sentry must be initialised before all other imports so it can instrument
-  // every subsequently-loaded module. No-op when SENTRY_DSN is not set.
-  import "./lib/sentry";
+// every subsequently-loaded module. No-op when SENTRY_DSN is not set.
+import "./lib/sentry";
 
-  import type { Server } from "http";
+import type { Server } from "http";
 import type { AddressInfo } from "net";
 import app from "./app";
 import { logger } from "./lib/logger";
@@ -291,22 +291,6 @@ function listenWithRetry(attemptNumber: number): void {
   const server: Server = app.listen(port, () => {
     const bound = server.address() as AddressInfo | null;
     logger.info({ port: bound?.port ?? port }, "Server listening");
-
-    // Graceful shutdown: drain in-flight requests, close DB pool, then exit.
-    // Railway sends SIGTERM when replacing a deploy or scaling down.
-    process.once("SIGTERM", () => {
-      logger.info("SIGTERM received — draining connections");
-      server.close(() => {
-        pool.end().finally(() => {
-          logger.info("Server shut down cleanly");
-          process.exit(0);
-        });
-      });
-      setTimeout(() => {
-        logger.warn("Graceful shutdown timed out — forcing exit");
-        process.exit(1);
-      }, 15_000).unref();
-    });
   });
 
   server.once("error", (err: NodeJS.ErrnoException) => {
