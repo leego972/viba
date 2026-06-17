@@ -25,15 +25,11 @@ const app: Express = express();
 // Without this req.ip returns the proxy IP and rate-limiting is ineffective.
 app.set("trust proxy", 1);
 
-// ─── Security headers (helmet) ────────────────────────────────────────────────
-// contentSecurityPolicy: false — API returns JSON; static-file CSP handled separately.
-// crossOriginEmbedderPolicy: false — VIBA is embedded via iframe in Archibald Titan AI.
-app.use(
-  helmet({
-    contentSecurityPolicy: false,
-    crossOriginEmbedderPolicy: false,
-  }),
-);
+// ─── Security headers ─────────────────────────────────────────────────────────
+// Custom middleware — replaces helmet() with explicit CSP so the Archibald Titan
+// AI iframe embed works (frame-ancestors includes CORS_ALLOWED_ORIGINS).
+// See lib/securityHeaders.ts.
+app.use(securityHeaders());
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 // Production: only allow viba.guru and any extras listed in CORS_ALLOWED_ORIGINS.
@@ -301,16 +297,6 @@ const AUTH_EXEMPT_PATHS = new Set([
   "/healthz",
 ]);
 
-// GET /api/healthz — DB liveness probe (runs before auth middleware)
-app.get("/api/healthz", async (_req, res): Promise<void> => {
-  try {
-    await pool.query("SELECT 1");
-    res.json({ ok: true, db: "connected", uptime: Math.floor(process.uptime()) });
-  } catch {
-    res.status(503).json({ ok: false, db: "error" });
-  }
-});
-
 // All other /api routes: general rate limit + session gate
 app.use(
   "/api",
@@ -337,13 +323,13 @@ if (process.env.NODE_ENV === "production") {
 }
 
 // ─── Sentry error handler ────────────────────────────────────────────────────
-  // Must be registered after all routes, before the generic error handler.
-  // No-op when SENTRY_DSN is not set (Sentry.init was skipped in lib/sentry.ts).
-  import("./lib/sentry").then(({ Sentry }) => {
-    Sentry.setupExpressErrorHandler(app);
-  }).catch(() => { /* Sentry not initialised — safe to ignore */ });
+// Must be registered after all routes, before the generic error handler.
+// No-op when SENTRY_DSN is not set (Sentry.init was skipped in lib/sentry.ts).
+import("./lib/sentry").then(({ Sentry }) => {
+  Sentry.setupExpressErrorHandler(app);
+}).catch(() => { /* Sentry not initialised — safe to ignore */ });
 
-  // ─── Global error handler ─────────────────────────────────────────────────────
+// ─── Global error handler ─────────────────────────────────────────────────────
 // Express 5 forwards async errors here automatically.
 // Never expose stack traces or internal details in production.
 const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
