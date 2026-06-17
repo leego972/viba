@@ -1,6 +1,6 @@
 import express, { type Express, type ErrorRequestHandler } from "express";
 import cors from "cors";
-import helmet from "helmet";
+import { securityHeaders } from "./lib/securityHeaders";
 import pinoHttp from "pino-http";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
@@ -336,7 +336,14 @@ if (process.env.NODE_ENV === "production") {
   }
 }
 
-// ─── Global error handler ─────────────────────────────────────────────────────
+// ─── Sentry error handler ────────────────────────────────────────────────────
+  // Must be registered after all routes, before the generic error handler.
+  // No-op when SENTRY_DSN is not set (Sentry.init was skipped in lib/sentry.ts).
+  import("./lib/sentry").then(({ Sentry }) => {
+    Sentry.setupExpressErrorHandler(app);
+  }).catch(() => { /* Sentry not initialised — safe to ignore */ });
+
+  // ─── Global error handler ─────────────────────────────────────────────────────
 // Express 5 forwards async errors here automatically.
 // Never expose stack traces or internal details in production.
 const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
