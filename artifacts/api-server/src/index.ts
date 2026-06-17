@@ -1,4 +1,8 @@
-import type { Server } from "http";
+// Sentry must be initialised before all other imports so it can instrument
+  // every subsequently-loaded module. No-op when SENTRY_DSN is not set.
+  import "./lib/sentry";
+
+  import type { Server } from "http";
 import type { AddressInfo } from "net";
 import app from "./app";
 import { logger } from "./lib/logger";
