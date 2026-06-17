@@ -128,3 +128,10 @@ These variables unlock real code and git execution for Replit and Manus adapters
 - Set all secrets as Railway environment variables, not in `.env` files committed to source control.
 - After changing `REPLIT_AGENT_URL` or `MANUS_WORKSPACE_API_KEY`, restart the API server — they are read at adapter call time, not at startup.
 - `VITE_BRIDGE_AI_URL` must be set in the **frontend** environment (Archibald Titan AI on Railway) pointing to `https://viba.guru/`. It is not an API server variable.
+
+  ## Error Monitoring
+
+  | Variable | Required | Description |
+  |---|---|---|
+  | `SENTRY_DSN` | No | Sentry DSN — enables Sentry error reporting. Get from sentry.io → your project → Settings → Client Keys (DSN). When absent, Sentry is disabled and the server starts normally. |
+  
