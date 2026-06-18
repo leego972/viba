@@ -144,6 +144,18 @@ async function runStartupMigrations(): Promise<void> {
     END $$
   `);
 
+  // ── agents: sat_out_reason column (safety voting) ─────────────────────────
+  await pool.query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'agents' AND column_name = 'sat_out_reason'
+      ) THEN
+        ALTER TABLE agents ADD COLUMN sat_out_reason TEXT;
+      END IF;
+    END $$
+  `);
+
   // ── users table (email/password + OAuth accounts) ─────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (

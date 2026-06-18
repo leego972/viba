@@ -16,6 +16,8 @@ import adminRouter from "./routes/admin";
 import { pool } from "@workspace/db";
 import { getBillingStatus, deductCredits, isStripeConfigured } from "./lib/billing";
 import { sendCreditsExhaustedReminder, sendLowCreditsWarningIfNeeded } from "./lib/billingEmail";
+import { buildAdapter, buildMockAdapter } from "./lib/agentFactory";
+import type { Agent } from "@workspace/db";
 
 const PgStore = connectPgSimple(session);
 
@@ -268,6 +270,84 @@ app.post("/api/sessions/:id/reopen", apiLimiter, requireSession, async (req, res
     res.json({ ok: true });
   } catch (err) {
     req.log?.error?.({ err }, "reopen session error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── Session: safety vote ─────────────────────────────────────────────────────
+// Each agent evaluates the session goal before execution begins.
+// Agents that refuse have their sat_out_reason set and are excluded from task routing.
+// If ALL agents refuse, the endpoint returns passed: false with combined reasons.
+app.post("/api/sessions/:id/safety-vote", apiLimiter, requireSession, async (req, res): Promise<void> => {
+  const sessionId = parseInt(String(req.params.id ?? ""), 10);
+  if (!sessionId) { res.status(400).json({ error: "invalid session id" }); return; }
+  try {
+    const { rows: sessionRows } = await pool.query<{ goal: string }>(
+      "SELECT goal FROM sessions WHERE id = $1", [sessionId],
+    );
+    const sessionRow = sessionRows[0];
+    if (!sessionRow) { res.status(404).json({ error: "session not found" }); return; }
+
+    const { rows: agentRows } = await pool.query<{
+      id: number; name: string; role: string; provider: string; can_use_tools: boolean; is_mock: boolean;
+    }>(
+      "SELECT id, name, role, provider, can_use_tools, is_mock FROM agents WHERE session_id = $1",
+      [sessionId],
+    );
+    if (!agentRows.length) { res.status(404).json({ error: "no agents found for this session" }); return; }
+
+    const goal = sessionRow.goal;
+    const allPeers = agentRows.map((a) => ({ name: a.name, role: a.role }));
+
+    // Evaluate each agent's vote in parallel, fail-open on individual errors
+    const voteResults = await Promise.all(
+      agentRows.map(async (row) => {
+        try {
+          const agentRecord = {
+            id: row.id, name: row.name, role: row.role, provider: row.provider,
+            canUseTools: row.can_use_tools, isMock: row.is_mock,
+            capabilities: [], sessionId, lastUsedModel: null, satOutReason: null, createdAt: new Date(),
+          } as unknown as Agent;
+          const adapter = row.is_mock
+            ? buildMockAdapter(agentRecord)
+            : await buildAdapter(agentRecord);
+          const peers = allPeers.filter((p) => p.name !== row.name);
+          const vote = await adapter.evaluateTask(goal, peers);
+          return { agentId: row.id, agentName: row.name, accepted: vote.accepted, reason: vote.reason };
+        } catch (err) {
+          req.log?.warn?.({ err, agentId: row.id }, "safety-vote evaluateTask failed — defaulting to accept");
+          return { agentId: row.id, agentName: row.name, accepted: true };
+        }
+      }),
+    );
+
+    // Clear previous sat_out_reason for all agents in this session, then set for refusers
+    await pool.query("UPDATE agents SET sat_out_reason = NULL WHERE session_id = $1", [sessionId]);
+    const refusers = voteResults.filter((v) => !v.accepted);
+    if (refusers.length > 0) {
+      await Promise.all(
+        refusers.map((v) =>
+          pool.query(
+            "UPDATE agents SET sat_out_reason = $1 WHERE id = $2",
+            [v.reason ?? "Declined to participate in this session", v.agentId],
+          ),
+        ),
+      );
+    }
+
+    const allRefused = refusers.length === agentRows.length;
+    const declineReason = allRefused
+      ? refusers.map((v) => `• ${v.agentName}: ${v.reason ?? "Declined to participate"}`).join("\n")
+      : undefined;
+
+    req.log?.info?.(
+      { sessionId, accepted: voteResults.filter((v) => v.accepted).length, refused: refusers.length },
+      "safety-vote complete",
+    );
+
+    res.json({ passed: !allRefused, votes: voteResults, declineReason });
+  } catch (err) {
+    req.log?.error?.({ err }, "safety-vote error");
     res.status(500).json({ error: "Internal server error" });
   }
 });

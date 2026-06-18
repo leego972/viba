@@ -13,6 +13,7 @@ function makeAgent(overrides: Partial<Agent> = {}): Agent {
     isMock: false,
     canUseTools: false,
     lastUsedModel: null,
+    satOutReason: null,
     createdAt: new Date(),
     ...overrides,
   };

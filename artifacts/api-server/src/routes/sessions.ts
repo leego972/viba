@@ -39,15 +39,19 @@ import { determineTaskSequence, autoAssignRoles } from "../lib/taskRouter";
 const router: IRouter = Router();
 
 /**
- * Extracts toolOutputs from the metadata JSONB field and surfaces it as a top-level
- * property on the message object, matching the OpenAPI contract.
- * The agentLoop persists tool outputs inside metadata.toolOutputs; the API contract
- * exposes them as message.toolOutputs for the frontend to render as rich cards.
+ * Extracts toolOutputs from metadata and resolves toAgentId → toAgentName.
+ * Pass agentNameMap (agentId → name) to surface the recipient name in messages
+ * that carry an outbound question to a specific peer agent.
  */
-function formatMessage(msg: typeof messagesTable.$inferSelect): typeof messagesTable.$inferSelect & { toolOutputs: unknown[] | null } {
+function formatMessage(
+  msg: typeof messagesTable.$inferSelect,
+  agentNameMap?: Map<number, string>,
+): typeof messagesTable.$inferSelect & { toolOutputs: unknown[] | null; toAgentName: string | null } {
   const meta = msg.metadata as Record<string, unknown> | null;
   const toolOutputs = Array.isArray(meta?.["toolOutputs"]) ? (meta["toolOutputs"] as unknown[]) : null;
-  return { ...msg, toolOutputs };
+  const toAgentName =
+    msg.toAgentId !== null && agentNameMap ? (agentNameMap.get(msg.toAgentId) ?? null) : null;
+  return { ...msg, toolOutputs, toAgentName };
 }
 
 /** Recursively converts Date objects to ISO strings for JSON serialization */
@@ -275,7 +279,8 @@ router.get("/sessions/:id", async (req, res): Promise<void> => {
   const agents = await withActiveModels(agentRows);
   const tasks = await db.select().from(tasksTable).where(eq(tasksTable.sessionId, session.id)).orderBy(asc(tasksTable.id));
   const rawMessages = await db.select().from(messagesTable).where(eq(messagesTable.sessionId, session.id)).orderBy(asc(messagesTable.id));
-  const messages = rawMessages.map(formatMessage);
+  const agentNameMap = new Map(agentRows.map((a) => [a.id, a.name]));
+  const messages = rawMessages.map((m) => formatMessage(m, agentNameMap));
   const [memory] = await db.select().from(memoryTable).where(eq(memoryTable.sessionId, session.id));
   const approvals = await db.select().from(approvalsTable).where(eq(approvalsTable.sessionId, session.id));
 
@@ -365,10 +370,12 @@ router.post("/sessions/:id/run-next", async (req, res): Promise<void> => {
 
   const result = await runNextAgentStep(params.data.id);
   const [updatedSession] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, params.data.id));
+  const stepAgents = await db.select().from(agentsTable).where(eq(agentsTable.sessionId, params.data.id));
+  const stepAgentNameMap = new Map(stepAgents.map((a) => [a.id, a.name]));
 
   res.json(serialize({
     session: updatedSession ? await withAgentModes(updatedSession) : updatedSession,
-    newMessages: result.newMessages.map(formatMessage),
+    newMessages: result.newMessages.map((m) => formatMessage(m, stepAgentNameMap)),
     updatedTasks: result.updatedTasks,
     approvalRequired: result.approvalRequired,
     approval: result.approval,
@@ -392,10 +399,12 @@ router.post("/sessions/:id/run-full", async (req, res): Promise<void> => {
 
   const result = await runFullWorkflow(params.data.id);
   const [updatedSession] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, params.data.id));
+  const fullAgents = await db.select().from(agentsTable).where(eq(agentsTable.sessionId, params.data.id));
+  const fullAgentNameMap = new Map(fullAgents.map((a) => [a.id, a.name]));
 
   res.json(serialize({
     session: updatedSession ? await withAgentModes(updatedSession) : updatedSession,
-    newMessages: result.newMessages.map(formatMessage),
+    newMessages: result.newMessages.map((m) => formatMessage(m, fullAgentNameMap)),
     updatedTasks: result.updatedTasks,
     approvalRequired: result.approvalRequired,
     approval: result.approval,
@@ -591,7 +600,8 @@ router.get("/sessions/:id/stream", async (req, res): Promise<void> => {
         .select().from(messagesTable)
         .where(eq(messagesTable.sessionId, sessionId))
         .orderBy(asc(messagesTable.id));
-      const messages = rawMessages.map(formatMessage);
+      const sseAgentNameMap = new Map(agentRows.map((a) => [a.id, a.name]));
+      const messages = rawMessages.map((m) => formatMessage(m, sseAgentNameMap));
       const tasks = await db
         .select().from(tasksTable)
         .where(eq(tasksTable.sessionId, sessionId))
@@ -663,10 +673,14 @@ router.get("/sessions/:id/messages", async (req, res): Promise<void> => {
     return;
   }
   const msgTypeFilter = typeof req.query["type"] === "string" ? req.query["type"] : undefined;
-  const rawMessages = msgTypeFilter
-    ? await db.select().from(messagesTable).where(and(eq(messagesTable.sessionId, params.data.id), eq(messagesTable.messageType, msgTypeFilter))).orderBy(asc(messagesTable.id))
-    : await db.select().from(messagesTable).where(eq(messagesTable.sessionId, params.data.id)).orderBy(asc(messagesTable.id));
-  res.json(serialize(rawMessages.map(formatMessage)));
+  const [rawMessages, msgAgents] = await Promise.all([
+    msgTypeFilter
+      ? db.select().from(messagesTable).where(and(eq(messagesTable.sessionId, params.data.id), eq(messagesTable.messageType, msgTypeFilter))).orderBy(asc(messagesTable.id))
+      : db.select().from(messagesTable).where(eq(messagesTable.sessionId, params.data.id)).orderBy(asc(messagesTable.id)),
+    db.select({ id: agentsTable.id, name: agentsTable.name }).from(agentsTable).where(eq(agentsTable.sessionId, params.data.id)),
+  ]);
+  const msgAgentNameMap = new Map(msgAgents.map((a) => [a.id, a.name]));
+  res.json(serialize(rawMessages.map((m) => formatMessage(m, msgAgentNameMap))));
 });
 
 // GET /sessions/:id/memory

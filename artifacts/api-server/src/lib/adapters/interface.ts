@@ -5,6 +5,11 @@ export interface AgentTaskInput {
   taskInstruction: string;
   previousMessages: Array<{ role: string; content: string; agentName?: string }>;
   taskType?: string;
+  /**
+   * Other agents participating in this session — used by adapters to address
+   * outbound questions to real peer names rather than generic placeholders.
+   */
+  peerAgents?: Array<{ name: string; role: string }>;
   /** Whether this adapter can use tools (execute code, run git, call APIs, etc.). Defaults to false. */
   canUseTools?: boolean;
   /** Git repo URL the tool-capable agent should act on. */
@@ -93,4 +98,11 @@ export interface AgentAdapter {
   /** True for Replit and Manus — can execute tools, clone repos, run code, etc. */
   canUseTools: boolean;
   runTask(input: AgentTaskInput): Promise<AgentTaskResult>;
+  /**
+   * Safety vote — called before task execution begins.
+   * Each adapter evaluates the project goal against its own guidelines.
+   * Returns { accepted: true } to participate or { accepted: false, reason } to sit out.
+   * Agents that sit out are excluded from task assignment for this session.
+   */
+  evaluateTask(goal: string, peers: Array<{ name: string; role: string }>): Promise<{ accepted: boolean; reason?: string }>;
 }

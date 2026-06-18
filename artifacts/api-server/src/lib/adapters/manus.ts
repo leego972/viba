@@ -253,4 +253,13 @@ ${jsonSchema}`;
       throw err;
     }
   }
+
+  async evaluateTask(goal: string, _peers: Array<{ name: string; role: string }>): Promise<{ accepted: boolean; reason?: string }> {
+    const HARMFUL =
+      /\b(malware|(?:write|create|build|code)\s+(?:a\s+)?(?:virus|ransomware|trojan|worm|rootkit)|ddos\s+attack|weapons?\s+of\s+mass\s+destruction|bioweapon|chemical\s+weapon|nuclear\s+weapon|child\s+(?:abuse|sexual|pornography)|csam|human\s+trafficking|terrorism\s+plot|genocide\s+campaign)\b/i;
+    if (HARMFUL.test(goal)) {
+      return { accepted: false, reason: "This goal conflicts with my research and execution safety protocols. I cannot research or execute tasks of this nature." };
+    }
+    return { accepted: true };
+  }
 }

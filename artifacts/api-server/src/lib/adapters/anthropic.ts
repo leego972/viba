@@ -64,4 +64,38 @@ ${buildAdapterJsonSchema(this.canUseTools, input.pendingQuestions)}`;
       throw err;
     }
   }
+
+  async evaluateTask(goal: string, peers: Array<{ name: string; role: string }>): Promise<{ accepted: boolean; reason?: string }> {
+    try {
+      const { default: Anthropic } = await import("@anthropic-ai/sdk");
+      const client = new Anthropic({ apiKey: this.apiKey, timeout: 10_000 });
+      const peerList = peers.map((p) => `${p.name} (${p.role})`).join(", ") || "none";
+      const prompt = `You are a safety evaluator for VIBA, a multi-agent AI orchestration system. Before execution begins, each agent votes on whether the project goal is acceptable.
+
+Project goal: "${goal}"
+Other agents: ${peerList}
+
+Evaluate the goal against your usage policies and ethical guidelines.
+Reply ONLY with a JSON object — no other text:
+{"accepted": true} to participate, or {"accepted": false, "reason": "one sentence"} to decline.`;
+
+      const response = await client.messages.create({
+        model: this.model,
+        max_tokens: 120,
+        messages: [{ role: "user", content: prompt }],
+      });
+      const text = response.content[0]?.type === "text" ? response.content[0].text : "";
+      const match = text.match(/\{[\s\S]*?\}/);
+      if (match) {
+        const parsed = JSON.parse(match[0]) as { accepted?: boolean; reason?: string };
+        return {
+          accepted: parsed.accepted !== false,
+          reason: typeof parsed.reason === "string" ? parsed.reason : undefined,
+        };
+      }
+    } catch (err) {
+      logger.warn({ err }, "AnthropicAdapter.evaluateTask failed — defaulting to accept");
+    }
+    return { accepted: true };
+  }
 }

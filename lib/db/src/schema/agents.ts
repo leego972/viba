@@ -16,6 +16,12 @@ export const agentsTable = pgTable("agents", {
   /** True for Replit and Manus — agents that can execute tools, run code, clone repos, etc. */
   canUseTools: boolean("can_use_tools").notNull().default(false),
   lastUsedModel: text("last_used_model"),
+  /**
+   * When non-null the agent has declined to participate in this session's tasks.
+   * The value is the agent's stated reason. Null means the agent is participating.
+   * Set by the safety-vote endpoint; cleared on re-vote.
+   */
+  satOutReason: text("sat_out_reason"),
   // MIGRATION NOTE: ALTER TABLE agents ADD COLUMN created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

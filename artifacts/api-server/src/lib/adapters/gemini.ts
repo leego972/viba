@@ -69,4 +69,43 @@ ${buildAdapterJsonSchema(this.canUseTools, input.pendingQuestions)}`;
       throw err;
     }
   }
+
+  async evaluateTask(goal: string, peers: Array<{ name: string; role: string }>): Promise<{ accepted: boolean; reason?: string }> {
+    try {
+      const { default: OpenAI } = await import("openai");
+      const client = new OpenAI({
+        apiKey: this.apiKey,
+        baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
+        timeout: 10_000,
+      });
+      const peerList = peers.map((p) => `${p.name} (${p.role})`).join(", ") || "none";
+      const response = await client.chat.completions.create({
+        model: this.model,
+        max_tokens: 120,
+        temperature: 0,
+        messages: [
+          {
+            role: "system",
+            content: `You are a safety evaluator for VIBA. Evaluate whether the project goal complies with safety policies. Reply ONLY with a JSON object: {"accepted": true} or {"accepted": false, "reason": "one sentence"}.`,
+          },
+          {
+            role: "user",
+            content: `Project goal: "${goal}"\nOther agents: ${peerList}`,
+          },
+        ],
+      });
+      const text = response.choices[0]?.message?.content ?? "";
+      const match = text.match(/\{[\s\S]*?\}/);
+      if (match) {
+        const parsed = JSON.parse(match[0]) as { accepted?: boolean; reason?: string };
+        return {
+          accepted: parsed.accepted !== false,
+          reason: typeof parsed.reason === "string" ? parsed.reason : undefined,
+        };
+      }
+    } catch (err) {
+      logger.warn({ err }, "GeminiAdapter.evaluateTask failed — defaulting to accept");
+    }
+    return { accepted: true };
+  }
 }

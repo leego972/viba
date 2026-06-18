@@ -63,6 +63,9 @@ export async function runNextAgentStep(sessionId: number): Promise<{
     return { newMessages: [], updatedTasks: [], approvalRequired: false, approval: null };
   }
 
+  // Exclude agents that sat out after the safety vote.
+  const activeAgents = agents.filter((a) => !a.satOutReason);
+
   // Find the next "planned" task — skip blocked_needs_tools tasks that already have siblings
   const allTasks = await db
     .select()
@@ -112,8 +115,8 @@ export async function runNextAgentStep(sessionId: number): Promise<{
     }
   }
 
-  // Route to the best-fit agent (tool-aware)
-  const assignedAgent = routeTask(nextTask, agents);
+  // Route to the best-fit agent (tool-aware), excluding sat-out agents.
+  const assignedAgent = routeTask(nextTask, activeAgents);
   if (!assignedAgent) {
     return { newMessages: [], updatedTasks: [], approvalRequired: false, approval: null };
   }
@@ -182,6 +185,9 @@ export async function runNextAgentStep(sessionId: number): Promise<{
             content: m.content,
             agentName: m.agentName ?? undefined,
           })),
+          peerAgents: activeAgents
+            .filter((a) => a.id !== assignedAgent.id)
+            .map((a) => ({ name: a.name, role: a.role })),
           taskType: nextTask.type,
           canUseTools: assignedAgent.canUseTools,
           repoUrl: session.repoUrl ?? undefined,

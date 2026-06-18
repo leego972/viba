@@ -138,6 +138,15 @@ export default function SessionWorkspace() {
   const [isRejectingApproval, setIsRejectingApproval] = useState(false);
   const [isReopening, setIsReopening] = useState(false);
 
+  // Safety-voting state
+  const [isVoting, setIsVoting] = useState(false);
+  const [voteResult, setVoteResult] = useState<{
+    passed: boolean;
+    votes: Array<{ agentId: number; agentName: string; accepted: boolean; reason?: string }>;
+    declineReason?: string;
+  } | null>(null);
+  const [showDeclineModal, setShowDeclineModal] = useState(false);
+
   // Prune stale keys from localStorage once on mount (#47)
   useEffect(() => {
     pruneStaleLocalStorageKeys();
@@ -354,14 +363,65 @@ export default function SessionWorkspace() {
     });
   }, [toast]);
 
-  const handleRunNext = () => {
+  /**
+   * Runs the pre-execution safety vote. Each agent evaluates the session goal
+   * and votes whether to participate. Agents that refuse sit out; if all refuse
+   * the session is declined and this returns false.
+   */
+  const handleSafetyVote = async (): Promise<boolean> => {
+    setIsVoting(true);
+    try {
+      const resp = await fetch(`/api/sessions/${sessionId}/safety-vote`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!resp.ok) return true; // fail-open if the endpoint errors
+      const result = await resp.json() as {
+        passed: boolean;
+        votes: Array<{ agentId: number; agentName: string; accepted: boolean; reason?: string }>;
+        declineReason?: string;
+      };
+      setVoteResult(result);
+      invalidateAll(); // refresh agent list to surface sat-out badges
+      if (!result.passed) {
+        setShowDeclineModal(true);
+        return false;
+      }
+      const satOut = result.votes.filter((v) => !v.accepted);
+      if (satOut.length > 0) {
+        const names = satOut.map((v) => v.agentName).join(", ");
+        toast({
+          title: `${satOut.length} agent${satOut.length > 1 ? "s" : ""} sat out`,
+          description: `${names} declined this session's goal. Proceeding with the remaining agents.`,
+        });
+      }
+      return true;
+    } catch {
+      return true; // fail-open
+    } finally {
+      setIsVoting(false);
+    }
+  };
+
+  const handleRunNext = async () => {
+    // On first run, conduct safety vote before executing anything
+    if (messages.length === 0 && !voteResult) {
+      const ok = await handleSafetyVote();
+      if (!ok) return;
+    }
     runNext.mutate({ id: sessionId }, {
       onSuccess: () => invalidateAll(),
       onError: (err: unknown) => toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to run step", variant: "destructive" })
     });
   };
 
-  const handleRunFull = () => {
+  const handleRunFull = async () => {
+    // On first run, conduct safety vote before executing anything
+    if (messages.length === 0 && !voteResult) {
+      const ok = await handleSafetyVote();
+      if (!ok) return;
+    }
     runFull.mutate({ id: sessionId }, {
       onSuccess: () => invalidateAll(),
       onError: (err: unknown) => toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to run workflow", variant: "destructive" })
@@ -847,31 +907,47 @@ export default function SessionWorkspace() {
                   {agents.map(agent => {
                     const isLive = !agent.isMock;
                     return (
-                      <div key={agent.id} className="flex items-center gap-2.5 p-2.5 rounded border bg-muted/30">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1">
-                            <span
-                              className="font-semibold text-xs truncate"
-                              title={[agent.role, agent.activeModel].filter(Boolean).join(" · ")}
-                            >
-                              {agent.name}
-                            </span>
-                            {agent.canUseTools && (
-                              <span title="Can execute tools" className="text-violet-400 text-[10px] shrink-0">🔧</span>
-                            )}
+                      <div
+                        key={agent.id}
+                        className={`flex flex-col gap-1.5 p-2.5 rounded border ${(agent as { satOutReason?: string | null }).satOutReason ? "border-amber-500/30 bg-amber-500/5" : "bg-muted/30"}`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1">
+                              <span
+                                className="font-semibold text-xs truncate"
+                                title={[agent.role, agent.activeModel].filter(Boolean).join(" · ")}
+                              >
+                                {agent.name}
+                              </span>
+                              {agent.canUseTools && (
+                                <span title="Can execute tools" className="text-violet-400 text-[10px] shrink-0">🔧</span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+                              {agent.provider}{agent.activeModel ? ` · ${agent.activeModel}` : ""}
+                            </p>
                           </div>
-                          <p className="text-[10px] text-muted-foreground truncate mt-0.5">
-                            {agent.provider}{agent.activeModel ? ` · ${agent.activeModel}` : ""}
-                          </p>
+                          {isLive ? (
+                            <Badge className="text-[10px] h-4 px-1.5 gap-0.5 bg-emerald-500/15 text-emerald-400 border-emerald-500/30 shrink-0">
+                              <Zap className="h-2.5 w-2.5" /> Live
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] h-4 px-1.5 gap-0.5 text-muted-foreground shrink-0">
+                              <FlaskConical className="h-2.5 w-2.5" /> Sim
+                            </Badge>
+                          )}
                         </div>
-                        {isLive ? (
-                          <Badge className="text-[10px] h-4 px-1.5 gap-0.5 bg-emerald-500/15 text-emerald-400 border-emerald-500/30 shrink-0">
-                            <Zap className="h-2.5 w-2.5" /> Live
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-[10px] h-4 px-1.5 gap-0.5 text-muted-foreground shrink-0">
-                            <FlaskConical className="h-2.5 w-2.5" /> Sim
-                          </Badge>
+                        {(agent as { satOutReason?: string | null }).satOutReason && (
+                          <div className="flex items-start gap-1.5 text-[10px] text-amber-400/90 leading-tight">
+                            <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
+                            <span>
+                              {(() => {
+                                const r = (agent as { satOutReason?: string | null }).satOutReason ?? "";
+                                return r.length > 120 ? r.substring(0, 120) + "…" : r;
+                              })()}
+                            </span>
+                          </div>
                         )}
                       </div>
                     );
@@ -1366,6 +1442,34 @@ export default function SessionWorkspace() {
             <Button onClick={handleSaveCtx} disabled={updateCtx.isPending}>
               {updateCtx.isPending ? "Saving…" : "Save"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Safety-vote Decline Modal — shown when all agents refuse the session goal */}
+      <Dialog open={showDeclineModal} onOpenChange={setShowDeclineModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" /> Session Declined by All Agents
+            </DialogTitle>
+            <DialogDescription>
+              Every agent in this session refused to participate in this goal. The session cannot proceed as defined.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-3 space-y-2">
+            <div className="text-xs font-medium text-muted-foreground">Agent reasoning:</div>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {voteResult?.votes.filter((v) => !v.accepted).map((v) => (
+                <div key={v.agentId} className="rounded bg-muted/50 p-2.5 text-xs">
+                  <span className="font-semibold text-foreground">{v.agentName}: </span>
+                  <span className="text-muted-foreground">{v.reason ?? "Declined to participate"}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeclineModal(false)}>Dismiss</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
