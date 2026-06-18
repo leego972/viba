@@ -203,7 +203,8 @@ app.use(
       }
 
       // Atomically deduct 1 credit — returns false when balance is already 0
-      const deducted = await deductCredits(userId, 1);
+      const sessionIdForBilling = parseInt(String(req.params.id ?? ""), 10) || undefined;
+      const deducted = await deductCredits(userId, 1, sessionIdForBilling);
       if (!deducted) {
         // Fire-and-forget email reminder (throttled to once per 24 h)
         sendCreditsExhaustedReminder(userId).catch(() => {});
