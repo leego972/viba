@@ -5,46 +5,73 @@ import { Zap, Shield, Blocks, ArrowRight, LineChart } from "lucide-react";
 export default function Home() {
   return (
     <div className="flex flex-col min-h-screen bg-background">
-      <header className="px-6 h-14 flex items-center border-b border-border">
+      {/* ─── Minimal top bar ─── */}
+      <header className="px-6 h-14 flex items-center border-b border-border/40 bg-background/80 backdrop-blur sticky top-0 z-50">
         <Link href="/" className="flex items-center justify-center">
           <img src="/viba-logo.png" alt="VIBA" className="h-9 w-auto object-contain" />
         </Link>
-        <nav className="ml-auto flex gap-4 sm:gap-6">
+        <nav className="ml-auto flex gap-3">
           <Link href="/settings">
-            <Button variant="ghost" size="sm">Settings</Button>
+            <Button variant="ghost" size="sm" className="text-foreground/60 hover:text-foreground">Settings</Button>
           </Link>
           <Link href="/dashboard">
             <Button variant="outline" size="sm">Dashboard</Button>
           </Link>
         </nav>
       </header>
-      
+
       <main className="flex-1">
-        <section className="w-full py-24 md:py-32 lg:py-48 xl:py-56 bg-background relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-tr from-primary/10 via-background to-background" />
-          
+        {/* ─── Hero ─── */}
+        <section className="w-full py-24 md:py-32 lg:py-48 relative overflow-hidden">
+          {/* layered background */}
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.08] via-background to-background" />
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-primary/[0.06] rounded-full blur-3xl pointer-events-none" />
+          {/* dot grid */}
+          <div
+            className="absolute inset-0 opacity-[0.025] pointer-events-none"
+            style={{
+              backgroundImage: `radial-gradient(circle, hsl(var(--foreground)) 1px, transparent 1px)`,
+              backgroundSize: "32px 32px",
+            }}
+          />
+
           <div className="container px-4 md:px-6 relative z-10">
-            <div className="flex flex-col items-center space-y-8 text-center">
-              <div className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold border-transparent bg-primary/10 text-primary">
-                  v1.0 — Multi-AI Orchestration Platform
-                </div>
-              <div className="space-y-4 max-w-3xl">
+            <div className="flex flex-col items-center space-y-8 text-center animate-fade-in-up">
+              {/* badge */}
+              <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-xs font-semibold text-primary shadow-sm shadow-primary/20">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-50" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+                </span>
+                v1.0 — Multi-AI Orchestration Platform
+              </div>
+
+              <div className="space-y-5 max-w-3xl">
                 <h1 className="text-4xl font-extrabold tracking-tighter sm:text-5xl md:text-6xl lg:text-7xl/none text-foreground">
-                  Plug in your AIs.<br />
+                  Plug in your AIs.{" "}
+                  <br className="hidden sm:block" />
                   <span className="text-primary">Let them work together.</span>
                 </h1>
-                <p className="mx-auto max-w-[700px] text-muted-foreground md:text-xl lg:text-2xl leading-relaxed">
-                  Connect ChatGPT, Claude, Gemini, Perplexity, Manus, and Replit in one session. Give each model a role — Strategist, Builder, Researcher — and watch them collaborate autonomously to deliver the output.
+                <p className="mx-auto max-w-[680px] text-muted-foreground md:text-xl lg:text-2xl leading-relaxed">
+                  Connect ChatGPT, Claude, Gemini, Perplexity, Manus, and Replit in one session. Give each model a role — Strategist, Builder, Researcher — and watch them collaborate autonomously.
                 </p>
               </div>
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
                 <Link href="/dashboard">
-                  <Button size="lg" className="w-full sm:w-auto h-12 px-8 text-lg font-medium gap-2">
-                    Start a Session <ArrowRight className="h-5 w-5" />
+                  <Button
+                    size="lg"
+                    className="w-full sm:w-auto h-12 px-8 text-base font-semibold gap-2 shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-shadow"
+                  >
+                    Start a Session <ArrowRight className="h-4 w-4" />
                   </Button>
                 </Link>
                 <Link href="/settings">
-                  <Button variant="outline" size="lg" className="w-full sm:w-auto h-12 px-8 text-lg font-medium">
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    className="w-full sm:w-auto h-12 px-8 text-base font-medium border-border/60 hover:border-border hover:bg-muted/50"
+                  >
                     Configure API Keys
                   </Button>
                 </Link>
@@ -53,91 +80,120 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="w-full py-12 md:py-24 lg:py-32 border-t border-border bg-muted/40">
+        {/* ─── How it works ─── */}
+        <section className="w-full py-16 md:py-24 border-t border-border/50 bg-muted/20">
           <div className="container px-4 md:px-6">
-            <div className="mx-auto flex max-w-[58rem] flex-col items-center justify-center gap-4 text-center">
-              <h2 className="text-3xl font-bold tracking-tighter sm:text-5xl">How it works</h2>
-              <p className="max-w-[85%] text-muted-foreground sm:text-xl">
+            <div className="mx-auto flex max-w-2xl flex-col items-center gap-3 text-center mb-12">
+              <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl">How it works</h2>
+              <p className="text-muted-foreground md:text-lg">
                 Orchestrate multiple agents with specific roles to solve complex problems faster and cheaper.
               </p>
             </div>
-            
-            <div className="mx-auto grid max-w-5xl items-center gap-6 py-12 lg:grid-cols-3">
-              <div className="flex flex-col items-center space-y-4 rounded-lg border bg-background p-6 shadow-sm">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-                  <Blocks className="h-8 w-8 text-primary" />
+
+            <div className="mx-auto grid max-w-5xl gap-5 lg:grid-cols-3">
+              {[
+                {
+                  icon: Blocks,
+                  step: "1",
+                  title: "Plug In",
+                  desc: "Bring your own API keys. We support OpenAI, Anthropic, Google, Perplexity, Manus, and Replit.",
+                },
+                {
+                  icon: LineChart,
+                  step: "2",
+                  title: "Assign Roles",
+                  desc: "Give each model a role: Strategist, Builder, Reviewer, QA. Let them play to their strengths.",
+                },
+                {
+                  icon: Zap,
+                  step: "3",
+                  title: "Execute",
+                  desc: "Watch them collaborate in real-time, generate tasks, review each other's work, and deliver the output.",
+                },
+              ].map(({ icon: Icon, step, title, desc }) => (
+                <div
+                  key={step}
+                  className="group flex flex-col items-center gap-4 rounded-xl border border-border/60 bg-card/80 p-7 text-center hover:border-primary/30 hover:bg-card hover:shadow-lg hover:shadow-primary/5 transition-all duration-200"
+                >
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 ring-1 ring-primary/20 group-hover:bg-primary/15 group-hover:ring-primary/30 transition-all">
+                    <Icon className="h-7 w-7 text-primary" />
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/60">Step {step}</p>
+                    <h3 className="text-lg font-bold">{title}</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{desc}</p>
+                  </div>
                 </div>
-                <h3 className="text-xl font-bold">1. Plug In</h3>
-                <p className="text-center text-sm text-muted-foreground">
-                  Bring your own API keys. We support the major providers: OpenAI, Anthropic, Google, and more.
-                </p>
-              </div>
-              <div className="flex flex-col items-center space-y-4 rounded-lg border bg-background p-6 shadow-sm">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-                  <LineChart className="h-8 w-8 text-primary" />
-                </div>
-                <h3 className="text-xl font-bold">2. Assign Roles</h3>
-                <p className="text-center text-sm text-muted-foreground">
-                  Give each model a specific role: Strategist, Builder, Reviewer, QA. Let them play to their strengths.
-                </p>
-              </div>
-              <div className="flex flex-col items-center space-y-4 rounded-lg border bg-background p-6 shadow-sm">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-                  <Zap className="h-8 w-8 text-primary" />
-                </div>
-                <h3 className="text-xl font-bold">3. Execute</h3>
-                <p className="text-center text-sm text-muted-foreground">
-                  Watch them collaborate in real-time, generate tasks, review each other's work, and deliver the final output.
-                </p>
-              </div>
+              ))}
             </div>
           </div>
         </section>
 
-        <section className="w-full py-12 md:py-24 lg:py-32">
+        {/* ─── Feature highlight ─── */}
+        <section className="w-full py-16 md:py-24">
           <div className="container px-4 md:px-6">
-            <div className="grid gap-10 sm:px-10 md:gap-16 lg:grid-cols-2">
-              <div className="space-y-4">
-                <div className="inline-block rounded-lg bg-muted px-3 py-1 text-sm">Security First</div>
-                <h2 className="lg:leading-tighter text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl xl:text-[3.4rem] 2xl:text-[3.75rem]">
+            <div className="grid gap-10 sm:px-10 md:gap-16 lg:grid-cols-2 items-center">
+              <div className="space-y-5">
+                <div className="inline-block rounded-full bg-primary/10 border border-primary/20 px-3 py-1 text-xs font-semibold text-primary">
+                  Security First
+                </div>
+                <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl lg:text-5xl">
                   Supervised execution.
                 </h2>
-                <div className="flex items-center space-x-2 mt-4 text-muted-foreground text-lg">
-                  <Shield className="h-6 w-6 text-primary" />
-                  <p>You control the autonomy level.</p>
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Shield className="h-5 w-5 text-primary shrink-0" />
+                  <p className="font-medium">You control the autonomy level.</p>
                 </div>
-                <p className="max-w-[600px] text-muted-foreground md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed mt-4">
-                  Run sessions in Manual, Supervised, or Autonomous mode. Critical actions always require your explicit approval before the agents can proceed, preventing runaway costs and unintended side effects.
+                <p className="text-muted-foreground md:text-lg leading-relaxed">
+                  Run sessions in Manual, Supervised, or Autonomous mode. Critical actions always require your explicit approval before agents can proceed — preventing runaway costs and unintended side effects.
                 </p>
               </div>
-              <div className="flex flex-col justify-center space-y-4">
-                <div className="rounded-xl border bg-card text-card-foreground shadow">
-                  <div className="p-6 space-y-4">
-                    <h3 className="font-semibold text-lg">Cost Efficiency</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Why use a reasoning model for everything? Use Claude 3.5 Sonnet for strategy, and GPT-4o-mini for repetitive coding tasks. Orchestration saves money.
-                    </p>
+
+              <div className="flex flex-col gap-4">
+                {[
+                  {
+                    title: "Cost Efficiency",
+                    body: "Why use a reasoning model for everything? Use Claude Sonnet for strategy and GPT-4o-mini for repetitive tasks. Smart orchestration saves money.",
+                    accent: false,
+                  },
+                  {
+                    title: "Server-Side Security",
+                    body: "API keys are stored securely in the database and never exposed to the browser. All provider calls go through VIBA's API layer — full cost visibility, zero client-side leaks.",
+                    accent: true,
+                  },
+                ].map(({ title, body, accent }) => (
+                  <div
+                    key={title}
+                    className={`rounded-xl border p-6 transition-colors ${
+                      accent
+                        ? "border-primary/25 bg-primary/5 hover:bg-primary/8"
+                        : "border-border/60 bg-card hover:bg-card/80"
+                    }`}
+                  >
+                    <h3 className="font-semibold text-base mb-2">{title}</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{body}</p>
                   </div>
-                </div>
-                <div className="rounded-xl border bg-card text-card-foreground shadow border-primary/20">
-                  <div className="p-6 space-y-4">
-                    <h3 className="font-semibold text-lg">Server-Side Security</h3>
-                    <p className="text-sm text-muted-foreground">
-                      API keys are stored securely in the database and never exposed to the browser. All provider calls go through VIBA's API layer — giving you full cost visibility and control without client-side leaks.
-                    </p>
-                  </div>
-                </div>
+                ))}
               </div>
             </div>
           </div>
         </section>
       </main>
-      
-      <footer className="w-full border-t py-6 md:py-0">
-        <div className="container flex flex-col items-center justify-between gap-4 md:h-24 md:flex-row">
-          <p className="text-center text-sm leading-loose text-muted-foreground md:text-left">
-            VIBA · Collaborative Multi-Agent Orchestration System
-          </p>
+
+      {/* ─── Footer ─── */}
+      <footer className="w-full border-t border-border/40 bg-muted/10">
+        <div className="container flex flex-col sm:flex-row items-center justify-between gap-3 py-6 md:h-16">
+          <div className="flex items-center gap-2">
+            <img src="/viba-logo.png" alt="VIBA" className="h-6 w-auto opacity-70" />
+            <p className="text-sm text-muted-foreground">
+              VIBA · Collaborative Multi-Agent Orchestration
+            </p>
+          </div>
+          <div className="flex items-center gap-4 text-xs text-muted-foreground/60">
+            <Link href="/pricing" className="hover:text-muted-foreground transition-colors">Pricing</Link>
+            <Link href="/settings" className="hover:text-muted-foreground transition-colors">Settings</Link>
+            <Link href="/dashboard" className="hover:text-muted-foreground transition-colors">Dashboard</Link>
+          </div>
         </div>
       </footer>
     </div>
