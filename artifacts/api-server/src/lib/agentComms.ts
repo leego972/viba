@@ -1,24 +1,25 @@
 import { db, messagesTable, agentsTable } from "@workspace/db";
 import type { Agent, Message } from "@workspace/db";
-import { eq, and, isNull, asc } from "drizzle-orm";
+import { eq, and, asc, inArray } from "drizzle-orm";
 import type { AgentTaskResult } from "./adapters/interface";
 import { logger } from "./logger";
 
 const MAX_OUTBOUND_QUESTIONS_PER_STEP = 3;
 
 /**
- * Fetch unanswered question messages directed at the given agent for this session.
- * Returns them as the pendingQuestions array to inject into the adapter's taskInput.
+ * Fetch unanswered question messages directed at the given agent for this task.
  *
- * Scoped by sessionId + toAgentId only — NOT by the recipient's current taskId.
- * Questions are stored with the *sender's* taskId; the recipient runs their own
- * task, so filtering by recipient's taskId would permanently hide all questions.
- * Display-side scoping (which task a question belongs to) is done via the
- * question's own taskId field, not here in the delivery query.
+ * Strictly task-scoped: only questions whose taskId matches the recipient's
+ * current taskId are delivered. This prevents questions from Task A being
+ * injected into the agent's context while they are executing Task B.
+ *
+ * Questions are stored with the *sender's* taskId (set in persistOutboundQuestions),
+ * so matching on taskId here ensures delivery only happens within the same task thread.
  */
 export async function processPendingQuestions(
   sessionId: number,
   agentId: number,
+  taskId: number,
 ): Promise<Array<{ fromAgent: string; question: string; messageId: number }>> {
   const questions = await db
     .select()
@@ -28,13 +29,16 @@ export async function processPendingQuestions(
         eq(messagesTable.sessionId, sessionId),
         eq(messagesTable.messageType, "question"),
         eq(messagesTable.toAgentId, agentId),
+        eq(messagesTable.taskId, taskId),
       ),
     )
     .orderBy(asc(messagesTable.id));
 
   if (questions.length === 0) return [];
 
-  // Filter out already-answered questions
+  // Filter out already-answered questions: fetch only answers that reference
+  // one of the question IDs we just loaded — not the whole session.
+  const questionIds = questions.map((q) => q.id);
   const answers = await db
     .select()
     .from(messagesTable)
@@ -51,12 +55,12 @@ export async function processPendingQuestions(
         const meta = a.metadata as Record<string, unknown> | null;
         return typeof meta?.questionMessageId === "number" ? meta.questionMessageId : null;
       })
-      .filter((id): id is number => id !== null),
+      .filter((id): id is number => id !== null && questionIds.includes(id)),
   );
 
   const pending = questions
     .filter((q) => !answeredQuestionIds.has(q.id))
-    .slice(0, 5); // cap at 5 pending questions per step
+    .slice(0, 5);
 
   return pending.map((q) => ({
     fromAgent: q.agentName ?? "Unknown agent",
@@ -69,8 +73,7 @@ export async function processPendingQuestions(
  * Save question messages for outbound questions emitted by an agent.
  * Resolves toAgentName → toAgentId using the session's agent list.
  * Capped at MAX_OUTBOUND_QUESTIONS_PER_STEP to prevent runaway chatter.
- * All questions are strictly task-scoped — the cap and name-resolution
- * together prevent off-topic or broadcast messaging.
+ * All questions are strictly task-scoped — stored with the sender's taskId.
  */
 export async function persistOutboundQuestions(
   sessionId: number,
@@ -85,7 +88,6 @@ export async function persistOutboundQuestions(
   const saved: Message[] = [];
 
   for (const q of capped) {
-    // Resolve recipient by name (case-insensitive) — skip unresolvable
     const recipient = allAgents.find(
       (a) => a.name.toLowerCase() === q.toAgentName.toLowerCase() && a.id !== fromAgent.id,
     );
@@ -132,9 +134,10 @@ export async function persistOutboundQuestions(
  *
  * Each answer is stored under the *question's original taskId*, not the
  * responder's current taskId. This keeps the Q/A pair in the same task thread
- * for display purposes even though the recipient ran on a different task.
+ * for display purposes.
  *
- * Each answer links back to its question via metadata.questionMessageId.
+ * Answer lookup is constrained to the specific referenced question IDs
+ * (not the full session) to enforce same-task linkage and avoid stale matches.
  */
 export async function persistAnswers(
   sessionId: number,
@@ -144,9 +147,9 @@ export async function persistAnswers(
 ): Promise<Message[]> {
   if (answers.length === 0) return [];
 
-  // Look up all referenced question messages in one query so we can resolve
-  // each question's original taskId.
   const questionIds = answers.map((a) => a.messageId);
+
+  // Fetch only the specific referenced question messages — not all session questions.
   const questionRows = await db
     .select({ id: messagesTable.id, taskId: messagesTable.taskId })
     .from(messagesTable)
@@ -154,6 +157,7 @@ export async function persistAnswers(
       and(
         eq(messagesTable.sessionId, sessionId),
         eq(messagesTable.messageType, "question"),
+        inArray(messagesTable.id, questionIds),
       ),
     );
 
@@ -164,8 +168,6 @@ export async function persistAnswers(
   const saved: Message[] = [];
 
   for (const a of answers) {
-    // Use the originating question's taskId so the answer stays in the same
-    // task thread. Fall back to responder's task only if lookup fails.
     const originTaskId = questionTaskMap.get(a.messageId) ?? _responderTaskId;
 
     const [msg] = await db
@@ -189,10 +191,12 @@ export async function persistAnswers(
     }
   }
 
-  // Warn if any referenced question message IDs were not found
   for (const id of questionIds) {
     if (!questionTaskMap.has(id)) {
-      logger.warn({ questionMessageId: id, sessionId }, "persistAnswers: question message not found — using responder taskId as fallback");
+      logger.warn(
+        { questionMessageId: id, sessionId },
+        "persistAnswers: question message not found — skipping (may be from a different session or already deleted)",
+      );
     }
   }
 
