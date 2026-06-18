@@ -1,6 +1,14 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Settings, Activity, FlaskConical, CreditCard } from "lucide-react";
+import { Settings, FlaskConical, CreditCard, Zap, LayoutDashboard, Radio } from "lucide-react";
+
+const NAV_LINKS = [
+  { href: "/dashboard", label: "Dashboard",  icon: LayoutDashboard, match: (l: string) => l.startsWith("/dashboard") || l.startsWith("/sessions") },
+  { href: "/workbench", label: "Workbench",  icon: FlaskConical,     match: (l: string) => l.startsWith("/workbench") },
+  { href: "/bridge",    label: "Bridge",     icon: Radio,            match: (l: string) => l.startsWith("/bridge") },
+  { href: "/billing",   label: "Billing",    icon: CreditCard,       match: (l: string) => l.startsWith("/billing") || l.startsWith("/pricing") },
+  { href: "/settings",  label: "Settings",   icon: Settings,         match: (l: string) => l === "/settings" },
+];
 
 export function Navbar() {
   const [location] = useLocation();
@@ -8,7 +16,7 @@ export function Navbar() {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 max-w-screen-2xl items-center gap-3">
-        {/* Logo — always visible */}
+        {/* Logo */}
         <Link href="/" className="flex items-center shrink-0">
           <img
             src="/viba-logo.png"
@@ -18,103 +26,50 @@ export function Navbar() {
         </Link>
 
         {/* Desktop nav */}
-        <nav className="hidden md:flex items-center space-x-6 text-sm font-medium flex-1">
-          <Link
-            href="/dashboard"
-            className={`transition-colors hover:text-foreground/80 ${
-              location.startsWith("/dashboard") || location.startsWith("/sessions")
-                ? "text-foreground"
-                : "text-foreground/60"
-            }`}
-          >
-            Dashboard
-          </Link>
-          <Link
-            href="/workbench"
-            className={`transition-colors hover:text-foreground/80 flex items-center gap-1.5 ${
-              location.startsWith("/workbench") ? "text-foreground" : "text-foreground/60"
-            }`}
-          >
-            <FlaskConical className="h-3.5 w-3.5" />
-            Workbench
-          </Link>
-          <Link
-            href="/billing"
-            className={`transition-colors hover:text-foreground/80 flex items-center gap-1.5 ${
-              location.startsWith("/billing") || location.startsWith("/pricing") ? "text-foreground" : "text-foreground/60"
-            }`}
-          >
-            <CreditCard className="h-3.5 w-3.5" />
-            Billing
-          </Link>
-          <Link
-            href="/settings"
-            className={`transition-colors hover:text-foreground/80 ${
-              location === "/settings" ? "text-foreground" : "text-foreground/60"
-            }`}
-          >
-            Settings
-          </Link>
+        <nav className="hidden md:flex items-center flex-1 h-full">
+          {NAV_LINKS.map(({ href, label, match }) => {
+            const active = match(location);
+            return (
+              <Link
+                key={href}
+                href={href}
+                className={`relative flex items-center h-full px-4 text-sm font-medium transition-colors border-b-2 ${
+                  active
+                    ? "text-foreground border-primary"
+                    : "text-foreground/60 border-transparent hover:text-foreground/80 hover:border-border"
+                }`}
+              >
+                {label}
+              </Link>
+            );
+          })}
         </nav>
 
-        {/* Mobile nav — icon + label buttons */}
+        {/* Mobile nav */}
         <nav className="flex md:hidden items-center gap-1 flex-1">
-          <Link href="/dashboard">
-            <Button
-              variant="ghost"
-              size="sm"
-              className={`h-8 px-2 gap-1 text-xs ${
-                location.startsWith("/dashboard") || location.startsWith("/sessions")
-                  ? "text-foreground"
-                  : "text-foreground/60"
-              }`}
-            >
-              <Activity className="h-3.5 w-3.5 shrink-0" />
-              <span>Dashboard</span>
-            </Button>
-          </Link>
-          <Link href="/workbench">
-            <Button
-              variant="ghost"
-              size="sm"
-              className={`h-8 px-2 gap-1 text-xs ${
-                location.startsWith("/workbench") ? "text-foreground" : "text-foreground/60"
-              }`}
-            >
-              <FlaskConical className="h-3.5 w-3.5 shrink-0" />
-              <span>Workbench</span>
-            </Button>
-          </Link>
-          <Link href="/billing">
-            <Button
-              variant="ghost"
-              size="sm"
-              className={`h-8 px-2 gap-1 text-xs ${
-                location.startsWith("/billing") || location.startsWith("/pricing") ? "text-foreground" : "text-foreground/60"
-              }`}
-            >
-              <CreditCard className="h-3.5 w-3.5 shrink-0" />
-              <span>Billing</span>
-            </Button>
-          </Link>
-          <Link href="/settings">
-            <Button
-              variant="ghost"
-              size="sm"
-              className={`h-8 px-2 gap-1 text-xs ${
-                location === "/settings" ? "text-foreground" : "text-foreground/60"
-              }`}
-            >
-              <Settings className="h-3.5 w-3.5 shrink-0" />
-              <span>Settings</span>
-            </Button>
-          </Link>
+          {NAV_LINKS.map(({ href, label, icon: Icon, match }) => {
+            const active = match(location);
+            return (
+              <Link key={href} href={href}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={`h-8 px-2 gap-1 text-xs ${
+                    active ? "text-foreground bg-accent/30" : "text-foreground/60"
+                  }`}
+                >
+                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                  <span className="hidden xs:inline">{label}</span>
+                </Button>
+              </Link>
+            );
+          })}
         </nav>
 
-        {/* New Session button — always visible */}
+        {/* New Session CTA */}
         <Link href="/sessions/new" className="shrink-0">
-          <Button variant="default" size="sm" className="h-8 gap-2">
-            <Activity className="h-4 w-4" />
+          <Button variant="default" size="sm" className="h-8 gap-1.5">
+            <Zap className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">New Session</span>
           </Button>
         </Link>
