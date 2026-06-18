@@ -177,6 +177,7 @@ async function runStartupMigrations(): Promise<void> {
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS dependency_task_id INTEGER`);
 
   // messages: inter-agent comms columns — one guard per column
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS task_id INTEGER`);
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_type TEXT NOT NULL DEFAULT 'output'`);
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS to_agent_id INTEGER`);
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS metadata JSONB`);

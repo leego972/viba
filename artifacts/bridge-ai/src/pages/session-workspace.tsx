@@ -136,6 +136,7 @@ export default function SessionWorkspace() {
   const [replyText, setReplyText] = useState("");
   const [rejectFeedback, setRejectFeedback] = useState("");
   const [isRejectingApproval, setIsRejectingApproval] = useState(false);
+  const [isReopening, setIsReopening] = useState(false);
 
   // Prune stale keys from localStorage once on mount (#47)
   useEffect(() => {
@@ -433,6 +434,23 @@ export default function SessionWorkspace() {
     }
   };
 
+  const handleReopen = async () => {
+    setIsReopening(true);
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/reopen`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed");
+      await queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(sessionId) });
+      toast({ title: "Session reopened", description: "The session has been reopened and is now active." });
+    } catch {
+      toast({ title: "Error", description: "Failed to reopen session.", variant: "destructive" });
+    } finally {
+      setIsReopening(false);
+    }
+  };
+
   const handleExport = () => {
     if (!session) return;
     const lines: string[] = [];
@@ -678,8 +696,17 @@ export default function SessionWorkspace() {
                 </Button>
               </>
             )}
-            {!isSessionActive && session.status !== "completed" && (
-              <Badge variant="secondary">Session {session.status}</Badge>
+            {!isSessionActive && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleReopen}
+                disabled={isReopening}
+                className="gap-1.5"
+              >
+                <RotateCcw className={`w-3.5 h-3.5 ${isReopening ? "animate-spin" : ""}`} />
+                {isReopening ? "Reopening…" : "Reopen Session"}
+              </Button>
             )}
           </div>
         </div>
