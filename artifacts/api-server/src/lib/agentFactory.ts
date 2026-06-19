@@ -52,6 +52,12 @@ export function buildMockAdapter(agent: Agent): AgentAdapter {
 export async function buildAdapter(agent: Agent): Promise<AgentAdapter> {
   const provider = agent.provider.toLowerCase();
 
+  // Shared tool tokens — loaded once and reused across tool-capable adapters
+  const [railwayToken, githubToken] = await Promise.all([
+    getSetting("RAILWAY_TOKEN").then((v) => v ?? process.env["RAILWAY_TOKEN"] ?? null),
+    getSetting("GITHUB_TOKEN").then((v) => v ?? process.env["GITHUB_TOKEN"] ?? null),
+  ]);
+
   if (provider === "openai") {
     const apiKey = await getSetting("OPENAI_API_KEY") ?? process.env["OPENAI_API_KEY"] ?? "";
     if (isValidKey(apiKey)) {
@@ -105,8 +111,11 @@ export async function buildAdapter(agent: Agent): Promise<AgentAdapter> {
     const apiKey = await getSetting("GROQ_API_KEY") ?? process.env["GROQ_API_KEY"] ?? "";
     if (isValidKey(apiKey)) {
       const model = await getSetting("GROQ_MODEL") ?? undefined;
-      const railwayToken = await getSetting("RAILWAY_TOKEN") ?? process.env["RAILWAY_TOKEN"] ?? undefined;
-      return new GroqAdapter(String(agent.id), agent.name, agent.role, apiKey, model, agent.canUseTools, railwayToken);
+      return new GroqAdapter(
+        String(agent.id), agent.name, agent.role, apiKey, model, agent.canUseTools,
+        railwayToken ?? undefined,
+        githubToken ?? undefined,
+      );
     }
     logger.warn({ provider }, "No Groq API key found — using simulation mode");
     return new GroqMockAdapter(String(agent.id), agent.name, agent.role);
@@ -115,14 +124,14 @@ export async function buildAdapter(agent: Agent): Promise<AgentAdapter> {
   if (provider === "ollama") {
     const baseUrl = await getSetting("OLLAMA_BASE_URL") ?? process.env["OLLAMA_BASE_URL"] ?? "http://localhost:11434";
     const model = await getSetting("OLLAMA_MODEL") ?? process.env["OLLAMA_MODEL"] ?? "llama3.2";
-    // Ollama needs no API key — always try the real adapter if a base URL is set
-    return new OllamaAdapter(String(agent.id), agent.name, agent.role, model, baseUrl, agent.canUseTools);
+    return new OllamaAdapter(
+      String(agent.id), agent.name, agent.role, model, baseUrl, agent.canUseTools,
+      githubToken ?? undefined,
+    );
   }
 
   if (provider === "railway") {
-    const railwayToken = await getSetting("RAILWAY_TOKEN") ?? process.env["RAILWAY_TOKEN"] ?? "";
     if (isValidKey(railwayToken)) {
-      // Use OpenAI as the reasoning LLM; fall back to Anthropic
       const openaiKey = await getSetting("OPENAI_API_KEY") ?? process.env["OPENAI_API_KEY"] ?? "";
       const anthropicKey = await getSetting("ANTHROPIC_API_KEY") ?? process.env["ANTHROPIC_API_KEY"] ?? "";
       const reasoningKey = isValidKey(openaiKey) ? openaiKey : (isValidKey(anthropicKey) ? anthropicKey : "");
