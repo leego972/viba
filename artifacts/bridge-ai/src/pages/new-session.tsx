@@ -223,7 +223,7 @@ export default function NewSession() {
   const simulatedSelected = selectedProviderIds.filter(id => !isLive(id));
 
   const selectedToolCapable = AVAILABLE_PROVIDERS
-    .filter(p => selectedAgents[p.id]!.selected && p.canUseTools)
+    .filter(p => selectedAgents[p.id]!.selected && selectedAgents[p.id]!.canUseTools)
     .map(p => p.name);
 
   const hasRealExecution = repoUrl.trim() !== "" && selectedToolCapable.length > 0;
