@@ -38,7 +38,7 @@ const WORKSPACE_ENVS = ["development", "staging", "production"];
 
 type SavedTeam = {
   name: string;
-  agents: Record<string, { selected: boolean; role: string }>;
+  agents: Record<string, { selected: boolean; role: string; canUseTools: boolean }>;
   savedAt: string;
 };
 
@@ -198,10 +198,10 @@ export default function NewSession() {
     }, 600);
   };
 
-  const [selectedAgents, setSelectedAgents] = useState<Record<string, { selected: boolean; role: string }>>(() => {
-    const initial: Record<string, { selected: boolean; role: string }> = {};
+  const [selectedAgents, setSelectedAgents] = useState<Record<string, { selected: boolean; role: string; canUseTools: boolean }>>(() => {
+    const initial: Record<string, { selected: boolean; role: string; canUseTools: boolean }> = {};
     AVAILABLE_PROVIDERS.forEach(p => {
-      initial[p.id] = { selected: false, role: p.defaultRole };
+      initial[p.id] = { selected: false, role: p.defaultRole, canUseTools: p.canUseTools };
     });
     initial["openai"]!.selected = true;
     initial["anthropic"]!.selected = true;
@@ -242,6 +242,13 @@ export default function NewSession() {
     }));
   };
 
+  const handleToolsToggle = (id: string) => {
+    setSelectedAgents(prev => ({
+      ...prev,
+      [id]: { ...prev[id]!, canUseTools: !prev[id]!.canUseTools }
+    }));
+  };
+
   const handleAutoAssign = () => {
     const newAgents = { ...selectedAgents };
     AVAILABLE_PROVIDERS.forEach(p => {
@@ -254,9 +261,9 @@ export default function NewSession() {
     setActiveTemplateId(tpl.id);
     setGoal(tpl.goal);
     setAutonomyMode(tpl.autonomyMode);
-    const next: Record<string, { selected: boolean; role: string }> = {};
+    const next: Record<string, { selected: boolean; role: string; canUseTools: boolean }> = {};
     AVAILABLE_PROVIDERS.forEach(p => {
-      next[p.id] = { selected: p.id in tpl.agents, role: tpl.agents[p.id] ?? p.defaultRole };
+      next[p.id] = { selected: p.id in tpl.agents, role: tpl.agents[p.id] ?? p.defaultRole, canUseTools: p.canUseTools };
     });
     setSelectedAgents(next);
   };
@@ -298,7 +305,8 @@ export default function NewSession() {
         name: p.name,
         provider: p.provider,
         role: selectedAgents[p.id]!.role,
-        isMock: !isLive(p.id)
+        isMock: !isLive(p.id),
+        canUseTools: selectedAgents[p.id]!.canUseTools,
       }));
 
     if (agentsList.length === 0) {
@@ -593,19 +601,36 @@ export default function NewSession() {
                         </Label>
                       </div>
                       {selectedAgents[provider.id]!.selected && (
-                        <Select 
-                          value={selectedAgents[provider.id]!.role} 
-                          onValueChange={(val) => handleRoleChange(provider.id, val)}
-                        >
-                          <SelectTrigger className="w-[130px] sm:w-[140px] h-8 text-xs flex-shrink-0">
-                            <SelectValue placeholder="Select role" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {ROLES.map(role => (
-                              <SelectItem key={role} value={role} className="text-xs">{role}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <Select 
+                            value={selectedAgents[provider.id]!.role} 
+                            onValueChange={(val) => handleRoleChange(provider.id, val)}
+                          >
+                            <SelectTrigger className="w-[130px] sm:w-[140px] h-8 text-xs flex-shrink-0">
+                              <SelectValue placeholder="Select role" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {ROLES.map(role => (
+                                <SelectItem key={role} value={role} className="text-xs">{role}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {!provider.canUseTools && (
+                            <button
+                              type="button"
+                              title={selectedAgents[provider.id]!.canUseTools ? "Disable tool access" : "Enable tool access"}
+                              onClick={() => handleToolsToggle(provider.id)}
+                              className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] border transition-colors ${
+                                selectedAgents[provider.id]!.canUseTools
+                                  ? "border-blue-500/40 bg-blue-500/10 text-blue-500"
+                                  : "border-muted-foreground/20 bg-muted/30 text-muted-foreground"
+                              }`}
+                            >
+                              <Wrench className="h-2.5 w-2.5" />
+                              Tools
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   );
