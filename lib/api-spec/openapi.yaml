@@ -95,6 +95,35 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateSession
+      tags: [sessions]
+      summary: Update session workspace context (repo, branch, environment)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSessionBody"
+      responses:
+        "200":
+          description: Updated session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     delete:
       operationId: deleteSession
       tags: [sessions]
@@ -191,6 +220,48 @@ paths:
                 $ref: "#/components/schemas/Message"
         "400":
           description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sessions/{id}/messages/{messageId}/answer:
+    post:
+      operationId: answerQuestion
+      tags: [sessions]
+      summary: User answers an agent's question directed at them
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: messageId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnswerQuestionBody"
+      responses:
+        "201":
+          description: Answer posted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "400":
+          description: Invalid request or not a user-directed question
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Session or message not found
           content:
             application/json:
               schema:
@@ -305,6 +376,13 @@ paths:
           required: true
           schema:
             type: integer
+        - name: type
+          in: query
+          required: false
+          description: "Filter by message type: output | question | answer | handoff | context"
+          schema:
+            type: string
+            enum: [output, question, answer, handoff, context]
       responses:
         "200":
           description: List of messages
@@ -605,6 +683,71 @@ paths:
               schema:
                 $ref: "#/components/schemas/WorkbenchRefuseCheckResponse"
 
+  /github/repo:
+    get:
+      operationId: getGithubRepo
+      tags: [settings]
+      summary: Fetch metadata for a single GitHub repository
+      parameters:
+        - name: owner
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Repository owner (user or org)
+        - name: repo
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Repository name
+      responses:
+        "200":
+          description: Repository metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GithubRepo"
+        "400":
+          description: Missing owner or repo param
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Repository not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: GitHub integration not connected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /github/repos:
+    get:
+      operationId: listGithubRepos
+      tags: [settings]
+      summary: List GitHub repositories accessible via the connected integration
+      responses:
+        "200":
+          description: Repository list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GithubRepo"
+        "503":
+          description: GitHub integration not connected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -636,6 +779,43 @@ components:
         - name
         - provider
         - isMock
+
+    UpdateSessionBody:
+      type: object
+      properties:
+        repoUrl:
+          type: string
+          nullable: true
+          description: Git repository URL (null clears it)
+        repoBranch:
+          type: string
+          nullable: true
+          description: Branch name (null clears it)
+        workspaceEnv:
+          type: string
+          nullable: true
+          description: "Environment label: development | staging | production (null clears it)"
+
+    GithubRepo:
+      type: object
+      properties:
+        fullName:
+          type: string
+          description: "Owner/repo (e.g. acme/my-app)"
+        htmlUrl:
+          type: string
+          description: Full HTTPS URL to the repository
+        defaultBranch:
+          type: string
+          description: Default branch name
+        private:
+          type: boolean
+          description: Whether the repository is private
+      required:
+        - fullName
+        - htmlUrl
+        - defaultBranch
+        - private
 
     Session:
       type: object
@@ -831,6 +1011,12 @@ components:
           nullable: true
           additionalProperties: true
           description: Extra structured data (e.g. partialWork, remainingWork, questionRef)
+        toolOutputs:
+          type: array
+          nullable: true
+          items:
+            $ref: "#/components/schemas/ToolOutput"
+          description: Structured tool outputs (diffs, test results, deployment URLs, build logs, git ops)
         createdAt:
           type: string
       required:
@@ -979,6 +1165,12 @@ components:
           type: string
         isMock:
           type: boolean
+        canUseTools:
+          type: boolean
+          description: >
+            Override whether this agent can execute tools/code. Defaults to
+            true for replit/manus providers and false for text-only providers.
+            Users can explicitly enable tool capability for any provider.
       required:
         - name
         - provider
@@ -1133,6 +1325,15 @@ components:
       properties:
         content:
           type: string
+      required:
+        - content
+
+    AnswerQuestionBody:
+      type: object
+      properties:
+        content:
+          type: string
+          description: The user's answer text
       required:
         - content
 
@@ -1490,3 +1691,145 @@ components:
       required:
         - allowed
         - reason
+
+    FileDiffOutput:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [file_diff]
+        filename:
+          type: string
+        diff:
+          type: string
+          description: Unified diff format
+        additions:
+          type: integer
+          nullable: true
+        deletions:
+          type: integer
+          nullable: true
+      required:
+        - type
+        - filename
+        - diff
+
+    TestResultOutput:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [test_result]
+        passed:
+          type: integer
+        failed:
+          type: integer
+        skipped:
+          type: integer
+          nullable: true
+        duration:
+          type: number
+          nullable: true
+          description: Duration in seconds
+        log:
+          type: string
+          nullable: true
+      required:
+        - type
+        - passed
+        - failed
+
+    DeploymentUrlOutput:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [deployment_url]
+        url:
+          type: string
+        environment:
+          type: string
+          nullable: true
+        label:
+          type: string
+          nullable: true
+      required:
+        - type
+        - url
+
+    CommandOutput:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [command_output]
+        command:
+          type: string
+        output:
+          type: string
+        exitCode:
+          type: integer
+          nullable: true
+      required:
+        - type
+        - command
+        - output
+
+    BuildLogOutput:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [build_log]
+        log:
+          type: string
+        success:
+          type: boolean
+        duration:
+          type: number
+          nullable: true
+          description: Duration in seconds
+      required:
+        - type
+        - log
+        - success
+
+    GitOperationOutput:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [git_operation]
+        operation:
+          type: string
+          description: "e.g. commit, push, merge, clone"
+        branch:
+          type: string
+        commitSha:
+          type: string
+          nullable: true
+        commitMessage:
+          type: string
+          nullable: true
+      required:
+        - type
+        - operation
+        - branch
+
+    ToolOutput:
+      oneOf:
+        - $ref: "#/components/schemas/FileDiffOutput"
+        - $ref: "#/components/schemas/TestResultOutput"
+        - $ref: "#/components/schemas/DeploymentUrlOutput"
+        - $ref: "#/components/schemas/CommandOutput"
+        - $ref: "#/components/schemas/BuildLogOutput"
+        - $ref: "#/components/schemas/GitOperationOutput"
+      discriminator:
+        propertyName: type
+        mapping:
+          file_diff: "#/components/schemas/FileDiffOutput"
+          test_result: "#/components/schemas/TestResultOutput"
+          deployment_url: "#/components/schemas/DeploymentUrlOutput"
+          command_output: "#/components/schemas/CommandOutput"
+          build_log: "#/components/schemas/BuildLogOutput"
+          git_operation: "#/components/schemas/GitOperationOutput"
