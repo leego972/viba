@@ -502,6 +502,57 @@ export class ManusMockAdapter extends ToolCapableMockAdapter {
   }
 }
 
+// ── Groq ─────────────────────────────────────────────────────────────────────
+export class GroqMockAdapter extends TextOnlyMockAdapter {
+  id: string; name: string; provider = "groq"; model = "llama-3.3-70b-versatile (sim)"; role: string;
+  capabilities = ["planning", "reasoning", "code_review", "build", "implementation", "research"];
+
+  constructor(id: string, name: string, role: string) { super(); this.id = id; this.name = name; this.role = role; }
+
+  generateResponse(input: AgentTaskInput): string {
+    const goal = input.projectGoal;
+    const type = input.taskType ?? "planning";
+    const responses: Record<string, string[]> = {
+      planning: [
+        `Strategic breakdown for "${goal}" using Llama 3.3 70B reasoning: I've decomposed the goal into executable sub-tasks, identified dependencies, and flagged two ambiguities that need resolution before the build phase. Task graph is ready.`,
+        `Plan complete for "${goal}". Three phases: discovery, implementation, validation. Risk-adjusted timeline included. Ready to hand to the Builder.`,
+      ],
+      build: [
+        `Implementation analysis for "${goal}": I've reviewed the architecture, spotted a more efficient pattern for the data layer, and outlined the changes needed. Code structure is sound — recommend proceeding.`,
+      ],
+      code_review: [
+        `Code review complete for "${goal}": logic is clean, types are consistent, no obvious security issues. One suggestion: extract the validation logic into a shared utility to avoid duplication across routes.`,
+      ],
+    };
+    const fallback = [`Analysis for "${goal}": task is well-scoped. Proceeding with structured reasoning approach. Output ready for next agent.`];
+    return pick(responses[type] ?? fallback);
+  }
+}
+
+// ── Ollama ────────────────────────────────────────────────────────────────────
+export class OllamaMockAdapter extends TextOnlyMockAdapter {
+  id: string; name: string; provider = "ollama"; model = "llama3.2 (sim)"; role: string;
+  capabilities = ["planning", "reasoning", "code_review", "build", "implementation", "research"];
+
+  constructor(id: string, name: string, role: string) { super(); this.id = id; this.name = name; this.role = role; }
+
+  generateResponse(input: AgentTaskInput): string {
+    const goal = input.projectGoal;
+    const type = input.taskType ?? "planning";
+    const responses: Record<string, string[]> = {
+      planning: [
+        `Local model analysis for "${goal}": running fully offline. Task decomposed into 4 steps. No external API calls needed — this runs entirely on your hardware.`,
+        `Offline plan for "${goal}": scope is clear, constraints are noted. Fully private — no data leaves your machine.`,
+      ],
+      build: [
+        `Local build guidance for "${goal}": implementation path is clear. All processing is on-device — zero cloud cost, full privacy.`,
+      ],
+    };
+    const fallback = [`Offline analysis for "${goal}": processed locally. No external dependencies. Result ready for next agent.`];
+    return pick(responses[type] ?? fallback);
+  }
+}
+
 // ── Railway ───────────────────────────────────────────────────────────────────
 export class RailwayMockAdapter extends ToolCapableMockAdapter {
   id: string; name: string; provider = "railway"; model = "railway-mcp (sim)"; role: string;
