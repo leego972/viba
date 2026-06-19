@@ -83,6 +83,26 @@ These keys power the LLM chat completion calls made by each provider adapter. Th
 
 ---
 
+## Railway MCP (Deployment Control Agent)
+
+Railway MCP lets the Railway agent adapter control Railway services directly — deploy, rollback, manage env vars, stream logs — using Railway's official MCP server at `https://railway.com/mcp`.
+
+| Variable | Description |
+|---|---|
+| `RAILWAY_TOKEN` | Railway API token. Generate one in Railway → Account Settings → Tokens. Required to enable real Railway operations. Without it the Railway agent runs in simulation mode. |
+| `RAILWAY_REASONING_MODEL` | Override the OpenAI model used for reasoning about which Railway tools to call (default: `gpt-4.1-mini`). Must be an OpenAI-compatible model. |
+
+When `RAILWAY_TOKEN` is set, the Railway agent also needs a reasoning LLM. It will use `OPENAI_API_KEY` first, then `ANTHROPIC_API_KEY` as fallback. Both can be configured via the admin settings panel or as env vars.
+
+**Capabilities unlocked with RAILWAY_TOKEN:**
+- List / inspect projects and services
+- Trigger deployments and rollbacks
+- Stream deployment logs
+- Read and write environment variables
+- Check service health and metrics
+
+---
+
 ## Real Code Execution (Tool-Capable Agents)
 
 These variables unlock real code and git execution for Replit and Manus adapters when a repo is connected to a session. Without them, both adapters fall back to LLM-only responses.
@@ -128,10 +148,3 @@ These variables unlock real code and git execution for Replit and Manus adapters
 - Set all secrets as Railway environment variables, not in `.env` files committed to source control.
 - After changing `REPLIT_AGENT_URL` or `MANUS_WORKSPACE_API_KEY`, restart the API server — they are read at adapter call time, not at startup.
 - `VITE_BRIDGE_AI_URL` must be set in the **frontend** environment (Archibald Titan AI on Railway) pointing to `https://viba.guru/`. It is not an API server variable.
-
-  ## Error Monitoring
-
-  | Variable | Required | Description |
-  |---|---|---|
-  | `SENTRY_DSN` | No | Sentry DSN — enables Sentry error reporting. Get from sentry.io → your project → Settings → Client Keys (DSN). When absent, Sentry is disabled and the server starts normally. |
-  
