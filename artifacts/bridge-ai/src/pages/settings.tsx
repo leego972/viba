@@ -16,7 +16,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Key, ShieldCheck, Zap, RotateCcw, BarChart2, Cpu, Bell, X, CheckCircle2, MinusCircle, Trash2, MailWarning } from "lucide-react";
+import { Key, ShieldCheck, Zap, RotateCcw, BarChart2, Cpu, Bell, X, CheckCircle2, MinusCircle, Trash2, MailWarning, AlertTriangle } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type ModelOption = { value: string; label: string };
 
@@ -143,6 +153,7 @@ export default function Settings() {
     Object.fromEntries(ALL_SETTING_KEYS.map((k) => [k, ""]))
   );
   const [clearedKeys, setClearedKeys] = useState<Set<string>>(new Set());
+  const [clearConfirmKey, setClearConfirmKey] = useState<string | null>(null);
   const [thresholdError, setThresholdError] = useState<string | null>(null);
   const [saveResults, setSaveResults] = useState<Record<string, "saved" | "skipped" | "deleted">>({});
   const [smtpMissingBanner, setSmtpMissingBanner] = useState(false);
@@ -171,8 +182,14 @@ export default function Settings() {
   };
 
   const handleClearKey = (key: string) => {
-    setValues((prev) => ({ ...prev, [key]: "" }));
-    setClearedKeys((prev) => new Set(prev).add(key));
+    setClearConfirmKey(key);
+  };
+
+  const confirmClearKey = () => {
+    if (!clearConfirmKey) return;
+    setValues((prev) => ({ ...prev, [clearConfirmKey]: "" }));
+    setClearedKeys((prev) => new Set(prev).add(clearConfirmKey));
+    setClearConfirmKey(null);
   };
 
   const handleModelChange = (modelKey: string, value: string) => {
@@ -880,6 +897,33 @@ export default function Settings() {
           </CardFooter>
         </Card>
       </div>
+
+      {/* Clear key confirmation dialog */}
+      <AlertDialog open={!!clearConfirmKey} onOpenChange={(open) => { if (!open) setClearConfirmKey(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-destructive" /> Remove API key?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove the saved key for{" "}
+              <span className="font-medium text-foreground">
+                {PROVIDERS.find(p => p.key === clearConfirmKey)?.label ?? clearConfirmKey}
+              </span>
+              . Any sessions using this provider will fall back to simulation. This takes effect when you click <em>Save Settings</em>.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmClearKey}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Remove key
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }
