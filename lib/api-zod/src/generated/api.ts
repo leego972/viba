@@ -52,7 +52,8 @@ export const CreateSessionBody = zod.object({
   "name": zod.string(),
   "provider": zod.string(),
   "role": zod.string(),
-  "isMock": zod.boolean()
+  "isMock": zod.boolean(),
+  "canUseTools": zod.boolean().optional().describe('Override whether this agent can execute tools\/code. Defaults to true for replit\/manus providers and false for text-only providers. Users can explicitly enable tool capability for any provider.\n')
 })),
   "repoUrl": zod.string().optional().describe('Git repository URL for tool-capable agents to operate on (optional)'),
   "repoBranch": zod.string().optional().describe('Branch to target — defaults to main if not specified'),
@@ -123,6 +124,41 @@ export const GetSessionResponse = zod.object({
   "toAgentId": zod.number().nullish().describe('For question\/answer\/handoff messages — the receiving agent\'s id'),
   "toAgentName": zod.string().nullish().describe('Resolved display name of the receiving agent (derived at query time from toAgentId)'),
   "metadata": zod.record(zod.string(), zod.unknown()).nullish().describe('Extra structured data (e.g. partialWork, remainingWork, questionRef)'),
+  "toolOutputs": zod.array(zod.union([zod.object({
+  "type": zod.enum(['file_diff']),
+  "filename": zod.string(),
+  "diff": zod.string().describe('Unified diff format'),
+  "additions": zod.number().nullish(),
+  "deletions": zod.number().nullish()
+}),zod.object({
+  "type": zod.enum(['test_result']),
+  "passed": zod.number(),
+  "failed": zod.number(),
+  "skipped": zod.number().nullish(),
+  "duration": zod.number().nullish().describe('Duration in seconds'),
+  "log": zod.string().nullish()
+}),zod.object({
+  "type": zod.enum(['deployment_url']),
+  "url": zod.string(),
+  "environment": zod.string().nullish(),
+  "label": zod.string().nullish()
+}),zod.object({
+  "type": zod.enum(['command_output']),
+  "command": zod.string(),
+  "output": zod.string(),
+  "exitCode": zod.number().nullish()
+}),zod.object({
+  "type": zod.enum(['build_log']),
+  "log": zod.string(),
+  "success": zod.boolean(),
+  "duration": zod.number().nullish().describe('Duration in seconds')
+}),zod.object({
+  "type": zod.enum(['git_operation']),
+  "operation": zod.string().describe('e.g. commit, push, merge, clone'),
+  "branch": zod.string(),
+  "commitSha": zod.string().nullish(),
+  "commitMessage": zod.string().nullish()
+})])).nullish().describe('Structured tool outputs (diffs, test results, deployment URLs, build logs, git ops)'),
   "createdAt": zod.string()
 })),
   "memory": zod.union([zod.object({
@@ -140,6 +176,40 @@ export const GetSessionResponse = zod.object({
   "status": zod.string(),
   "createdAt": zod.string(),
   "approvedAt": zod.string().nullable()
+}))
+})
+
+
+/**
+ * @summary Update session workspace context (repo, branch, environment)
+ */
+export const UpdateSessionParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateSessionBody = zod.object({
+  "repoUrl": zod.string().nullish().describe('Git repository URL (null clears it)'),
+  "repoBranch": zod.string().nullish().describe('Branch name (null clears it)'),
+  "workspaceEnv": zod.string().nullish().describe('Environment label: development | staging | production (null clears it)')
+})
+
+export const UpdateSessionResponse = zod.object({
+  "id": zod.number(),
+  "goal": zod.string(),
+  "status": zod.string(),
+  "autonomyMode": zod.string(),
+  "mode": zod.enum(['live', 'simulation', 'mixed']),
+  "estimatedCost": zod.number().nullable(),
+  "finalOutput": zod.string().nullable(),
+  "repoUrl": zod.string().nullish().describe('Git repository URL connected to this session (optional)'),
+  "repoBranch": zod.string().nullish().describe('Target branch — defaults to main when not specified'),
+  "workspaceEnv": zod.string().nullish().describe('Environment label: development | staging | production'),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string(),
+  "agentModes": zod.array(zod.object({
+  "name": zod.string(),
+  "provider": zod.string(),
+  "isMock": zod.boolean()
 }))
 })
 
@@ -194,6 +264,41 @@ export const RunNextStepResponse = zod.object({
   "toAgentId": zod.number().nullish().describe('For question\/answer\/handoff messages — the receiving agent\'s id'),
   "toAgentName": zod.string().nullish().describe('Resolved display name of the receiving agent (derived at query time from toAgentId)'),
   "metadata": zod.record(zod.string(), zod.unknown()).nullish().describe('Extra structured data (e.g. partialWork, remainingWork, questionRef)'),
+  "toolOutputs": zod.array(zod.union([zod.object({
+  "type": zod.enum(['file_diff']),
+  "filename": zod.string(),
+  "diff": zod.string().describe('Unified diff format'),
+  "additions": zod.number().nullish(),
+  "deletions": zod.number().nullish()
+}),zod.object({
+  "type": zod.enum(['test_result']),
+  "passed": zod.number(),
+  "failed": zod.number(),
+  "skipped": zod.number().nullish(),
+  "duration": zod.number().nullish().describe('Duration in seconds'),
+  "log": zod.string().nullish()
+}),zod.object({
+  "type": zod.enum(['deployment_url']),
+  "url": zod.string(),
+  "environment": zod.string().nullish(),
+  "label": zod.string().nullish()
+}),zod.object({
+  "type": zod.enum(['command_output']),
+  "command": zod.string(),
+  "output": zod.string(),
+  "exitCode": zod.number().nullish()
+}),zod.object({
+  "type": zod.enum(['build_log']),
+  "log": zod.string(),
+  "success": zod.boolean(),
+  "duration": zod.number().nullish().describe('Duration in seconds')
+}),zod.object({
+  "type": zod.enum(['git_operation']),
+  "operation": zod.string().describe('e.g. commit, push, merge, clone'),
+  "branch": zod.string(),
+  "commitSha": zod.string().nullish(),
+  "commitMessage": zod.string().nullish()
+})])).nullish().describe('Structured tool outputs (diffs, test results, deployment URLs, build logs, git ops)'),
   "createdAt": zod.string()
 })),
   "updatedTasks": zod.array(zod.object({
@@ -268,6 +373,41 @@ export const RunFullWorkflowResponse = zod.object({
   "toAgentId": zod.number().nullish().describe('For question\/answer\/handoff messages — the receiving agent\'s id'),
   "toAgentName": zod.string().nullish().describe('Resolved display name of the receiving agent (derived at query time from toAgentId)'),
   "metadata": zod.record(zod.string(), zod.unknown()).nullish().describe('Extra structured data (e.g. partialWork, remainingWork, questionRef)'),
+  "toolOutputs": zod.array(zod.union([zod.object({
+  "type": zod.enum(['file_diff']),
+  "filename": zod.string(),
+  "diff": zod.string().describe('Unified diff format'),
+  "additions": zod.number().nullish(),
+  "deletions": zod.number().nullish()
+}),zod.object({
+  "type": zod.enum(['test_result']),
+  "passed": zod.number(),
+  "failed": zod.number(),
+  "skipped": zod.number().nullish(),
+  "duration": zod.number().nullish().describe('Duration in seconds'),
+  "log": zod.string().nullish()
+}),zod.object({
+  "type": zod.enum(['deployment_url']),
+  "url": zod.string(),
+  "environment": zod.string().nullish(),
+  "label": zod.string().nullish()
+}),zod.object({
+  "type": zod.enum(['command_output']),
+  "command": zod.string(),
+  "output": zod.string(),
+  "exitCode": zod.number().nullish()
+}),zod.object({
+  "type": zod.enum(['build_log']),
+  "log": zod.string(),
+  "success": zod.boolean(),
+  "duration": zod.number().nullish().describe('Duration in seconds')
+}),zod.object({
+  "type": zod.enum(['git_operation']),
+  "operation": zod.string().describe('e.g. commit, push, merge, clone'),
+  "branch": zod.string(),
+  "commitSha": zod.string().nullish(),
+  "commitMessage": zod.string().nullish()
+})])).nullish().describe('Structured tool outputs (diffs, test results, deployment URLs, build logs, git ops)'),
   "createdAt": zod.string()
 })),
   "updatedTasks": zod.array(zod.object({
@@ -309,6 +449,19 @@ export const SendMessageParams = zod.object({
 
 export const SendMessageBody = zod.object({
   "content": zod.string()
+})
+
+
+/**
+ * @summary User answers an agent's question directed at them
+ */
+export const AnswerQuestionParams = zod.object({
+  "id": zod.coerce.number(),
+  "messageId": zod.coerce.number()
+})
+
+export const AnswerQuestionBody = zod.object({
+  "content": zod.string().describe('The user\'s answer text')
 })
 
 
@@ -417,6 +570,10 @@ export const ListMessagesParams = zod.object({
   "id": zod.coerce.number()
 })
 
+export const ListMessagesQueryParams = zod.object({
+  "type": zod.enum(['output', 'question', 'answer', 'handoff', 'context']).optional().describe('Filter by message type: output | question | answer | handoff | context')
+})
+
 export const ListMessagesResponseItem = zod.object({
   "id": zod.number(),
   "sessionId": zod.number(),
@@ -432,6 +589,41 @@ export const ListMessagesResponseItem = zod.object({
   "toAgentId": zod.number().nullish().describe('For question\/answer\/handoff messages — the receiving agent\'s id'),
   "toAgentName": zod.string().nullish().describe('Resolved display name of the receiving agent (derived at query time from toAgentId)'),
   "metadata": zod.record(zod.string(), zod.unknown()).nullish().describe('Extra structured data (e.g. partialWork, remainingWork, questionRef)'),
+  "toolOutputs": zod.array(zod.union([zod.object({
+  "type": zod.enum(['file_diff']),
+  "filename": zod.string(),
+  "diff": zod.string().describe('Unified diff format'),
+  "additions": zod.number().nullish(),
+  "deletions": zod.number().nullish()
+}),zod.object({
+  "type": zod.enum(['test_result']),
+  "passed": zod.number(),
+  "failed": zod.number(),
+  "skipped": zod.number().nullish(),
+  "duration": zod.number().nullish().describe('Duration in seconds'),
+  "log": zod.string().nullish()
+}),zod.object({
+  "type": zod.enum(['deployment_url']),
+  "url": zod.string(),
+  "environment": zod.string().nullish(),
+  "label": zod.string().nullish()
+}),zod.object({
+  "type": zod.enum(['command_output']),
+  "command": zod.string(),
+  "output": zod.string(),
+  "exitCode": zod.number().nullish()
+}),zod.object({
+  "type": zod.enum(['build_log']),
+  "log": zod.string(),
+  "success": zod.boolean(),
+  "duration": zod.number().nullish().describe('Duration in seconds')
+}),zod.object({
+  "type": zod.enum(['git_operation']),
+  "operation": zod.string().describe('e.g. commit, push, merge, clone'),
+  "branch": zod.string(),
+  "commitSha": zod.string().nullish(),
+  "commitMessage": zod.string().nullish()
+})])).nullish().describe('Structured tool outputs (diffs, test results, deployment URLs, build logs, git ops)'),
   "createdAt": zod.string()
 })
 export const ListMessagesResponse = zod.array(ListMessagesResponseItem)
@@ -696,5 +888,33 @@ export const WorkbenchRefuseCheckResponse = zod.object({
   "allowed": zod.boolean(),
   "reason": zod.string().nullable()
 })
+
+
+/**
+ * @summary Fetch metadata for a single GitHub repository
+ */
+export const GetGithubRepoQueryParams = zod.object({
+  "owner": zod.coerce.string().describe('Repository owner (user or org)'),
+  "repo": zod.coerce.string().describe('Repository name')
+})
+
+export const GetGithubRepoResponse = zod.object({
+  "fullName": zod.string().describe('Owner\/repo (e.g. acme\/my-app)'),
+  "htmlUrl": zod.string().describe('Full HTTPS URL to the repository'),
+  "defaultBranch": zod.string().describe('Default branch name'),
+  "private": zod.boolean().describe('Whether the repository is private')
+})
+
+
+/**
+ * @summary List GitHub repositories accessible via the connected integration
+ */
+export const ListGithubReposResponseItem = zod.object({
+  "fullName": zod.string().describe('Owner\/repo (e.g. acme\/my-app)'),
+  "htmlUrl": zod.string().describe('Full HTTPS URL to the repository'),
+  "defaultBranch": zod.string().describe('Default branch name'),
+  "private": zod.boolean().describe('Whether the repository is private')
+})
+export const ListGithubReposResponse = zod.array(ListGithubReposResponseItem)
 
 
