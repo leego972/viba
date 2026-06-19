@@ -245,6 +245,12 @@ async function runStartupMigrations(): Promise<void> {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_token ON password_reset_tokens(token)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_audit_logs_session_id ON audit_logs(session_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id)`);
+  // Hot-path indexes for email verification and session listing
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_email_verification_tokens_token ON email_verification_tokens(token)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_email_verification_tokens_user_id ON email_verification_tokens(user_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id) WHERE user_id IS NOT NULL`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_agents_session_id ON agents(session_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_session_id ON tasks(session_id)`);
 
   // ── email_verification_tokens table ───────────────────────────────────────
   await pool.query(`
