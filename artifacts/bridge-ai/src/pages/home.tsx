@@ -193,6 +193,17 @@ export default function Home() {
             <Link href="/pricing" className="hover:text-muted-foreground transition-colors">Pricing</Link>
             <Link href="/settings" className="hover:text-muted-foreground transition-colors">Settings</Link>
             <Link href="/dashboard" className="hover:text-muted-foreground transition-colors">Dashboard</Link>
+            <span className="text-border/60">|</span>
+            <a
+              href="https://leego.dev"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 opacity-50 hover:opacity-80 transition-opacity"
+              title="Made by Leego"
+            >
+              <span>by</span>
+              <img src="/leego-logo-transparent.png" alt="Leego" className="h-4 w-auto object-contain" />
+            </a>
           </div>
         </div>
       </footer>
