@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Zap, Shield, Blocks, ArrowRight, LineChart } from "lucide-react";
+import { Zap, Shield, Blocks, ArrowRight, LineChart, Rocket, Globe, RefreshCw, KeyRound, FileText } from "lucide-react";
 
 export default function Home() {
   return (
@@ -92,6 +92,14 @@ export default function Home() {
                     {name}
                   </span>
                 ))}
+                <span className="text-xs font-semibold text-rose-300 border border-rose-500/40 rounded-full px-3 py-1 bg-rose-500/10 flex items-center gap-1.5">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-rose-400 animate-pulse" />
+                  Groq — Free
+                </span>
+                <span className="text-xs font-semibold text-violet-300 border border-violet-500/40 rounded-full px-3 py-1 bg-violet-500/10 flex items-center gap-1.5">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse" />
+                  Railway
+                </span>
               </div>
             </div>
           </div>
@@ -207,6 +215,96 @@ export default function Home() {
                     <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: "300ms" }} />
                   </div>
                   <span className="text-xs text-muted-foreground">Claude is implementing schema migrations…</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ─── Groq free tier + key requirements ─── */}
+        <section className="w-full py-16 md:py-20 border-t border-border/50 bg-gradient-to-b from-rose-950/10 to-transparent">
+          <div className="container px-4 md:px-6">
+            <div className="mx-auto max-w-4xl">
+              {/* Header */}
+              <div className="flex flex-col items-center gap-3 text-center mb-10">
+                <div className="inline-flex items-center gap-2 rounded-full border border-rose-500/30 bg-rose-500/10 px-4 py-1.5 text-xs font-semibold text-rose-300">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-60" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-rose-400" />
+                  </span>
+                  Groq — Pre-configured &amp; Free for All Users
+                </div>
+                <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl">
+                  Start immediately. No API key needed.
+                </h2>
+                <p className="text-muted-foreground md:text-lg max-w-2xl">
+                  VIBA comes with <span className="text-foreground font-medium">Groq pre-configured</span> — powered by Llama&nbsp;3.3&nbsp;70B, one of the most capable open models available. Use it to plan, build, and review right away.
+                </p>
+              </div>
+
+              {/* Two-column: free vs bring your own */}
+              <div className="grid md:grid-cols-2 gap-5">
+                {/* Free / Groq card */}
+                <div className="rounded-2xl border border-rose-500/25 bg-rose-500/[0.06] p-7 flex flex-col gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-500/15 ring-1 ring-rose-500/25">
+                      <Zap className="h-5 w-5 text-rose-400" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-sm text-foreground">Groq — Free &amp; Ready</p>
+                      <p className="text-xs text-muted-foreground">No setup required</p>
+                    </div>
+                  </div>
+                  <ul className="space-y-2.5 text-sm text-muted-foreground">
+                    {[
+                      "Llama 3.3 70B — full function calling",
+                      "Railway MCP tools — deploy, rollback, manage env vars",
+                      "Planning, code review, implementation",
+                      "Zero cost — free Groq tier, no credit card",
+                    ].map(item => (
+                      <li key={item} className="flex items-start gap-2">
+                        <span className="mt-0.5 h-4 w-4 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center text-[10px] shrink-0">✓</span>
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-auto pt-2 text-xs text-rose-400/70 font-medium">
+                    Powered by Groq · Llama 3.3 70B · Included for all VIBA users
+                  </div>
+                </div>
+
+                {/* Bring your own keys card */}
+                <div className="rounded-2xl border border-border/50 bg-card p-7 flex flex-col gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/20">
+                      <KeyRound className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-sm text-foreground">Collaborative Multi-Agent Work</p>
+                      <p className="text-xs text-muted-foreground">Bring your own keys</p>
+                    </div>
+                  </div>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    To run <span className="text-foreground font-medium">multiple different AI models collaborating together</span> — e.g. Claude as Architect, ChatGPT as Strategist, Gemini as Researcher — each provider needs its own API key in your settings.
+                  </p>
+                  <ul className="space-y-2 text-sm text-muted-foreground">
+                    {[
+                      { name: "OpenAI", key: "OPENAI_API_KEY" },
+                      { name: "Anthropic", key: "ANTHROPIC_API_KEY" },
+                      { name: "Gemini", key: "GEMINI_API_KEY" },
+                      { name: "Perplexity", key: "PERPLEXITY_API_KEY" },
+                    ].map(({ name, key }) => (
+                      <li key={key} className="flex items-center justify-between gap-2">
+                        <span>{name}</span>
+                        <code className="text-[10px] font-mono text-muted-foreground/60 bg-muted/50 px-2 py-0.5 rounded">{key}</code>
+                      </li>
+                    ))}
+                  </ul>
+                  <Link href="/settings" className="mt-auto">
+                    <button className="w-full flex items-center justify-center gap-2 h-9 rounded-lg text-sm font-medium border border-border/60 bg-white/[0.04] hover:bg-white/[0.07] transition-all">
+                      Add API Keys <ArrowRight className="h-3.5 w-3.5" />
+                    </button>
+                  </Link>
                 </div>
               </div>
             </div>
