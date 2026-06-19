@@ -502,6 +502,34 @@ export class ManusMockAdapter extends ToolCapableMockAdapter {
   }
 }
 
+// ── Railway ───────────────────────────────────────────────────────────────────
+export class RailwayMockAdapter extends ToolCapableMockAdapter {
+  id: string; name: string; provider = "railway"; model = "railway-mcp (sim)"; role: string;
+  capabilities = ["deployment", "infrastructure", "monitoring", "environment_management", "rollback"];
+
+  constructor(id: string, name: string, role: string) { super(); this.id = id; this.name = name; this.role = role; }
+
+  generateResponse(input: AgentTaskInput): string {
+    const goal = input.projectGoal;
+    const type = input.taskType ?? "deployment_approval";
+    const responses: Record<string, string[]> = {
+      build: [
+        `Railway deployment plan for "${goal}": I've reviewed the service configuration, environment variables, and build settings. The deployment pipeline is ready. Services are correctly sized for the expected load. Recommending a staged rollout to production with health check gates.`,
+        `Infrastructure assessment for "${goal}": all Railway services are healthy. Build configs validated. No deprecated runtime versions detected. Deploy when ready.`,
+      ],
+      deployment_approval: [
+        `Railway deployment verified for "${goal}": smoke tests passed, health checks green, environment variables confirmed. Production deploy is safe to proceed. Rollback plan is in place if needed.`,
+        `Deploy complete (simulated) for "${goal}". Service restarted successfully. Logs show no errors. Deployment URL is live.`,
+      ],
+      research: [
+        `Railway infrastructure analysis for "${goal}": current services are running on optimal regions. Costs are within expected range. No scaling issues detected. One recommendation: enable auto-scaling on the API service.`,
+      ],
+    };
+    const fallback = [`Railway status for "${goal}": all services operational. No deployment issues detected. Environment variables are correctly configured.`];
+    return pick(responses[type] ?? fallback);
+  }
+}
+
 // ── Replit ────────────────────────────────────────────────────────────────────
 export class ReplitMockAdapter extends ToolCapableMockAdapter {
   id: string; name: string; provider = "replit"; model = "replit-code-v1-3b (sim)"; role: string;
