@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Key, ShieldCheck, Zap, RotateCcw, BarChart2, Cpu, Bell, X, CheckCircle2, MinusCircle, Trash2, MailWarning, AlertTriangle } from "lucide-react";
+import { Key, ShieldCheck, Zap, RotateCcw, BarChart2, Cpu, Bell, X, CheckCircle2, MinusCircle, Trash2, MailWarning, AlertTriangle, Server, Github, GitBranch } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -119,6 +119,29 @@ const PROVIDERS: ProviderConfig[] = [
     hint: "Powers Manus research agents. Obtain your key from manus.im.",
     providerName: "manus",
   },
+  {
+    key: "GROQ_API_KEY",
+    label: "Groq API Key",
+    placeholder: "gsk_...",
+    hint: "Powers Groq agents (free tier, pre-configured). Only override if you have your own key. Get one free at console.groq.com.",
+    providerName: "groq",
+    modelKey: "GROQ_MODEL",
+    defaultModel: "llama-3.3-70b-versatile",
+    models: [
+      { value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B Versatile (default · tool-capable)" },
+      { value: "llama3-70b-8192", label: "Llama 3 70B" },
+      { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant (fastest)" },
+      { value: "mixtral-8x7b-32768", label: "Mixtral 8x7B" },
+      { value: "gemma2-9b-it", label: "Gemma 2 9B" },
+    ],
+  },
+  {
+    key: "GITHUB_TOKEN",
+    label: "GitHub Personal Access Token",
+    placeholder: "ghp_... or github_pat_...",
+    hint: "Lets agents create repos, read/write files, open pull requests, and manage issues on your GitHub. Generate at github.com/settings/tokens (scopes: repo, read:user).",
+    providerName: "github",
+  },
 ];
 
 const SMTP_KEYS = ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "SMTP_FROM"] as const;
@@ -136,6 +159,8 @@ const ALL_SETTING_KEYS = [
   ...PROVIDERS.flatMap((p) => (p.modelKey ? [p.key, p.modelKey] : [p.key])),
   ...ALERT_KEYS,
   ...SMTP_KEYS,
+  "OLLAMA_BASE_URL",
+  "OLLAMA_MODEL",
 ];
 
 type KeyState = Record<string, string>;
@@ -895,6 +920,107 @@ export default function Settings() {
               {saveSettings.isPending ? "Saving..." : "Save Settings"}
             </Button>
           </CardFooter>
+        </Card>
+
+        {/* Ollama — local model configuration */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Server className="h-5 w-5" /> Ollama — Local Models
+            </CardTitle>
+            <CardDescription>
+              Run AI agents entirely on your own machine — no API key, no cost, no data leaving your network.
+              Install Ollama from <a href="https://ollama.com" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-foreground">ollama.com</a>, then pull a model with{" "}
+              <code className="bg-muted px-1 py-0.5 rounded text-xs">ollama pull llama3.1:8b</code>.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="ollama-url">Ollama Base URL</Label>
+              <Input
+                id="ollama-url"
+                name="OLLAMA_BASE_URL"
+                type="url"
+                placeholder="http://localhost:11434"
+                value={values["OLLAMA_BASE_URL"] ?? ""}
+                onChange={handleKeyChange}
+                className="font-mono text-sm"
+              />
+              {saveResults["OLLAMA_BASE_URL"] === "saved" && (
+                <p className="flex items-center gap-1 text-xs text-emerald-500">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Saved
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Default: <code className="bg-muted px-1 rounded">http://localhost:11434</code>. Change this if Ollama runs on a different host or port.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="ollama-model" className="flex items-center gap-2">
+                Model
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1">
+                  <GitBranch className="h-2.5 w-2.5" /> Pulled locally
+                </Badge>
+              </Label>
+              <Input
+                id="ollama-model"
+                name="OLLAMA_MODEL"
+                type="text"
+                placeholder="llama3.1:8b"
+                value={values["OLLAMA_MODEL"] ?? ""}
+                onChange={handleKeyChange}
+                className="font-mono text-sm"
+              />
+              {saveResults["OLLAMA_MODEL"] === "saved" && (
+                <p className="flex items-center gap-1 text-xs text-emerald-500">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Saved
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Tool-capable models: <code className="bg-muted px-1 rounded">llama3.1:8b</code>,{" "}
+                <code className="bg-muted px-1 rounded">qwen2.5:7b</code>,{" "}
+                <code className="bg-muted px-1 rounded">mistral:7b</code>.
+                Default: <code className="bg-muted px-1 rounded">llama3.2</code> (3B, fast).
+              </p>
+            </div>
+          </CardContent>
+          <CardFooter>
+            <Button
+              onClick={handleSave}
+              disabled={saveSettings.isPending || isLoading}
+              variant="outline"
+              size="sm"
+            >
+              {saveSettings.isPending ? "Saving..." : "Save Ollama Settings"}
+            </Button>
+          </CardFooter>
+        </Card>
+
+        {/* GitHub integration info */}
+        <Card className="border-dashed">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Github className="h-4 w-4" /> GitHub Integration
+            </CardTitle>
+            <CardDescription>
+              Agents with a GitHub token can create repositories, push code, open pull requests, manage issues, and search your codebase.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground space-y-1">
+              <p className="font-medium text-foreground">Required token scopes:</p>
+              <ul className="list-disc pl-4 space-y-0.5">
+                <li><code className="bg-muted px-1 rounded">repo</code> — full read/write access to repositories</li>
+                <li><code className="bg-muted px-1 rounded">read:user</code> — read your GitHub profile</li>
+              </ul>
+              <p className="pt-1">
+                Generate at{" "}
+                <a href="https://github.com/settings/tokens/new?scopes=repo,read:user" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-foreground">
+                  github.com/settings/tokens
+                </a>. Paste the token in the GitHub Personal Access Token field above.
+              </p>
+            </div>
+          </CardContent>
         </Card>
       </div>
 
