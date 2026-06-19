@@ -19,6 +19,26 @@ export interface AgentModeSummary {
   isMock: boolean;
 }
 
+export interface UpdateSessionBody {
+  /** Git repository URL (null clears it) */
+  repoUrl?: string | null;
+  /** Branch name (null clears it) */
+  repoBranch?: string | null;
+  /** Environment label: development | staging | production (null clears it) */
+  workspaceEnv?: string | null;
+}
+
+export interface GithubRepo {
+  /** Owner/repo (e.g. acme/my-app) */
+  fullName: string;
+  /** Full HTTPS URL to the repository */
+  htmlUrl: string;
+  /** Default branch name */
+  defaultBranch: string;
+  /** Whether the repository is private */
+  private: boolean;
+}
+
 export type SessionMode = typeof SessionMode[keyof typeof SessionMode];
 
 
@@ -102,6 +122,100 @@ export const MessageMessageType = {
  */
 export type MessageMetadata = { [key: string]: unknown } | null;
 
+export type FileDiffOutputType = typeof FileDiffOutputType[keyof typeof FileDiffOutputType];
+
+
+export const FileDiffOutputType = {
+  file_diff: 'file_diff',
+} as const;
+
+export interface FileDiffOutput {
+  type: FileDiffOutputType;
+  filename: string;
+  /** Unified diff format */
+  diff: string;
+  additions?: number | null;
+  deletions?: number | null;
+}
+
+export type TestResultOutputType = typeof TestResultOutputType[keyof typeof TestResultOutputType];
+
+
+export const TestResultOutputType = {
+  test_result: 'test_result',
+} as const;
+
+export interface TestResultOutput {
+  type: TestResultOutputType;
+  passed: number;
+  failed: number;
+  skipped?: number | null;
+  /** Duration in seconds */
+  duration?: number | null;
+  log?: string | null;
+}
+
+export type DeploymentUrlOutputType = typeof DeploymentUrlOutputType[keyof typeof DeploymentUrlOutputType];
+
+
+export const DeploymentUrlOutputType = {
+  deployment_url: 'deployment_url',
+} as const;
+
+export interface DeploymentUrlOutput {
+  type: DeploymentUrlOutputType;
+  url: string;
+  environment?: string | null;
+  label?: string | null;
+}
+
+export type CommandOutputType = typeof CommandOutputType[keyof typeof CommandOutputType];
+
+
+export const CommandOutputType = {
+  command_output: 'command_output',
+} as const;
+
+export interface CommandOutput {
+  type: CommandOutputType;
+  command: string;
+  output: string;
+  exitCode?: number | null;
+}
+
+export type BuildLogOutputType = typeof BuildLogOutputType[keyof typeof BuildLogOutputType];
+
+
+export const BuildLogOutputType = {
+  build_log: 'build_log',
+} as const;
+
+export interface BuildLogOutput {
+  type: BuildLogOutputType;
+  log: string;
+  success: boolean;
+  /** Duration in seconds */
+  duration?: number | null;
+}
+
+export type GitOperationOutputType = typeof GitOperationOutputType[keyof typeof GitOperationOutputType];
+
+
+export const GitOperationOutputType = {
+  git_operation: 'git_operation',
+} as const;
+
+export interface GitOperationOutput {
+  type: GitOperationOutputType;
+  /** e.g. commit, push, merge, clone */
+  operation: string;
+  branch: string;
+  commitSha?: string | null;
+  commitMessage?: string | null;
+}
+
+export type ToolOutput = FileDiffOutput | TestResultOutput | DeploymentUrlOutput | CommandOutput | BuildLogOutput | GitOperationOutput;
+
 export interface Message {
   id: number;
   sessionId: number;
@@ -121,6 +235,8 @@ export interface Message {
   toAgentName?: string | null;
   /** Extra structured data (e.g. partialWork, remainingWork, questionRef) */
   metadata?: MessageMetadata;
+  /** Structured tool outputs (diffs, test results, deployment URLs, build logs, git ops) */
+  toolOutputs?: ToolOutput[] | null;
   createdAt: string;
 }
 
@@ -179,6 +295,9 @@ export interface AgentInput {
   provider: string;
   role: string;
   isMock: boolean;
+  /** Override whether this agent can execute tools/code. Defaults to true for replit/manus providers and false for text-only providers. Users can explicitly enable tool capability for any provider.
+   */
+  canUseTools?: boolean;
 }
 
 export interface CreateSessionBody {
@@ -250,6 +369,11 @@ export interface SaveSettingsBody {
 }
 
 export interface SendMessageBody {
+  content: string;
+}
+
+export interface AnswerQuestionBody {
+  /** The user's answer text */
   content: string;
 }
 
@@ -468,4 +592,33 @@ export interface WorkbenchRefuseCheckResponse {
   allowed: boolean;
   reason: string | null;
 }
+
+export type ListMessagesParams = {
+/**
+ * Filter by message type: output | question | answer | handoff | context
+ */
+type?: ListMessagesType;
+};
+
+export type ListMessagesType = typeof ListMessagesType[keyof typeof ListMessagesType];
+
+
+export const ListMessagesType = {
+  output: 'output',
+  question: 'question',
+  answer: 'answer',
+  handoff: 'handoff',
+  context: 'context',
+} as const;
+
+export type GetGithubRepoParams = {
+/**
+ * Repository owner (user or org)
+ */
+owner: string;
+/**
+ * Repository name
+ */
+repo: string;
+};
 
