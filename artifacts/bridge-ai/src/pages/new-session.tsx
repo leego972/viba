@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowRight, Bot, Target, ShieldCheck, Zap, AlertTriangle, FlaskConical, GitBranch, ChevronDown, Wrench, CheckCircle2, Loader2 } from "lucide-react";
+import { ArrowRight, Bot, Target, ShieldCheck, Zap, AlertTriangle, FlaskConical, GitBranch, ChevronDown, Wrench, CheckCircle2, Loader2, Sparkles, Bookmark, BookMarked, Trash2 } from "lucide-react";
 
 const AVAILABLE_PROVIDERS = [
   { id: "openai",     name: "ChatGPT",    provider: "OpenAI",     defaultRole: "Strategist",    color: "bg-green-500",  apiKey: "OPENAI_API_KEY",     canUseTools: false },
@@ -36,6 +36,79 @@ const ROLES = [
 
 const WORKSPACE_ENVS = ["development", "staging", "production"];
 
+type SavedTeam = {
+  name: string;
+  agents: Record<string, { selected: boolean; role: string }>;
+  savedAt: string;
+};
+
+const SAVED_TEAMS_KEY = "viba_saved_teams";
+
+const SESSION_TEMPLATES: Array<{
+  id: string;
+  emoji: string;
+  label: string;
+  description: string;
+  goal: string;
+  autonomyMode: string;
+  agents: Partial<Record<string, string>>;
+}> = [
+  {
+    id: "code-review",
+    emoji: "🔍",
+    label: "Code Review",
+    description: "Security, performance & quality analysis",
+    goal: "Perform a comprehensive code review of this repository. Analyse code quality, identify security vulnerabilities, performance bottlenecks, and provide specific improvement suggestions with file references.",
+    autonomyMode: "Supervised",
+    agents: { openai: "Strategist", anthropic: "Code Reviewer" },
+  },
+  {
+    id: "bug-hunt",
+    emoji: "🐛",
+    label: "Bug Hunt",
+    description: "Systematic bug identification & fix proposals",
+    goal: "Systematically identify bugs, edge cases, and logic errors. For each issue found, provide a root cause analysis, the affected location, and a concrete proposed fix.",
+    autonomyMode: "Supervised",
+    agents: { anthropic: "Code Reviewer", openai: "Final QA", replit: "Builder" },
+  },
+  {
+    id: "feature-build",
+    emoji: "⚡",
+    label: "Feature Build",
+    description: "Plan, build, and test a new feature end-to-end",
+    goal: "Design and implement a new feature. Start with a technical spec, then build the implementation, write tests, and prepare a pull request with a clear description.",
+    autonomyMode: "Supervised",
+    agents: { openai: "Strategist", anthropic: "Builder", replit: "Builder" },
+  },
+  {
+    id: "research-report",
+    emoji: "📊",
+    label: "Research Report",
+    description: "Deep research with structured deliverables",
+    goal: "Research the topic thoroughly and produce a structured report: executive summary, key findings, supporting evidence, and prioritised actionable recommendations.",
+    autonomyMode: "Autonomous",
+    agents: { gemini: "Researcher", perplexity: "Researcher", openai: "Strategist" },
+  },
+  {
+    id: "architecture-review",
+    emoji: "🏗️",
+    label: "Architecture Review",
+    description: "System design analysis & improvement roadmap",
+    goal: "Review the system architecture for scalability, reliability, and maintainability. Identify anti-patterns, propose improvements, and outline a prioritised migration roadmap.",
+    autonomyMode: "Manual",
+    agents: { openai: "Strategist", anthropic: "Code Reviewer", gemini: "Researcher" },
+  },
+  {
+    id: "content-strategy",
+    emoji: "✍️",
+    label: "Content Strategy",
+    description: "Multi-agent content creation & review pipeline",
+    goal: "Develop a content strategy and produce polished deliverables. Cover audience analysis, key messaging, content calendar, and draft pieces ready for publication.",
+    autonomyMode: "Supervised",
+    agents: { openai: "Creative Director", anthropic: "Researcher", gemini: "Final QA" },
+  },
+];
+
 function parseGithubUrl(url: string): { owner: string; repo: string } | null {
   const m = url.trim().match(/^https?:\/\/github\.com\/([^/]+)\/([^/?.]+?)(?:\.git)?(?:\/.*)?$/);
   if (!m || !m[1] || !m[2]) return null;
@@ -56,6 +129,14 @@ export default function NewSession() {
   const lastRepo   = !initRepo   ? (localStorage.getItem("viba_last_repo")   ?? "") : "";
   const lastBranch = !initBranch ? (localStorage.getItem("viba_last_branch") ?? "") : "";
   const lastEnv    = localStorage.getItem("viba_last_env") ?? "";
+
+  const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null);
+  const [savedTeams, setSavedTeams] = useState<SavedTeam[]>(() => {
+    try { return JSON.parse(localStorage.getItem(SAVED_TEAMS_KEY) ?? "[]") as SavedTeam[]; }
+    catch { return []; }
+  });
+  const [saveTeamName, setSaveTeamName] = useState("");
+  const [showSaveTeamInput, setShowSaveTeamInput] = useState(false);
 
   const [goal, setGoal] = useState("");
   const [autonomyMode, setAutonomyMode] = useState("Supervised");
@@ -169,6 +250,42 @@ export default function NewSession() {
     setSelectedAgents(newAgents);
   };
 
+  const applyTemplate = (tpl: typeof SESSION_TEMPLATES[number]) => {
+    setActiveTemplateId(tpl.id);
+    setGoal(tpl.goal);
+    setAutonomyMode(tpl.autonomyMode);
+    const next: Record<string, { selected: boolean; role: string }> = {};
+    AVAILABLE_PROVIDERS.forEach(p => {
+      next[p.id] = { selected: p.id in tpl.agents, role: tpl.agents[p.id] ?? p.defaultRole };
+    });
+    setSelectedAgents(next);
+  };
+
+  const persistSavedTeams = (teams: SavedTeam[]) => {
+    setSavedTeams(teams);
+    try { localStorage.setItem(SAVED_TEAMS_KEY, JSON.stringify(teams)); } catch {}
+  };
+
+  const handleSaveTeam = () => {
+    const name = saveTeamName.trim();
+    if (!name) return;
+    const team: SavedTeam = { name, agents: selectedAgents, savedAt: new Date().toISOString() };
+    persistSavedTeams([...savedTeams.filter(t => t.name !== name), team]);
+    setSaveTeamName("");
+    setShowSaveTeamInput(false);
+    toast({ title: "Team saved", description: `"${name}" saved for future sessions.` });
+  };
+
+  const handleLoadTeam = (team: SavedTeam) => {
+    setSelectedAgents(team.agents);
+    setActiveTemplateId(null);
+    toast({ title: "Team loaded", description: `"${team.name}" applied.` });
+  };
+
+  const handleDeleteTeam = (name: string) => {
+    persistSavedTeams(savedTeams.filter(t => t.name !== name));
+  };
+
   const handleSubmit = () => {
     if (!goal.trim()) {
       toast({ title: "Goal required", description: "Please enter a project goal.", variant: "destructive" });
@@ -219,6 +336,33 @@ export default function NewSession() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">New Session</h1>
           <p className="text-muted-foreground">Configure your agents and project goal</p>
+        </div>
+
+        {/* Quick-start Templates */}
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 mb-3">
+            <Sparkles className="h-3.5 w-3.5" /> Quick-start templates
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {SESSION_TEMPLATES.map(tpl => (
+              <button
+                key={tpl.id}
+                type="button"
+                onClick={() => applyTemplate(tpl)}
+                className={`text-left p-3 rounded-lg border transition-all ${
+                  activeTemplateId === tpl.id
+                    ? "border-primary bg-primary/10 shadow-sm shadow-primary/20"
+                    : "border-border/60 bg-card hover:border-primary/40 hover:bg-muted/50"
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-base leading-none">{tpl.emoji}</span>
+                  <span className="text-sm font-semibold leading-tight">{tpl.label}</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-snug">{tpl.description}</p>
+              </button>
+            ))}
+          </div>
         </div>
 
         <Card>
@@ -365,7 +509,56 @@ export default function NewSession() {
                   <CardTitle className="flex items-center gap-2"><Bot className="h-5 w-5" /> Assemble Team</CardTitle>
                   <CardDescription>Select agents and assign roles.</CardDescription>
                 </div>
-                <Button variant="outline" size="sm" onClick={handleAutoAssign}>Auto-assign</Button>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {savedTeams.length > 0 && (
+                    <Select onValueChange={(name) => {
+                      const t = savedTeams.find(s => s.name === name);
+                      if (t) handleLoadTeam(t);
+                    }}>
+                      <SelectTrigger className="h-7 text-xs w-auto min-w-[90px] gap-1 pr-2">
+                        <BookMarked className="h-3 w-3 shrink-0" />
+                        <SelectValue placeholder="Load…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {savedTeams.map(t => (
+                          <SelectItem key={t.name} value={t.name} className="text-xs">
+                            <div className="flex items-center justify-between gap-4 w-full">
+                              <span>{t.name}</span>
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); handleDeleteTeam(t.name); }}
+                                className="text-muted-foreground hover:text-destructive transition-colors"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {showSaveTeamInput ? (
+                    <div className="flex items-center gap-1">
+                      <input
+                        autoFocus
+                        className="h-7 px-2 text-xs rounded border border-border bg-background w-28 focus:outline-none focus:ring-1 focus:ring-primary"
+                        placeholder="Team name…"
+                        value={saveTeamName}
+                        onChange={e => setSaveTeamName(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === "Enter") handleSaveTeam();
+                          if (e.key === "Escape") { setShowSaveTeamInput(false); setSaveTeamName(""); }
+                        }}
+                      />
+                      <Button size="sm" className="h-7 px-2 text-xs" onClick={handleSaveTeam} disabled={!saveTeamName.trim()}>Save</Button>
+                    </div>
+                  ) : (
+                    <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setShowSaveTeamInput(true)}>
+                      <Bookmark className="h-3 w-3" /> Save team
+                    </Button>
+                  )}
+                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleAutoAssign}>Auto-assign</Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
