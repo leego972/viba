@@ -16,12 +16,13 @@ import { useToast } from "@/hooks/use-toast";
 import { ArrowRight, Bot, Target, ShieldCheck, Zap, AlertTriangle, FlaskConical, GitBranch, ChevronDown, Wrench, CheckCircle2, Loader2, Sparkles, Bookmark, BookMarked, Trash2 } from "lucide-react";
 
 const AVAILABLE_PROVIDERS = [
-  { id: "openai",     name: "ChatGPT",    provider: "OpenAI",     defaultRole: "Strategist",    color: "bg-green-500",  apiKey: "OPENAI_API_KEY",     canUseTools: false },
-  { id: "anthropic",  name: "Claude",     provider: "Anthropic",  defaultRole: "Builder",       color: "bg-orange-500", apiKey: "ANTHROPIC_API_KEY",  canUseTools: false },
-  { id: "manus",      name: "Manus",      provider: "Manus",      defaultRole: "Code Reviewer", color: "bg-purple-500", apiKey: "MANUS_API_KEY",      canUseTools: true  },
-  { id: "replit",     name: "Replit",     provider: "Replit",     defaultRole: "Builder",       color: "bg-blue-500",   apiKey: "REPLIT_API_KEY",     canUseTools: true  },
-  { id: "gemini",     name: "Gemini",     provider: "Google",     defaultRole: "Researcher",    color: "bg-teal-500",   apiKey: "GEMINI_API_KEY",     canUseTools: false },
-  { id: "perplexity", name: "Perplexity", provider: "Perplexity", defaultRole: "Researcher",    color: "bg-amber-500",  apiKey: "PERPLEXITY_API_KEY", canUseTools: false },
+  { id: "openai",     name: "ChatGPT",    provider: "OpenAI",     defaultRole: "Strategist",    color: "bg-green-500",   apiKey: "OPENAI_API_KEY",     canUseTools: false },
+  { id: "anthropic",  name: "Claude",     provider: "Anthropic",  defaultRole: "Builder",       color: "bg-orange-500",  apiKey: "ANTHROPIC_API_KEY",  canUseTools: false },
+  { id: "manus",      name: "Manus",      provider: "Manus",      defaultRole: "Code Reviewer", color: "bg-purple-500",  apiKey: "MANUS_API_KEY",      canUseTools: true  },
+  { id: "replit",     name: "Replit",     provider: "Replit",     defaultRole: "Builder",       color: "bg-blue-500",    apiKey: "REPLIT_API_KEY",     canUseTools: true  },
+  { id: "railway",    name: "Railway",    provider: "Railway",    defaultRole: "DevOps",        color: "bg-violet-500",  apiKey: "RAILWAY_TOKEN",      canUseTools: true  },
+  { id: "gemini",     name: "Gemini",     provider: "Google",     defaultRole: "Researcher",    color: "bg-teal-500",    apiKey: "GEMINI_API_KEY",     canUseTools: false },
+  { id: "perplexity", name: "Perplexity", provider: "Perplexity", defaultRole: "Researcher",    color: "bg-amber-500",   apiKey: "PERPLEXITY_API_KEY", canUseTools: false },
 ];
 
 const ROLES = [
