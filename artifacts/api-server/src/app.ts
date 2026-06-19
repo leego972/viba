@@ -63,6 +63,15 @@ app.use(
 // Must be before body parsers and route handlers.
 // Sessions are stored in PostgreSQL via connect-pg-simple.
 const isProd = process.env.NODE_ENV === "production";
+
+// SESSION_SECRET must be set in production — an absent or placeholder value is a
+// session-forgery risk. Fail fast so Railway alerts on startup rather than serving
+// insecure sessions silently.
+const sessionSecret = process.env.SESSION_SECRET;
+if (isProd && (!sessionSecret || sessionSecret === "dev-secret-change-me-in-production")) {
+  throw new Error("SESSION_SECRET must be set to a strong random value in production. Refusing to start.");
+}
+
 app.use(
   session({
     store: new PgStore({
@@ -71,7 +80,7 @@ app.use(
       createTableIfMissing: true,
     }),
     name: "viba.sid",
-    secret: process.env.SESSION_SECRET ?? "dev-secret-change-me-in-production",
+    secret: sessionSecret ?? "dev-secret-change-me-in-production",
     resave: false,
     saveUninitialized: false,
     cookie: {
