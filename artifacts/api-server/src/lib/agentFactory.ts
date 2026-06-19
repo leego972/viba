@@ -6,6 +6,8 @@ import { PerplexityAdapter } from "./adapters/perplexity";
 import { ReplitAdapter } from "./adapters/replit";
 import { ManusAdapter } from "./adapters/manus";
 import { RailwayAdapter } from "./adapters/railway";
+import { GroqAdapter } from "./adapters/groq";
+import { OllamaAdapter } from "./adapters/ollama";
 import {
   ChatGPTMockAdapter,
   ClaudeMockAdapter,
@@ -14,6 +16,8 @@ import {
   ReplitMockAdapter,
   ManusMockAdapter,
   RailwayMockAdapter,
+  GroqMockAdapter,
+  OllamaMockAdapter,
 } from "./adapters/mocks";
 import type { Agent } from "@workspace/db";
 import { db, settingsTable } from "@workspace/db";
@@ -40,6 +44,8 @@ export function buildMockAdapter(agent: Agent): AgentAdapter {
   if (provider === "replit") return new ReplitMockAdapter(String(agent.id), agent.name, agent.role);
   if (provider === "manus") return new ManusMockAdapter(String(agent.id), agent.name, agent.role);
   if (provider === "railway") return new RailwayMockAdapter(String(agent.id), agent.name, agent.role);
+  if (provider === "groq") return new GroqMockAdapter(String(agent.id), agent.name, agent.role);
+  if (provider === "ollama") return new OllamaMockAdapter(String(agent.id), agent.name, agent.role);
   return new ChatGPTMockAdapter(String(agent.id), agent.name, agent.role);
 }
 
@@ -93,6 +99,24 @@ export async function buildAdapter(agent: Agent): Promise<AgentAdapter> {
     }
     logger.warn({ provider }, "No Replit API key found — using simulation mode");
     return new ReplitMockAdapter(String(agent.id), agent.name, agent.role);
+  }
+
+  if (provider === "groq") {
+    const apiKey = await getSetting("GROQ_API_KEY") ?? process.env["GROQ_API_KEY"] ?? "";
+    if (isValidKey(apiKey)) {
+      const model = await getSetting("GROQ_MODEL") ?? undefined;
+      const railwayToken = await getSetting("RAILWAY_TOKEN") ?? process.env["RAILWAY_TOKEN"] ?? undefined;
+      return new GroqAdapter(String(agent.id), agent.name, agent.role, apiKey, model, agent.canUseTools, railwayToken);
+    }
+    logger.warn({ provider }, "No Groq API key found — using simulation mode");
+    return new GroqMockAdapter(String(agent.id), agent.name, agent.role);
+  }
+
+  if (provider === "ollama") {
+    const baseUrl = await getSetting("OLLAMA_BASE_URL") ?? process.env["OLLAMA_BASE_URL"] ?? "http://localhost:11434";
+    const model = await getSetting("OLLAMA_MODEL") ?? process.env["OLLAMA_MODEL"] ?? "llama3.2";
+    // Ollama needs no API key — always try the real adapter if a base URL is set
+    return new OllamaAdapter(String(agent.id), agent.name, agent.role, model, baseUrl, agent.canUseTools);
   }
 
   if (provider === "railway") {
