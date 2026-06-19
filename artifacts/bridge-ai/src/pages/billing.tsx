@@ -1,7 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { AlertTriangle, CheckCircle2, Clock, XCircle, Zap, RefreshCw, ExternalLink, TrendingDown, TrendingUp, History } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, XCircle, Zap, RefreshCw, ExternalLink, TrendingDown, TrendingUp, History, ToggleLeft, ToggleRight } from "lucide-react";
+
+const AUTO_TOPUP_KEY = "viba_auto_topup";
+interface AutoTopupConfig { enabled: boolean; threshold: number; packKey: string; }
+function loadAutoTopup(): AutoTopupConfig {
+  try { return JSON.parse(localStorage.getItem(AUTO_TOPUP_KEY) ?? "{}"); } catch { return { enabled: false, threshold: 100, packKey: "" }; }
+}
+function saveAutoTopup(cfg: AutoTopupConfig) { localStorage.setItem(AUTO_TOPUP_KEY, JSON.stringify(cfg)); }
 
 interface BillingStatus {
   subscriptionStatus: string;
@@ -59,6 +66,7 @@ export default function Billing() {
   const [refreshing, setRefreshing] = useState(false);
   const [transactions, setTransactions] = useState<CreditTransaction[]>([]);
   const [txnLoading, setTxnLoading] = useState(false);
+  const [autoTopup, setAutoTopup] = useState<AutoTopupConfig>(() => loadAutoTopup());
 
   // Check if we just bought credits (Stripe redirected back with ?credits_added=N)
   const params = new URLSearchParams(window.location.search);
@@ -294,6 +302,61 @@ export default function Billing() {
                 <p className="text-xs text-muted-foreground">
                   Resets automatically on {periodEnd.toLocaleDateString("en-US", { month: "long", day: "numeric" })}
                 </p>
+              )}
+            </div>
+
+            {/* Auto top-up */}
+            <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Auto Top-Up</p>
+                  <p className="text-sm font-medium">Automatically refill when credits run low</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Never have a session paused mid-run due to empty credits.</p>
+                </div>
+                <button
+                  onClick={() => { const next = { ...autoTopup, enabled: !autoTopup.enabled }; setAutoTopup(next); saveAutoTopup(next); }}
+                  className="shrink-0 ml-4"
+                  title={autoTopup.enabled ? "Disable auto top-up" : "Enable auto top-up"}
+                >
+                  {autoTopup.enabled
+                    ? <ToggleRight className="w-8 h-8 text-primary" />
+                    : <ToggleLeft className="w-8 h-8 text-muted-foreground" />}
+                </button>
+              </div>
+              {autoTopup.enabled && (
+                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border">
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-muted-foreground font-medium">Trigger threshold</p>
+                    <select
+                      className="w-full rounded-lg border border-border bg-background text-sm px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary"
+                      value={autoTopup.threshold}
+                      onChange={e => { const next = { ...autoTopup, threshold: Number(e.target.value) }; setAutoTopup(next); saveAutoTopup(next); }}
+                    >
+                      {[50, 100, 150, 200, 250].map(n => (
+                        <option key={n} value={n}>Below {n} credits</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-muted-foreground font-medium">Pack to buy</p>
+                    <select
+                      className="w-full rounded-lg border border-border bg-background text-sm px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary"
+                      value={autoTopup.packKey}
+                      onChange={e => { const next = { ...autoTopup, packKey: e.target.value }; setAutoTopup(next); saveAutoTopup(next); }}
+                    >
+                      <option value="">Select pack…</option>
+                      {packs.map(p => <option key={p.key} value={p.key}>{p.label} — {p.description}</option>)}
+                    </select>
+                  </div>
+                  <div className="col-span-2">
+                    <div className="flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                      <p className="text-xs text-amber-300">
+                        Auto top-up preference saved locally. Automated charging requires server-side billing support — coming soon.
+                      </p>
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
 
