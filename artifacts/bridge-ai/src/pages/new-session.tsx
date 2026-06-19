@@ -18,6 +18,8 @@ import { ArrowRight, Bot, Target, ShieldCheck, Zap, AlertTriangle, FlaskConical,
 const AVAILABLE_PROVIDERS = [
   { id: "openai",     name: "ChatGPT",    provider: "OpenAI",     defaultRole: "Strategist",    color: "bg-green-500",   apiKey: "OPENAI_API_KEY",     canUseTools: false },
   { id: "anthropic",  name: "Claude",     provider: "Anthropic",  defaultRole: "Builder",       color: "bg-orange-500",  apiKey: "ANTHROPIC_API_KEY",  canUseTools: false },
+  { id: "groq",       name: "Groq",       provider: "Groq",       defaultRole: "Builder",       color: "bg-rose-500",    apiKey: "GROQ_API_KEY",       canUseTools: true  },
+  { id: "ollama",     name: "Ollama",     provider: "Ollama",     defaultRole: "Researcher",    color: "bg-slate-500",   apiKey: "",                   canUseTools: true  },
   { id: "manus",      name: "Manus",      provider: "Manus",      defaultRole: "Code Reviewer", color: "bg-purple-500",  apiKey: "MANUS_API_KEY",      canUseTools: true  },
   { id: "replit",     name: "Replit",     provider: "Replit",     defaultRole: "Builder",       color: "bg-blue-500",    apiKey: "REPLIT_API_KEY",     canUseTools: true  },
   { id: "railway",    name: "Railway",    provider: "Railway",    defaultRole: "DevOps",        color: "bg-violet-500",  apiKey: "RAILWAY_TOKEN",      canUseTools: true  },
