@@ -114,30 +114,35 @@ export default function Home() {
                   step: "1",
                   title: "Plug In",
                   desc: "Bring your own API keys. We support OpenAI, Anthropic, Google, Perplexity, Manus, and Replit.",
+                  color: "from-indigo-500/30 to-violet-500/20",
                 },
                 {
                   icon: LineChart,
                   step: "2",
                   title: "Assign Roles",
                   desc: "Give each model a role: Strategist, Builder, Reviewer, QA. Let them play to their strengths.",
+                  color: "from-violet-500/30 to-purple-500/20",
                 },
                 {
                   icon: Zap,
                   step: "3",
                   title: "Execute",
                   desc: "Watch them collaborate in real-time, generate tasks, review each other's work, and deliver the output.",
+                  color: "from-blue-500/30 to-indigo-500/20",
                 },
-              ].map(({ icon: Icon, step, title, desc }) => (
+              ].map(({ icon: Icon, step, title, desc, color }) => (
                 <div
                   key={step}
-                  className="group flex flex-col items-center gap-4 rounded-xl border border-border/60 bg-card/80 p-7 text-center hover:border-primary/30 hover:bg-card hover:shadow-lg hover:shadow-primary/5 transition-all duration-200"
+                  className="group relative flex flex-col items-center gap-4 rounded-2xl border border-border/50 bg-card/80 p-8 text-center hover:border-primary/25 hover:bg-card transition-all duration-250 overflow-hidden hover:shadow-xl hover:shadow-primary/[0.08]"
                 >
-                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 ring-1 ring-primary/20 group-hover:bg-primary/15 group-hover:ring-primary/30 transition-all">
-                    <Icon className="h-7 w-7 text-primary" />
+                  {/* Indigo gradient top accent */}
+                  <div className={`absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r ${color} opacity-70 group-hover:opacity-100 transition-opacity`} />
+                  <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/20 group-hover:bg-primary/15 group-hover:ring-primary/30 transition-all">
+                    <Icon className="h-6 w-6 text-primary" />
                   </div>
                   <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/60">Step {step}</p>
-                    <h3 className="text-lg font-bold">{title}</h3>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-primary/60">Step {step}</p>
+                    <h3 className="text-lg font-bold tracking-tight">{title}</h3>
                     <p className="text-sm text-muted-foreground leading-relaxed">{desc}</p>
                   </div>
                 </div>
