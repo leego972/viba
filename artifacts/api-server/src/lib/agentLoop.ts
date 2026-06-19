@@ -89,7 +89,7 @@ export async function runNextAgentStep(sessionId: number): Promise<{
   }
 
   // Check if approval required before this task (Supervised mode only)
-  if (APPROVAL_TASK_TYPES.has(nextTask.type) && session.autonomyMode === "Supervised") {
+  if (APPROVAL_TASK_TYPES.has(nextTask.type) && session.autonomyMode.toLowerCase() === "supervised") {
     const [existingApproval] = await db
       .select()
       .from(approvalsTable)
