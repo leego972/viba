@@ -246,7 +246,7 @@ async function runStartupMigrations(): Promise<void> {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_audit_logs_session_id ON audit_logs(session_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id)`);
   // Performance indexes for core lookup paths
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id) WHERE user_id IS NOT NULL`);
+  // Note: sessions table has no user_id column — agents/tasks are indexed by session_id
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_agents_session_id ON agents(session_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_session_id ON tasks(session_id)`);
 
