@@ -5,6 +5,7 @@ import { GeminiAdapter } from "./adapters/gemini";
 import { PerplexityAdapter } from "./adapters/perplexity";
 import { ReplitAdapter } from "./adapters/replit";
 import { ManusAdapter } from "./adapters/manus";
+import { RailwayAdapter } from "./adapters/railway";
 import {
   ChatGPTMockAdapter,
   ClaudeMockAdapter,
@@ -12,6 +13,7 @@ import {
   PerplexityMockAdapter,
   ReplitMockAdapter,
   ManusMockAdapter,
+  RailwayMockAdapter,
 } from "./adapters/mocks";
 import type { Agent } from "@workspace/db";
 import { db, settingsTable } from "@workspace/db";
@@ -37,6 +39,7 @@ export function buildMockAdapter(agent: Agent): AgentAdapter {
   if (provider === "perplexity") return new PerplexityMockAdapter(String(agent.id), agent.name, agent.role);
   if (provider === "replit") return new ReplitMockAdapter(String(agent.id), agent.name, agent.role);
   if (provider === "manus") return new ManusMockAdapter(String(agent.id), agent.name, agent.role);
+  if (provider === "railway") return new RailwayMockAdapter(String(agent.id), agent.name, agent.role);
   return new ChatGPTMockAdapter(String(agent.id), agent.name, agent.role);
 }
 
@@ -90,6 +93,20 @@ export async function buildAdapter(agent: Agent): Promise<AgentAdapter> {
     }
     logger.warn({ provider }, "No Replit API key found — using simulation mode");
     return new ReplitMockAdapter(String(agent.id), agent.name, agent.role);
+  }
+
+  if (provider === "railway") {
+    const railwayToken = await getSetting("RAILWAY_TOKEN") ?? process.env["RAILWAY_TOKEN"] ?? "";
+    if (isValidKey(railwayToken)) {
+      // Use OpenAI as the reasoning LLM; fall back to Anthropic
+      const openaiKey = await getSetting("OPENAI_API_KEY") ?? process.env["OPENAI_API_KEY"] ?? "";
+      const anthropicKey = await getSetting("ANTHROPIC_API_KEY") ?? process.env["ANTHROPIC_API_KEY"] ?? "";
+      const reasoningKey = isValidKey(openaiKey) ? openaiKey : (isValidKey(anthropicKey) ? anthropicKey : "");
+      const model = await getSetting("RAILWAY_REASONING_MODEL") ?? undefined;
+      return new RailwayAdapter(String(agent.id), agent.name, agent.role, railwayToken, reasoningKey, model);
+    }
+    logger.warn({ provider }, "No RAILWAY_TOKEN found — using simulation mode");
+    return new RailwayMockAdapter(String(agent.id), agent.name, agent.role);
   }
 
   if (provider === "manus") {
