@@ -1073,95 +1073,106 @@ export default function Dashboard() {
                 No sessions match your search.
               </div>
             ) : (
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {filteredSessions.map((session) => (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {filteredSessions.map((session) => {
+                  const isActive = session.status === "active";
+                  const isCompleted = session.status === "completed";
+                  return (
                   <Link key={session.id} href={`/sessions/${session.id}`}>
-                    <Card className="hover-elevate cursor-pointer transition-all hover:border-primary/50 h-full flex flex-col">
-                      <CardHeader className="pb-3">
-                        <div className="flex flex-wrap justify-between items-start gap-2">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <Badge variant={getStatusColor(session.status)} className="capitalize">
+                    <div className={`group relative flex flex-col h-full rounded-2xl border bg-card transition-all duration-200 cursor-pointer overflow-hidden
+                      hover:shadow-xl hover:shadow-primary/[0.07]
+                      ${isActive
+                        ? "border-primary/30 hover:border-primary/50 shadow-[0_0_18px_rgba(99,102,241,0.10)]"
+                        : "border-border/60 hover:border-border"
+                      }`}
+                    >
+                      {/* Active indicator — indigo left bar */}
+                      {isActive && (
+                        <div className="absolute left-0 top-4 bottom-4 w-[3px] rounded-full bg-gradient-to-b from-primary/80 via-primary/60 to-primary/30" />
+                      )}
+                      {/* Subtle top highlight */}
+                      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
+
+                      <div className="pl-5 pr-4 pt-4 pb-3">
+                        {/* Status row */}
+                        <div className="flex items-center justify-between gap-2 mb-3">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border capitalize
+                              ${isActive ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" :
+                                isCompleted ? "bg-blue-500/10 border-blue-500/30 text-blue-400" :
+                                session.status === "stopped" ? "bg-red-500/10 border-red-500/30 text-red-400" :
+                                "bg-muted/30 border-border/50 text-muted-foreground"}`}
+                            >
+                              {isActive && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />}
                               {session.status}
-                            </Badge>
+                            </span>
                             <SessionModeBadge agentModes={session.agentModes} />
                           </div>
-                          <div className="flex items-center gap-1">
-                            <Badge variant="outline" className="text-xs font-normal">
+                          <div className="flex items-center gap-1 shrink-0">
+                            <span className="text-[10px] font-medium border border-border/40 bg-muted/20 rounded-full px-2 py-0.5 text-muted-foreground">
                               {session.autonomyMode}
-                            </Badge>
+                            </span>
                             <button
-                              className="h-7 w-7 flex items-center justify-center rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                              className="h-6 w-6 flex items-center justify-center rounded-md text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-colors"
                               title="Delete session"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setSessionToDelete({ id: session.id, goal: session.goal });
-                              }}
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setSessionToDelete({ id: session.id, goal: session.goal }); }}
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
+                              <Trash2 className="h-3 w-3" />
                             </button>
                           </div>
                         </div>
-                        <div className="line-clamp-2 mt-2 text-lg font-semibold">
+
+                        {/* Goal */}
+                        <p className="line-clamp-2 text-[15px] font-semibold leading-snug tracking-tight text-foreground/90 mb-3">
                           {session.goal || "Untitled Session"}
-                        </div>
-                      </CardHeader>
-                      <CardContent className="pb-3 flex-1">
-                        {(session.repoUrl || session.workspaceEnv) && (
+                        </p>
+
+                        {/* Repo badge */}
+                        {session.repoUrl && (
                           <div className="flex items-center gap-1.5 flex-wrap mb-3">
-                            {session.repoUrl && (
-                              <>
-                                <a
-                                  href={session.repoUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={e => e.stopPropagation()}
-                                  className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-muted/40 px-2 py-0.5 font-mono text-[11px] text-muted-foreground max-w-full hover:border-primary/40 hover:text-foreground transition-colors"
-                                >
-                                  <Github className="h-3 w-3 shrink-0" />
-                                  <span className="truncate max-w-[180px]">{shortRepoName(session.repoUrl)}</span>
-                                  {session.repoBranch && (
-                                    <span className="truncate max-w-[80px] opacity-60">:{session.repoBranch}</span>
-                                  )}
-                                </a>
-                                <Badge
-                                  variant="outline"
-                                  className="gap-0.5 text-[10px] h-5 px-1.5 shrink-0 border-violet-500/40 text-violet-400 bg-violet-500/10"
-                                >
-                                  <Zap className="h-2.5 w-2.5" />
-                                  Real execution
-                                </Badge>
-                              </>
-                            )}
+                            <a
+                              href={session.repoUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={e => e.stopPropagation()}
+                              className="inline-flex items-center gap-1 rounded-lg border border-border/50 bg-muted/30 px-2 py-0.5 font-mono text-[10px] text-muted-foreground max-w-full hover:border-primary/30 hover:text-foreground transition-colors"
+                            >
+                              <Github className="h-3 w-3 shrink-0" />
+                              <span className="truncate max-w-[160px]">{shortRepoName(session.repoUrl)}</span>
+                              {session.repoBranch && <span className="opacity-50">:{session.repoBranch}</span>}
+                            </a>
                             {session.workspaceEnv && (
-                              <Badge
-                                variant="outline"
-                                className={`text-[10px] h-5 px-1.5 shrink-0 ${ENV_BADGE_STYLES[session.workspaceEnv] ?? "bg-muted/30 text-muted-foreground border-border/50"}`}
-                              >
+                              <span className={`text-[10px] border rounded-lg px-2 py-0.5 ${ENV_BADGE_STYLES[session.workspaceEnv] ?? "bg-muted/30 text-muted-foreground border-border/50"}`}>
                                 {session.workspaceEnv}
-                              </Badge>
+                              </span>
                             )}
                           </div>
                         )}
-                        <div className="flex flex-col space-y-2 text-sm text-muted-foreground">
-                          <div className="flex items-center gap-2">
-                            <Clock className="h-4 w-4" />
-                            <span>{format(new Date(session.createdAt), "MMM d, yyyy h:mm a")}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <DollarSign className="h-4 w-4" />
-                            <span>Est. Cost: ${session.estimatedCost?.toFixed(4) || "0.0000"}</span>
-                          </div>
+
+                        {/* Meta row */}
+                        <div className="flex items-center gap-3 text-[11px] text-muted-foreground/70">
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {format(new Date(session.createdAt), "MMM d, h:mm a")}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <DollarSign className="h-3 w-3" />
+                            ${session.estimatedCost?.toFixed(4) || "0.0000"}
+                          </span>
                         </div>
-                      </CardContent>
-                      <div className="px-6 pb-4 pt-0">
-                        <Button variant="ghost" className="w-full text-primary hover:text-primary">
-                          Open Workspace
-                        </Button>
                       </div>
-                    </Card>
+
+                      {/* Footer CTA */}
+                      <div className="mt-auto px-5 pb-4 pt-2 border-t border-border/30">
+                        <span className="flex items-center gap-1.5 text-xs font-medium text-primary/70 group-hover:text-primary transition-colors">
+                          Open Workspace
+                          <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                        </span>
+                      </div>
+                    </div>
                   </Link>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
