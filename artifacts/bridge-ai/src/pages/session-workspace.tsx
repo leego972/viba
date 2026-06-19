@@ -43,7 +43,7 @@ import {
   Crosshair, LineChart, Zap, FlaskConical, RotateCcw, X,
   RefreshCw, History, ShieldCheck, TrendingDown, AlertTriangle,
   Download, Brain, Copy, GitBranch, ExternalLink, Server, Pencil, Wrench,
-  CopyPlus, BarChart3, MessageSquare, ListChecks,
+  CopyPlus, BarChart3, MessageSquare, ListChecks, Search,
 } from "lucide-react";
 import { useSessionStream } from "@/hooks/useSessionStream";
 import { MarkdownContent } from "@/components/MarkdownContent";
@@ -122,6 +122,7 @@ export default function SessionWorkspace() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const [userInstruction, setUserInstruction] = useState("");
+  const [msgSearch, setMsgSearch] = useState("");
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [pendingApproval, setPendingApproval] = useState<Approval | null>(null);
@@ -968,7 +969,7 @@ export default function SessionWorkspace() {
 
           {/* Center: Conversation Thread (6 cols) */}
           <Card className="lg:col-span-6 flex flex-col min-h-0">
-            <CardHeader className="p-4 border-b shrink-0">
+            <CardHeader className="p-4 border-b shrink-0 space-y-2">
               <CardTitle className="text-sm flex items-center gap-2">
                 <LineChart className="w-4 h-4" /> Live Collaboration
                 <span className="ml-auto text-[10px] font-normal text-muted-foreground flex items-center gap-3">
@@ -979,6 +980,23 @@ export default function SessionWorkspace() {
                   )}
                 </span>
               </CardTitle>
+              {messages.length > 4 && (
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Search messages…"
+                    value={msgSearch}
+                    onChange={e => setMsgSearch(e.target.value)}
+                    className="w-full h-7 pl-8 pr-8 rounded-md border border-border bg-muted/30 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                  {msgSearch && (
+                    <button onClick={() => setMsgSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              )}
             </CardHeader>
             <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4" ref={scrollRef} onScroll={handleMessagesScroll}>
               {messages.length === 0 ? (
@@ -1003,9 +1021,20 @@ export default function SessionWorkspace() {
                     [...answerByQuestionId.values()].map(m => m.id)
                   );
 
-                  return messages
+                  const searchLower = msgSearch.trim().toLowerCase();
+                  const visibleMessages = messages
                     .filter(msg => !answerMessageIds.has(msg.id))
-                    .map(msg => {
+                    .filter(msg => !searchLower || msg.content?.toLowerCase().includes(searchLower) || msg.agentName?.toLowerCase().includes(searchLower) || msg.agentRole?.toLowerCase().includes(searchLower));
+
+                  if (searchLower && visibleMessages.length === 0) {
+                    return (
+                      <div className="flex h-full items-center justify-center text-muted-foreground text-sm italic">
+                        No messages match "{msgSearch}".
+                      </div>
+                    );
+                  }
+
+                  return visibleMessages.map(msg => {
                   const isUser = msg.role === "user";
                   const isSimulated = !isUser && msg.content?.startsWith(SIMULATED_PREFIX);
                   const msgType = msg.messageType ?? "output";
