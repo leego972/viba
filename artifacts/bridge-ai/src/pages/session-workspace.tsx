@@ -584,7 +584,7 @@ export default function SessionWorkspace() {
   const openEditCtxModal = () => {
     setEditRepoUrl(session?.repoUrl ?? "");
     setEditRepoBranch(session?.repoBranch ?? "");
-    setEditWorkspaceEnv(session?.workspaceEnv ?? "");
+    setEditWorkspaceEnv(session?.workspaceEnv ?? "none");
     setShowEditCtxModal(true);
   };
 
@@ -593,7 +593,7 @@ export default function SessionWorkspace() {
       { id: sessionId, data: {
         repoUrl: editRepoUrl.trim() || null,
         repoBranch: editRepoBranch.trim() || null,
-        workspaceEnv: editWorkspaceEnv || null,
+        workspaceEnv: editWorkspaceEnv === "none" ? null : editWorkspaceEnv || null,
       }},
       {
         onSuccess: () => {
@@ -1504,7 +1504,7 @@ export default function SessionWorkspace() {
                   <SelectValue placeholder="Select environment…" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="none">None</SelectItem>
                   {["development", "staging", "production"].map(env => (
                     <SelectItem key={env} value={env} className="capitalize">{env}</SelectItem>
                   ))}
