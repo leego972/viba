@@ -43,6 +43,7 @@ import {
   Crosshair, LineChart, Zap, FlaskConical, RotateCcw, X,
   RefreshCw, History, ShieldCheck, TrendingDown, AlertTriangle,
   Download, Brain, Copy, GitBranch, ExternalLink, Server, Pencil, Wrench,
+  CopyPlus, BarChart3, MessageSquare, ListChecks,
 } from "lucide-react";
 import { useSessionStream } from "@/hooks/useSessionStream";
 import { MarkdownContent } from "@/components/MarkdownContent";
@@ -741,6 +742,14 @@ export default function SessionWorkspace() {
             <Button size="sm" variant="ghost" onClick={handleExport} title="Download session transcript as Markdown" aria-label="Export session as Markdown">
               <Download className="w-4 h-4 mr-1.5" /> Export
             </Button>
+            <a
+              href={`/sessions/new?goal=${encodeURIComponent(session.goal)}`}
+              title="Fork — start a new session with the same goal"
+            >
+              <Button size="sm" variant="ghost" className="gap-1.5">
+                <CopyPlus className="w-4 h-4" /> Fork
+              </Button>
+            </a>
             {isSessionActive && (
               <>
                 <Button size="sm" variant="outline" onClick={handleRunNext} disabled={runNext.isPending || !!pendingApproval}>
@@ -1384,6 +1393,43 @@ export default function SessionWorkspace() {
                             {format(new Date(log.createdAt), "HH:mm:ss")}
                           </p>
                         </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            )}
+
+            {/* Agent Insights */}
+            {agents.length > 0 && messages.length > 0 && (
+              <Card className="shrink-0 bg-muted/10">
+                <CardHeader className="p-3 pb-2 border-b">
+                  <CardTitle className="text-xs flex items-center gap-2 text-muted-foreground">
+                    <BarChart3 className="w-3.5 h-3.5" /> Agent Insights
+                  </CardTitle>
+                </CardHeader>
+                <div className="p-2 flex flex-col gap-1.5">
+                  {agents.map(agent => {
+                    const agentMsgs = messages.filter(m => m.agentName === agent.name && m.role !== "user").length;
+                    const agentTasks = tasks.filter(t => t.assignedAgentId === agent.id).length;
+                    const completedTasks = tasks.filter(t => t.assignedAgentId === agent.id && t.status === "complete").length;
+                    const pct = agentMsgs === 0 ? 0 : Math.round((agentMsgs / Math.max(messages.filter(m => m.role !== "user").length, 1)) * 100);
+                    return (
+                      <div key={agent.id} className="px-1 py-1">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[11px] font-medium truncate max-w-[100px]">{agent.name}</span>
+                          <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                            <span className="flex items-center gap-0.5"><MessageSquare className="h-2.5 w-2.5" />{agentMsgs}</span>
+                            <span className="flex items-center gap-0.5"><ListChecks className="h-2.5 w-2.5" />{completedTasks}/{agentTasks}</span>
+                          </div>
+                        </div>
+                        <div className="h-1 rounded-full bg-muted overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${agent.isMock ? "bg-amber-400/50" : "bg-primary/60"}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <p className="text-[9px] text-muted-foreground/60 mt-0.5">{pct}% of output</p>
                       </div>
                     );
                   })}
