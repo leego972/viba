@@ -384,6 +384,7 @@ const AUTH_EXEMPT_PATHS = new Set([
   "/stripe/subscription",
   "/stripe/portal",
   "/billing/plans", // Public — pricing page reads this without auth
+  "/stats",         // Public — settings page reads fallback/spike stats without auth
   "/healthz",
 ]);
 
