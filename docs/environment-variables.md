@@ -80,6 +80,10 @@ These keys power the LLM chat completion calls made by each provider adapter. Th
 | `REPLIT_MODEL` | Override the default Replit model (default: `replit-code-v1-3b`). |
 | `MANUS_API_KEY` | Manus API key (used for the LLM chat completion fallback path). |
 | `MANUS_MODEL` | Override the default Manus model (default: `manus-deep-research-1`). |
+| `GROQ_API_KEY` | Groq API key — **free** at [console.groq.com](https://console.groq.com), no credit card required. Unlocks Llama 3.3 70B, Mixtral 8x7B, Gemma 2 with full tool/function calling support. |
+| `GROQ_MODEL` | Override the default Groq model (default: `llama-3.3-70b-versatile`). |
+| `OLLAMA_BASE_URL` | Base URL of a running Ollama instance (default: `http://localhost:11434`). Ollama is free and runs models locally — no API key needed. |
+| `OLLAMA_MODEL` | Model to use with Ollama (default: `llama3.2`). Pull models with `ollama pull <name>`. Tool-capable models: `llama3.1:8b`, `qwen2.5:7b`, `mistral:7b`. |
 
 ---
 
