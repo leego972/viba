@@ -220,7 +220,7 @@ router.post("/sessions", async (req, res): Promise<void> => {
         provider: agentInput.provider.toLowerCase(),
         role,
         capabilities: getCapabilities(agentInput.provider),
-        canUseTools: TOOL_CAPABLE_PROVIDERS.has(agentInput.provider.toLowerCase()),
+        canUseTools: agentInput.canUseTools ?? TOOL_CAPABLE_PROVIDERS.has(agentInput.provider.toLowerCase()),
         isMock: agentInput.isMock,
       })
       .returning();
