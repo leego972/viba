@@ -76,9 +76,11 @@ const PROVIDER_CAPABILITIES: Record<string, string[]> = {
   google: ["multimodal", "contextual_analysis", "summarization", "creative"],
   perplexity: ["research_summary", "fact_checking", "citation"],
   railway: ["deployment", "infrastructure", "monitoring", "environment_management", "rollback"],
+  groq: ["planning", "reasoning", "code_review", "build", "implementation", "research"],
+  ollama: ["planning", "reasoning", "code_review", "build", "implementation", "research"],
 };
 
-const TOOL_CAPABLE_PROVIDERS = new Set(["replit", "manus", "railway"]);
+const TOOL_CAPABLE_PROVIDERS = new Set(["replit", "manus", "railway", "groq", "ollama"]);
 
 function getCapabilities(provider: string): string[] {
   return PROVIDER_CAPABILITIES[provider.toLowerCase()] ?? ["general"];
