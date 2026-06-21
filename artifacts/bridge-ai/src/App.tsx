@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import VibaFooter from "@/components/VibaFooter";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import UserInstructions from "@/pages/user-instructions";
@@ -109,6 +110,7 @@ function App() {
               <Route component={GatedRouter} />
             </Switch>
           </ErrorBoundary>
+          <VibaFooter />
         </WouterRouter>
         <Toaster />
       </TooltipProvider>
