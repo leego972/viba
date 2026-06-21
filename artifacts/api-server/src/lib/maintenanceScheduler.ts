@@ -8,6 +8,7 @@ const PUBLIC_URL = process.env["VIBA_PUBLIC_URL"] || "https://viba.guru";
 
 let schedulerStarted = false;
 let running = false;
+let lastScheduledRunKey: string | null = null;
 
 function melbourneParts(date = new Date()): Record<string, string> {
   const parts = new Intl.DateTimeFormat("en-AU", {
@@ -91,7 +92,8 @@ async function updateRun(id: number, patch: { status: string; selfRepairRunId?: 
 }
 
 async function callSelfRepair(repo: string, branch: string): Promise<{ ok: boolean; runId?: number; status?: string; checkpoint?: { id?: number }; pr?: { number?: number; html_url?: string }; message?: string }> {
-  const url = `http://127.0.0.1:${process.env["PORT"]}/api/self-repair/auto-fix`;
+  const port = process.env["PORT"] || "3000";
+  const url = `http://127.0.0.1:${port}/api/self-repair/auto-fix`;
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -121,10 +123,11 @@ export async function runWeeklyMaintenanceNow(reason = "manual_or_scheduled"): P
     if (!result.ok) {
       await updateRun(runId, { status: "failed", metadata: { result } });
       await logRunEvent({ runKey, status: "failed", message: `Weekly maintenance failed: ${result.message ?? "self-repair failed"}`, metadata: { result } });
-      await notifyAdmin({
+      const notice = await notifyAdmin({
         subject: "VIBA weekly maintenance failed",
         body: `VIBA weekly maintenance failed for ${repo}@${branch}.\n\nReason: ${result.message ?? "Unknown"}\n\nDashboard: ${PUBLIC_URL}/admin`,
-      }).catch(() => ({ sent: false, to: ADMIN_EMAIL }));
+      }).catch(() => ({ sent: false, to: ADMIN_EMAIL, reason: "notification failed" }));
+      await updateRun(runId, { status: "failed", notificationStatus: notice.sent ? "sent" : `not_sent: ${notice.reason ?? "unknown"}`, metadata: { result, notice } });
       return { ok: false, runKey, message: result.message ?? "Maintenance failed." };
     }
 
@@ -155,6 +158,9 @@ export function startWeeklyMaintenanceScheduler(): void {
   logger.info({ timezone: MELBOURNE_TZ, schedule: "Sunday 22:00" }, "Weekly VIBA maintenance scheduler enabled");
   setInterval(() => {
     if (!isSundayTenPmMelbourne()) return;
+    const runKey = melbourneRunKey();
+    if (lastScheduledRunKey === runKey) return;
+    lastScheduledRunKey = runKey;
     runWeeklyMaintenanceNow("scheduled").catch((error) => logger.error({ error }, "Weekly VIBA maintenance failed"));
   }, 60_000);
 }
