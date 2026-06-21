@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
+import sessionAccessRouter from "./sessionPrivacy";
 import coreDefaultsRouter from "./coreDefaults";
 import sessionsRouter from "./sessions";
 import attachmentsRouter from "./attachments";
@@ -20,6 +21,7 @@ const router: IRouter = Router();
 
 router.use(authRouter);
 router.use(healthRouter);
+router.use(sessionAccessRouter);
 router.use(coreDefaultsRouter);
 router.use(sessionsRouter);
 router.use(attachmentsRouter);
