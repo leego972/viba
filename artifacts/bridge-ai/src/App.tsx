@@ -65,6 +65,10 @@ function AdminOnly({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+function AdminMaintenanceRoute() {
+  return <AdminOnly><AdminMaintenance /></AdminOnly>;
+}
+
 function GatedRouter() {
   return (
     <AuthGuard>
@@ -116,8 +120,8 @@ function App() {
               <Route path="/verify-email" component={VerifyEmail} />
               <Route path="/pricing" component={Pricing} />
               <Route path="/checkout/success" component={CheckoutSuccess} />
-              <Route path="/admin/maintenance"><AdminOnly><AdminMaintenance /></AdminOnly></Route>
-              <Route path="/admin"><AdminOnly><AdminMaintenance /></AdminOnly></Route>
+              <Route path="/admin/maintenance" component={AdminMaintenanceRoute} />
+              <Route path="/admin" component={AdminMaintenanceRoute} />
               <Route component={GatedRouter} />
             </Switch>
           </ErrorBoundary>
