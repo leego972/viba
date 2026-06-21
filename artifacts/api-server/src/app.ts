@@ -1,4 +1,4 @@
-import express, { type Express, type ErrorRequestHandler } from "express";
+import express, { type Express, type ErrorRequestHandler, type Request } from "express";
 import cors from "cors";
 import { securityHeaders } from "./lib/securityHeaders";
 import pinoHttp from "pino-http";
@@ -22,7 +22,6 @@ import { startWeeklyMaintenanceScheduler } from "./lib/maintenanceScheduler";
 import type { Agent } from "@workspace/db";
 
 const PgStore = connectPgSimple(session);
-
 const app: Express = express();
 
 app.set("trust proxy", 1);
@@ -30,23 +29,18 @@ app.use(securityHeaders());
 
 const PRODUCTION_ALLOWED_ORIGINS = new Set([
   "https://viba.guru",
-  ...(process.env.CORS_ALLOWED_ORIGINS ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean),
+  ...(process.env.CORS_ALLOWED_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean),
 ]);
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
-      if (process.env.NODE_ENV !== "production") return callback(null, true);
-      if (PRODUCTION_ALLOWED_ORIGINS.has(origin)) return callback(null, true);
-      callback(new Error(`CORS: origin "${origin}" is not permitted`));
-    },
-    credentials: true,
-  }),
-);
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (process.env.NODE_ENV !== "production") return callback(null, true);
+    if (PRODUCTION_ALLOWED_ORIGINS.has(origin)) return callback(null, true);
+    callback(new Error(`CORS: origin "${origin}" is not permitted`));
+  },
+  credentials: true,
+}));
 
 const isProd = process.env.NODE_ENV === "production";
 const sessionSecret = process.env.SESSION_SECRET;
@@ -54,25 +48,14 @@ if (isProd && (!sessionSecret || sessionSecret === "dev-secret-change-me-in-prod
   throw new Error("SESSION_SECRET must be set to a strong random value in production. Refusing to start.");
 }
 
-app.use(
-  session({
-    store: new PgStore({
-      pool,
-      tableName: "user_sessions",
-      createTableIfMissing: true,
-    }),
-    name: "viba.sid",
-    secret: sessionSecret ?? "dev-secret-change-me-in-production",
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: isProd ? "none" : "lax",
-      maxAge: 30 * 24 * 60 * 60 * 1000,
-    },
-  }),
-);
+app.use(session({
+  store: new PgStore({ pool, tableName: "user_sessions", createTableIfMissing: true }),
+  name: "viba.sid",
+  secret: sessionSecret ?? "dev-secret-change-me-in-production",
+  resave: false,
+  saveUninitialized: false,
+  cookie: { httpOnly: true, secure: isProd, sameSite: isProd ? "none" : "lax", maxAge: 30 * 24 * 60 * 60 * 1000 },
+}));
 
 const apiLimiter = createRateLimiter({ windowMs: 60_000, max: 300, message: "Too many requests. Please slow down." });
 const agentLimiter = createRateLimiter({ windowMs: 60_000, max: 30, message: "Agent execution rate limit reached. Wait before running more steps." });
@@ -87,19 +70,13 @@ app.post("/api/auth/forgot-password", authLimiter);
 app.post("/api/auth/reset-password", authLimiter);
 app.post("/api/auth/verify-email", authLimiter);
 
-app.use(
-  pinoHttp({
-    logger,
-    serializers: {
-      req(req) {
-        return { id: req.id, method: req.method, url: req.url?.split("?")[0] };
-      },
-      res(res) {
-        return { statusCode: res.statusCode };
-      },
-    },
-  }),
-);
+app.use(pinoHttp({
+  logger,
+  serializers: {
+    req(req) { return { id: req.id, method: req.method, url: req.url?.split("?")[0] }; },
+    res(res) { return { statusCode: res.statusCode }; },
+  },
+}));
 
 app.use(express.json({ limit: "512kb" }));
 app.use(express.urlencoded({ limit: "512kb", extended: true }));
@@ -110,34 +87,31 @@ app.post("/api/sessions/:id/run-full", agentLimiter);
 app.use("/api/admin/maintenance", apiLimiter, requireAdmin, adminMaintenanceRouter);
 app.use("/api/admin", apiLimiter, requireAdmin, adminRouter);
 
-app.use(
-  ["/api/sessions/:id/run-next", "/api/sessions/:id/run-full"],
-  async (req, res, next): Promise<void> => {
-    if (req.session?.bypass) { next(); return; }
-    const userId = req.session?.userId;
-    if (!userId) { next(); return; }
-    if (!isStripeConfigured()) { next(); return; }
-    try {
-      const { subscriptionStatus } = await getBillingStatus(userId);
-      if (subscriptionStatus === "canceled" || subscriptionStatus === "none") {
-        res.status(402).json({ error: "subscription_required", message: "An active VIBA membership is required. Visit /pricing to subscribe.", subscriptionUrl: "/pricing" });
-        return;
-      }
-      const sessionIdForBilling = parseInt(String(req.params.id ?? ""), 10) || undefined;
-      const deducted = await deductCredits(userId, 1, sessionIdForBilling);
-      if (!deducted) {
-        sendCreditsExhaustedReminder(userId).catch(() => {});
-        res.status(402).json({ error: "out_of_credits", message: "You've used all your credits for this period. Top up to continue.", topUpUrl: "/billing" });
-        return;
-      }
-      sendLowCreditsWarningIfNeeded(userId).catch(() => {});
-      next();
-    } catch (err) {
-      logger.error({ err }, "Credit gate error — failing open to avoid blocking users");
-      next();
+app.use(["/api/sessions/:id/run-next", "/api/sessions/:id/run-full"], async (req, res, next): Promise<void> => {
+  if (req.session?.bypass) { next(); return; }
+  const userId = req.session?.userId;
+  if (!userId) { next(); return; }
+  if (!isStripeConfigured()) { next(); return; }
+  try {
+    const { subscriptionStatus } = await getBillingStatus(userId);
+    if (subscriptionStatus === "canceled" || subscriptionStatus === "none") {
+      res.status(402).json({ error: "subscription_required", message: "An active VIBA membership is required. Visit /pricing to subscribe.", subscriptionUrl: "/pricing" });
+      return;
     }
-  },
-);
+    const sessionIdForBilling = parseInt(String(req.params.id ?? ""), 10) || undefined;
+    const deducted = await deductCredits(userId, 1, sessionIdForBilling);
+    if (!deducted) {
+      sendCreditsExhaustedReminder(userId).catch(() => {});
+      res.status(402).json({ error: "out_of_credits", message: "You've used all your credits for this period. Top up to continue.", topUpUrl: "/billing" });
+      return;
+    }
+    sendLowCreditsWarningIfNeeded(userId).catch(() => {});
+    next();
+  } catch (err) {
+    logger.error({ err }, "Credit gate error — failing open to avoid blocking users");
+    next();
+  }
+});
 
 app.post("/api/sessions/:id/reject-approval", apiLimiter, requireSession, async (req, res): Promise<void> => {
   const sessionId = parseInt(String(req.params.id ?? ""), 10);
@@ -146,10 +120,7 @@ app.post("/api/sessions/:id/reject-approval", apiLimiter, requireSession, async 
   const reason = typeof body.rejectedReason === "string" ? body.rejectedReason.trim().slice(0, 1000) : "";
   if (!sessionId || !approvalId) { res.status(400).json({ error: "sessionId and approvalId required" }); return; }
   try {
-    await pool.query(
-      `UPDATE approvals SET status = 'rejected', rejected_at = NOW(), rejected_reason = $1, updated_at = NOW() WHERE id = $2 AND session_id = $3`,
-      [reason || null, approvalId, sessionId],
-    );
+    await pool.query(`UPDATE approvals SET status = 'rejected', rejected_at = NOW(), rejected_reason = $1, updated_at = NOW() WHERE id = $2 AND session_id = $3`, [reason || null, approvalId, sessionId]);
     await pool.query(`UPDATE sessions SET status = 'paused', updated_at = NOW() WHERE id = $1`, [sessionId]);
     req.log?.info?.({ sessionId, approvalId }, "Approval rejected — session paused");
     res.json({ ok: true });
@@ -179,10 +150,7 @@ app.post("/api/sessions/:id/safety-vote", apiLimiter, requireSession, async (req
     const { rows: sessionRows } = await pool.query<{ goal: string }>("SELECT goal FROM sessions WHERE id = $1", [sessionId]);
     const sessionRow = sessionRows[0];
     if (!sessionRow) { res.status(404).json({ error: "session not found" }); return; }
-    const { rows: agentRows } = await pool.query<{ id: number; name: string; role: string; provider: string; can_use_tools: boolean; is_mock: boolean }>(
-      "SELECT id, name, role, provider, can_use_tools, is_mock FROM agents WHERE session_id = $1",
-      [sessionId],
-    );
+    const { rows: agentRows } = await pool.query<{ id: number; name: string; role: string; provider: string; can_use_tools: boolean; is_mock: boolean }>("SELECT id, name, role, provider, can_use_tools, is_mock FROM agents WHERE session_id = $1", [sessionId]);
     if (!agentRows.length) { res.status(404).json({ error: "no agents found for this session" }); return; }
     const goal = sessionRow.goal;
     const allPeers = agentRows.map((a) => ({ name: a.name, role: a.role }));
@@ -200,9 +168,7 @@ app.post("/api/sessions/:id/safety-vote", apiLimiter, requireSession, async (req
     }));
     await pool.query("UPDATE agents SET sat_out_reason = NULL WHERE session_id = $1", [sessionId]);
     const refusers = voteResults.filter((v) => !v.accepted);
-    if (refusers.length > 0) {
-      await Promise.all(refusers.map((v) => pool.query("UPDATE agents SET sat_out_reason = $1 WHERE id = $2", [v.reason ?? "Declined to participate in this session", v.agentId])));
-    }
+    if (refusers.length > 0) await Promise.all(refusers.map((v) => pool.query("UPDATE agents SET sat_out_reason = $1 WHERE id = $2", [v.reason ?? "Declined to participate in this session", v.agentId])));
     const allRefused = refusers.length === agentRows.length;
     const declineReason = allRefused ? refusers.map((v) => `• ${v.agentName}: ${v.reason ?? "Declined to participate"}`).join("\n") : undefined;
     req.log?.info?.({ sessionId, accepted: voteResults.filter((v) => v.accepted).length, refused: refusers.length }, "safety-vote complete");
@@ -213,46 +179,27 @@ app.post("/api/sessions/:id/safety-vote", apiLimiter, requireSession, async (req
   }
 });
 
-const AUTH_EXEMPT_PATHS = new Set([
-  "/auth/config", "/auth/verify-bypass", "/auth/login", "/auth/register", "/auth/logout", "/auth/me",
-  "/auth/google", "/auth/google/callback", "/auth/github", "/auth/github/callback",
-  "/auth/forgot-password", "/auth/reset-password", "/auth/verify-email",
-  "/stripe/config", "/stripe/checkout", "/stripe/subscription", "/stripe/portal",
-  "/billing/plans", "/stats", "/healthz",
-]);
+const AUTH_EXEMPT_PATHS = new Set(["/auth/config", "/auth/verify-bypass", "/auth/login", "/auth/register", "/auth/logout", "/auth/me", "/auth/google", "/auth/google/callback", "/auth/github", "/auth/github/callback", "/auth/forgot-password", "/auth/reset-password", "/auth/verify-email", "/stripe/config", "/stripe/checkout", "/stripe/subscription", "/stripe/portal", "/billing/plans", "/stats", "/healthz"]);
 
-function isInternalMaintenanceRequest(req: express.Request): boolean {
+function isInternalMaintenanceRequest(req: Request): boolean {
   const configured = process.env.VIBA_INTERNAL_MAINTENANCE_TOKEN;
-  return Boolean(
-    configured &&
-    req.path === "/self-repair/auto-fix" &&
-    req.headers["x-viba-internal-maintenance"] === configured
-  );
+  return Boolean(configured && req.path === "/self-repair/auto-fix" && req.headers["x-viba-internal-maintenance"] === configured);
 }
 
-app.use(
-  "/api",
-  apiLimiter,
-  (req, res, next) => {
-    if (AUTH_EXEMPT_PATHS.has(req.path) || isInternalMaintenanceRequest(req)) { next(); return; }
-    requireSession(req, res, next);
-  },
-  router,
-);
+app.use("/api", apiLimiter, (req, res, next) => {
+  if (AUTH_EXEMPT_PATHS.has(req.path) || isInternalMaintenanceRequest(req)) { next(); return; }
+  requireSession(req, res, next);
+}, router);
 
 if (process.env.NODE_ENV === "production") {
   const frontendDist = path.resolve(process.cwd(), "artifacts/bridge-ai/dist/public");
   if (existsSync(frontendDist)) {
     app.use(express.static(frontendDist));
-    app.get("/{*splat}", (_req, res) => {
-      res.sendFile(path.join(frontendDist, "index.html"));
-    });
+    app.get("/{*splat}", (_req, res) => { res.sendFile(path.join(frontendDist, "index.html")); });
   }
 }
 
-import("./lib/sentry").then(({ Sentry }) => {
-  Sentry.setupExpressErrorHandler(app);
-}).catch(() => {});
+import("./lib/sentry").then(({ Sentry }) => { Sentry.setupExpressErrorHandler(app); }).catch(() => {});
 
 const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   req.log?.error?.({ err }, "Unhandled route error");
@@ -261,7 +208,6 @@ const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
 };
 
 app.use(errorHandler);
-
 startWeeklyMaintenanceScheduler();
 
 export default app;
