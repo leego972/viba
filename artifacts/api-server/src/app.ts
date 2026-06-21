@@ -84,8 +84,21 @@ app.use(express.urlencoded({ limit: "512kb", extended: true }));
 app.post("/api/sessions/:id/run-next", agentLimiter);
 app.post("/api/sessions/:id/run-full", agentLimiter);
 
+function hasInternalMaintenanceToken(req: Request): boolean {
+  const configured = process.env.VIBA_INTERNAL_MAINTENANCE_TOKEN;
+  return Boolean(configured && req.headers["x-viba-internal-maintenance"] === configured);
+}
+
+function isInternalMaintenanceRequest(req: Request): boolean {
+  return hasInternalMaintenanceToken(req) && req.path === "/self-repair/auto-fix";
+}
+
 app.use("/api/admin/maintenance", apiLimiter, requireAdmin, adminMaintenanceRouter);
 app.use("/api/admin", apiLimiter, requireAdmin, adminRouter);
+app.use("/api/self-repair", apiLimiter, (req, res, next) => {
+  if (hasInternalMaintenanceToken(req)) { next(); return; }
+  requireAdmin(req, res, next);
+});
 
 app.use(["/api/sessions/:id/run-next", "/api/sessions/:id/run-full"], async (req, res, next): Promise<void> => {
   if (req.session?.bypass) { next(); return; }
@@ -180,11 +193,6 @@ app.post("/api/sessions/:id/safety-vote", apiLimiter, requireSession, async (req
 });
 
 const AUTH_EXEMPT_PATHS = new Set(["/auth/config", "/auth/verify-bypass", "/auth/login", "/auth/register", "/auth/logout", "/auth/me", "/auth/google", "/auth/google/callback", "/auth/github", "/auth/github/callback", "/auth/forgot-password", "/auth/reset-password", "/auth/verify-email", "/stripe/config", "/stripe/checkout", "/stripe/subscription", "/stripe/portal", "/billing/plans", "/stats", "/healthz"]);
-
-function isInternalMaintenanceRequest(req: Request): boolean {
-  const configured = process.env.VIBA_INTERNAL_MAINTENANCE_TOKEN;
-  return Boolean(configured && req.path === "/self-repair/auto-fix" && req.headers["x-viba-internal-maintenance"] === configured);
-}
 
 app.use("/api", apiLimiter, (req, res, next) => {
   if (AUTH_EXEMPT_PATHS.has(req.path) || isInternalMaintenanceRequest(req)) { next(); return; }
