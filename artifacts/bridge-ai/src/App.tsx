@@ -11,7 +11,7 @@ import UserInstructions from "@/pages/user-instructions";
 import Terms from "@/pages/terms";
 import Dashboard from "@/pages/dashboard";
 import NewSession from "@/pages/new-session";
-import SessionWorkspace from "@/pages/session-workspace-clinical";
+import SessionWorkspace from "@/pages/session-workspace";
 import Settings from "@/pages/settings";
 import Workbench from "@/pages/workbench";
 import Bridge from "@/pages/bridge";
