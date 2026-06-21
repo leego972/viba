@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { agentsTable, db, tasksTable } from "@workspace/db";
 import { runFullWorkflow, runNextAgentStep } from "../lib/agentLoop";
 import { fallbackStatus, resetFallbackPool, returnTaskToPool } from "../lib/fallbackPool";
+import { confirmBrowserSession, getBrowserSession, listBrowserSessions, revokeBrowserSession, startBrowserSession } from "../lib/browserSessionHandoff";
 
 const router: IRouter = Router();
 
@@ -18,6 +19,21 @@ type PoolUpdate = {
 function idParam(value: string | undefined): number | null {
   const id = Number(value);
   return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+function userId(req: { session?: { userId?: number } }): number | null {
+  return typeof req.session?.userId === "number" ? req.session.userId : null;
+}
+
+function safeHttpUrl(input: unknown): string | null {
+  if (typeof input !== "string") return null;
+  try {
+    const url = new URL(input);
+    if (!["http:", "https:"].includes(url.protocol)) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
 
 function needsPool(content: string): boolean {
@@ -77,6 +93,41 @@ router.post("/sessions/:id/run-full-resilient", async (req, res): Promise<void> 
   const result = await runFullWorkflow(id);
   const poolUpdates = await poolSignals(id, result.newMessages);
   res.json({ ...result, poolUpdates, resilient: true });
+});
+
+router.get("/browser-sessions", async (req, res): Promise<void> => {
+  res.json({ sessions: await listBrowserSessions(userId(req)) });
+});
+
+router.post("/browser-sessions/start", async (req, res): Promise<void> => {
+  const body = req.body as { provider?: unknown; startUrl?: unknown; ttlHours?: unknown };
+  const provider = typeof body.provider === "string" && body.provider.trim() ? body.provider.trim() : "custom";
+  const startUrl = safeHttpUrl(body.startUrl);
+  if (!startUrl) { res.status(400).json({ error: "valid startUrl required" }); return; }
+  const ttlHours = typeof body.ttlHours === "number" ? body.ttlHours : undefined;
+  const record = await startBrowserSession({ userId: userId(req), provider, startUrl, ttlHours });
+  res.status(201).json({ ok: true, session: record, instruction: "Open startUrl in a temporary local browser profile, log in manually, then confirm the profile reference." });
+});
+
+router.get("/browser-sessions/:id/status", async (req, res): Promise<void> => {
+  const id = idParam(req.params.id);
+  if (!id) { res.status(400).json({ error: "valid browser session id required" }); return; }
+  res.json({ session: await getBrowserSession({ id, userId: userId(req) }) });
+});
+
+router.post("/browser-sessions/:id/confirm", async (req, res): Promise<void> => {
+  const id = idParam(req.params.id);
+  if (!id) { res.status(400).json({ error: "valid browser session id required" }); return; }
+  const body = req.body as { profileRef?: unknown };
+  const profileRef = typeof body.profileRef === "string" ? body.profileRef.trim() : "";
+  if (!profileRef) { res.status(400).json({ error: "profileRef required" }); return; }
+  res.json({ ok: true, session: await confirmBrowserSession({ id, userId: userId(req), profileRef }) });
+});
+
+router.post("/browser-sessions/:id/revoke", async (req, res): Promise<void> => {
+  const id = idParam(req.params.id);
+  if (!id) { res.status(400).json({ error: "valid browser session id required" }); return; }
+  res.json({ ok: true, session: await revokeBrowserSession({ id, userId: userId(req) }) });
 });
 
 export default router;
