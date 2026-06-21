@@ -9,6 +9,8 @@ import authRouter from "./auth";
 import stripeRouter from "./stripe";
 import billingRouter from "./billing";
 import githubRouter from "./github";
+import connectionsRouter from "./connections";
+import vibaKeysRouter from "./credentials";
 
 const router: IRouter = Router();
 
@@ -23,5 +25,7 @@ router.use(workbenchRouter);
 router.use(stripeRouter);
 router.use(billingRouter);
 router.use(githubRouter);
+router.use(connectionsRouter);
+router.use(vibaKeysRouter);
 
 export default router;
