@@ -46,6 +46,9 @@ export async function ensureFallbackPoolTables(): Promise<void> {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_viba_provider_health_session ON viba_provider_health (session_id, provider)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_viba_task_fallbacks_session_task ON viba_task_fallbacks (session_id, task_id)`);
 }
 
 export function classifyFallbackReason(error: unknown): FallbackReason {
@@ -92,6 +95,11 @@ export async function markProviderHealthy(input: { sessionId: number; provider: 
      DO UPDATE SET status = 'healthy', reason = NULL, cooldown_until = NULL, last_error = NULL, updated_at = NOW()`,
     [input.sessionId, input.provider],
   );
+}
+
+export async function resetFallbackPool(sessionId: number): Promise<void> {
+  await ensureFallbackPoolTables();
+  await pool.query(`DELETE FROM viba_provider_health WHERE session_id = $1`, [sessionId]);
 }
 
 export async function fallbackEligibleAgents(input: {
@@ -161,7 +169,21 @@ export async function returnTaskToPool(input: {
             partial_work = COALESCE(partial_work || E'\n\n', '') || COALESCE($3, ''),
             updated_at = NOW()
       WHERE id = $4
-      RETURNING *`,
+      RETURNING
+        id,
+        session_id AS "sessionId",
+        title,
+        description,
+        type,
+        status,
+        assigned_agent_id AS "assignedAgentId",
+        cost_estimate AS "costEstimate",
+        dependency_task_id AS "dependencyTaskId",
+        blocked_reason AS "blockedReason",
+        partial_work AS "partialWork",
+        tool_requirements AS "toolRequirements",
+        created_at AS "createdAt",
+        updated_at AS "updatedAt"`,
     [newStatus, blockedReason, input.partialWork ?? "", input.task.id],
   );
 
