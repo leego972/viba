@@ -19,6 +19,7 @@ import { getBillingStatus, deductCredits, isStripeConfigured } from "./lib/billi
 import { sendCreditsExhaustedReminder, sendLowCreditsWarningIfNeeded } from "./lib/billingEmail";
 import { buildAdapter, buildMockAdapter } from "./lib/agentFactory";
 import { startWeeklyMaintenanceScheduler } from "./lib/maintenanceScheduler";
+import { assertSelfRepo, configuredSelfRepo } from "./lib/selfRepoGuard";
 import type { Agent } from "@workspace/db";
 
 const PgStore = connectPgSimple(session);
@@ -93,12 +94,28 @@ function isInternalMaintenanceRequest(req: Request): boolean {
   return hasInternalMaintenanceToken(req) && req.path === "/self-repair/auto-fix";
 }
 
+function restrictToConfiguredSelfRepo(req: Request, res: express.Response, next: express.NextFunction): void {
+  try {
+    const body = (req.body ?? {}) as { repoFullName?: unknown };
+    if (typeof body.repoFullName === "string" && body.repoFullName.trim()) {
+      assertSelfRepo(body.repoFullName);
+    } else if (req.method !== "GET") {
+      body.repoFullName = configuredSelfRepo();
+      req.body = body;
+    }
+    next();
+  } catch (error) {
+    res.status(403).json({ error: error instanceof Error ? error.message : "Self-repo access denied" });
+  }
+}
+
 app.use("/api/admin/maintenance", apiLimiter, requireAdmin, adminMaintenanceRouter);
 app.use("/api/admin", apiLimiter, requireAdmin, adminRouter);
-app.use("/api/self-repair", apiLimiter, (req, res, next) => {
+app.use("/api/self-repair", apiLimiter, restrictToConfiguredSelfRepo, (req, res, next) => {
   if (hasInternalMaintenanceToken(req)) { next(); return; }
   requireAdmin(req, res, next);
 });
+app.use("/api/self-audit", apiLimiter, restrictToConfiguredSelfRepo, requireAdmin);
 
 app.use(["/api/sessions/:id/run-next", "/api/sessions/:id/run-full"], async (req, res, next): Promise<void> => {
   if (req.session?.bypass) { next(); return; }
