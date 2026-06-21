@@ -28,6 +28,9 @@ async function poolSignals(sessionId: number, messages: Array<{ id: number; task
     if (!task || !agent) continue;
     const reason = message.content.toLowerCase().includes("timed out") ? "timeout" : "provider_unavailable";
     const returned = await returnTaskToPool({ sessionId, task, agent, reason, partialWork: message.content, error: `message:${message.id}` });
+    if (returned.alternativeAvailable) {
+      await db.update(agentsTable).set({ satOutReason: `temporary provider cooldown: ${reason}` }).where(and(eq(agentsTable.sessionId, sessionId), eq(agentsTable.provider, agent.provider)));
+    }
     updates.push({ messageId: message.id, taskId: task.id, provider: agent.provider, reason, alternativeAvailable: returned.alternativeAvailable });
   }
   return updates;
@@ -42,6 +45,13 @@ router.get("/sessions/:id/provider-health", async (req, res): Promise<void> => {
   const id = idParam(req.params.id);
   if (!id) { res.status(400).json({ error: "valid session id required" }); return; }
   res.json(await fallbackStatus(id));
+});
+
+router.post("/sessions/:id/provider-reset", async (req, res): Promise<void> => {
+  const id = idParam(req.params.id);
+  if (!id) { res.status(400).json({ error: "valid session id required" }); return; }
+  await db.update(agentsTable).set({ satOutReason: null }).where(eq(agentsTable.sessionId, id));
+  res.json({ ok: true, message: "Provider cooldown flags cleared for this session." });
 });
 
 router.post("/sessions/:id/run-next-resilient", async (req, res): Promise<void> => {
