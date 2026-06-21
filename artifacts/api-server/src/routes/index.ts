@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
+import coreDefaultsRouter from "./coreDefaults";
 import sessionsRouter from "./sessions";
 import settingsRouter from "./settings";
 import statsRouter from "./stats";
@@ -18,6 +19,7 @@ const router: IRouter = Router();
 
 router.use(authRouter);
 router.use(healthRouter);
+router.use(coreDefaultsRouter);
 router.use(sessionsRouter);
 router.use(settingsRouter);
 router.use(statsRouter);
