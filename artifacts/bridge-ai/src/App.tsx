@@ -7,6 +7,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import UserInstructions from "@/pages/user-instructions";
+import Terms from "@/pages/terms";
 import Dashboard from "@/pages/dashboard";
 import NewSession from "@/pages/new-session";
 import SessionWorkspace from "@/pages/session-workspace-clinical";
@@ -101,6 +102,7 @@ function App() {
               <Route path="/verify-email" component={VerifyEmail} />
               <Route path="/pricing" component={Pricing} />
               <Route path="/user-instructions" component={UserInstructions} />
+              <Route path="/terms" component={Terms} />
               <Route path="/checkout/success" component={CheckoutSuccess} />
               <Route path="/admin/maintenance" component={AdminMaintenanceRoute} />
               <Route path="/admin" component={AdminMaintenanceRoute} />
