@@ -91,7 +91,7 @@ async function updateRun(id: number, patch: { status: string; selfRepairRunId?: 
 }
 
 async function callSelfRepair(repo: string, branch: string): Promise<{ ok: boolean; runId?: number; status?: string; checkpoint?: { id?: number }; pr?: { number?: number; html_url?: string }; message?: string }> {
-  const url = `http://127.0.0.1:${process.env["PORT"]}/api/internal/self-repair/weekly`;
+  const url = `http://127.0.0.1:${process.env["PORT"]}/api/self-repair/auto-fix`;
   const response = await fetch(url, {
     method: "POST",
     headers: {
