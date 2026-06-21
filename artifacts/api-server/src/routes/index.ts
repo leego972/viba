@@ -12,6 +12,7 @@ import githubRouter from "./github";
 import connectionsRouter from "./connections";
 import vibaKeysRouter from "./credentials";
 import webResearchRouter from "./webResearch";
+import pricingResearchRouter from "./pricingResearch";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(githubRouter);
 router.use(connectionsRouter);
 router.use(vibaKeysRouter);
 router.use(webResearchRouter);
+router.use(pricingResearchRouter);
 
 export default router;
