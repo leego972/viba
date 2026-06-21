@@ -4,6 +4,7 @@ import { logVibaEvent, resolveVibaCredential } from "../lib/vibaVault";
 const router: IRouter = Router();
 
 type ReqWithSession = { session?: { userId?: number } };
+type JsonRecord = Record<string, unknown>;
 
 function userId(req: ReqWithSession): number | null {
   return typeof req.session?.userId === "number" ? req.session.userId : null;
@@ -40,11 +41,11 @@ function jsonHeaders(token: string): Record<string, string> {
   return { Authorization: `Bearer ${token}`, Accept: "application/json", "Content-Type": "application/json", "User-Agent": "VIBA-Connector/1.0" };
 }
 
-async function railwayRequest(token: string, query: string) {
+async function railwayRequest(token: string, query: string, variables?: JsonRecord) {
   const response = await fetch(process.env.RAILWAY_GRAPHQL_URL || "https://backboard.railway.app/graphql/v2", {
     method: "POST",
     headers: jsonHeaders(token),
-    body: JSON.stringify({ query }),
+    body: JSON.stringify({ query, variables: variables ?? {} }),
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || (data as { errors?: unknown }).errors) throw new Error(`Railway check failed. Replace RAILWAY_TOKEN. HTTP ${response.status}`);
@@ -54,15 +55,7 @@ async function railwayRequest(token: string, query: string) {
 router.get("/connections/status", async (req, res): Promise<void> => {
   const uid = userId(req);
   const [github, railway, mcp] = await Promise.all([githubToken(uid), railwayToken(uid), railwayMcpUrl(uid)]);
-  res.json({
-    app: "VIBA",
-    connections: {
-      github: { configured: Boolean(github.value), source: github.source, missing: github.missing },
-      railway: { configured: Boolean(railway.value), source: railway.source, missing: railway.missing },
-      railwayMcp: { configured: Boolean(mcp.value), source: mcp.source, missing: mcp.missing },
-      browserAudit: { configured: true },
-    },
-  });
+  res.json({ app: "VIBA", connections: { github: { configured: Boolean(github.value), source: github.source, missing: github.missing }, railway: { configured: Boolean(railway.value), source: railway.source, missing: railway.missing }, railwayMcp: { configured: Boolean(mcp.value), source: mcp.source, missing: mcp.missing }, browserAudit: { configured: true } } });
 });
 
 router.post("/connections/github/validate", async (req, res): Promise<void> => {
@@ -105,10 +98,47 @@ router.post("/connections/railway/projects", async (req, res): Promise<void> => 
   }
 });
 
+router.post("/connections/railway/graphql", async (req, res): Promise<void> => {
+  const body = req.body as { query?: unknown; variables?: JsonRecord };
+  const query = typeof body.query === "string" ? body.query.trim() : "";
+  if (!query) { res.status(400).json({ error: "query required" }); return; }
+  const lower = query.toLowerCase();
+  const isMutation = lower.includes("mutation") || lower.includes("subscription");
+  if (isMutation && process.env.RAILWAY_ALLOW_MUTATIONS !== "true") {
+    res.status(403).json({ error: "Railway mutation blocked. Set RAILWAY_ALLOW_MUTATIONS=true only after explicit owner approval." });
+    return;
+  }
+  const uid = userId(req);
+  const token = await railwayToken(uid);
+  if (!token.value) { res.status(400).json({ ok: false, keyToAdd: "RAILWAY_TOKEN", missing: token.missing }); return; }
+  try {
+    const data = await railwayRequest(token.value, query, body.variables);
+    await logVibaEvent({ userId: uid, eventType: isMutation ? "railway_mutation" : "railway_query", provider: "railway", status: "ok", message: "Railway GraphQL call completed.", metadata: { mutation: isMutation } });
+    res.json({ ok: true, data, source: token.source });
+  } catch (error) {
+    res.status(503).json({ ok: false, keyToReplace: "RAILWAY_TOKEN", message: error instanceof Error ? error.message : "Railway GraphQL call failed." });
+  }
+});
+
 router.get("/connections/railway-mcp/status", async (req, res): Promise<void> => {
   const uid = userId(req);
   const [mcp, railway] = await Promise.all([railwayMcpUrl(uid), railwayToken(uid)]);
   res.json({ ok: true, configured: Boolean(mcp.value), source: mcp.source, missing: [...mcp.missing, ...railway.missing], tokenConfigured: Boolean(railway.value) });
+});
+
+router.post("/connections/railway-mcp/tools", async (req, res): Promise<void> => {
+  const uid = userId(req);
+  const [mcp, railway] = await Promise.all([railwayMcpUrl(uid), railwayToken(uid)]);
+  if (!mcp.value) { res.status(400).json({ ok: false, keyToAdd: "RAILWAY_MCP_URL", missing: mcp.missing }); return; }
+  try {
+    const response = await fetch(mcp.value, { method: "POST", headers: jsonHeaders(railway.value ?? ""), body: JSON.stringify({ jsonrpc: "2.0", id: "viba-tools-list", method: "tools/list", params: {} }) });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(`MCP HTTP error ${response.status}`);
+    await logVibaEvent({ userId: uid, eventType: "railway_mcp_tools_listed", provider: "railway_mcp", status: "ok", message: "Railway MCP tools listed.", metadata: { source: mcp.source } });
+    res.json({ ok: true, data, source: mcp.source });
+  } catch (error) {
+    res.status(503).json({ ok: false, keyToReplace: "RAILWAY_MCP_URL", message: error instanceof Error ? error.message : "Railway MCP tool discovery failed." });
+  }
 });
 
 router.post("/connections/browser-audit", async (req, res): Promise<void> => {
