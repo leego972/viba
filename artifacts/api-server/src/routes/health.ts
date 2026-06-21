@@ -3,9 +3,17 @@ import { HealthCheckResponse } from "@workspace/api-zod";
 import { and, eq } from "drizzle-orm";
 import { agentsTable, db, tasksTable } from "@workspace/db";
 import { runFullWorkflow, runNextAgentStep } from "../lib/agentLoop";
-import { fallbackStatus, returnTaskToPool } from "../lib/fallbackPool";
+import { fallbackStatus, resetFallbackPool, returnTaskToPool } from "../lib/fallbackPool";
 
 const router: IRouter = Router();
+
+type PoolUpdate = {
+  messageId: number;
+  taskId: number;
+  provider: string;
+  reason: string;
+  alternativeAvailable: boolean;
+};
 
 function idParam(value: string | undefined): number | null {
   const id = Number(value);
@@ -17,8 +25,8 @@ function needsPool(content: string): boolean {
   return lower.includes("[simulated") || lower.includes("timed out") || lower.includes("queued for retry");
 }
 
-async function poolSignals(sessionId: number, messages: Array<{ id: number; taskId: number | null; agentId: number | null; content: string }>) {
-  const updates = [];
+async function poolSignals(sessionId: number, messages: Array<{ id: number; taskId: number | null; agentId: number | null; content: string }>): Promise<PoolUpdate[]> {
+  const updates: PoolUpdate[] = [];
   for (const message of messages) {
     if (!message.taskId || !message.agentId || !needsPool(message.content)) continue;
     const [[task], [agent]] = await Promise.all([
@@ -50,8 +58,9 @@ router.get("/sessions/:id/provider-health", async (req, res): Promise<void> => {
 router.post("/sessions/:id/provider-reset", async (req, res): Promise<void> => {
   const id = idParam(req.params.id);
   if (!id) { res.status(400).json({ error: "valid session id required" }); return; }
+  await resetFallbackPool(id);
   await db.update(agentsTable).set({ satOutReason: null }).where(eq(agentsTable.sessionId, id));
-  res.json({ ok: true, message: "Provider cooldown flags cleared for this session." });
+  res.json({ ok: true, message: "Provider cooldown flags and fallback health records cleared for this session." });
 });
 
 router.post("/sessions/:id/run-next-resilient", async (req, res): Promise<void> => {
