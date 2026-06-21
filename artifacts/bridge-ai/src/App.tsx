@@ -15,6 +15,7 @@ import Bridge from "@/pages/bridge";
 import Pricing from "@/pages/pricing";
 import CheckoutSuccess from "@/pages/checkout-success";
 import Admin from "@/pages/admin";
+import AdminMaintenance from "@/pages/admin-maintenance";
 import LoginPage from "@/pages/login";
 import SignUpPage from "@/pages/signup";
 import ForgotPassword from "@/pages/forgot-password";
@@ -59,7 +60,7 @@ function isAdminEmail(email: string | null | undefined): boolean {
   return configured.split(",").map((item) => item.trim().toLowerCase()).filter(Boolean).includes((email ?? "").toLowerCase());
 }
 
-function AdminGuard() {
+function AdminOnly({ children }: { children: ReactNode }) {
   const [, setLocation] = useLocation();
   const { user, isAuthenticated, isLoading } = useAuth();
 
@@ -70,7 +71,7 @@ function AdminGuard() {
   if (isLoading) return <Spinner />;
   if (!isAuthenticated) return <Spinner />;
   if (!isAdminEmail(user?.email)) return <NotFound />;
-  return <Admin />;
+  return <>{children}</>;
 }
 
 function GatedRouter() {
@@ -96,13 +97,7 @@ function BypassHandler() {
     const urlParams = new URLSearchParams(window.location.search);
     const bypassParam = urlParams.get("bypass");
     if (!bypassParam || isBypassValid()) return;
-
-    fetch("/api/auth/verify-bypass", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ token: bypassParam }),
-    })
+    fetch("/api/auth/verify-bypass", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ token: bypassParam }) })
       .then(async (res) => {
         if (res.ok) {
           setBypassValid();
@@ -113,13 +108,11 @@ function BypassHandler() {
       })
       .catch(() => {});
   }, []);
-
   return null;
 }
 
 function App() {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
-
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
@@ -134,7 +127,12 @@ function App() {
               <Route path="/verify-email" component={VerifyEmail} />
               <Route path="/pricing" component={Pricing} />
               <Route path="/checkout/success" component={CheckoutSuccess} />
-              <Route path="/admin" component={AdminGuard} />
+              <Route path="/admin/maintenance">
+                <AdminOnly><AdminMaintenance /></AdminOnly>
+              </Route>
+              <Route path="/admin">
+                <AdminOnly><Admin /></AdminOnly>
+              </Route>
               <Route component={GatedRouter} />
             </Switch>
           </ErrorBoundary>
