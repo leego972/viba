@@ -9,6 +9,10 @@ type SearchResult = {
   snippet?: string;
 };
 
+type InspirationReportItem =
+  | { url: string; status: number; title: string | null; features: string[]; designPatterns: string[]; ideas: string[] }
+  | { url: string; status: "error"; message: string };
+
 function userId(req: { session?: { userId?: number } }): number | null {
   return typeof req.session?.userId === "number" ? req.session.userId : null;
 }
@@ -109,9 +113,7 @@ router.get("/web-research/config", (_req, res): void => {
   res.json({
     app: "VIBA",
     mode: "web_research_inspiration",
-    searchProviders: {
-      brave: Boolean(process.env.BRAVE_SEARCH_API_KEY),
-    },
+    searchProviders: { brave: Boolean(process.env.BRAVE_SEARCH_API_KEY) },
     rules: [
       "Extract feature ideas and UX patterns.",
       "Generate original implementation plans.",
@@ -148,16 +150,7 @@ router.post("/web-research/analyze-url", async (req, res): Promise<void> => {
     const signals = extractSignals(html);
     const ideas = originalImplementationIdeas(signals);
     await logVibaEvent({ userId: userId(req), eventType: "web_research_analyze_url", provider: "web_research", subject: url, status: response.ok ? "ok" : "failed", message: `Analyzed public page for inspiration: ${url}`, metadata: { status: response.status, features: signals.features } });
-    res.json({
-      ok: response.ok,
-      source: url,
-      status: response.status,
-      title,
-      description,
-      signals,
-      originalImplementationIdeas: ideas,
-      complianceNote: "Use these as inspiration only. Build original VIBA UI/copy/assets; do not copy protected code, branding, images or pixel-perfect layouts.",
-    });
+    res.json({ ok: response.ok, source: url, status: response.status, title, description, signals, originalImplementationIdeas: ideas, complianceNote: "Use these as inspiration only. Build original VIBA UI/copy/assets; do not copy protected code, branding, images or pixel-perfect layouts." });
   } catch (error) {
     res.status(502).json({ ok: false, source: url, message: error instanceof Error ? error.message : "URL analysis failed." });
   }
@@ -168,7 +161,7 @@ router.post("/web-research/inspiration-report", async (req, res): Promise<void> 
   const urls = Array.isArray(body.urls) ? body.urls.map(safeHttpUrl).filter(Boolean).slice(0, 8) as string[] : [];
   if (!urls.length) { res.status(400).json({ error: "urls array required" }); return; }
 
-  const reports = [];
+  const reports: InspirationReportItem[] = [];
   for (const url of urls) {
     try {
       const response = await fetch(url, { redirect: "follow" });
