@@ -1,4 +1,3 @@
-import { z } from "zod/v4";
 import { Router, type IRouter } from "express";
 import { eq, asc, desc, inArray, sql, and } from "drizzle-orm";
 import {
@@ -38,44 +37,31 @@ import { determineTaskSequence, autoAssignRoles } from "../lib/taskRouter";
 
 const router: IRouter = Router();
 
-function currentUserId(req: { session?: { userId?: number; bypass?: boolean } }): number | null {
+type ReqWithUser = { session?: { userId?: number; bypass?: boolean } };
+
+function currentUserId(req: ReqWithUser): number | null {
   return typeof req.session?.userId === "number" ? req.session.userId : null;
 }
 
-function sessionOwnerFilter(req: { session?: { userId?: number; bypass?: boolean } }) {
-  const uid = currentUserId(req);
-  if (uid === null || req.session?.bypass) return undefined;
-  return eq(sessionsTable.userId, uid);
+function serialize<T>(val: T): T {
+  if (val instanceof Date) return val.toISOString() as unknown as T;
+  if (Array.isArray(val)) return val.map(serialize) as unknown as T;
+  if (val !== null && typeof val === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(val as Record<string, unknown>)) out[k] = serialize(v);
+    return out as T;
+  }
+  return val;
 }
 
-/**
- * Extracts toolOutputs from metadata and resolves toAgentId → toAgentName.
- * Pass agentNameMap (agentId → name) to surface the recipient name in messages
- * that carry an outbound question to a specific peer agent.
- */
 function formatMessage(
   msg: typeof messagesTable.$inferSelect,
   agentNameMap?: Map<number, string>,
 ): typeof messagesTable.$inferSelect & { toolOutputs: unknown[] | null; toAgentName: string | null } {
   const meta = msg.metadata as Record<string, unknown> | null;
   const toolOutputs = Array.isArray(meta?.["toolOutputs"]) ? (meta["toolOutputs"] as unknown[]) : null;
-  const toAgentName =
-    msg.toAgentId !== null && agentNameMap ? (agentNameMap.get(msg.toAgentId) ?? null) : null;
+  const toAgentName = msg.toAgentId !== null && agentNameMap ? (agentNameMap.get(msg.toAgentId) ?? null) : null;
   return { ...msg, toolOutputs, toAgentName };
-}
-
-/** Recursively converts Date objects to ISO strings for JSON serialization */
-function serialize<T>(val: T): T {
-  if (val instanceof Date) return val.toISOString() as unknown as T;
-  if (Array.isArray(val)) return val.map(serialize) as unknown as T;
-  if (val !== null && typeof val === "object") {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(val as Record<string, unknown>)) {
-      out[k] = serialize(v);
-    }
-    return out as T;
-  }
-  return val;
 }
 
 const PROVIDER_CAPABILITIES: Record<string, string[]> = {
@@ -97,152 +83,102 @@ function getCapabilities(provider: string): string[] {
 }
 
 async function logAudit(sessionId: number, eventType: string, description: string, metadata?: Record<string, unknown>) {
-  await db.insert(auditLogsTable).values({
-    sessionId,
-    eventType,
-    description,
-    metadata: metadata ?? {},
-  });
+  await db.insert(auditLogsTable).values({ sessionId, eventType, description, metadata: metadata ?? {} });
 }
 
-/**
- * Derives activeModel for each agent from the most recent message that has a
- * non-null model value. Uses a single query for all agents to avoid N+1.
- */
-async function withActiveModels<T extends { id: number; lastUsedModel: string | null }>(
-  agents: T[]
-): Promise<(T & { activeModel: string | null })[]> {
-  if (agents.length === 0) return agents.map((a) => ({ ...a, activeModel: null }));
-
+async function withActiveModels<T extends { id: number; lastUsedModel: string | null }>(agents: T[]): Promise<(T & { activeModel: string | null })[]> {
+  if (!agents.length) return agents.map((a) => ({ ...a, activeModel: null }));
   const agentIds = agents.map((a) => a.id);
-
-  const agentFilter =
-    agentIds.length === 1
-      ? eq(messagesTable.agentId, agentIds[0]!)
-      : inArray(messagesTable.agentId, agentIds);
-
-  const rows = await db
-    .select({ agentId: messagesTable.agentId, model: messagesTable.model })
-    .from(messagesTable)
-    .where(agentFilter)
-    .orderBy(desc(messagesTable.id));
-
+  const agentFilter = agentIds.length === 1 ? eq(messagesTable.agentId, agentIds[0]!) : inArray(messagesTable.agentId, agentIds);
+  const rows = await db.select({ agentId: messagesTable.agentId, model: messagesTable.model }).from(messagesTable).where(agentFilter).orderBy(desc(messagesTable.id));
   const latestModelByAgent = new Map<number, string>();
   for (const row of rows) {
-    if (row.agentId !== null && row.model !== null && !latestModelByAgent.has(row.agentId)) {
-      latestModelByAgent.set(row.agentId, row.model);
-    }
+    if (row.agentId !== null && row.model !== null && !latestModelByAgent.has(row.agentId)) latestModelByAgent.set(row.agentId, row.model);
   }
-
   return agents.map((a) => ({ ...a, activeModel: latestModelByAgent.get(a.id) ?? null }));
 }
 
-/** Enriches a session row with the agentModes array required by the Session schema */
 async function withAgentModes<T extends { id: number }>(session: T) {
   const agents = await db.select().from(agentsTable).where(eq(agentsTable.sessionId, session.id));
-  return {
-    ...session,
-    agentModes: agents.map((a) => ({ name: a.name, provider: a.provider, isMock: a.isMock })),
-  };
+  return { ...session, agentModes: agents.map((a) => ({ name: a.name, provider: a.provider, isMock: a.isMock })) };
 }
 
-// GET /sessions  — paginated (default 100, max 500)
+function ownerWhere(req: ReqWithUser) {
+  const uid = currentUserId(req);
+  if (uid === null || req.session?.bypass) return undefined;
+  return eq(sessionsTable.userId, uid);
+}
+
 router.get("/sessions", async (req, res): Promise<void> => {
   const rawLimit = parseInt(String(req.query.limit ?? "100"), 10);
   const rawOffset = parseInt(String(req.query.offset ?? "0"), 10);
   const limit = Math.min(Number.isNaN(rawLimit) ? 100 : Math.max(1, rawLimit), 500);
   const offset = Number.isNaN(rawOffset) ? 0 : Math.max(0, rawOffset);
-  const ownerFilter = sessionOwnerFilter(req);
-
+  const filter = ownerWhere(req);
   const [sessions, totalRows] = await Promise.all([
-    ownerFilter
-      ? db.select().from(sessionsTable).where(ownerFilter).orderBy(asc(sessionsTable.id)).limit(limit).offset(offset)
-      : db.select().from(sessionsTable).orderBy(asc(sessionsTable.id)).limit(limit).offset(offset),
-    ownerFilter
-      ? db.select({ total: sql`count(*)::int` }).from(sessionsTable).where(ownerFilter)
-      : db.select({ total: sql`count(*)::int` }).from(sessionsTable),
+    filter ? db.select().from(sessionsTable).where(filter).orderBy(asc(sessionsTable.id)).limit(limit).offset(offset) : db.select().from(sessionsTable).orderBy(asc(sessionsTable.id)).limit(limit).offset(offset),
+    filter ? db.select({ total: sql`count(*)::int` }).from(sessionsTable).where(filter) : db.select({ total: sql`count(*)::int` }).from(sessionsTable),
   ]);
-
   const sessionIds = sessions.map((s) => s.id);
-  const agents = sessionIds.length > 0
-    ? await db.select().from(agentsTable).where(inArray(agentsTable.sessionId, sessionIds))
-    : [];
-
+  const agents = sessionIds.length ? await db.select().from(agentsTable).where(inArray(agentsTable.sessionId, sessionIds)) : [];
   const agentsBySession = agents.reduce<Record<number, typeof agents>>((acc, agent) => {
     if (!acc[agent.sessionId]) acc[agent.sessionId] = [];
     acc[agent.sessionId]!.push(agent);
     return acc;
   }, {});
-
   const result = sessions.map((session) => ({
     ...session,
     agentModes: (agentsBySession[session.id] ?? []).map((a) => ({ name: a.name, provider: a.provider, isMock: a.isMock })),
   }));
-
   res.json(serialize({ sessions: result, total: totalRows[0]?.total ?? 0, limit, offset }));
 });
 
-// POST /sessions
 router.post("/sessions", async (req, res): Promise<void> => {
   const parsed = CreateSessionBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const { goal, autonomyMode, agents, repoUrl: rawRepoUrl, repoBranch: rawRepoBranch, workspaceEnv: rawWorkspaceEnv } = parsed.data;
   const repoUrl = typeof rawRepoUrl === "string" ? rawRepoUrl.trim() || null : null;
   const repoBranch = typeof rawRepoBranch === "string" ? rawRepoBranch.trim() || null : null;
   const workspaceEnv = typeof rawWorkspaceEnv === "string" ? rawWorkspaceEnv.trim() || null : null;
-
   const allMock = agents.every((a) => a.isMock);
   const noneMock = agents.every((a) => !a.isMock);
   const mode: "live" | "simulation" | "mixed" = allMock ? "simulation" : noneMock ? "live" : "mixed";
 
-  const [session] = await db
-    .insert(sessionsTable)
-    .values({ goal, userId: currentUserId(req), autonomyMode, status: "active", mode, repoUrl: repoUrl ?? null, repoBranch: repoBranch ?? null, workspaceEnv: workspaceEnv ?? null })
-    .returning();
-
-  if (!session) {
-    res.status(500).json({ error: "Failed to create session" });
-    return;
-  }
-
+  const [session] = await db.insert(sessionsTable).values({
+    userId: currentUserId(req),
+    goal,
+    autonomyMode,
+    status: "active",
+    mode,
+    repoUrl: repoUrl ?? null,
+    repoBranch: repoBranch ?? null,
+    workspaceEnv: workspaceEnv ?? null,
+  }).returning();
+  if (!session) { res.status(500).json({ error: "Failed to create session" }); return; }
   await logAudit(session.id, "session_created", `Session created with goal: ${goal}`, { autonomyMode, userId: session.userId });
 
   const providerList = agents.map((a) => a.provider);
   const autoRoles = autoAssignRoles(providerList);
-
   const createdAgents = [];
   for (const agentInput of agents) {
     const role = agentInput.role || autoRoles[agentInput.provider] || "Strategist";
-    const [agent] = await db
-      .insert(agentsTable)
-      .values({
-        sessionId: session.id,
-        name: agentInput.name,
-        provider: agentInput.provider.toLowerCase(),
-        role,
-        capabilities: getCapabilities(agentInput.provider),
-        canUseTools: agentInput.canUseTools ?? TOOL_CAPABLE_PROVIDERS.has(agentInput.provider.toLowerCase()),
-        isMock: agentInput.isMock,
-      })
-      .returning();
+    const [agent] = await db.insert(agentsTable).values({
+      sessionId: session.id,
+      name: agentInput.name,
+      provider: agentInput.provider.toLowerCase(),
+      role,
+      capabilities: getCapabilities(agentInput.provider),
+      canUseTools: agentInput.canUseTools ?? TOOL_CAPABLE_PROVIDERS.has(agentInput.provider.toLowerCase()),
+      isMock: agentInput.isMock,
+    }).returning();
     if (agent) {
       createdAgents.push(agent);
       await logAudit(session.id, "agent_added", `Agent ${agent.name} (${role}) added to session`, { agentId: agent.id, provider: agent.provider });
     }
   }
 
-  const taskSequence = determineTaskSequence(goal);
-  for (let i = 0; i < taskSequence.length; i++) {
-    const taskDef = taskSequence[i];
-    if (!taskDef) continue;
-    const [task] = await db
-      .insert(tasksTable)
-      .values({ sessionId: session.id, title: taskDef.title, description: taskDef.description, type: taskDef.type, status: "planned" })
-      .returning();
+  for (const taskDef of determineTaskSequence(goal)) {
+    const [task] = await db.insert(tasksTable).values({ sessionId: session.id, title: taskDef.title, description: taskDef.description, type: taskDef.type, status: "planned" }).returning();
     if (task) await logAudit(session.id, "task_created", `Task "${task.title}" created`, { taskId: task.id, type: task.type });
   }
 
@@ -251,11 +187,9 @@ router.post("/sessions", async (req, res): Promise<void> => {
     summary: `Project started: ${goal}. Agents: ${createdAgents.map((a) => `${a.name} (${a.role})`).join(", ")}.`,
     decisions: [`Project goal defined: ${goal}`, `Autonomy mode: ${autonomyMode}`],
   });
-
   res.status(201).json(serialize(await withAgentModes(session)));
 });
 
-// GET /sessions/:id
 router.get("/sessions/:id", async (req, res): Promise<void> => {
   const params = GetSessionParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
@@ -272,4 +206,232 @@ router.get("/sessions/:id", async (req, res): Promise<void> => {
   res.json(serialize({ ...session, agents, tasks, messages, memory: memory ?? null, approvals }));
 });
 
-// Remaining routes continue below in the existing file.
+router.patch("/sessions/:id", async (req, res): Promise<void> => {
+  const params = UpdateSessionParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const [session] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, params.data.id));
+  if (!session) { res.status(404).json({ error: "Session not found" }); return; }
+  const parsed = UpdateSessionBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const updateData: Record<string, string | null> = {};
+  if ("repoUrl" in req.body) updateData.repoUrl = parsed.data.repoUrl ?? null;
+  if ("repoBranch" in req.body) updateData.repoBranch = parsed.data.repoBranch ?? null;
+  if ("workspaceEnv" in req.body) updateData.workspaceEnv = parsed.data.workspaceEnv ?? null;
+  if (!Object.keys(updateData).length) { res.json(serialize(await withAgentModes(session))); return; }
+  const [updated] = await db.update(sessionsTable).set(updateData).where(eq(sessionsTable.id, params.data.id)).returning();
+  await logAudit(params.data.id, "session_updated", "Workspace context updated", { changes: updateData });
+  res.json(serialize(updated ? await withAgentModes(updated) : await withAgentModes(session)));
+});
+
+router.delete("/sessions/:id", async (req, res): Promise<void> => {
+  const params = GetSessionParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const sessionId = params.data.id;
+  await db.delete(auditLogsTable).where(eq(auditLogsTable.sessionId, sessionId));
+  await db.delete(approvalsTable).where(eq(approvalsTable.sessionId, sessionId));
+  await db.delete(memoryTable).where(eq(memoryTable.sessionId, sessionId));
+  await db.delete(messagesTable).where(eq(messagesTable.sessionId, sessionId));
+  await db.delete(tasksTable).where(eq(tasksTable.sessionId, sessionId));
+  await db.delete(agentsTable).where(eq(agentsTable.sessionId, sessionId));
+  await db.delete(sessionsTable).where(eq(sessionsTable.id, sessionId));
+  res.status(204).end();
+});
+
+router.post("/sessions/:id/run-next", async (req, res): Promise<void> => {
+  const params = RunNextStepParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const [session] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, params.data.id));
+  if (!session) { res.status(404).json({ error: "Session not found" }); return; }
+  const result = await runNextAgentStep(params.data.id);
+  const [updatedSession] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, params.data.id));
+  const stepAgents = await db.select().from(agentsTable).where(eq(agentsTable.sessionId, params.data.id));
+  const stepAgentNameMap = new Map(stepAgents.map((a) => [a.id, a.name]));
+  res.json(serialize({ session: updatedSession ? await withAgentModes(updatedSession) : updatedSession, newMessages: result.newMessages.map((m) => formatMessage(m, stepAgentNameMap)), updatedTasks: result.updatedTasks, approvalRequired: result.approvalRequired, approval: result.approval, stepsRun: 1 }));
+});
+
+router.post("/sessions/:id/run-full", async (req, res): Promise<void> => {
+  const params = RunFullWorkflowParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const [session] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, params.data.id));
+  if (!session) { res.status(404).json({ error: "Session not found" }); return; }
+  const result = await runFullWorkflow(params.data.id);
+  const [updatedSession] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, params.data.id));
+  const fullAgents = await db.select().from(agentsTable).where(eq(agentsTable.sessionId, params.data.id));
+  const fullAgentNameMap = new Map(fullAgents.map((a) => [a.id, a.name]));
+  res.json(serialize({ session: updatedSession ? await withAgentModes(updatedSession) : updatedSession, newMessages: result.newMessages.map((m) => formatMessage(m, fullAgentNameMap)), updatedTasks: result.updatedTasks, approvalRequired: result.approvalRequired, approval: result.approval, stepsRun: result.stepsRun }));
+});
+
+router.post("/sessions/:id/message", async (req, res): Promise<void> => {
+  const params = SendMessageParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const body = SendMessageBody.safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
+  const [session] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, params.data.id));
+  if (!session) { res.status(404).json({ error: "Session not found" }); return; }
+  const [message] = await db.insert(messagesTable).values({ sessionId: params.data.id, agentId: null, role: "user", provider: null, content: body.data.content, taskId: null, agentName: "User", agentRole: "Human" }).returning();
+  res.status(201).json(serialize(message));
+});
+
+router.post("/sessions/:id/messages/:messageId/answer", async (req, res): Promise<void> => {
+  const params = AnswerQuestionParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const body = AnswerQuestionBody.safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
+  const [questionMsg] = await db.select().from(messagesTable).where(and(eq(messagesTable.sessionId, params.data.id), eq(messagesTable.id, params.data.messageId)));
+  if (!questionMsg) { res.status(404).json({ error: "Question message not found" }); return; }
+  if (questionMsg.messageType !== "question") { res.status(400).json({ error: "Referenced message is not a question" }); return; }
+  const [answer] = await db.insert(messagesTable).values({ sessionId: params.data.id, agentId: null, role: "user", provider: null, content: body.data.content, taskId: questionMsg.taskId, agentName: "User", agentRole: "Human", messageType: "answer", metadata: { questionMessageId: params.data.messageId } }).returning();
+  res.status(201).json(serialize(answer));
+});
+
+router.post("/sessions/:id/approve", async (req, res): Promise<void> => {
+  const params = ApproveActionParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const body = ApproveActionBody.safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
+  const [approval] = await db.select().from(approvalsTable).where(eq(approvalsTable.id, body.data.approvalId));
+  if (!approval) { res.status(404).json({ error: "Approval not found" }); return; }
+  const [updated] = await db.update(approvalsTable).set({ status: "approved", approvedAt: new Date() }).where(eq(approvalsTable.id, approval.id)).returning();
+  await logAudit(params.data.id, "approval_granted", `Approval granted for: ${approval.description}`, { approvalId: approval.id, type: approval.type });
+  res.json(serialize(updated));
+});
+
+router.post("/sessions/:id/stop", async (req, res): Promise<void> => {
+  const params = StopSessionParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const [session] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, params.data.id));
+  if (!session) { res.status(404).json({ error: "Session not found" }); return; }
+  const [updated] = await db.update(sessionsTable).set({ status: "stopped" }).where(eq(sessionsTable.id, params.data.id)).returning();
+  await logAudit(params.data.id, "session_stopped", "Session stopped by user");
+  res.json(serialize(updated ? await withAgentModes(updated) : updated));
+});
+
+router.get("/sessions/:id/stream", async (req, res): Promise<void> => {
+  const params = GetSessionParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const sessionId = params.data.id;
+  const [initial] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, sessionId));
+  if (!initial) { res.status(404).json({ error: "Session not found" }); return; }
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+  const sendSnapshot = async () => {
+    try {
+      const [sess] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, sessionId));
+      if (!sess) return;
+      const agentRows = await db.select().from(agentsTable).where(eq(agentsTable.sessionId, sessionId));
+      const agents = await withActiveModels(agentRows);
+      const rawMessages = await db.select().from(messagesTable).where(eq(messagesTable.sessionId, sessionId)).orderBy(asc(messagesTable.id));
+      const sseAgentNameMap = new Map(agentRows.map((a) => [a.id, a.name]));
+      const messages = rawMessages.map((m) => formatMessage(m, sseAgentNameMap));
+      const tasks = await db.select().from(tasksTable).where(eq(tasksTable.sessionId, sessionId)).orderBy(asc(tasksTable.id));
+      const approvals = await db.select().from(approvalsTable).where(eq(approvalsTable.sessionId, sessionId));
+      const auditLogs = await db.select().from(auditLogsTable).where(eq(auditLogsTable.sessionId, sessionId)).orderBy(asc(auditLogsTable.id));
+      const [memory] = await db.select().from(memoryTable).where(eq(memoryTable.sessionId, sessionId));
+      res.write(`data: ${JSON.stringify(serialize({ session: { ...sess, memory: memory ?? null }, agents, messages, tasks, approvals, auditLogs }))}\n\n`);
+    } catch { }
+  };
+  await sendSnapshot();
+  const interval = setInterval(sendSnapshot, 800);
+  const keepAlive = setInterval(() => res.write(": ping\n\n"), 20_000);
+  req.on("close", () => { clearInterval(interval); clearInterval(keepAlive); });
+});
+
+router.get("/sessions/:id/agents", async (req, res): Promise<void> => {
+  const params = ListAgentsParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const agentRows = await db.select().from(agentsTable).where(eq(agentsTable.sessionId, params.data.id));
+  res.json(serialize(await withActiveModels(agentRows)));
+});
+
+router.get("/sessions/:id/tasks", async (req, res): Promise<void> => {
+  const params = ListTasksParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const tasks = await db.select().from(tasksTable).where(eq(tasksTable.sessionId, params.data.id)).orderBy(asc(tasksTable.id));
+  res.json(serialize(tasks));
+});
+
+router.get("/sessions/:id/messages", async (req, res): Promise<void> => {
+  const params = ListMessagesParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const msgTypeFilter = typeof req.query["type"] === "string" ? req.query["type"] : undefined;
+  const [rawMessages, msgAgents] = await Promise.all([
+    msgTypeFilter ? db.select().from(messagesTable).where(and(eq(messagesTable.sessionId, params.data.id), eq(messagesTable.messageType, msgTypeFilter))).orderBy(asc(messagesTable.id)) : db.select().from(messagesTable).where(eq(messagesTable.sessionId, params.data.id)).orderBy(asc(messagesTable.id)),
+    db.select({ id: agentsTable.id, name: agentsTable.name }).from(agentsTable).where(eq(agentsTable.sessionId, params.data.id)),
+  ]);
+  const msgAgentNameMap = new Map(msgAgents.map((a) => [a.id, a.name]));
+  res.json(serialize(rawMessages.map((m) => formatMessage(m, msgAgentNameMap))));
+});
+
+router.get("/sessions/:id/memory", async (req, res): Promise<void> => {
+  const params = GetMemoryParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const [memory] = await db.select().from(memoryTable).where(eq(memoryTable.sessionId, params.data.id));
+  if (!memory) { res.status(404).json({ error: "Memory not found" }); return; }
+  res.json(serialize(memory));
+});
+
+router.get("/sessions/:id/audit-logs", async (req, res): Promise<void> => {
+  const params = ListAuditLogsParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const logs = await db.select().from(auditLogsTable).where(eq(auditLogsTable.sessionId, params.data.id)).orderBy(asc(auditLogsTable.id));
+  res.json(serialize(logs));
+});
+
+router.get("/sessions/:id/approvals", async (req, res): Promise<void> => {
+  const params = ListApprovalsParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const approvals = await db.select().from(approvalsTable).where(eq(approvalsTable.sessionId, params.data.id));
+  res.json(serialize(approvals));
+});
+
+router.get("/sessions/:id/banner-dismissal", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id ?? "", 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid session id" }); return; }
+  const [row] = await db.select().from(bannerDismissalsTable).where(eq(bannerDismissalsTable.sessionId, id));
+  res.json({ sessionId: id, dismissedAt: row ? serialize(row.dismissedAt) : null });
+});
+
+router.put("/sessions/:id/banner-dismissal", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id ?? "", 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid session id" }); return; }
+  let dismissedAt: Date;
+  const bodyTs = req.body?.dismissedAt;
+  if (bodyTs !== undefined) {
+    if (typeof bodyTs !== "string" || isNaN(Date.parse(bodyTs))) { res.status(400).json({ error: "dismissedAt must be a valid ISO 8601 timestamp string" }); return; }
+    dismissedAt = new Date(bodyTs);
+  } else dismissedAt = new Date();
+  await db.insert(bannerDismissalsTable).values({ sessionId: id, dismissedAt }).onConflictDoUpdate({ target: bannerDismissalsTable.sessionId, set: { dismissedAt } });
+  res.json({ sessionId: id, dismissedAt: dismissedAt.toISOString() });
+});
+
+router.delete("/sessions/:id/banner-dismissal", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id ?? "", 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid session id" }); return; }
+  await db.delete(bannerDismissalsTable).where(eq(bannerDismissalsTable.sessionId, id));
+  res.json({ sessionId: id, dismissedAt: null });
+});
+
+router.get("/sessions/:id/export", async (req, res): Promise<void> => {
+  const parsed = GetSessionParams.safeParse(req.params);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const id = parsed.data.id;
+  const [session] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, id));
+  if (!session) { res.status(404).json({ error: "Session not found" }); return; }
+  const [agents, tasks, messages] = await Promise.all([
+    db.select().from(agentsTable).where(eq(agentsTable.sessionId, id)).orderBy(asc(agentsTable.id)),
+    db.select().from(tasksTable).where(eq(tasksTable.sessionId, id)).orderBy(asc(tasksTable.id)),
+    db.select().from(messagesTable).where(eq(messagesTable.sessionId, id)).orderBy(asc(messagesTable.id)),
+  ]);
+  const taskLines = tasks.map((t) => `- [${t.status === "completed" ? "x" : " "}] **${t.title}** (${t.type}) — ${t.status}`);
+  const messageLines = messages.flatMap((m) => [`### ${m.agentName ? `[${m.agentName}]` : "User"} — ${new Date(m.createdAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}`, ``, m.content, ``]);
+  const agentLines = agents.map((a) => `- **${a.name}** — Provider: ${a.provider}, Role: ${a.role}, Mode: ${a.isMock ? "simulation" : "live"}`);
+  const markdown = [`# VIBA - Collaborative Multi-Agent Orchestration System Session Transcript`, ``, `**Goal:** ${session.goal}`, `**Mode:** ${session.mode}`, `**Status:** ${session.status}`, `**Created:** ${new Date(session.createdAt).toISOString()}`, ``, `## Agents (${agents.length})`, ``, ...agentLines, ``, `## Task Plan (${tasks.length} tasks)`, ``, ...taskLines, ``, `## Conversation`, ``, ...messageLines, `---`, `*Exported from VIBA - Collaborative Multi-Agent Orchestration System*`].join("\n");
+  res.set("Content-Type", "text/markdown; charset=utf-8");
+  res.set("Content-Disposition", `attachment; filename="viba-session-${id}.md"`);
+  res.send(markdown);
+});
+
+export default router;
