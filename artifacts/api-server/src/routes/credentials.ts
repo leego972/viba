@@ -1,6 +1,5 @@
 import { Router, type IRouter } from "express";
 import {
-  getVibaCredential,
   listVibaCredentials,
   logVibaEvent,
   markVibaCredential,
@@ -65,9 +64,23 @@ async function validateRailway(token: string): Promise<{ ok: boolean; message: s
   return { ok: true, message: "RAILWAY_TOKEN is valid.", details: data as Record<string, unknown> };
 }
 
+async function validateGroq(token: string): Promise<{ ok: boolean; message: string; details?: Record<string, unknown> }> {
+  const response = await fetch("https://api.groq.com/openai/v1/models", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+      "User-Agent": "VIBA-Credential-Validator/1.0",
+    },
+  });
+  if (!response.ok) return { ok: false, message: `GROQ_API_KEY rejected by Groq. Replace GROQ_API_KEY. HTTP ${response.status}` };
+  const data = await response.json() as { data?: Array<{ id?: string }> };
+  return { ok: true, message: "GROQ_API_KEY is valid and available for low-cost/default VIBA tasks.", details: { modelCount: data.data?.length ?? 0 } };
+}
+
 async function validateProvider(provider: Provider, token: string): Promise<{ ok: boolean; message: string; details?: Record<string, unknown> }> {
   if (provider === "github") return validateGithub(token);
   if (provider === "railway") return validateRailway(token);
+  if (provider === "groq") return validateGroq(token);
   if (provider === "railway_mcp") return { ok: true, message: "RAILWAY_MCP_URL is saved. Tool discovery should be tested through /connections/railway-mcp/tools." };
   if (token.length < 8) return { ok: false, message: `${REQUIRED_ENV[provider][0]} looks too short. Replace ${REQUIRED_ENV[provider][0]}.` };
   return { ok: true, message: `${REQUIRED_ENV[provider][0]} is saved. Live provider call validation can be added per provider.` };
@@ -80,14 +93,15 @@ router.get("/credentials/status", async (req, res): Promise<void> => {
     const presentInEnv = envNames.filter((name) => Boolean(process.env[name]));
     return { provider, envNames, presentInEnv, envMissing: envNames.filter((name) => !process.env[name]) };
   });
-  res.json({ app: "VIBA", saved, required });
+  res.json({ app: "VIBA", defaultProvider: "groq", saved, required });
 });
 
 router.get("/credentials/required", async (_req, res): Promise<void> => {
   res.json({
     app: "VIBA",
+    defaultProvider: "groq",
     required: REQUIRED_ENV,
-    note: "VIBA checks env vars first, then encrypted saved credentials. If validation fails, the response names the exact key to replace.",
+    note: "VIBA checks env vars first, then encrypted saved credentials. If validation fails, the response names the exact key to replace. Groq is preferred for low-cost/default tasks when GROQ_API_KEY exists.",
   });
 });
 
