@@ -11,10 +11,10 @@ import billingRouter from "./billing";
 import githubRouter from "./github";
 import connectionsRouter from "./connections";
 import vibaKeysRouter from "./credentials";
+import webResearchRouter from "./webResearch";
 
 const router: IRouter = Router();
 
-// auth routes are registered first and bypass the ACCESS_TOKEN gate in app.ts
 router.use(authRouter);
 router.use(healthRouter);
 router.use(sessionsRouter);
@@ -27,5 +27,6 @@ router.use(billingRouter);
 router.use(githubRouter);
 router.use(connectionsRouter);
 router.use(vibaKeysRouter);
+router.use(webResearchRouter);
 
 export default router;
