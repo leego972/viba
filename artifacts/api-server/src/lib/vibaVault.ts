@@ -9,6 +9,10 @@ function vaultKey(): Buffer {
   return crypto.createHash("sha256").update(raw).digest();
 }
 
+function ownerId(userId?: number | null): number {
+  return typeof userId === "number" && Number.isFinite(userId) ? userId : 0;
+}
+
 function seal(value: string): { encrypted: string; iv: string; tag: string } {
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv("aes-256-gcm", vaultKey(), iv);
@@ -26,7 +30,7 @@ export async function ensureVibaVault(): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS viba_credentials (
       id SERIAL PRIMARY KEY,
-      user_id INTEGER,
+      user_id INTEGER NOT NULL DEFAULT 0,
       provider TEXT NOT NULL,
       kind TEXT NOT NULL,
       label TEXT NOT NULL DEFAULT 'default',
@@ -56,6 +60,8 @@ export async function ensureVibaVault(): Promise<void> {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_viba_activity_logs_session ON viba_activity_logs (session_id, created_at DESC)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_viba_activity_logs_user ON viba_activity_logs (user_id, created_at DESC)`);
 }
 
 export async function saveVibaCredential(input: { userId?: number | null; provider: string; kind: string; value: string; label?: string }): Promise<void> {
@@ -71,17 +77,18 @@ export async function saveVibaCredential(input: { userId?: number | null; provid
                    status = 'saved',
                    last_error = NULL,
                    updated_at = NOW()`,
-    [input.userId ?? null, input.provider, input.kind, input.label ?? "default", packed.encrypted, packed.iv, packed.tag],
+    [ownerId(input.userId), input.provider, input.kind, input.label ?? "default", packed.encrypted, packed.iv, packed.tag],
   );
 }
 
 export async function getVibaCredential(input: { userId?: number | null; provider: string; kind: string; label?: string }): Promise<string | null> {
   await ensureVibaVault();
+  const currentOwnerId = ownerId(input.userId);
   const { rows } = await pool.query<{ encrypted_value: string; iv: string; auth_tag: string }>(
     `SELECT encrypted_value, iv, auth_tag FROM viba_credentials
-      WHERE (user_id = $1 OR user_id IS NULL) AND provider = $2 AND kind = $3 AND label = $4
-      ORDER BY user_id NULLS LAST, updated_at DESC LIMIT 1`,
-    [input.userId ?? null, input.provider, input.kind, input.label ?? "default"],
+      WHERE user_id IN ($1, 0) AND provider = $2 AND kind = $3 AND label = $4
+      ORDER BY CASE WHEN user_id = $1 THEN 0 ELSE 1 END, updated_at DESC LIMIT 1`,
+    [currentOwnerId, input.provider, input.kind, input.label ?? "default"],
   );
   return rows[0] ? open(rows[0]) : null;
 }
@@ -98,12 +105,13 @@ export async function resolveVibaCredential(input: { userId?: number | null; pro
 
 export async function listVibaCredentials(userId?: number | null): Promise<Array<Record<string, unknown>>> {
   await ensureVibaVault();
+  const currentOwnerId = ownerId(userId);
   const { rows } = await pool.query(
     `SELECT provider, kind, label, status, last_validated_at, last_error, updated_at
        FROM viba_credentials
-      WHERE user_id = $1 OR user_id IS NULL
+      WHERE user_id IN ($1, 0)
       ORDER BY provider ASC, kind ASC`,
-    [userId ?? null],
+    [currentOwnerId],
   );
   return rows;
 }
@@ -112,8 +120,8 @@ export async function markVibaCredential(input: { userId?: number | null; provid
   await ensureVibaVault();
   await pool.query(
     `UPDATE viba_credentials SET status = $1, last_validated_at = NOW(), last_error = $2, updated_at = NOW()
-      WHERE (user_id = $3 OR user_id IS NULL) AND provider = $4 AND kind = $5 AND label = $6`,
-    [input.status, input.error ?? null, input.userId ?? null, input.provider, input.kind, input.label ?? "default"],
+      WHERE user_id = $3 AND provider = $4 AND kind = $5 AND label = $6`,
+    [input.status, input.error ?? null, ownerId(input.userId), input.provider, input.kind, input.label ?? "default"],
   );
 }
 
