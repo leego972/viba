@@ -6,6 +6,7 @@ import { runFullWorkflow, runNextAgentStep } from "../lib/agentLoop";
 import { fallbackStatus, resetFallbackPool, returnTaskToPool } from "../lib/fallbackPool";
 import { confirmBrowserSession, getBrowserSession, listBrowserSessions, revokeBrowserSession, startBrowserSession } from "../lib/browserSessionHandoff";
 import { logVibaEvent } from "../lib/vibaVault";
+import { orchestrateUserInstruction } from "../lib/instructionOrchestrator";
 
 const router: IRouter = Router();
 
@@ -64,6 +65,19 @@ async function poolSignals(sessionId: number, messages: Array<{ id: number; task
 router.get("/healthz", (_req, res) => {
   const data = HealthCheckResponse.parse({ status: "ok" });
   res.json(data);
+});
+
+router.post("/sessions/:id/instruct", async (req, res): Promise<void> => {
+  const id = idParam(req.params.id);
+  if (!id) { res.status(400).json({ error: "valid session id required" }); return; }
+  try {
+    const body = req.body as { content?: unknown; instruction?: unknown };
+    const content = body.content ?? body.instruction;
+    const result = await orchestrateUserInstruction({ sessionId: id, content, userId: userId(req) });
+    res.status(201).json({ ok: true, ...result });
+  } catch (error) {
+    res.status(400).json({ ok: false, error: error instanceof Error ? error.message : "instruction orchestration failed" });
+  }
 });
 
 router.get("/sessions/:id/provider-health", async (req, res): Promise<void> => {
