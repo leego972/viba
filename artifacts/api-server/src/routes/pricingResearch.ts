@@ -175,35 +175,42 @@ function makeBenchmark(category: string, sources: SourcePricing[]) {
   };
 }
 
-router.post("/pricing-research/benchmark", async (req, res): Promise<void> => {
+async function benchmarkCategory(req: { body: unknown; session?: { userId?: number } }, categoryOverride?: string, topNOverride?: number) {
   const body = req.body as { category?: unknown; topN?: unknown; query?: unknown };
-  const category = typeof body.category === "string" && body.category.trim() ? body.category.trim() : "AI builder apps";
-  const topN = Math.min(Math.max(Number(body.topN ?? 10), 1), 10);
+  const category = categoryOverride ?? (typeof body.category === "string" && body.category.trim() ? body.category.trim() : "AI builder apps");
+  const topN = topNOverride ?? Math.min(Math.max(Number(body.topN ?? 10), 1), 10);
   const query = typeof body.query === "string" && body.query.trim()
     ? body.query.trim()
     : `${category} pricing plans AI app builder code builder`;
 
+  const searchResults = (await braveSearch(query, 20)).filter((r) => looksRelevant(r, category)).slice(0, topN);
+  const sources = await Promise.all(searchResults.map(fetchPricingSource));
+  const result = makeBenchmark(category, sources);
+  await logVibaEvent({
+    userId: userId(req),
+    eventType: "pricing_benchmark",
+    provider: "web_research",
+    status: "ok",
+    message: `Pricing benchmark completed for ${category}.`,
+    metadata: { topN, pricedSources: result.benchmark.pricedSources, suggestedMonthlyPrice: result.recommendation.suggestedMonthlyPrice },
+  });
+  return { ok: true, query, topN, ...result, sources, note: "Public pricing pages are parsed heuristically. Review extracted prices before making final business decisions." };
+}
+
+router.post("/pricing-research/benchmark", async (req, res): Promise<void> => {
   try {
-    const searchResults = (await braveSearch(query, 20)).filter((r) => looksRelevant(r, category)).slice(0, topN);
-    const sources = await Promise.all(searchResults.map(fetchPricingSource));
-    const result = makeBenchmark(category, sources);
-    await logVibaEvent({
-      userId: userId(req),
-      eventType: "pricing_benchmark",
-      provider: "web_research",
-      status: "ok",
-      message: `Pricing benchmark completed for ${category}.`,
-      metadata: { topN, pricedSources: result.benchmark.pricedSources, suggestedMonthlyPrice: result.recommendation.suggestedMonthlyPrice },
-    });
-    res.json({ ok: true, query, topN, ...result, sources, note: "Public pricing pages are parsed heuristically. Review extracted prices before making final business decisions." });
+    res.json(await benchmarkCategory(req));
   } catch (error) {
     res.status(503).json({ ok: false, keyToAdd: "BRAVE_SEARCH_API_KEY", message: error instanceof Error ? error.message : "Pricing benchmark failed." });
   }
 });
 
 router.post("/pricing-research/builder-apps", async (req, res): Promise<void> => {
-  req.body = { ...(req.body as object), category: "AI builder apps", topN: 10 };
-  router.handle(req, res);
+  try {
+    res.json(await benchmarkCategory(req, "AI builder apps", 10));
+  } catch (error) {
+    res.status(503).json({ ok: false, keyToAdd: "BRAVE_SEARCH_API_KEY", message: error instanceof Error ? error.message : "Builder-app pricing benchmark failed." });
+  }
 });
 
 export default router;
