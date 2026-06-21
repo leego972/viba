@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 
 export const sessionsTable = pgTable("sessions", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id"),
   goal: text("goal").notNull(),
   status: text("status").notNull().default("active"),
   autonomyMode: text("autonomy_mode").notNull().default("supervised"),
