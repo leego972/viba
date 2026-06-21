@@ -30,7 +30,7 @@ function melbourneRunKey(date = new Date()): string {
 
 function isSundayTenPmMelbourne(date = new Date()): boolean {
   const p = melbourneParts(date);
-  return p.weekday === "Sun" && p.hour === "22" && p.minute === "00";
+  return p.weekday === "Sun" && p.hour === "22";
 }
 
 async function ensureTables(): Promise<void> {
