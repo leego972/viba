@@ -9,7 +9,7 @@ import Home from "@/pages/home";
 import UserInstructions from "@/pages/user-instructions";
 import Dashboard from "@/pages/dashboard";
 import NewSession from "@/pages/new-session";
-import SessionWorkspace from "@/pages/session-workspace";
+import SessionWorkspace from "@/pages/session-workspace-clinical";
 import Settings from "@/pages/settings";
 import Workbench from "@/pages/workbench";
 import Bridge from "@/pages/bridge";
