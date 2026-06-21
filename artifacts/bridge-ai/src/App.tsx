@@ -45,19 +45,32 @@ function AuthGuard({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated && !isBypassValid()) {
-      setLocation("/login");
-    }
+    if (!isLoading && !isAuthenticated && !isBypassValid()) setLocation("/login");
   }, [isLoading, isAuthenticated, setLocation]);
 
-  // Archibald Titan AI embedded bypass — skip auth entirely
   if (isBypassValid()) return <>{children}</>;
+  if (isLoading) return <Spinner />;
+  if (!isAuthenticated) return <Spinner />;
+  return <>{children}</>;
+}
+
+function isAdminEmail(email: string | null | undefined): boolean {
+  const configured = (import.meta.env.VITE_VIBA_ADMIN_EMAILS || import.meta.env.VITE_VIBA_ADMIN_EMAIL || "leego972@gmail.com") as string;
+  return configured.split(",").map((item) => item.trim().toLowerCase()).filter(Boolean).includes((email ?? "").toLowerCase());
+}
+
+function AdminGuard() {
+  const [, setLocation] = useLocation();
+  const { user, isAuthenticated, isLoading } = useAuth();
+
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) setLocation("/login");
+  }, [isLoading, isAuthenticated, setLocation]);
 
   if (isLoading) return <Spinner />;
-
   if (!isAuthenticated) return <Spinner />;
-
-  return <>{children}</>;
+  if (!isAdminEmail(user?.email)) return <NotFound />;
+  return <Admin />;
 }
 
 function GatedRouter() {
@@ -78,7 +91,6 @@ function GatedRouter() {
   );
 }
 
-// Handles ?bypass= param at app startup (Archibald Titan AI embed)
 function BypassHandler() {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -96,7 +108,6 @@ function BypassHandler() {
           setBypassValid();
           const cleanUrl = window.location.pathname + window.location.hash;
           window.history.replaceState(null, "", cleanUrl);
-          // Force re-render so AuthGuard picks up the new bypass state
           queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
         }
       })
@@ -116,7 +127,6 @@ function App() {
           <BypassHandler />
           <ErrorBoundary>
             <Switch>
-              {/* Public routes */}
               <Route path="/login" component={LoginPage} />
               <Route path="/signup" component={SignUpPage} />
               <Route path="/forgot-password" component={ForgotPassword} />
@@ -124,9 +134,7 @@ function App() {
               <Route path="/verify-email" component={VerifyEmail} />
               <Route path="/pricing" component={Pricing} />
               <Route path="/checkout/success" component={CheckoutSuccess} />
-              {/* Admin — self-gated by ADMIN_TOKEN, no session required */}
-              <Route path="/admin" component={Admin} />
-              {/* All other routes — gated by AuthGuard */}
+              <Route path="/admin" component={AdminGuard} />
               <Route component={GatedRouter} />
             </Switch>
           </ErrorBoundary>
