@@ -1,4 +1,4 @@
-import nodemailer from "nodemailer";
+import * as nodemailer from "nodemailer";
 
 export type MaintenanceNotice = {
   subject: string;
