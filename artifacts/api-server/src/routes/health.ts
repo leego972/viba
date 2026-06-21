@@ -5,6 +5,7 @@ import { agentsTable, db, tasksTable } from "@workspace/db";
 import { runFullWorkflow, runNextAgentStep } from "../lib/agentLoop";
 import { fallbackStatus, resetFallbackPool, returnTaskToPool } from "../lib/fallbackPool";
 import { confirmBrowserSession, getBrowserSession, listBrowserSessions, revokeBrowserSession, startBrowserSession } from "../lib/browserSessionHandoff";
+import { logVibaEvent } from "../lib/vibaVault";
 
 const router: IRouter = Router();
 
@@ -128,6 +129,25 @@ router.post("/browser-sessions/:id/revoke", async (req, res): Promise<void> => {
   const id = idParam(req.params.id);
   if (!id) { res.status(400).json({ error: "valid browser session id required" }); return; }
   res.json({ ok: true, session: await revokeBrowserSession({ id, userId: userId(req) }) });
+});
+
+router.post("/viba/logs", async (req, res): Promise<void> => {
+  const body = req.body as { sessionId?: unknown; eventType?: unknown; severity?: unknown; provider?: unknown; subject?: unknown; status?: unknown; message?: unknown; metadata?: unknown };
+  const eventType = typeof body.eventType === "string" && body.eventType.trim() ? body.eventType.trim() : "manual_event";
+  const message = typeof body.message === "string" && body.message.trim() ? body.message.trim() : eventType;
+  const sessionId = typeof body.sessionId === "number" ? body.sessionId : null;
+  await logVibaEvent({
+    userId: userId(req),
+    sessionId,
+    eventType,
+    severity: typeof body.severity === "string" ? body.severity : "info",
+    provider: typeof body.provider === "string" ? body.provider : null,
+    subject: typeof body.subject === "string" ? body.subject : null,
+    status: typeof body.status === "string" ? body.status : "created",
+    message,
+    metadata: body.metadata && typeof body.metadata === "object" && !Array.isArray(body.metadata) ? body.metadata as Record<string, unknown> : null,
+  });
+  res.status(201).json({ ok: true, message: "VIBA activity logged." });
 });
 
 export default router;
