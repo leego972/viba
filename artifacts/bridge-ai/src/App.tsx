@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
+import UserInstructions from "@/pages/user-instructions";
 import Dashboard from "@/pages/dashboard";
 import NewSession from "@/pages/new-session";
 import SessionWorkspace from "@/pages/session-workspace";
@@ -22,7 +23,6 @@ import ResetPassword from "@/pages/reset-password";
 import VerifyEmail from "@/pages/verify-email";
 import Billing from "@/pages/billing";
 import { useAuth } from "@/hooks/useAuth";
-import { isBypassValid, setBypassValid } from "@/lib/auth";
 
 const queryClient = new QueryClient();
 
@@ -43,8 +43,7 @@ function Spinner() {
 function AuthGuard({ children }: { children: ReactNode }) {
   const [, setLocation] = useLocation();
   const { isAuthenticated, isLoading } = useAuth();
-  useEffect(() => { if (!isLoading && !isAuthenticated && !isBypassValid()) setLocation("/login"); }, [isLoading, isAuthenticated, setLocation]);
-  if (isBypassValid()) return <>{children}</>;
+  useEffect(() => { if (!isLoading && !isAuthenticated) setLocation("/login"); }, [isLoading, isAuthenticated, setLocation]);
   if (isLoading) return <Spinner />;
   if (!isAuthenticated) return <Spinner />;
   return <>{children}</>;
@@ -87,30 +86,12 @@ function GatedRouter() {
   );
 }
 
-function BypassHandler() {
-  useEffect(() => {
-    const bypassParam = new URLSearchParams(window.location.search).get("bypass");
-    if (!bypassParam || isBypassValid()) return;
-    fetch("/api/auth/verify-bypass", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ token: bypassParam }) })
-      .then(async (res) => {
-        if (res.ok) {
-          setBypassValid();
-          window.history.replaceState(null, "", window.location.pathname + window.location.hash);
-          queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
-        }
-      })
-      .catch(() => {});
-  }, []);
-  return null;
-}
-
 function App() {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={basePath}>
-          <BypassHandler />
           <ErrorBoundary>
             <Switch>
               <Route path="/login" component={LoginPage} />
@@ -119,6 +100,7 @@ function App() {
               <Route path="/reset-password" component={ResetPassword} />
               <Route path="/verify-email" component={VerifyEmail} />
               <Route path="/pricing" component={Pricing} />
+              <Route path="/user-instructions" component={UserInstructions} />
               <Route path="/checkout/success" component={CheckoutSuccess} />
               <Route path="/admin/maintenance" component={AdminMaintenanceRoute} />
               <Route path="/admin" component={AdminMaintenanceRoute} />
