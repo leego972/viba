@@ -1,4 +1,5 @@
 import type { RequestHandler } from "express";
+import { pool } from "@workspace/db";
 import { getStripeClient, isStripeConfigured } from "../lib/stripe/client";
 import {
   getSubscriberByCustomerId,
@@ -12,7 +13,6 @@ import {
   markWebhookProcessed,
   getUserByStripeCustomer,
   linkSubscription,
-  refreshMonthlyCredits,
   updateSubscriptionStatus,
   grantCredits,
   VIBA_PLAN,
@@ -23,8 +23,27 @@ import {
   sendSubscriptionCanceledEmail,
 } from "../lib/billingEmail";
 
+const PAID_MONTHLY_CREDITS = 1500;
+
 function tsToDate(ts: number | null | undefined): Date | null {
   return ts != null ? new Date(ts * 1000) : null;
+}
+
+async function resetPaidCredits(userId: number, periodEnd: Date | null): Promise<void> {
+  await pool.query(
+    `UPDATE users SET
+       credits_remaining = $1,
+       credits_period_end = $2,
+       subscription_status = 'active',
+       updated_at = NOW()
+     WHERE id = $3`,
+    [PAID_MONTHLY_CREDITS, periodEnd, userId],
+  );
+  await pool.query(
+    `INSERT INTO credit_transactions (user_id, amount, balance_after, reason)
+     VALUES ($1, $2, $3, $4)`,
+    [userId, PAID_MONTHLY_CREDITS, PAID_MONTHLY_CREDITS, "paid_allowance_reset"],
+  );
 }
 
 export const webhookHandler: RequestHandler = async (req, res): Promise<void> => {
@@ -80,7 +99,7 @@ export const webhookHandler: RequestHandler = async (req, res): Promise<void> =>
             const isTrial = sub.status === "trialing";
             const initialCredits = isTrial
               ? VIBA_CREDIT_ECONOMICS.trialCreditsDaily
-              : Number(meta["credits"] ?? VIBA_PLAN.monthlyCredits);
+              : Number(meta["credits"] ?? PAID_MONTHLY_CREDITS);
             await grantCredits(
               userId,
               initialCredits,
@@ -135,7 +154,7 @@ export const webhookHandler: RequestHandler = async (req, res): Promise<void> =>
         if (!subId) break;
 
         if (invoice.billing_reason === "subscription_create" && (invoice.amount_paid ?? 0) === 0) {
-          logger.info({ subscriptionId: subId }, "Trial invoice succeeded — monthly reset skipped until paid renewal");
+          logger.info({ subscriptionId: subId }, "Trial invoice succeeded — paid credit reset skipped until paid renewal");
           break;
         }
 
@@ -143,8 +162,8 @@ export const webhookHandler: RequestHandler = async (req, res): Promise<void> =>
         const user = await getUserByStripeCustomer(customerId);
         if (user) {
           const periodEnd = tsToDate(invoice.period_end);
-          await refreshMonthlyCredits(user.id, periodEnd);
-          logger.info({ userId: user.id }, "Billing: monthly credits reset on paid renewal");
+          await resetPaidCredits(user.id, periodEnd);
+          logger.info({ userId: user.id, credits: PAID_MONTHLY_CREDITS }, "Billing: paid credits reset on renewal");
         }
 
         await updateSubscriberBySubscriptionId(subId, { status: "active" });
