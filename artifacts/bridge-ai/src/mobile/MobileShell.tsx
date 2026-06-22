@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { Home, LayoutDashboard, PlusCircle, Settings, CreditCard } from "lucide-react";
+import { CreditBalancePill } from "@/components/CreditBalancePill";
 
 type MobileShellProps = {
   children: ReactNode;
@@ -30,6 +31,7 @@ export function MobileShell({ children }: MobileShellProps) {
           <span>{isSession ? "Live Session" : "VIBA"}</span>
         </Link>
         <nav className="viba-mobile-actions" aria-label="Quick actions">
+          <CreditBalancePill compact className="viba-mobile-credit" />
           <Link href="/sessions/new" className="viba-mobile-action" aria-label="Start new session">
             New
           </Link>
