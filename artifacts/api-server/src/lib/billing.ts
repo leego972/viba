@@ -24,8 +24,9 @@ export const VIBA_CREDIT_ECONOMICS = {
   smallRepairCredits: 90,
   typicalSmallRepairCount: 3,
   fullAuditRepairEstimateCredits: 580,
-  trialCredits: 420,
+  trialCreditsDaily: 500,
   monthlyCredits: 1000,
+  annualCredits: 15600,
   topUpCredits: 1000,
   topUpUnitAmount: 5000,
 } as const;
@@ -35,12 +36,12 @@ export const VIBA_PLAN = {
   priceEnvKey: "STRIPE_BILLING_SUBSCRIPTION_PRICE_ID",
   productName: "VIBA Member",
   description:
-    "Full access to VIBA collaborative multi-agent orchestration. Includes 1,000 credits/month and a 3-day trial.",
+    "Full access to VIBA collaborative multi-agent orchestration. Includes 1,000 credits/month and a 3-day trial with 500 daily credits.",
   unitAmount: 5000,
   currency: "usd",
   monthlyCredits: VIBA_CREDIT_ECONOMICS.monthlyCredits,
   trialDays: 3,
-  trialCredits: VIBA_CREDIT_ECONOMICS.trialCredits,
+  trialCredits: VIBA_CREDIT_ECONOMICS.trialCreditsDaily,
 } as const;
 
 export interface CreditPack {
@@ -96,6 +97,7 @@ export async function provisionStripeProducts(): Promise<void> {
         type: "subscription",
         credits: String(VIBA_PLAN.monthlyCredits),
         trialDays: String(VIBA_PLAN.trialDays),
+        trialCreditsDaily: String(VIBA_PLAN.trialCredits),
       },
     });
     _priceCache[VIBA_PLAN.key] = priceId;
@@ -168,6 +170,45 @@ async function findOrCreatePrice(opts: {
   return price.id;
 }
 
+async function ensureDailyTrialCredits(userId: number): Promise<void> {
+  const userResult = await pool.query<{
+    subscription_status: string | null;
+    credits_period_end: Date | null;
+    credits_remaining: number;
+  }>(
+    `SELECT subscription_status, credits_period_end, credits_remaining
+     FROM users WHERE id = $1`,
+    [userId],
+  );
+  const user = userResult.rows[0];
+  if (!user || user.subscription_status !== "trialing") return;
+  if (user.credits_period_end && user.credits_period_end.getTime() < Date.now()) return;
+
+  const resetCheck = await pool.query(
+    `SELECT id FROM credit_transactions
+     WHERE user_id = $1
+       AND reason = 'trial_daily_reset'
+       AND created_at >= date_trunc('day', NOW())
+     LIMIT 1`,
+    [userId],
+  );
+  if ((resetCheck.rowCount ?? 0) > 0) return;
+
+  const newBalance = VIBA_CREDIT_ECONOMICS.trialCreditsDaily;
+  const delta = newBalance - (user.credits_remaining ?? 0);
+  await pool.query(
+    `UPDATE users SET credits_remaining = $1, updated_at = NOW()
+     WHERE id = $2`,
+    [newBalance, userId],
+  );
+  await pool.query(
+    `INSERT INTO credit_transactions (user_id, amount, balance_after, reason)
+     VALUES ($1, $2, $3, $4)`,
+    [userId, delta, newBalance, "trial_daily_reset"],
+  );
+  logger.info({ userId, balanceAfter: newBalance }, "Billing: trial credits reset for the day");
+}
+
 export async function grantCredits(
   userId: number,
   amount: number,
@@ -192,6 +233,7 @@ export async function deductCredits(
   amount: number,
   sessionId?: number,
 ): Promise<boolean> {
+  await ensureDailyTrialCredits(userId);
   const result = await pool.query(
     `UPDATE users SET credits_remaining = credits_remaining - $1, updated_at = NOW()
      WHERE id = $2 AND credits_remaining >= $1
@@ -230,6 +272,7 @@ export async function getCreditTransactions(
 }
 
 export async function getCredits(userId: number): Promise<number> {
+  await ensureDailyTrialCredits(userId);
   const result = await pool.query(
     `SELECT credits_remaining FROM users WHERE id = $1`,
     [userId],
@@ -270,7 +313,12 @@ export async function refreshMonthlyCredits(
      WHERE id = $3`,
     [VIBA_PLAN.monthlyCredits, periodEnd, userId],
   );
-  logger.info({ userId, credits: VIBA_PLAN.monthlyCredits }, "Billing: monthly credits refreshed");
+  await pool.query(
+    `INSERT INTO credit_transactions (user_id, amount, balance_after, reason)
+     VALUES ($1, $2, $3, $4)`,
+    [userId, VIBA_PLAN.monthlyCredits, VIBA_PLAN.monthlyCredits, "monthly_allowance_reset"],
+  );
+  logger.info({ userId, credits: VIBA_PLAN.monthlyCredits }, "Billing: monthly credits reset");
 }
 
 export async function updateSubscriptionStatus(
@@ -323,6 +371,7 @@ export async function getBillingStatus(userId: number): Promise<{
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
 }> {
+  await ensureDailyTrialCredits(userId);
   const result = await pool.query(
     `SELECT subscription_status, credits_remaining, credits_period_end,
             stripe_customer_id, stripe_subscription_id
