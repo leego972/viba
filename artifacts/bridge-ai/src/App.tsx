@@ -5,6 +5,9 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import VibaFooter from "@/components/VibaFooterFinal";
+import { MobileShell } from "@/mobile/MobileShell";
+import "@/mobile/mobileStyles.css";
+import { installMobileViewportFix } from "@/mobile/viewport";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import UserInstructions from "@/pages/user-instructions";
@@ -89,28 +92,34 @@ function GatedRouter() {
 }
 
 function App() {
+  useEffect(() => {
+    installMobileViewportFix();
+  }, []);
+
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={basePath}>
-          <ErrorBoundary>
-            <Switch>
-              <Route path="/login" component={LoginPage} />
-              <Route path="/signup" component={SignUpPage} />
-              <Route path="/forgot-password" component={ForgotPassword} />
-              <Route path="/reset-password" component={ResetPassword} />
-              <Route path="/verify-email" component={VerifyEmail} />
-              <Route path="/pricing" component={Pricing} />
-              <Route path="/user-instructions" component={UserInstructions} />
-              <Route path="/terms" component={Terms} />
-              <Route path="/checkout/success" component={CheckoutSuccess} />
-              <Route path="/admin/maintenance" component={AdminMaintenanceRoute} />
-              <Route path="/admin" component={AdminMaintenanceRoute} />
-              <Route component={GatedRouter} />
-            </Switch>
-          </ErrorBoundary>
-          <VibaFooter />
+          <MobileShell>
+            <ErrorBoundary>
+              <Switch>
+                <Route path="/login" component={LoginPage} />
+                <Route path="/signup" component={SignUpPage} />
+                <Route path="/forgot-password" component={ForgotPassword} />
+                <Route path="/reset-password" component={ResetPassword} />
+                <Route path="/verify-email" component={VerifyEmail} />
+                <Route path="/pricing" component={Pricing} />
+                <Route path="/user-instructions" component={UserInstructions} />
+                <Route path="/terms" component={Terms} />
+                <Route path="/checkout/success" component={CheckoutSuccess} />
+                <Route path="/admin/maintenance" component={AdminMaintenanceRoute} />
+                <Route path="/admin" component={AdminMaintenanceRoute} />
+                <Route component={GatedRouter} />
+              </Switch>
+            </ErrorBoundary>
+            <VibaFooter />
+          </MobileShell>
         </WouterRouter>
         <Toaster />
       </TooltipProvider>
