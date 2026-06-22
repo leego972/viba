@@ -29,11 +29,16 @@ const AVAILABLE_PROVIDERS = [
 
 const ROLES = [
   "Strategist",
-  "Creative Director",
   "Researcher",
+  "Creative Director",
   "Builder",
+  "Tester",
+  "Critic",
+  "Risk Officer",
+  "Monetiser",
   "Code Reviewer",
   "UX Reviewer",
+  "Verifier",
   "Final QA"
 ];
 
@@ -56,6 +61,15 @@ const SESSION_TEMPLATES: Array<{
   autonomyMode: string;
   agents: Partial<Record<string, string>>;
 }> = [
+  {
+    id: "business-asset-passport",
+    emoji: "🧭",
+    label: "Asset Passport",
+    description: "Research, design, build, verify, score & monetise",
+    goal: "Create a VIBA Business Asset Passport for this business system. Research the customer need and market context, design the business asset, build or specify the implementation, verify proof gates, score readiness, identify improvements, and package the revenue path. Output an asset ledger, proof gates, risk flags, next best action, and monetisation plan. Do not mark the asset ready without proof.",
+    autonomyMode: "Supervised",
+    agents: { openai: "Strategist", gemini: "Researcher", anthropic: "Builder", groq: "Tester", manus: "Verifier" },
+  },
   {
     id: "code-review",
     emoji: "🔍",
@@ -345,8 +359,11 @@ export default function NewSession() {
     <AppLayout>
       <div className="max-w-4xl mx-auto space-y-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">New Session</h1>
-          <p className="text-muted-foreground">Configure your agents and project goal</p>
+          <Badge variant="outline" className="mb-3 gap-1.5 border-primary/30 bg-primary/10 text-primary">
+            <Sparkles className="h-3.5 w-3.5" /> Business Asset Passport
+          </Badge>
+          <h1 className="text-3xl font-bold tracking-tight">Start a proof-led agent session</h1>
+          <p className="text-muted-foreground">Research, design, build, verify, score, improve, and monetise a business asset with the right AI team.</p>
         </div>
 
         {/* Quick-start Templates */}
@@ -379,11 +396,11 @@ export default function NewSession() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Target className="h-5 w-5" /> Project Goal</CardTitle>
-            <CardDescription>What should the AI team build or accomplish?</CardDescription>
+            <CardDescription>What should the AI team research, design, build, verify, or improve?</CardDescription>
           </CardHeader>
           <CardContent>
             <Textarea 
-              placeholder="E.g., Build a personal finance tracker web app using React and Tailwind. The app should allow users to add expenses, categorize them, and see a monthly summary chart."
+              placeholder="E.g., Create a Business Asset Passport for our website: research the customer need, design the improvement plan, identify what to build, verify proof gates, score readiness, and package the revenue path."
               className="min-h-[150px] resize-none"
               value={goal}
               onChange={(e) => setGoal(e.target.value)}
@@ -410,7 +427,7 @@ export default function NewSession() {
                   <ChevronDown className={`h-4 w-4 ml-auto transition-transform ${workspaceOpen ? "rotate-180" : ""}`} />
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  Connect a git repo so tool-capable agents (Replit, Manus) can clone, run, and deploy code.
+                  Connect a git repo so tool-capable agents can clone, inspect, build, test, and improve real systems.
                 </CardDescription>
               </CardHeader>
             </CollapsibleTrigger>
