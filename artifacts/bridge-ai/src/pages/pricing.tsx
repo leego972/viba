@@ -32,11 +32,12 @@ function fmt(cents: number) {
 }
 
 function defaultFeatures(plan?: Plan) {
-  const monthlyCredits = plan?.monthlyCredits ?? 1000;
+  const monthlyCredits = plan?.monthlyCredits ?? 1500;
   return [
     `${monthlyCredits.toLocaleString()} credits per month included`,
     "Included monthly credits reset each billing month and do not accumulate",
     "Trial users get 500 credits per day for 3 days",
+    "Normal chat is free; credits are deducted only when agents execute task work",
     "Full multi-agent orchestration workspace",
     "Website/project review, repair planning, and implementation sessions",
     "Background full-run mode continues after the user exits",
@@ -123,7 +124,7 @@ export default function Pricing() {
   const plan = plans?.plan;
   const packs = plans?.creditPacks ?? [];
   const trialDays = plan?.trialDays ?? 3;
-  const monthlyCredits = plan?.monthlyCredits ?? 1000;
+  const monthlyCredits = plan?.monthlyCredits ?? 1500;
   const features = defaultFeatures(plan);
 
   return (
