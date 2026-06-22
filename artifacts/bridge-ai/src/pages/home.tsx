@@ -19,8 +19,8 @@ const features = [
     icon: ShieldCheck,
   },
   {
-    title: "Growth Engine",
-    text: "Convert buyer demand into private beta-testing, repair planning, launch-readiness, and follow-up workflows after login.",
+    title: "Business asset engine",
+    text: "Turn buyer demand into private beta-testing, repair planning, launch-readiness, and follow-up workflows after login.",
     icon: TrendingUp,
   },
 ];
@@ -68,13 +68,13 @@ export default function Home() {
           <div className="mx-auto grid max-w-7xl items-center gap-10 lg:grid-cols-[1fr_0.9fr]">
             <div className="relative z-10">
               <div className="inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-teal-700">
-                <Sparkles className="h-3.5 w-3.5" /> Multi-agent control room
+                <Sparkles className="h-3.5 w-3.5" /> Very Interesting Business Assets
               </div>
               <h1 className="mt-6 max-w-4xl text-5xl font-semibold tracking-tight text-slate-950 sm:text-6xl lg:text-7xl">
-                A clean AI workspace for serious builds.
+                VIBA turns serious business work into controlled AI execution.
               </h1>
               <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-600">
-                Give VIBA a task, upload the context, and watch your AI agents coordinate, question each other, write what they are doing, and deliver controlled work without clutter.
+                VIBA stands for Very Interesting Business Assets: a clean AI workspace where agents coordinate, question each other, process project context, and turn useful ideas into structured business assets.
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <Link href="/dashboard">
@@ -94,7 +94,7 @@ export default function Home() {
                 </Link>
               </div>
               <div className="mt-8 flex flex-wrap gap-2 text-xs text-slate-500">
-                {['Groq default AI', 'ChatGPT-style workflow', 'Private Growth Engine', 'Admin-gated source controls'].map((item) => (
+                {['Very Interesting Business Assets', 'Groq default AI', 'Private Growth Engine', 'Admin-gated source controls'].map((item) => (
                   <span key={item} className="rounded-full border border-slate-200 bg-white px-3 py-1.5">{item}</span>
                 ))}
               </div>
@@ -106,13 +106,13 @@ export default function Home() {
                   <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-950 text-white">V</div>
                   <div>
                     <p className="text-sm font-semibold text-slate-950">VIBA live session</p>
-                    <p className="text-xs text-slate-500">Agents working · clean execution thread</p>
+                    <p className="text-xs text-slate-500">Business assets · clean execution thread</p>
                   </div>
                   <span className="ml-auto rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">Live</span>
                 </div>
                 <div className="space-y-3">
-                  <Bubble name="Strategist" text="I’m breaking the request into build, safety, and UI tasks before assigning work." />
-                  <Bubble name="Builder" text="I’m checking the repo structure and identifying which files need to change." />
+                  <Bubble name="Strategist" text="I’m turning the business request into build, safety, offer, and execution tasks." />
+                  <Bubble name="Builder" text="I’m checking the project context and identifying what needs to be created, repaired, or packaged." />
                   <Bubble name="Reviewer" text="I’ll verify the result and flag anything risky before approval." />
                 </div>
                 <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-400">
@@ -127,7 +127,7 @@ export default function Home() {
           <div className="mx-auto max-w-7xl">
             <div className="max-w-2xl">
               <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Simple navigation. No clutter.</h2>
-              <p className="mt-3 text-slate-600">The app is organized around the session: conversation in the center, command box at the bottom, secondary panels around it only when useful.</p>
+              <p className="mt-3 text-slate-600">The app is organized around the business asset being created: conversation in the center, command box at the bottom, secondary panels around it only when useful.</p>
             </div>
             <div className="mt-8 grid gap-4 md:grid-cols-4">
               {features.map(({ title, text, icon: Icon }) => (
@@ -149,9 +149,9 @@ export default function Home() {
               <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
                 <LockKeyhole className="h-3.5 w-3.5" /> Feature runs after login
               </div>
-              <h2 className="mt-5 text-4xl font-semibold tracking-tight text-slate-950">Private Growth Engine for beta-testing revenue workflows.</h2>
+              <h2 className="mt-5 text-4xl font-semibold tracking-tight text-slate-950">Private Growth Engine for business-asset revenue workflows.</h2>
               <p className="mt-4 text-base leading-7 text-slate-600">
-                VIBA now explains the advertising system publicly but keeps the actual engine behind login. The system is not a shame board. It captures customer demand, qualifies the opportunity, and turns it into private beta-testing, repair, and launch-protection work.
+                VIBA explains the advertising system publicly but keeps the actual engine behind login. The system is not a shame board. It captures customer demand, qualifies the opportunity, and turns it into private beta-testing, repair, launch-protection, and sellable business assets.
               </p>
               <Link href="/bridge">
                 <Button className="mt-7 h-12 rounded-xl bg-slate-950 px-7 text-base text-white hover:bg-slate-800">
