@@ -91,7 +91,7 @@ export function decomposeInstruction(instruction: string): PlannedTask[] {
 
 function previewAssignments(tasks: PlannedTask[], agents: Agent[]): AssignmentPreview[] {
   return tasks.map((task, index) => {
-    const pseudoTask = { id: index + 1, type: task.type, title: task.title, toolRequirements: [] } as Task;
+    const pseudoTask = { id: index + 1, type: task.type, toolRequirements: [] };
     const agent = routeTask(pseudoTask, agents);
     return {
       taskTitle: task.title,

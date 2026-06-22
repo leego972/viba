@@ -6,8 +6,9 @@ const router: IRouter = Router();
 
 const MAX_ATTACHMENT_BYTES = Number(process.env.VIBA_MAX_ATTACHMENT_BYTES ?? 25 * 1024 * 1024);
 
-function idParam(value: string | undefined): number | null {
-  const id = Number(value);
+function idParam(value: string | string[] | undefined): number | null {
+  const normalized = Array.isArray(value) ? value[0] : value;
+  const id = Number(normalized);
   return Number.isFinite(id) && id > 0 ? id : null;
 }
 
@@ -17,6 +18,10 @@ function userId(req: { session?: { userId?: number } }): number | null {
 
 function headerValue(req: Request, name: string): string | null {
   const value = req.header(name);
+  if (Array.isArray(value)) {
+    const first = value[0];
+    return typeof first === "string" && first.trim() ? first.trim() : null;
+  }
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 

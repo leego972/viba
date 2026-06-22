@@ -42,8 +42,14 @@ const EXPENSIVE_PROVIDER_PENALTY: Record<string, number> = {
   anthropic: 0,
 };
 
+interface RoutableTask {
+  id?: number;
+  type: string;
+  toolRequirements?: string[] | null;
+}
+
 function scoreAgents(
-  task: Task,
+  task: RoutableTask,
   agents: Agent[],
 ): Array<{ agent: Agent; score: number }> {
   const config = TASK_TYPE_CONFIG[task.type] ?? { capabilities: [] };
@@ -80,7 +86,7 @@ function scoreAgents(
   });
 }
 
-export function routeTask(task: Task, agents: Agent[]): Agent | null {
+export function routeTask(task: RoutableTask, agents: Agent[]): Agent | null {
   if (!agents.length) return null;
 
   const config = TASK_TYPE_CONFIG[task.type] ?? { capabilities: [] };
