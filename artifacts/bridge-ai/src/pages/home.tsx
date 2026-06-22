@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { ArrowRight, CheckCircle2, FileText, MessageSquare, Paperclip, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowRight, CheckCircle2, FileText, LockKeyhole, MessageSquare, Paperclip, ShieldCheck, Sparkles, Target, TrendingUp, Workflow } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const features = [
@@ -17,6 +17,29 @@ const features = [
     title: "Controlled execution",
     text: "Important actions stay permission-gated, with admin-only controls separated from user projects.",
     icon: ShieldCheck,
+  },
+  {
+    title: "Growth Engine",
+    text: "Convert buyer demand into private beta-testing, repair planning, launch-readiness, and follow-up workflows after login.",
+    icon: TrendingUp,
+  },
+];
+
+const growthSteps = [
+  {
+    title: "Customer demand first",
+    text: "The public message focuses on what customers need fixed or improved, not on exposing a business publicly.",
+    icon: Target,
+  },
+  {
+    title: "Private qualification",
+    text: "Inside the app, VIBA scores fit, urgency, budget signal, clarity, and delivery risk before work is packaged.",
+    icon: LockKeyhole,
+  },
+  {
+    title: "Agent repair workflow",
+    text: "The authenticated Growth Engine routes the opportunity into beta-testing, risk, offer, and follow-up agents.",
+    icon: Workflow,
   },
 ];
 
@@ -59,6 +82,11 @@ export default function Home() {
                     Start Orchestrating <ArrowRight className="ml-2 h-4 w-4" />
                   </Button>
                 </Link>
+                <Link href="/bridge">
+                  <Button variant="outline" className="h-12 rounded-xl border-slate-200 bg-white px-7 text-base text-slate-800 hover:bg-slate-50">
+                    <TrendingUp className="mr-2 h-4 w-4" /> Growth Engine
+                  </Button>
+                </Link>
                 <Link href="/user-instructions">
                   <Button variant="outline" className="h-12 rounded-xl border-slate-200 bg-white px-7 text-base text-slate-800 hover:bg-slate-50">
                     <FileText className="mr-2 h-4 w-4" /> User Instructions
@@ -66,7 +94,7 @@ export default function Home() {
                 </Link>
               </div>
               <div className="mt-8 flex flex-wrap gap-2 text-xs text-slate-500">
-                {['Groq default AI', 'ChatGPT-style workflow', 'Upload support', 'Admin-gated source controls'].map((item) => (
+                {['Groq default AI', 'ChatGPT-style workflow', 'Private Growth Engine', 'Admin-gated source controls'].map((item) => (
                   <span key={item} className="rounded-full border border-slate-200 bg-white px-3 py-1.5">{item}</span>
                 ))}
               </div>
@@ -101,10 +129,40 @@ export default function Home() {
               <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Simple navigation. No clutter.</h2>
               <p className="mt-3 text-slate-600">The app is organized around the session: conversation in the center, command box at the bottom, secondary panels around it only when useful.</p>
             </div>
-            <div className="mt-8 grid gap-4 md:grid-cols-3">
+            <div className="mt-8 grid gap-4 md:grid-cols-4">
               {features.map(({ title, text, icon: Icon }) => (
                 <article key={title} className="rounded-3xl border border-slate-200 bg-[#f8fafc] p-6">
                   <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-slate-900 shadow-sm">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <h3 className="mt-5 text-lg font-semibold text-slate-950">{title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">{text}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="border-t border-slate-200 bg-[#f6f8fb] px-4 py-16 sm:px-6">
+          <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[0.9fr_1.1fr]">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
+                <LockKeyhole className="h-3.5 w-3.5" /> Feature runs after login
+              </div>
+              <h2 className="mt-5 text-4xl font-semibold tracking-tight text-slate-950">Private Growth Engine for beta-testing revenue workflows.</h2>
+              <p className="mt-4 text-base leading-7 text-slate-600">
+                VIBA now explains the advertising system publicly but keeps the actual engine behind login. The system is not a shame board. It captures customer demand, qualifies the opportunity, and turns it into private beta-testing, repair, and launch-protection work.
+              </p>
+              <Link href="/bridge">
+                <Button className="mt-7 h-12 rounded-xl bg-slate-950 px-7 text-base text-white hover:bg-slate-800">
+                  Open Growth Engine <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </Link>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-3">
+              {growthSteps.map(({ title, text, icon: Icon }) => (
+                <article key={title} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-white shadow-sm">
                     <Icon className="h-5 w-5" />
                   </div>
                   <h3 className="mt-5 text-lg font-semibold text-slate-950">{title}</h3>
