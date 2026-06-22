@@ -4,44 +4,46 @@ import { Button } from "@/components/ui/button";
 
 const features = [
   {
-    title: "Agent execution",
-    text: "Plan, build, review, and verify work through coordinated agents instead of loose one-off prompts.",
-    icon: MessageSquare,
+    title: "Research",
+    text: "Clarify the market, customer need, risk, evidence, and best path before expensive work starts.",
+    icon: Target,
   },
   {
-    title: "Context intake",
-    text: "Add screenshots, logs, zips, specs, repos, and documents so sessions start with the right evidence.",
-    icon: Paperclip,
+    title: "Design & build",
+    text: "Turn requirements into usable systems, workflows, pages, reports, campaigns, and implementation plans.",
+    icon: Workflow,
   },
   {
-    title: "Proof gates",
-    text: "Important outputs are treated as drafts until the required proof, risk, and review checks are satisfied.",
+    title: "Verify & score",
+    text: "Use proof gates, review packets, readiness scoring, and risk checks before calling work complete.",
     icon: ShieldCheck,
   },
   {
-    title: "Revenue path",
-    text: "Turn useful work into reports, repair sprints, retainers, campaigns, and reusable business assets.",
+    title: "Improve & monetise",
+    text: "Convert finished work into offers, repair sprints, retainers, campaigns, and reusable business assets.",
     icon: TrendingUp,
   },
 ];
 
 const growthSteps = [
   {
-    title: "Asset ledger",
-    text: "Every serious task becomes a clean business-asset record: status, buyer, proof, revenue path, and next action.",
+    title: "Business Asset Passport",
+    text: "Each important system gets a professional record: purpose, status, proof, score, revenue path, and next action.",
     icon: Target,
   },
   {
-    title: "Proof engine",
-    text: "VIBA separates drafted, validated, ready, and scale-ready work so users do not confuse output with verified progress.",
+    title: "Proof-led execution",
+    text: "VIBA separates drafted, validated, ready, and scale-ready work so output is never confused with verified progress.",
     icon: LockKeyhole,
   },
   {
     title: "Agent tribunal",
-    text: "Strategist, Builder, Tester, Critic, Risk Officer, Monetiser, and Verifier roles force stronger execution quality.",
+    text: "Strategist, Builder, Tester, Critic, Risk Officer, Monetiser, and Verifier roles force higher execution quality.",
     icon: Workflow,
   },
 ];
+
+const passportStages = ["Research", "Design", "Build", "Verify", "Score", "Improve", "Monetise"];
 
 export default function Home() {
   return (
@@ -65,16 +67,17 @@ export default function Home() {
       <main>
         <section className="relative overflow-hidden px-4 py-16 sm:px-6 sm:py-24">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(20,184,166,0.13),_transparent_38%)]" />
+          <div className="pointer-events-none absolute -right-24 top-24 h-72 w-72 rounded-full bg-teal-200/25 blur-3xl" />
           <div className="mx-auto grid max-w-7xl items-center gap-10 lg:grid-cols-[1fr_0.9fr]">
             <div className="relative z-10">
               <div className="inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-teal-700">
                 <Sparkles className="h-3.5 w-3.5" /> Very Interesting Business Assets
               </div>
               <h1 className="mt-6 max-w-4xl text-5xl font-semibold tracking-tight text-slate-950 sm:text-6xl lg:text-7xl">
-                VIBA turns ideas into verified business assets.
+                The AI Business Asset Passport for serious operators.
               </h1>
               <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-600">
-                VIBA is a clean AI control room for planning, building, testing, proving, and monetising serious work. It does not just chat — it pushes work through proof gates and agent review before calling it ready.
+                VIBA researches, designs, builds, verifies, scores, improves, and monetises the systems your business depends on. It does not just chat — it turns work into proof-led business assets.
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <Link href="/dashboard">
@@ -94,8 +97,8 @@ export default function Home() {
                 </Link>
               </div>
               <div className="mt-8 flex flex-wrap gap-2 text-xs text-slate-500">
-                {['Asset Ledger', 'Proof Engine', 'Agent Tribunal', 'Revenue Path'].map((item) => (
-                  <span key={item} className="rounded-full border border-slate-200 bg-white px-3 py-1.5">{item}</span>
+                {passportStages.map((item) => (
+                  <span key={item} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 shadow-sm">{item}</span>
                 ))}
               </div>
             </div>
@@ -105,18 +108,24 @@ export default function Home() {
                 <div className="mb-4 flex items-center gap-3 border-b border-slate-200 pb-3">
                   <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-950 text-white">V</div>
                   <div>
-                    <p className="text-sm font-semibold text-slate-950">VIBA live session</p>
-                    <p className="text-xs text-slate-500">Business asset · proof-led execution</p>
+                    <p className="text-sm font-semibold text-slate-950">Business Asset Passport</p>
+                    <p className="text-xs text-slate-500">Research · Design · Build · Verify</p>
                   </div>
-                  <span className="ml-auto rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">Verified flow</span>
+                  <span className="ml-auto rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">Score 82</span>
                 </div>
-                <div className="space-y-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <PassportTile label="Status" value="Ready to validate" />
+                  <PassportTile label="Proof" value="Gates active" />
+                  <PassportTile label="Revenue path" value="Report → Sprint" />
+                  <PassportTile label="Next action" value="Verify offer" />
+                </div>
+                <div className="mt-4 space-y-3">
                   <Bubble name="Strategist" text="I’m defining the asset, buyer, outcome, proof gate, and first success metric." />
-                  <Bubble name="Builder" text="I’m creating the execution plan and separating real actions from assumptions." />
+                  <Bubble name="Builder" text="I’m creating the system plan and separating real actions from assumptions." />
                   <Bubble name="Verifier" text="I will not mark this ready until the proof gates are satisfied." />
                 </div>
                 <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-400">
-                  Clean workflow: context → agents → proof → next action.
+                  Clean workflow: context → agents → proof → score → next action.
                 </div>
               </div>
             </div>
@@ -126,12 +135,12 @@ export default function Home() {
         <section className="border-t border-slate-200 bg-white px-4 py-14 sm:px-6">
           <div className="mx-auto max-w-7xl">
             <div className="max-w-2xl">
-              <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Simple navigation. No clutter.</h2>
-              <p className="mt-3 text-slate-600">The app stays organized around the asset being created: session, workbench, Growth Engine, settings. Every visible action either starts work, copies an asset, or opens a real route.</p>
+              <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Professional workflow. No clutter.</h2>
+              <p className="mt-3 text-slate-600">VIBA stays organised around the asset being created: session, workbench, Growth Engine, settings. Every visible action either starts work, copies an asset, or opens a real route.</p>
             </div>
             <div className="mt-8 grid gap-4 md:grid-cols-4">
               {features.map(({ title, text, icon: Icon }) => (
-                <article key={title} className="rounded-3xl border border-slate-200 bg-[#f8fafc] p-6">
+                <article key={title} className="rounded-3xl border border-slate-200 bg-[#f8fafc] p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
                   <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-slate-900 shadow-sm">
                     <Icon className="h-5 w-5" />
                   </div>
@@ -151,7 +160,7 @@ export default function Home() {
               </div>
               <h2 className="mt-5 text-4xl font-semibold tracking-tight text-slate-950">Private Growth Engine for verified revenue workflows.</h2>
               <p className="mt-4 text-base leading-7 text-slate-600">
-                The Growth Engine keeps the powerful part private. It captures buyer demand, scores the opportunity, creates the asset ledger, checks proof gates, runs the agent tribunal, and turns useful work into a clear revenue path.
+                The Growth Engine keeps the powerful part private. It captures buyer demand, scores the opportunity, creates the asset passport, checks proof gates, runs the agent tribunal, and turns useful work into a clear revenue path.
               </p>
               <Link href="/bridge">
                 <Button className="mt-7 h-12 rounded-xl bg-slate-950 px-7 text-base text-white hover:bg-slate-800">
@@ -161,7 +170,7 @@ export default function Home() {
             </div>
             <div className="grid gap-4 sm:grid-cols-3">
               {growthSteps.map(({ title, text, icon: Icon }) => (
-                <article key={title} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                <article key={title} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
                   <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-white shadow-sm">
                     <Icon className="h-5 w-5" />
                   </div>
@@ -173,6 +182,15 @@ export default function Home() {
           </div>
         </section>
       </main>
+    </div>
+  );
+}
+
+function PassportTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-slate-900">{value}</p>
     </div>
   );
 }
