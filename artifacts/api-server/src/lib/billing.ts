@@ -1,17 +1,7 @@
-/**
- * VIBA Billing — Stripe integration
- *
- * $50/month membership — 7-day free trial, card captured upfront
- * 1,000 credits/month included
- * One-time credit top-up packs available when allowance runs out
- *
- * Adapted from leego972/virellestudios billing system (simplified for VIBA).
- */
 import Stripe from "stripe";
 import { pool } from "@workspace/db";
 import { logger } from "./logger";
 
-// ─── Stripe singleton ─────────────────────────────────────────────────────────
 let _stripe: Stripe | null = null;
 
 export function getStripe(): Stripe {
@@ -29,21 +19,29 @@ export function isStripeConfigured(): boolean {
   return !!process.env["STRIPE_SECRET_KEY"];
 }
 
-// ─── Plan definition ──────────────────────────────────────────────────────────
+export const VIBA_CREDIT_ECONOMICS = {
+  standardWebsiteAuditCredits: 220,
+  smallRepairCredits: 90,
+  typicalSmallRepairCount: 3,
+  fullAuditRepairEstimateCredits: 580,
+  trialCredits: 260,
+  monthlyCredits: 500,
+  topUpCredits: 500,
+  topUpUnitAmount: 5000,
+} as const;
 
 export const VIBA_PLAN = {
   key: "viba_monthly",
   priceEnvKey: "STRIPE_BILLING_SUBSCRIPTION_PRICE_ID",
   productName: "VIBA Member",
   description:
-    "Full access to VIBA collaborative multi-agent orchestration. Includes 1,000 credits/month. 7-day free trial — card required.",
-  unitAmount: 5000, // $50.00 USD in cents
+    "Full access to VIBA collaborative multi-agent orchestration. Includes 500 credits/month and a 3-day trial.",
+  unitAmount: 5000,
   currency: "usd",
-  monthlyCredits: 1000,
-  trialDays: 7,
+  monthlyCredits: VIBA_CREDIT_ECONOMICS.monthlyCredits,
+  trialDays: 3,
+  trialCredits: VIBA_CREDIT_ECONOMICS.trialCredits,
 } as const;
-
-// ─── Credit pack definitions ──────────────────────────────────────────────────
 
 export interface CreditPack {
   key: string;
@@ -51,55 +49,28 @@ export interface CreditPack {
   label: string;
   description: string;
   credits: number;
-  unitAmount: number; // USD cents
+  unitAmount: number;
   badge?: string;
 }
 
 export const CREDIT_PACKS: CreditPack[] = [
   {
-    key: "credits_200",
-    priceEnvKey: "STRIPE_BILLING_CREDITS_200_PRICE_ID",
-    label: "Starter Pack",
-    description: "200 credits",
-    credits: 200,
-    unitAmount: 900, // $9
-  },
-  {
     key: "credits_500",
     priceEnvKey: "STRIPE_BILLING_CREDITS_500_PRICE_ID",
-    label: "Pro Pack",
+    label: "500 Credit Pack",
     description: "500 credits",
-    credits: 500,
-    unitAmount: 1900, // $19
-    badge: "Popular",
-  },
-  {
-    key: "credits_1200",
-    priceEnvKey: "STRIPE_BILLING_CREDITS_1200_PRICE_ID",
-    label: "Power Pack",
-    description: "1,200 credits",
-    credits: 1200,
-    unitAmount: 3900, // $39
-  },
-  {
-    key: "credits_3000",
-    priceEnvKey: "STRIPE_BILLING_CREDITS_3000_PRICE_ID",
-    label: "Pro Max Pack",
-    description: "3,000 credits",
-    credits: 3000,
-    unitAmount: 7900, // $79
-    badge: "Best Value",
+    credits: VIBA_CREDIT_ECONOMICS.topUpCredits,
+    unitAmount: VIBA_CREDIT_ECONOMICS.topUpUnitAmount,
+    badge: "Continue Work",
   },
 ];
 
-// ─── In-memory price ID cache ─────────────────────────────────────────────────
 const _priceCache: Record<string, string> = {};
 
 export function getBillingPriceId(key: string): string {
   return _priceCache[key] ?? "";
 }
 
-// ─── Auto-provisioning (idempotent — safe on every restart) ──────────────────
 export async function provisionStripeProducts(): Promise<void> {
   if (!isStripeConfigured()) {
     logger.warn("Stripe not configured — billing provisioning skipped");
@@ -108,7 +79,6 @@ export async function provisionStripeProducts(): Promise<void> {
 
   const stripe = getStripe();
 
-  // ── Membership subscription price ────────────────────────────────────────
   const subsEnvVal = process.env[VIBA_PLAN.priceEnvKey];
   if (subsEnvVal) {
     _priceCache[VIBA_PLAN.key] = subsEnvVal;
@@ -125,13 +95,13 @@ export async function provisionStripeProducts(): Promise<void> {
         system: "viba_billing",
         type: "subscription",
         credits: String(VIBA_PLAN.monthlyCredits),
+        trialDays: String(VIBA_PLAN.trialDays),
       },
     });
     _priceCache[VIBA_PLAN.key] = priceId;
     logger.info({ priceId }, "Billing: membership price ready");
   }
 
-  // ── Credit pack prices ────────────────────────────────────────────────────
   for (const pack of CREDIT_PACKS) {
     const envVal = process.env[pack.priceEnvKey];
     if (envVal) {
@@ -143,7 +113,7 @@ export async function provisionStripeProducts(): Promise<void> {
     const priceId = await findOrCreatePrice({
       stripe,
       productName: `VIBA ${pack.label}`,
-      productDesc: `${pack.description} — one-time top-up for VIBA`,
+      productDesc: `${pack.description} — VIBA add-on`,
       unitAmount: pack.unitAmount,
       currency: "usd",
       metadata: {
@@ -167,8 +137,6 @@ async function findOrCreatePrice(opts: {
   metadata?: Record<string, string>;
 }): Promise<string> {
   const { stripe, productName, productDesc, unitAmount, currency, recurring, metadata } = opts;
-
-  // Find or create the product
   const products = await stripe.products.list({ active: true, limit: 100 });
   let product = products.data.find((p) => p.name === productName);
   if (!product) {
@@ -180,7 +148,6 @@ async function findOrCreatePrice(opts: {
     logger.info({ productId: product.id, name: productName }, "Billing: created Stripe product");
   }
 
-  // Find or create the price
   const prices = await stripe.prices.list({ product: product.id, active: true, limit: 20 });
   let price = prices.data.find(
     (p) =>
@@ -201,8 +168,6 @@ async function findOrCreatePrice(opts: {
   return price.id;
 }
 
-// ─── Credit management ────────────────────────────────────────────────────────
-
 export async function grantCredits(
   userId: number,
   amount: number,
@@ -222,7 +187,6 @@ export async function grantCredits(
   logger.info({ userId, amount, balanceAfter, reason }, "Billing: credits granted");
 }
 
-/** Returns false when insufficient credits — atomically deducts only if balance allows */
 export async function deductCredits(
   userId: number,
   amount: number,
@@ -272,8 +236,6 @@ export async function getCredits(userId: number): Promise<number> {
   );
   return (result.rows[0]?.credits_remaining as number) ?? 0;
 }
-
-// ─── Subscription management ──────────────────────────────────────────────────
 
 export async function linkSubscription(
   userId: number,
@@ -386,7 +348,6 @@ export async function getBillingStatus(userId: number): Promise<{
   };
 }
 
-// ─── Webhook idempotency (in-memory; survives typical deploys) ────────────────
 const _processedWebhooks = new Map<string, number>();
 const WEBHOOK_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -400,6 +361,7 @@ setInterval(() => {
 export function isWebhookProcessed(id: string): boolean {
   return _processedWebhooks.has(id);
 }
+
 export function markWebhookProcessed(id: string): void {
   _processedWebhooks.set(id, Date.now());
 }
