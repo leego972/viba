@@ -32,9 +32,11 @@ function fmt(cents: number) {
 }
 
 function defaultFeatures(plan?: Plan) {
-  const monthlyCredits = plan?.monthlyCredits ?? 500;
+  const monthlyCredits = plan?.monthlyCredits ?? 1000;
   return [
     `${monthlyCredits.toLocaleString()} credits per month included`,
+    "Included monthly credits reset each billing month and do not accumulate",
+    "Trial users get 500 credits per day for 3 days",
     "Full multi-agent orchestration workspace",
     "Website/project review, repair planning, and implementation sessions",
     "Background full-run mode continues after the user exits",
@@ -121,7 +123,7 @@ export default function Pricing() {
   const plan = plans?.plan;
   const packs = plans?.creditPacks ?? [];
   const trialDays = plan?.trialDays ?? 3;
-  const monthlyCredits = plan?.monthlyCredits ?? 500;
+  const monthlyCredits = plan?.monthlyCredits ?? 1000;
   const features = defaultFeatures(plan);
 
   return (
@@ -152,7 +154,7 @@ export default function Pricing() {
             Run AI build work with <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-violet-400">VIBA credits</span>
           </h1>
           <p className="text-zinc-400 text-lg max-w-2xl mx-auto">
-            Start with a {trialDays}-day trial. Trial credits are enough for evaluation work such as a project review with findings or several small repairs. Larger full-fix workflows can continue with monthly credits or a top-up.
+            Start with a {trialDays}-day trial. Trial credits reset to 500 each day, so users can test real work without banking a large free balance. Paid membership includes {monthlyCredits.toLocaleString()} credits each month.
           </p>
         </div>
 
@@ -175,12 +177,12 @@ export default function Pricing() {
                     <span className="text-5xl font-bold">{plan ? fmt(plan.unitAmount) : "$50"}</span>
                     <span className="text-zinc-400 mb-1">/month</span>
                   </div>
-                  <p className="text-zinc-500 text-sm mt-1">{monthlyCredits.toLocaleString()} credits reset each billing month.</p>
+                  <p className="text-zinc-500 text-sm mt-1">{monthlyCredits.toLocaleString()} credits reset each billing month. Unused included monthly credits do not accumulate.</p>
                 </div>
 
                 <div className="rounded-xl border border-amber-400/25 bg-amber-400/10 p-4 text-sm text-amber-100">
                   <div className="flex gap-2 font-semibold mb-1"><Clock className="w-4 h-4 mt-0.5" /> Trial allowance</div>
-                  <p className="text-amber-100/80">Use the trial for a real review, a written fix plan, or 2-3 small repairs. Full audit plus multi-step repair cycles may require paid credits or a top-up.</p>
+                  <p className="text-amber-100/80">Trial credits reset to 500 daily for 3 days. This is enough for a real review, a written fix plan, or small repairs, while larger full-fix workflows continue after upgrading.</p>
                 </div>
 
                 <ul className="space-y-3">
@@ -215,7 +217,7 @@ export default function Pricing() {
             <div className="flex items-center justify-center gap-2 text-zinc-300 font-semibold text-lg">
               <Zap className="w-5 h-5 text-amber-400" /> Need more credits?
             </div>
-            <p className="text-zinc-500 text-sm">When a session pauses because credits finish, buy 500 credits or wait for monthly renewal.</p>
+            <p className="text-zinc-500 text-sm">When a session pauses because credits finish, buy another {monthlyCredits.toLocaleString()}-credit pack for $50 or wait for monthly renewal.</p>
           </div>
 
           {plansLoading ? (
@@ -239,14 +241,14 @@ export default function Pricing() {
                     disabled={packLoading === pack.key}
                     className="mt-auto text-sm py-2.5 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-60 transition-colors font-medium"
                   >
-                    {packLoading === pack.key ? "Opening…" : "Buy 500 credits"}
+                    {packLoading === pack.key ? "Opening…" : `Buy ${pack.credits.toLocaleString()} credits`}
                   </button>
                 </div>
               ))}
             </div>
           )}
 
-          <p className="text-center text-xs text-zinc-600">Credit packs require an active VIBA membership.</p>
+          <p className="text-center text-xs text-zinc-600">Credit packs require an active VIBA membership. Bought top-up credits are added immediately; included monthly credits reset rather than stacking.</p>
         </div>
       </div>
     </div>
