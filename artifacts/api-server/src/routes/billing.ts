@@ -10,15 +10,33 @@ import {
 
 const router: IRouter = Router();
 
-const MONTHLY_CREDITS = 1500;
 const TRIAL_DAILY_CREDITS = 500;
-const MONTHLY_PLAN = {
-  productName: "VIBA Member Monthly",
-  unitAmount: 5000,
-  currency: "usd",
-  credits: MONTHLY_CREDITS,
-  trialDays: VIBA_PLAN.trialDays,
-};
+const SUBSCRIPTION_PLANS = [
+  {
+    key: "viba_member",
+    productName: "VIBA Member Monthly",
+    displayName: "VIBA Member",
+    unitAmount: 5000,
+    currency: "usd",
+    credits: 1500,
+    trialDays: VIBA_PLAN.trialDays,
+    badge: "Member",
+  },
+  {
+    key: "viba_pro",
+    productName: "VIBA Pro Monthly",
+    displayName: "VIBA Pro",
+    unitAmount: 15000,
+    currency: "usd",
+    credits: 4500,
+    trialDays: VIBA_PLAN.trialDays,
+    badge: "Triple Credits",
+  },
+] as const;
+
+const DEFAULT_PLAN = SUBSCRIPTION_PLANS[0];
+const PRO_PLAN = SUBSCRIPTION_PLANS[1];
+type SubscriptionPlan = (typeof SUBSCRIPTION_PLANS)[number];
 
 const TOP_UP_PACKS = [
   { key: "credits_1000", label: "1,000 Credit Pack", description: "1,000 credits", credits: 1000, unitAmount: 5000, badge: "$50" },
@@ -31,7 +49,7 @@ const TOP_UP_PACKS = [
 
 type TopUpPack = (typeof TOP_UP_PACKS)[number];
 
-let cachedMonthlyPriceId = "";
+const cachedSubscriptionPriceIds: Record<string, string> = {};
 const cachedTopUpPriceIds: Record<string, string> = {};
 
 function origin(req: import("express").Request): string {
@@ -41,36 +59,42 @@ function origin(req: import("express").Request): string {
   );
 }
 
-async function getMonthlyPriceId(): Promise<string> {
-  const configured = process.env["STRIPE_BILLING_SUBSCRIPTION_PRICE_ID"];
+function envKeyForSubscription(plan: SubscriptionPlan): string {
+  return plan.key === "viba_pro"
+    ? "STRIPE_BILLING_PRO_SUBSCRIPTION_PRICE_ID"
+    : "STRIPE_BILLING_SUBSCRIPTION_PRICE_ID";
+}
+
+async function getSubscriptionPriceId(plan: SubscriptionPlan): Promise<string> {
+  const configured = process.env[envKeyForSubscription(plan)];
   if (configured) return configured;
-  if (cachedMonthlyPriceId) return cachedMonthlyPriceId;
+  if (cachedSubscriptionPriceIds[plan.key]) return cachedSubscriptionPriceIds[plan.key]!;
 
   const stripe = getStripe();
   const products = await stripe.products.list({ active: true, limit: 100 });
-  let product = products.data.find((item) => item.name === MONTHLY_PLAN.productName);
+  let product = products.data.find((item) => item.name === plan.productName);
   if (!product) {
     product = await stripe.products.create({
-      name: MONTHLY_PLAN.productName,
-      description: "Monthly VIBA membership with 1,500 credits per month.",
-      metadata: { system: "viba_billing", type: "subscription", credits: String(MONTHLY_PLAN.credits), trialDailyCredits: String(TRIAL_DAILY_CREDITS) },
+      name: plan.productName,
+      description: `${plan.displayName} with ${plan.credits.toLocaleString()} credits per month.`,
+      metadata: { system: "viba_billing", type: "subscription", planKey: plan.key, credits: String(plan.credits), trialDailyCredits: String(TRIAL_DAILY_CREDITS) },
     });
   }
 
   const prices = await stripe.prices.list({ product: product.id, active: true, limit: 20 });
-  let price = prices.data.find((item) => item.unit_amount === MONTHLY_PLAN.unitAmount && item.recurring?.interval === "month");
+  let price = prices.data.find((item) => item.unit_amount === plan.unitAmount && item.recurring?.interval === "month");
   if (!price) {
     price = await stripe.prices.create({
       product: product.id,
-      unit_amount: MONTHLY_PLAN.unitAmount,
-      currency: MONTHLY_PLAN.currency,
+      unit_amount: plan.unitAmount,
+      currency: plan.currency,
       recurring: { interval: "month" },
-      metadata: { system: "viba_billing", type: "subscription", credits: String(MONTHLY_PLAN.credits), trialDailyCredits: String(TRIAL_DAILY_CREDITS) },
+      metadata: { system: "viba_billing", type: "subscription", planKey: plan.key, credits: String(plan.credits), trialDailyCredits: String(TRIAL_DAILY_CREDITS) },
     });
   }
 
-  cachedMonthlyPriceId = price.id;
-  return cachedMonthlyPriceId;
+  cachedSubscriptionPriceIds[plan.key] = price.id;
+  return price.id;
 }
 
 function envKeyForTopUp(pack: TopUpPack): string {
@@ -112,12 +136,35 @@ async function getTopUpPriceId(pack: TopUpPack): Promise<string> {
 router.get("/billing/plans", (_req, res): void => {
   res.json({
     plan: {
-      name: MONTHLY_PLAN.productName,
-      unitAmount: MONTHLY_PLAN.unitAmount,
-      currency: MONTHLY_PLAN.currency,
-      monthlyCredits: MONTHLY_CREDITS,
-      trialDays: MONTHLY_PLAN.trialDays,
+      name: DEFAULT_PLAN.displayName,
+      key: DEFAULT_PLAN.key,
+      unitAmount: DEFAULT_PLAN.unitAmount,
+      currency: DEFAULT_PLAN.currency,
+      monthlyCredits: DEFAULT_PLAN.credits,
+      trialDays: DEFAULT_PLAN.trialDays,
       trialDailyCredits: TRIAL_DAILY_CREDITS,
+      configured: isStripeConfigured(),
+    },
+    plans: SUBSCRIPTION_PLANS.map((plan) => ({
+      key: plan.key,
+      name: plan.displayName,
+      unitAmount: plan.unitAmount,
+      currency: plan.currency,
+      monthlyCredits: plan.credits,
+      trialDays: plan.trialDays,
+      trialDailyCredits: TRIAL_DAILY_CREDITS,
+      badge: plan.badge,
+      configured: isStripeConfigured(),
+    })),
+    proPlan: {
+      key: PRO_PLAN.key,
+      name: PRO_PLAN.displayName,
+      unitAmount: PRO_PLAN.unitAmount,
+      currency: PRO_PLAN.currency,
+      monthlyCredits: PRO_PLAN.credits,
+      trialDays: PRO_PLAN.trialDays,
+      trialDailyCredits: TRIAL_DAILY_CREDITS,
+      badge: PRO_PLAN.badge,
       configured: isStripeConfigured(),
     },
     creditPacks: TOP_UP_PACKS.map((pack) => ({
@@ -140,6 +187,8 @@ router.get("/billing/status", async (req, res): Promise<void> => {
   res.json(status);
 });
 
+const CheckoutBody = z.object({ planKey: z.string().optional() }).optional();
+
 router.post("/billing/checkout", async (req, res): Promise<void> => {
   const userId = req.session?.userId as number | undefined;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
@@ -149,16 +198,22 @@ router.post("/billing/checkout", async (req, res): Promise<void> => {
     return;
   }
 
+  const parsed = CheckoutBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid checkout payload" }); return; }
+  const requestedPlanKey = parsed.data?.planKey ?? DEFAULT_PLAN.key;
+  const plan = SUBSCRIPTION_PLANS.find((item) => item.key === requestedPlanKey);
+  if (!plan) { res.status(400).json({ error: "Unknown subscription plan" }); return; }
+
   const current = await getBillingStatus(userId);
   if (current.subscriptionStatus === "active" || current.subscriptionStatus === "trialing") {
-    res.status(409).json({ error: "You already have an active subscription" });
+    res.status(409).json({ error: "already_subscribed", message: "You already have an active subscription. Use Billing > Manage to change plans." });
     return;
   }
 
   try {
     const stripe = getStripe();
     const base = origin(req);
-    const priceId = await getMonthlyPriceId();
+    const priceId = await getSubscriptionPriceId(plan);
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
@@ -166,12 +221,12 @@ router.post("/billing/checkout", async (req, res): Promise<void> => {
       ...(current.stripeCustomerId ? { customer: current.stripeCustomerId } : {}),
       line_items: [{ price: priceId, quantity: 1 }],
       subscription_data: {
-        trial_period_days: MONTHLY_PLAN.trialDays,
-        metadata: { system: "viba_billing", userId: String(userId), credits: String(MONTHLY_CREDITS), trialDailyCredits: String(TRIAL_DAILY_CREDITS) },
+        trial_period_days: plan.trialDays,
+        metadata: { system: "viba_billing", userId: String(userId), planKey: plan.key, credits: String(plan.credits), trialDailyCredits: String(TRIAL_DAILY_CREDITS) },
       },
       payment_method_collection: "always",
       client_reference_id: String(userId),
-      metadata: { system: "viba_billing", type: "subscription", userId: String(userId), credits: String(MONTHLY_CREDITS), trialDailyCredits: String(TRIAL_DAILY_CREDITS) },
+      metadata: { system: "viba_billing", type: "subscription", userId: String(userId), planKey: plan.key, credits: String(plan.credits), trialDailyCredits: String(TRIAL_DAILY_CREDITS) },
       success_url: `${base}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${base}/pricing`,
     });
@@ -180,6 +235,31 @@ router.post("/billing/checkout", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "billing checkout error");
     res.status(500).json({ error: "Failed to create checkout session" });
+  }
+});
+
+router.post("/billing/upgrade/pro", async (req, res): Promise<void> => {
+  const userId = req.session?.userId as number | undefined;
+  if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
+  if (!isStripeConfigured()) { res.status(503).json({ error: "Stripe is not configured" }); return; }
+
+  const current = await getBillingStatus(userId);
+  if (!current.stripeCustomerId) {
+    res.status(400).json({ error: "No billing customer found. Start a Pro checkout from Pricing." });
+    return;
+  }
+
+  try {
+    const stripe = getStripe();
+    const base = origin(req);
+    const portal = await stripe.billingPortal.sessions.create({
+      customer: current.stripeCustomerId,
+      return_url: `${base}/billing`,
+    });
+    res.json({ url: portal.url });
+  } catch (err) {
+    req.log.error({ err }, "pro upgrade portal error");
+    res.status(500).json({ error: "Failed to open upgrade portal" });
   }
 });
 
