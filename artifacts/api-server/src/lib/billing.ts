@@ -24,9 +24,9 @@ export const VIBA_CREDIT_ECONOMICS = {
   smallRepairCredits: 90,
   typicalSmallRepairCount: 3,
   fullAuditRepairEstimateCredits: 580,
-  trialCredits: 260,
-  monthlyCredits: 500,
-  topUpCredits: 500,
+  trialCredits: 420,
+  monthlyCredits: 1000,
+  topUpCredits: 1000,
   topUpUnitAmount: 5000,
 } as const;
 
@@ -35,7 +35,7 @@ export const VIBA_PLAN = {
   priceEnvKey: "STRIPE_BILLING_SUBSCRIPTION_PRICE_ID",
   productName: "VIBA Member",
   description:
-    "Full access to VIBA collaborative multi-agent orchestration. Includes 500 credits/month and a 3-day trial.",
+    "Full access to VIBA collaborative multi-agent orchestration. Includes 1,000 credits/month and a 3-day trial.",
   unitAmount: 5000,
   currency: "usd",
   monthlyCredits: VIBA_CREDIT_ECONOMICS.monthlyCredits,
@@ -55,13 +55,13 @@ export interface CreditPack {
 
 export const CREDIT_PACKS: CreditPack[] = [
   {
-    key: "credits_500",
-    priceEnvKey: "STRIPE_BILLING_CREDITS_500_PRICE_ID",
-    label: "500 Credit Pack",
-    description: "500 credits",
+    key: "credits_1000",
+    priceEnvKey: "STRIPE_BILLING_CREDITS_1000_PRICE_ID",
+    label: "1,000 Credit Pack",
+    description: "1,000 credits",
     credits: VIBA_CREDIT_ECONOMICS.topUpCredits,
     unitAmount: VIBA_CREDIT_ECONOMICS.topUpUnitAmount,
-    badge: "Continue Work",
+    badge: "Another Month",
   },
 ];
 
