@@ -34,21 +34,30 @@ type OfferItem = {
   purpose: string;
 };
 
+type CommandStatus = "Draft" | "Validate" | "Ready" | "Scale";
+
+type ProofGate = {
+  title: string;
+  state: "Required" | "Ready" | "Strong";
+  text: string;
+};
+
 const workflowSteps: CardItem[] = [
-  { title: "Demand capture", text: "Advertise the buyer need and collect private request details without exposing any business publicly." },
-  { title: "Qualification", text: "Score urgency, budget signal, buyer clarity, channel fit, proof strength, and delivery risk." },
-  { title: "Asset packaging", text: "Turn the opportunity into a report, sprint, retainer, partner handoff, campaign, and follow-up sequence." },
-  { title: "Agent execution", text: "Route the work through VIBA agents for beta testing, risk review, offer creation, campaign copy, and close support." },
-  { title: "Feedback loop", text: "Use every completed job as private proof, anonymised benchmark insight, and the next campaign input." },
+  { title: "Capture", text: "Record the customer need, buyer trigger, audience, channel, and proof asset before any selling starts." },
+  { title: "Score", text: "Measure commercial fit using budget signal, urgency, clarity, proof strength, channel strength, and delivery risk." },
+  { title: "Package", text: "Convert the opportunity into a report, repair sprint, retainer, campaign angle, and follow-up path." },
+  { title: "Verify", text: "Require proof gates before the work can be treated as ready: intake, offer, proof asset, KPI gate, and private-delivery rule." },
+  { title: "Compound", text: "Use each completed job as private proof, an anonymised benchmark, and the next business asset input." },
 ];
 
-const agentCards: CardItem[] = [
-  { title: "Signal Agent", text: "Qualifies buyer intent, urgency, budget signal, channel fit, and missing information." },
-  { title: "Beta Test Agent", text: "Builds the test plan for websites, apps, AI tools, checkout flows, onboarding, and launch funnels." },
-  { title: "Risk Agent", text: "Flags unclear authority, weak fit, delivery risk, overclaiming, and anything that should not be sold." },
-  { title: "Offer Agent", text: "Packages the work into a paid report, repair sprint, monthly protection plan, or partner handoff." },
-  { title: "Campaign Agent", text: "Creates headline angles, ad copy, organic posts, referral hooks, and direct outreach sequences." },
-  { title: "Proof Agent", text: "Converts outcomes into private proof assets, anonymised benchmarks, and safe case-study structures." },
+const tribunalSteps: CardItem[] = [
+  { title: "Strategist", text: "Defines the business asset, buyer, promised outcome, and first measurable success gate." },
+  { title: "Builder", text: "Creates the campaign, report structure, repair scope, and operating checklist." },
+  { title: "Tester", text: "Checks whether the flow, offer, proof, and buyer path make practical sense." },
+  { title: "Critic", text: "Finds weak claims, vague positioning, unclear authority, and missing conversion evidence." },
+  { title: "Risk Officer", text: "Blocks public exposure, unsafe promises, unapproved naming, and anything that could damage trust." },
+  { title: "Monetiser", text: "Turns the asset into a clear report, sprint, retainer, referral path, and next campaign." },
+  { title: "Verifier", text: "Refuses to mark the asset as ready until the proof gates are satisfied." },
 ];
 
 const privacyRules: CardItem[] = [
@@ -68,10 +77,22 @@ function clamp(value: number) {
 }
 
 function scoreBand(score: number) {
-  if (score >= 85) return { label: "Scale now", className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-400" };
-  if (score >= 70) return { label: "Strong", className: "border-blue-500/30 bg-blue-500/10 text-blue-400" };
-  if (score >= 50) return { label: "Prove first", className: "border-amber-500/30 bg-amber-500/10 text-amber-400" };
-  return { label: "Rework", className: "border-red-500/30 bg-red-500/10 text-red-400" };
+  if (score >= 85) return { label: "Scale", className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-400" };
+  if (score >= 70) return { label: "Ready", className: "border-blue-500/30 bg-blue-500/10 text-blue-400" };
+  if (score >= 50) return { label: "Validate", className: "border-amber-500/30 bg-amber-500/10 text-amber-400" };
+  return { label: "Draft", className: "border-red-500/30 bg-red-500/10 text-red-400" };
+}
+
+function statusFromScore(score: number): CommandStatus {
+  if (score >= 85) return "Scale";
+  if (score >= 70) return "Ready";
+  if (score >= 50) return "Validate";
+  return "Draft";
+}
+
+function gateState(condition: boolean, strongCondition = false): ProofGate["state"] {
+  if (strongCondition) return "Strong";
+  return condition ? "Ready" : "Required";
 }
 
 export default function Bridge() {
@@ -97,13 +118,21 @@ export default function Bridge() {
     const channelScore = channel.trim().length > 65 ? 9 : 5;
     const fitScore = functionName.toLowerCase().includes("test") || functionName.toLowerCase().includes("repair") || functionName.toLowerCase().includes("app") ? 10 : 6;
     const score = clamp(18 + moneyScore + urgencyScore + clarityScore + audienceScore + triggerScore + proofScore + channelScore + fitScore);
+    const status = statusFromScore(score);
     return {
       score,
+      status,
       band: scoreBand(score),
       report: score >= 85 ? "$997-$1,500" : score >= 70 ? "$497-$997" : "$297-$497",
       sprint: score >= 85 ? "$5,000-$10,000" : score >= 70 ? "$2,500-$5,000" : score >= 50 ? "$1,500-$2,500" : "Rework offer first",
       monthly: score >= 85 ? "$2,500-$5,000/mo" : score >= 70 ? "$997-$2,500/mo" : score >= 50 ? "$497-$997/mo" : "After validation",
-      experiment: score >= 70 ? "Launch controlled campaign now" : "Run 7-day validation sprint first",
+      nextAction: score >= 85
+        ? "Launch one controlled campaign, one partner referral test, and one direct outreach sequence."
+        : score >= 70
+        ? "Run the paid beta-test report offer and collect proof before scaling."
+        : score >= 50
+        ? "Run a seven-day validation sprint before offering repair work."
+        : "Tighten the audience, trigger event, proof asset, and offer before selling.",
     };
   }, [audience, budget, channel, customerNeed, functionName, proofAsset, triggerEvent, urgency]);
 
@@ -116,6 +145,34 @@ export default function Bridge() {
     return { headline, subheadline, cta, contentHook, directOutreach };
   }, [result.score]);
 
+  const proofGates: ProofGate[] = [
+    {
+      title: "Buyer problem defined",
+      state: gateState(customerNeed.trim().length > 60, customerNeed.trim().length > 110),
+      text: "The need must be specific enough to sell without guessing.",
+    },
+    {
+      title: "Buyer trigger identified",
+      state: gateState(triggerEvent.trim().length > 50, triggerEvent.trim().length > 80),
+      text: "A trigger event makes outreach timely instead of random.",
+    },
+    {
+      title: "Proof asset attached",
+      state: gateState(proofAsset.trim().length > 55, proofAsset.trim().length > 90),
+      text: "Every sale needs a scorecard, report, checklist, benchmark, or before/after proof.",
+    },
+    {
+      title: "Revenue path priced",
+      state: gateState(cleanNumber(budget) >= 300, cleanNumber(budget) >= 2500),
+      text: "The offer must be worth the operational cost of testing, repairing, and supporting it.",
+    },
+    {
+      title: "Private delivery rule",
+      state: "Strong",
+      text: "No public exposure, no shame board, no unapproved naming. Trust is part of the product.",
+    },
+  ];
+
   const offerLadder: OfferItem[] = [
     { price: "$0-$97", name: "Private readiness snapshot", purpose: "Low-friction entry that captures demand and proves the private diagnostic value." },
     { price: result.report, name: "Paid beta-test report", purpose: "A structured QA, UX, trust, mobile, payment/contact, and launch-blocker report." },
@@ -123,18 +180,54 @@ export default function Bridge() {
     { price: result.monthly, name: "Launch protection retainer", purpose: "Ongoing QA, release testing, regression checks, follow-up campaigns, and private benchmarks." },
   ];
 
-  const experiments: CardItem[] = [
-    { title: "Traffic readiness ad", text: "Target businesses about to spend on ads: 'Check your site before you buy traffic.'" },
-    { title: "Founder rescue angle", text: "Target builders with bugs, launch pressure, or incomplete AI tools: 'Get a private fix plan.'" },
-    { title: "Agency partner loop", text: "Offer agencies a private QA layer they can resell before client launches." },
-    { title: "Referral bounty", text: "Reward trusted partners for sending qualified builds needing beta testing or launch repair." },
-  ];
+  const assetRecord = {
+    name: functionName || "Untitled business asset",
+    status: result.status,
+    buyer: audience,
+    nextAction: result.nextAction,
+    revenuePath: `${result.report} report → ${result.sprint} sprint → ${result.monthly} retainer`,
+  };
 
-  const prompt = `Run the VIBA Asset Growth Engine.\n\nVIBA meaning: Very Interesting Business Assets.\nFunction: ${functionName}\nCustomer need: ${customerNeed}\nAudience: ${audience}\nTrigger event: ${triggerEvent}\nBudget signal: ${budget}\nUrgency: ${urgency}\nChannel: ${channel}\nProof asset: ${proofAsset}\nOpportunity score: ${result.score}/100 (${result.band.label})\n\nGenerated campaign assets:\nHeadline: ${campaignAssets.headline}\nSubheadline: ${campaignAssets.subheadline}\nCTA: ${campaignAssets.cta}\nContent hook: ${campaignAssets.contentHook}\nDirect outreach: ${campaignAssets.directOutreach}\n\nOffer ladder:\n1. Private readiness snapshot: $0-$97\n2. Paid beta-test report: ${result.report}\n3. Repair sprint: ${result.sprint}\n4. Launch protection retainer: ${result.monthly}\n\nAgent tasks:\n1. Signal Agent: qualify intent, authority, urgency, budget strength, and missing information.\n2. Beta Test Agent: create the beta-test and launch-readiness test plan.\n3. Risk Agent: flag weak fit, unclear authority, overclaiming, and delivery risk.\n4. Campaign Agent: create three paid ad angles, three organic post angles, one direct outreach script, and one referral partner pitch.\n5. Offer Agent: package the report, sprint, retainer, and close script.\n6. Proof Agent: create private proof assets and anonymised benchmark insights without exposing the business.\n\nRules:\n- Do not publicly name, rank, mock, or expose any business.\n- Keep diagnostic findings inside the client workflow unless permission is granted.\n- Turn useful opportunities into sellable business assets.\n- Use conversion assumptions and KPI gates, not guaranteed revenue claims.\n- Prefer practical campaign experiments over theory.`;
+  const prompt = `Run the VIBA Asset Growth Engine.
+
+VIBA meaning: Very Interesting Business Assets.
+Asset: ${assetRecord.name}
+Status: ${assetRecord.status}
+Customer need: ${customerNeed}
+Audience: ${audience}
+Trigger event: ${triggerEvent}
+Budget signal: ${budget}
+Urgency: ${urgency}
+Channel: ${channel}
+Proof asset: ${proofAsset}
+Opportunity score: ${result.score}/100 (${result.band.label})
+Next best action: ${result.nextAction}
+Revenue path: ${assetRecord.revenuePath}
+
+Generated campaign assets:
+Headline: ${campaignAssets.headline}
+Subheadline: ${campaignAssets.subheadline}
+CTA: ${campaignAssets.cta}
+Content hook: ${campaignAssets.contentHook}
+Direct outreach: ${campaignAssets.directOutreach}
+
+Proof gates:
+${proofGates.map((gate, index) => `${index + 1}. ${gate.title}: ${gate.state} — ${gate.text}`).join("\n")}
+
+Agent tribunal:
+${tribunalSteps.map((step, index) => `${index + 1}. ${step.title}: ${step.text}`).join("\n")}
+
+Rules:
+- Do not publicly name, rank, mock, or expose any business.
+- Keep diagnostic findings inside the client workflow unless permission is granted.
+- Turn useful opportunities into sellable business assets.
+- Use conversion assumptions and KPI gates, not guaranteed revenue claims.
+- Do not mark the asset ready unless proof gates are satisfied.
+- Prefer practical campaign experiments over theory.`;
 
   async function copyPrompt() {
     await navigator.clipboard.writeText(prompt);
-    toast({ title: "Copied", description: "Advanced VIBA Growth Engine prompt copied." });
+    toast({ title: "Copied", description: "VIBA asset command prompt copied." });
   }
 
   async function copyCampaign() {
@@ -147,18 +240,18 @@ export default function Bridge() {
     <AppLayout>
       <div className="mx-auto flex max-w-7xl flex-col gap-8 py-8">
         <section className="overflow-hidden rounded-3xl border bg-card shadow-sm">
-          <div className="grid gap-0 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="grid gap-0 lg:grid-cols-[1.05fr_0.95fr]">
             <div className="p-6 sm:p-8 lg:p-10">
               <Badge className="mb-5 gap-2 border-primary/30 bg-primary/10 text-primary" variant="outline">
                 <LockKeyhole className="h-3.5 w-3.5" /> Very Interesting Business Assets
               </Badge>
               <h1 className="max-w-3xl text-3xl font-bold tracking-tight sm:text-5xl">VIBA Asset Growth Engine</h1>
               <p className="mt-5 max-w-3xl text-base leading-7 text-muted-foreground sm:text-lg">
-                An advanced private advertising, beta-testing, and business-asset operating system. It captures buyer demand, scores the opportunity, generates campaigns, builds the offer ladder, and hands execution to VIBA agents.
+                A clean operating system for turning buyer demand into a verified, monetisable business asset. One page. One score. One next action. No public exposure.
               </p>
               <div className="mt-7 flex flex-col gap-3 sm:flex-row">
                 <Link href="/sessions/new"><Button className="gap-2">Start agent session <ArrowRight className="h-4 w-4" /></Button></Link>
-                <Button variant="outline" className="gap-2" onClick={copyPrompt}><Copy className="h-4 w-4" /> Copy full agent prompt</Button>
+                <Button variant="outline" className="gap-2" onClick={copyPrompt}><Copy className="h-4 w-4" /> Copy command prompt</Button>
                 <Button variant="outline" className="gap-2" onClick={copyCampaign}><Megaphone className="h-4 w-4" /> Copy campaign assets</Button>
               </div>
             </div>
@@ -170,24 +263,27 @@ export default function Bridge() {
                 </div>
                 <div className="text-6xl font-bold tracking-tight">{result.score}<span className="text-2xl text-muted-foreground">/100</span></div>
                 <div className="mt-5 grid gap-3 text-sm sm:grid-cols-3">
-                  <div className="rounded-xl border bg-card p-3"><p className="text-xs text-muted-foreground">Report</p><p className="mt-1 font-semibold">{result.report}</p></div>
-                  <div className="rounded-xl border bg-card p-3"><p className="text-xs text-muted-foreground">Sprint</p><p className="mt-1 font-semibold">{result.sprint}</p></div>
-                  <div className="rounded-xl border bg-card p-3"><p className="text-xs text-muted-foreground">Retainer</p><p className="mt-1 font-semibold">{result.monthly}</p></div>
+                  <Metric label="Report" value={result.report} />
+                  <Metric label="Sprint" value={result.sprint} />
+                  <Metric label="Retainer" value={result.monthly} />
                 </div>
-                <p className="mt-4 text-xs leading-5 text-muted-foreground">No guaranteed revenue claims. Effectiveness comes from scoring, experiments, offer fit, follow-up, and measurable conversion gates.</p>
+                <div className="mt-4 rounded-xl border bg-primary/5 p-3">
+                  <p className="text-xs font-semibold text-foreground">Next best action</p>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">{result.nextAction}</p>
+                </div>
               </div>
             </div>
           </div>
         </section>
 
-        <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+        <section className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
           <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Target className="h-4 w-4" /> Asset intake model</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Target className="h-4 w-4" /> Asset intake</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2"><Label htmlFor="functionName">Business asset function</Label><Input id="functionName" value={functionName} onChange={(e) => setFunctionName(e.target.value)} /></div>
-              <div className="space-y-2"><Label htmlFor="customerNeed">Customer-facing need</Label><Textarea id="customerNeed" rows={4} value={customerNeed} onChange={(e) => setCustomerNeed(e.target.value)} /></div>
-              <div className="space-y-2"><Label htmlFor="audience">Target audience</Label><Textarea id="audience" rows={3} value={audience} onChange={(e) => setAudience(e.target.value)} /></div>
-              <div className="space-y-2"><Label htmlFor="triggerEvent">Buyer trigger event</Label><Textarea id="triggerEvent" rows={3} value={triggerEvent} onChange={(e) => setTriggerEvent(e.target.value)} /></div>
+              <div className="space-y-2"><Label htmlFor="functionName">Business asset</Label><Input id="functionName" value={functionName} onChange={(e) => setFunctionName(e.target.value)} /></div>
+              <div className="space-y-2"><Label htmlFor="customerNeed">Customer need</Label><Textarea id="customerNeed" rows={4} value={customerNeed} onChange={(e) => setCustomerNeed(e.target.value)} /></div>
+              <div className="space-y-2"><Label htmlFor="audience">Buyer / audience</Label><Textarea id="audience" rows={3} value={audience} onChange={(e) => setAudience(e.target.value)} /></div>
+              <div className="space-y-2"><Label htmlFor="triggerEvent">Buyer trigger</Label><Textarea id="triggerEvent" rows={3} value={triggerEvent} onChange={(e) => setTriggerEvent(e.target.value)} /></div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2"><Label htmlFor="budget">Budget signal</Label><Input id="budget" value={budget} onChange={(e) => setBudget(e.target.value)} /></div>
                 <div className="space-y-2"><Label htmlFor="urgency">Urgency</Label><Input id="urgency" value={urgency} onChange={(e) => setUrgency(e.target.value)} /></div>
@@ -199,28 +295,49 @@ export default function Bridge() {
 
           <div className="grid gap-6">
             <Card>
-              <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Megaphone className="h-4 w-4" /> Generated campaign assets</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="flex items-center gap-2 text-base"><ClipboardCheck className="h-4 w-4" /> Asset ledger</CardTitle></CardHeader>
               <CardContent className="grid gap-3">
-                <AssetRow label="Headline" value={campaignAssets.headline} />
-                <AssetRow label="Subheadline" value={campaignAssets.subheadline} />
-                <AssetRow label="CTA" value={campaignAssets.cta} />
-                <AssetRow label="Content hook" value={campaignAssets.contentHook} />
-                <AssetRow label="Direct outreach" value={campaignAssets.directOutreach} />
+                <AssetRow label="Asset" value={assetRecord.name} />
+                <AssetRow label="Status" value={`${assetRecord.status} — ${result.score}/100`} />
+                <AssetRow label="Revenue path" value={assetRecord.revenuePath} />
+                <AssetRow label="Next action" value={assetRecord.nextAction} />
               </CardContent>
             </Card>
 
             <Card>
-              <CardHeader><CardTitle className="flex items-center gap-2 text-base"><BadgeDollarSign className="h-4 w-4" /> Offer ladder</CardTitle></CardHeader>
-              <CardContent className="grid gap-3 md:grid-cols-2">
-                {offerLadder.map((offer) => (
-                  <div key={offer.name} className="rounded-xl border bg-card p-4">
-                    <div className="flex items-start justify-between gap-3"><p className="font-semibold">{offer.name}</p><Badge variant="outline">{offer.price}</Badge></div>
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">{offer.purpose}</p>
-                  </div>
+              <CardHeader><CardTitle className="flex items-center gap-2 text-base"><ShieldCheck className="h-4 w-4" /> Proof engine</CardTitle></CardHeader>
+              <CardContent className="grid gap-3">
+                {proofGates.map((gate) => (
+                  <ProofGateRow key={gate.title} gate={gate} />
                 ))}
               </CardContent>
             </Card>
           </div>
+        </section>
+
+        <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+          <Card>
+            <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Megaphone className="h-4 w-4" /> Campaign assets</CardTitle></CardHeader>
+            <CardContent className="grid gap-3">
+              <AssetRow label="Headline" value={campaignAssets.headline} />
+              <AssetRow label="Subheadline" value={campaignAssets.subheadline} />
+              <AssetRow label="CTA" value={campaignAssets.cta} />
+              <AssetRow label="Content hook" value={campaignAssets.contentHook} />
+              <AssetRow label="Direct outreach" value={campaignAssets.directOutreach} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader><CardTitle className="flex items-center gap-2 text-base"><BadgeDollarSign className="h-4 w-4" /> Revenue path</CardTitle></CardHeader>
+            <CardContent className="grid gap-3">
+              {offerLadder.map((offer) => (
+                <div key={offer.name} className="rounded-xl border bg-card p-4">
+                  <div className="flex items-start justify-between gap-3"><p className="font-semibold">{offer.name}</p><Badge variant="outline">{offer.price}</Badge></div>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{offer.purpose}</p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
         </section>
 
         <section className="grid gap-6 lg:grid-cols-2">
@@ -228,37 +345,24 @@ export default function Bridge() {
             <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Workflow className="h-4 w-4" /> Operating loop</CardTitle></CardHeader>
             <CardContent className="grid gap-3">
               {workflowSteps.map((step, index) => (
-                <div key={step.title} className="flex gap-3 rounded-xl border bg-card p-3">
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">{index + 1}</div>
-                  <div><p className="font-medium">{step.title}</p><p className="text-sm leading-6 text-muted-foreground">{step.text}</p></div>
-                </div>
+                <NumberedRow key={step.title} index={index} title={step.title} text={step.text} />
               ))}
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2 text-base"><TrendingUp className="h-4 w-4" /> Experiments to run</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2 text-base"><CheckCircle2 className="h-4 w-4" /> Agent tribunal</CardTitle></CardHeader>
             <CardContent className="grid gap-3">
-              <div className="rounded-xl border bg-primary/5 p-4"><p className="text-sm font-semibold">Recommended next action</p><p className="mt-1 text-sm text-muted-foreground">{result.experiment}</p></div>
-              {experiments.map((experiment) => (
-                <div key={experiment.title} className="rounded-xl border bg-card p-4"><p className="font-semibold">{experiment.title}</p><p className="mt-2 text-sm leading-6 text-muted-foreground">{experiment.text}</p></div>
+              {tribunalSteps.map((step, index) => (
+                <NumberedRow key={step.title} index={index} title={step.title} text={step.text} />
               ))}
             </CardContent>
           </Card>
         </section>
 
-        <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+        <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
           <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2 text-base"><CheckCircle2 className="h-4 w-4" /> Agent squad</CardTitle></CardHeader>
-            <CardContent className="grid gap-3 md:grid-cols-2">
-              {agentCards.map((agent) => (
-                <div key={agent.title} className="rounded-xl border bg-card p-4"><p className="font-semibold">{agent.title}</p><p className="mt-2 text-sm leading-6 text-muted-foreground">{agent.text}</p></div>
-              ))}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2 text-base"><ShieldCheck className="h-4 w-4" /> Privacy and trust rules</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2 text-base"><EyeOff className="h-4 w-4" /> Trust rules</CardTitle></CardHeader>
             <CardContent className="space-y-3 text-sm text-muted-foreground">
               {privacyRules.map((rule, index) => (
                 <div key={rule.title} className="flex items-start gap-3 rounded-xl border bg-card p-3">
@@ -268,14 +372,23 @@ export default function Bridge() {
               ))}
             </CardContent>
           </Card>
-        </section>
 
-        <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2 text-base"><CheckCircle2 className="h-4 w-4" /> Full VIBA agent handoff prompt</CardTitle></CardHeader>
-          <CardContent><pre className="max-h-[380px] overflow-auto whitespace-pre-wrap rounded-xl border bg-muted/30 p-4 text-xs leading-6 text-muted-foreground">{prompt}</pre></CardContent>
-        </Card>
+          <Card>
+            <CardHeader><CardTitle className="flex items-center gap-2 text-base"><CheckCircle2 className="h-4 w-4" /> VIBA command prompt</CardTitle></CardHeader>
+            <CardContent><pre className="max-h-[420px] overflow-auto whitespace-pre-wrap rounded-xl border bg-muted/30 p-4 text-xs leading-6 text-muted-foreground">{prompt}</pre></CardContent>
+          </Card>
+        </section>
       </div>
     </AppLayout>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border bg-card p-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-1 font-semibold">{value}</p>
+    </div>
   );
 }
 
@@ -284,6 +397,33 @@ function AssetRow({ label, value }: { label: string; value: string }) {
     <div className="rounded-xl border bg-card p-4">
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="mt-2 text-sm leading-6">{value}</p>
+    </div>
+  );
+}
+
+function NumberedRow({ index, title, text }: { index: number; title: string; text: string }) {
+  return (
+    <div className="flex gap-3 rounded-xl border bg-card p-3">
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">{index + 1}</div>
+      <div><p className="font-medium">{title}</p><p className="text-sm leading-6 text-muted-foreground">{text}</p></div>
+    </div>
+  );
+}
+
+function ProofGateRow({ gate }: { gate: ProofGate }) {
+  const className = gate.state === "Strong"
+    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+    : gate.state === "Ready"
+    ? "border-blue-500/30 bg-blue-500/10 text-blue-400"
+    : "border-amber-500/30 bg-amber-500/10 text-amber-400";
+
+  return (
+    <div className="rounded-xl border bg-card p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="font-semibold">{gate.title}</p>
+        <Badge variant="outline" className={className}>{gate.state}</Badge>
+      </div>
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">{gate.text}</p>
     </div>
   );
 }
