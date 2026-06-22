@@ -3,7 +3,6 @@ import { z } from "zod/v4";
 import {
   getStripe,
   isStripeConfigured,
-  getBillingPriceId,
   getBillingStatus,
   getCreditTransactions,
   VIBA_PLAN,
@@ -13,6 +12,13 @@ const router: IRouter = Router();
 
 const MONTHLY_CREDITS = 1500;
 const TRIAL_DAILY_CREDITS = 500;
+const MONTHLY_PLAN = {
+  productName: "VIBA Member Monthly",
+  unitAmount: 5000,
+  currency: "usd",
+  credits: MONTHLY_CREDITS,
+  trialDays: VIBA_PLAN.trialDays,
+};
 const TOP_UP_PACK = {
   key: "credits_1500",
   label: "1,500 Credit Pack",
@@ -22,6 +28,7 @@ const TOP_UP_PACK = {
   badge: "Another Month",
 };
 
+let cachedMonthlyPriceId = "";
 let cachedTopUpPriceId = "";
 
 function origin(req: import("express").Request): string {
@@ -29,6 +36,38 @@ function origin(req: import("express").Request): string {
     (req.headers["origin"] as string | undefined) ??
     `${req.protocol}://${req.get("host")}`
   );
+}
+
+async function getMonthlyPriceId(): Promise<string> {
+  const configured = process.env["STRIPE_BILLING_SUBSCRIPTION_PRICE_ID"];
+  if (configured) return configured;
+  if (cachedMonthlyPriceId) return cachedMonthlyPriceId;
+
+  const stripe = getStripe();
+  const products = await stripe.products.list({ active: true, limit: 100 });
+  let product = products.data.find((item) => item.name === MONTHLY_PLAN.productName);
+  if (!product) {
+    product = await stripe.products.create({
+      name: MONTHLY_PLAN.productName,
+      description: "Monthly VIBA membership with 1,500 credits per month.",
+      metadata: { system: "viba_billing", type: "subscription", credits: String(MONTHLY_PLAN.credits), trialDailyCredits: String(TRIAL_DAILY_CREDITS) },
+    });
+  }
+
+  const prices = await stripe.prices.list({ product: product.id, active: true, limit: 20 });
+  let price = prices.data.find((item) => item.unit_amount === MONTHLY_PLAN.unitAmount && item.recurring?.interval === "month");
+  if (!price) {
+    price = await stripe.prices.create({
+      product: product.id,
+      unit_amount: MONTHLY_PLAN.unitAmount,
+      currency: MONTHLY_PLAN.currency,
+      recurring: { interval: "month" },
+      metadata: { system: "viba_billing", type: "subscription", credits: String(MONTHLY_PLAN.credits), trialDailyCredits: String(TRIAL_DAILY_CREDITS) },
+    });
+  }
+
+  cachedMonthlyPriceId = price.id;
+  return cachedMonthlyPriceId;
 }
 
 async function getTopUpPriceId(): Promise<string> {
@@ -65,13 +104,13 @@ async function getTopUpPriceId(): Promise<string> {
 router.get("/billing/plans", (_req, res): void => {
   res.json({
     plan: {
-      name: VIBA_PLAN.productName,
-      unitAmount: VIBA_PLAN.unitAmount,
-      currency: VIBA_PLAN.currency,
+      name: MONTHLY_PLAN.productName,
+      unitAmount: MONTHLY_PLAN.unitAmount,
+      currency: MONTHLY_PLAN.currency,
       monthlyCredits: MONTHLY_CREDITS,
-      trialDays: VIBA_PLAN.trialDays,
+      trialDays: MONTHLY_PLAN.trialDays,
       trialDailyCredits: TRIAL_DAILY_CREDITS,
-      configured: isStripeConfigured() && !!getBillingPriceId(VIBA_PLAN.key),
+      configured: isStripeConfigured(),
     },
     creditPacks: [{
       key: TOP_UP_PACK.key,
@@ -102,12 +141,6 @@ router.post("/billing/checkout", async (req, res): Promise<void> => {
     return;
   }
 
-  const priceId = getBillingPriceId(VIBA_PLAN.key);
-  if (!priceId) {
-    res.status(503).json({ error: "Membership price not provisioned yet — try again in a moment" });
-    return;
-  }
-
   const current = await getBillingStatus(userId);
   if (current.subscriptionStatus === "active" || current.subscriptionStatus === "trialing") {
     res.status(409).json({ error: "You already have an active subscription" });
@@ -117,6 +150,7 @@ router.post("/billing/checkout", async (req, res): Promise<void> => {
   try {
     const stripe = getStripe();
     const base = origin(req);
+    const priceId = await getMonthlyPriceId();
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
@@ -124,7 +158,7 @@ router.post("/billing/checkout", async (req, res): Promise<void> => {
       ...(current.stripeCustomerId ? { customer: current.stripeCustomerId } : {}),
       line_items: [{ price: priceId, quantity: 1 }],
       subscription_data: {
-        trial_period_days: VIBA_PLAN.trialDays,
+        trial_period_days: MONTHLY_PLAN.trialDays,
         metadata: { system: "viba_billing", userId: String(userId), credits: String(MONTHLY_CREDITS), trialDailyCredits: String(TRIAL_DAILY_CREDITS) },
       },
       payment_method_collection: "always",
