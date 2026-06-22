@@ -15,7 +15,6 @@ import {
   linkSubscription,
   updateSubscriptionStatus,
   grantCredits,
-  VIBA_PLAN,
   VIBA_CREDIT_ECONOMICS,
 } from "../lib/billing";
 import {
@@ -23,13 +22,30 @@ import {
   sendSubscriptionCanceledEmail,
 } from "../lib/billingEmail";
 
-const PAID_MONTHLY_CREDITS = 1500;
+const MEMBER_MONTHLY_CREDITS = 1500;
+const PRO_MONTHLY_CREDITS = 4500;
 
 function tsToDate(ts: number | null | undefined): Date | null {
   return ts != null ? new Date(ts * 1000) : null;
 }
 
-async function resetPaidCredits(userId: number, periodEnd: Date | null): Promise<void> {
+function creditsFromMetadata(meta: Record<string, string | undefined> | null | undefined): number {
+  const raw = Number(meta?.["credits"]);
+  if (Number.isFinite(raw) && raw > 0) return raw;
+  if (meta?.["planKey"] === "viba_pro") return PRO_MONTHLY_CREDITS;
+  return MEMBER_MONTHLY_CREDITS;
+}
+
+async function subscriptionCredits(subscriptionId: string): Promise<number> {
+  const stripe = getStripeClient();
+  const sub = await stripe.subscriptions.retrieve(subscriptionId, { expand: ["items.data.price"] });
+  const fromSub = creditsFromMetadata(sub.metadata as Record<string, string | undefined>);
+  if (fromSub > MEMBER_MONTHLY_CREDITS || sub.metadata?.["credits"]) return fromSub;
+  const priceMeta = sub.items.data[0]?.price.metadata as Record<string, string | undefined> | undefined;
+  return creditsFromMetadata(priceMeta);
+}
+
+async function resetPaidCredits(userId: number, periodEnd: Date | null, credits: number): Promise<void> {
   await pool.query(
     `UPDATE users SET
        credits_remaining = $1,
@@ -37,12 +53,12 @@ async function resetPaidCredits(userId: number, periodEnd: Date | null): Promise
        subscription_status = 'active',
        updated_at = NOW()
      WHERE id = $3`,
-    [PAID_MONTHLY_CREDITS, periodEnd, userId],
+    [credits, periodEnd, userId],
   );
   await pool.query(
     `INSERT INTO credit_transactions (user_id, amount, balance_after, reason)
      VALUES ($1, $2, $3, $4)`,
-    [userId, PAID_MONTHLY_CREDITS, PAID_MONTHLY_CREDITS, "paid_allowance_reset"],
+    [userId, credits, credits, "paid_allowance_reset"],
   );
 }
 
@@ -99,7 +115,7 @@ export const webhookHandler: RequestHandler = async (req, res): Promise<void> =>
             const isTrial = sub.status === "trialing";
             const initialCredits = isTrial
               ? VIBA_CREDIT_ECONOMICS.trialCreditsDaily
-              : Number(meta["credits"] ?? PAID_MONTHLY_CREDITS);
+              : creditsFromMetadata(meta as Record<string, string | undefined>);
             await grantCredits(
               userId,
               initialCredits,
@@ -162,8 +178,9 @@ export const webhookHandler: RequestHandler = async (req, res): Promise<void> =>
         const user = await getUserByStripeCustomer(customerId);
         if (user) {
           const periodEnd = tsToDate(invoice.period_end);
-          await resetPaidCredits(user.id, periodEnd);
-          logger.info({ userId: user.id, credits: PAID_MONTHLY_CREDITS }, "Billing: paid credits reset on renewal");
+          const credits = await subscriptionCredits(subId);
+          await resetPaidCredits(user.id, periodEnd, credits);
+          logger.info({ userId: user.id, credits }, "Billing: paid credits reset on renewal");
         }
 
         await updateSubscriberBySubscriptionId(subId, { status: "active" });
