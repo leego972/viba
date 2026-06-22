@@ -9,7 +9,7 @@ const ANNUAL = {
   productName: "VIBA Member Annual",
   unitAmount: 60000,
   currency: "usd",
-  credits: 7800,
+  credits: 15600,
   trialDays: VIBA_PLAN.trialDays,
 };
 
@@ -30,7 +30,7 @@ async function annualPriceId(): Promise<string> {
   if (!product) {
     product = await stripe.products.create({
       name: ANNUAL.productName,
-      description: "Annual VIBA membership with 7,800 credits per year.",
+      description: "Annual VIBA membership with 15,600 credits per year, including a 30 percent credit bonus.",
       metadata: { system: "viba_billing", type: "subscription", planKey: ANNUAL.key, credits: String(ANNUAL.credits) },
     });
   }
