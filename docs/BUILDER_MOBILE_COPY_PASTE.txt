@@ -1,0 +1,48 @@
+Work only on branch mobile-capacitor-redesign in leego972/bridge-ai.
+
+Mission: turn the existing VIBA / Bridge AI React + Express repo into one mobile-compatible app for both Android and iOS using Capacitor, while preserving the current web app and backend.
+
+Non-negotiables:
+1. Do not rebuild the backend from scratch.
+2. Do not create a separate Android codebase and separate iOS codebase.
+3. Use the existing React/Vite frontend in artifacts/bridge-ai as the single app UI.
+4. Use Capacitor for Android and iOS native shells.
+5. Keep the API hosted on HTTPS production infrastructure, not inside the mobile app.
+6. Do not commit signing credentials, server-only values, or production private credentials.
+7. Keep admin/source-repair controls server-gated.
+8. Keep Railway deployment compatibility for the web/backend app.
+9. Commit in checkpoints.
+
+Files already added for you:
+- artifacts/bridge-ai/capacitor.config.ts
+- artifacts/bridge-ai/src/mobile/MobileShell.tsx
+- artifacts/bridge-ai/src/mobile/mobileStyles.css
+- artifacts/bridge-ai/public/manifest.webmanifest
+- docs/MOBILE_APP_BUILD_PLAN.md
+
+Required next tasks:
+1. Run pnpm install.
+2. Run pnpm run typecheck.
+3. Fix the first real TypeScript error only, then rerun.
+4. Run pnpm --filter @workspace/bridge-ai run build.
+5. Run pnpm --filter @workspace/bridge-ai run mobile:prepare.
+6. Run pnpm --filter @workspace/bridge-ai exec cap add android.
+7. Run pnpm --filter @workspace/bridge-ai exec cap add ios.
+8. Run pnpm --filter @workspace/bridge-ai run mobile:sync.
+9. Open Android Studio and verify the Android emulator launches.
+10. Open Xcode and verify the iOS simulator launches.
+11. Test login, dashboard, new session, session workspace, chat composer, settings, billing, terms, and instructions on mobile viewport.
+12. Report exact command output and screenshots/evidence.
+
+Expected validation commands:
+pnpm install
+pnpm run typecheck
+pnpm --filter @workspace/bridge-ai run build
+pnpm --filter @workspace/bridge-ai run mobile:sync
+pnpm --filter @workspace/bridge-ai run mobile:open:android
+pnpm --filter @workspace/bridge-ai run mobile:open:ios
+
+Release notes:
+- Replace /viba-logo.png placeholder app icon mapping with dedicated app icon assets before App Store / Google Play submission.
+- Add final privacy/support/terms URLs before store submission.
+- Keep payment handling compliant with Apple and Google rules; web checkout may need native policy review before public store release.
