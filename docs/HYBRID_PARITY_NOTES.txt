@@ -1,0 +1,16 @@
+VIBA mobile target: one full-parity hybrid app for Android and iOS.
+
+Use the existing React/Vite frontend as the single UI.
+Use the existing hosted API as the backend.
+Use Capacitor to produce Android and iOS shells.
+Do not create separate Android-only and iOS-only product forks.
+
+Mobile must keep the same web routes and product surface: landing, auth, dashboard, new session, session workspace, uploads, repo context, settings, pricing, billing, terms, instructions, and admin-gated maintenance.
+
+Validate with:
+pnpm install
+pnpm run typecheck
+pnpm --filter @workspace/bridge-ai run build
+pnpm --filter @workspace/bridge-ai run mobile:sync
+pnpm --filter @workspace/bridge-ai run mobile:open:android
+pnpm --filter @workspace/bridge-ai run mobile:open:ios
