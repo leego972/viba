@@ -19,17 +19,20 @@ const MONTHLY_PLAN = {
   credits: MONTHLY_CREDITS,
   trialDays: VIBA_PLAN.trialDays,
 };
-const TOP_UP_PACK = {
-  key: "credits_1500",
-  label: "1,500 Credit Pack",
-  description: "1,500 credits",
-  credits: 1500,
-  unitAmount: 5000,
-  badge: "Another Month",
-};
+
+const TOP_UP_PACKS = [
+  { key: "credits_1000", label: "1,000 Credit Pack", description: "1,000 credits", credits: 1000, unitAmount: 5000, badge: "$50" },
+  { key: "credits_2000", label: "2,000 Credit Pack", description: "2,000 credits", credits: 2000, unitAmount: 10000, badge: "$100" },
+  { key: "credits_3000", label: "3,000 Credit Pack", description: "3,000 credits", credits: 3000, unitAmount: 15000, badge: "$150" },
+  { key: "credits_4000", label: "4,000 Credit Pack", description: "4,000 credits", credits: 4000, unitAmount: 20000, badge: "$200" },
+  { key: "credits_5000", label: "5,000 Credit Pack", description: "5,000 credits", credits: 5000, unitAmount: 25000, badge: "$250" },
+  { key: "credits_6000", label: "6,000 Credit Pack", description: "6,000 credits", credits: 6000, unitAmount: 30000, badge: "$300" },
+] as const;
+
+type TopUpPack = (typeof TOP_UP_PACKS)[number];
 
 let cachedMonthlyPriceId = "";
-let cachedTopUpPriceId = "";
+const cachedTopUpPriceIds: Record<string, string> = {};
 
 function origin(req: import("express").Request): string {
   return (
@@ -70,35 +73,40 @@ async function getMonthlyPriceId(): Promise<string> {
   return cachedMonthlyPriceId;
 }
 
-async function getTopUpPriceId(): Promise<string> {
-  const configured = process.env["STRIPE_BILLING_CREDITS_1500_PRICE_ID"];
+function envKeyForTopUp(pack: TopUpPack): string {
+  return `STRIPE_BILLING_CREDITS_${pack.credits}_PRICE_ID`;
+}
+
+async function getTopUpPriceId(pack: TopUpPack): Promise<string> {
+  const configured = process.env[envKeyForTopUp(pack)];
   if (configured) return configured;
-  if (cachedTopUpPriceId) return cachedTopUpPriceId;
+  if (cachedTopUpPriceIds[pack.key]) return cachedTopUpPriceIds[pack.key]!;
 
   const stripe = getStripe();
+  const productName = `VIBA ${pack.label}`;
   const products = await stripe.products.list({ active: true, limit: 100 });
-  let product = products.data.find((item) => item.name === "VIBA 1,500 Credit Pack");
+  let product = products.data.find((item) => item.name === productName);
   if (!product) {
     product = await stripe.products.create({
-      name: "VIBA 1,500 Credit Pack",
-      description: "1,500 VIBA credits — one-time top-up pack",
-      metadata: { system: "viba_billing", type: "credit_pack", credits: String(TOP_UP_PACK.credits) },
+      name: productName,
+      description: `${pack.description} — VIBA one-time top-up pack`,
+      metadata: { system: "viba_billing", type: "credit_pack", credits: String(pack.credits), packKey: pack.key },
     });
   }
 
   const prices = await stripe.prices.list({ product: product.id, active: true, limit: 20 });
-  let price = prices.data.find((item) => item.unit_amount === TOP_UP_PACK.unitAmount && !item.recurring);
+  let price = prices.data.find((item) => item.unit_amount === pack.unitAmount && !item.recurring);
   if (!price) {
     price = await stripe.prices.create({
       product: product.id,
-      unit_amount: TOP_UP_PACK.unitAmount,
+      unit_amount: pack.unitAmount,
       currency: "usd",
-      metadata: { system: "viba_billing", type: "credit_pack", credits: String(TOP_UP_PACK.credits) },
+      metadata: { system: "viba_billing", type: "credit_pack", credits: String(pack.credits), packKey: pack.key },
     });
   }
 
-  cachedTopUpPriceId = price.id;
-  return cachedTopUpPriceId;
+  cachedTopUpPriceIds[pack.key] = price.id;
+  return price.id;
 }
 
 router.get("/billing/plans", (_req, res): void => {
@@ -112,15 +120,15 @@ router.get("/billing/plans", (_req, res): void => {
       trialDailyCredits: TRIAL_DAILY_CREDITS,
       configured: isStripeConfigured(),
     },
-    creditPacks: [{
-      key: TOP_UP_PACK.key,
-      label: TOP_UP_PACK.label,
-      description: TOP_UP_PACK.description,
-      credits: TOP_UP_PACK.credits,
-      unitAmount: TOP_UP_PACK.unitAmount,
-      badge: TOP_UP_PACK.badge,
+    creditPacks: TOP_UP_PACKS.map((pack) => ({
+      key: pack.key,
+      label: pack.label,
+      description: pack.description,
+      credits: pack.credits,
+      unitAmount: pack.unitAmount,
+      badge: pack.badge,
       configured: isStripeConfigured(),
-    }],
+    })),
   });
 });
 
@@ -188,14 +196,15 @@ router.post("/billing/credits/checkout", async (req, res): Promise<void> => {
 
   const parsed = CreditPackBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "packKey is required" }); return; }
-  if (parsed.data.packKey !== TOP_UP_PACK.key) { res.status(400).json({ error: "Unknown credit pack" }); return; }
+  const pack = TOP_UP_PACKS.find((item) => item.key === parsed.data.packKey);
+  if (!pack) { res.status(400).json({ error: "Unknown credit pack" }); return; }
 
   const current = await getBillingStatus(userId);
 
   try {
     const stripe = getStripe();
     const base = origin(req);
-    const priceId = await getTopUpPriceId();
+    const priceId = await getTopUpPriceId(pack);
 
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
@@ -207,10 +216,10 @@ router.post("/billing/credits/checkout", async (req, res): Promise<void> => {
         system: "viba_billing",
         type: "credit_pack",
         userId: String(userId),
-        credits: String(TOP_UP_PACK.credits),
-        packKey: TOP_UP_PACK.key,
+        credits: String(pack.credits),
+        packKey: pack.key,
       },
-      success_url: `${base}/billing?credits_added=${TOP_UP_PACK.credits}`,
+      success_url: `${base}/billing?credits_added=${pack.credits}`,
       cancel_url: `${base}/billing`,
     });
 
