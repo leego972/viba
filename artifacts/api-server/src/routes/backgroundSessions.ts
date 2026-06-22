@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, sessionsTable } from "@workspace/db";
-import { deductCredits, getBillingStatus, isStripeConfigured } from "../lib/billing";
+import { isStripeConfigured } from "../lib/billing";
 import { getBackgroundRun, startBackgroundFullRun } from "../lib/backgroundSessionRunner";
 
 const router: IRouter = Router();
@@ -36,25 +36,11 @@ router.post("/sessions/:id/run-full", async (req, res): Promise<void> => {
   if (!canAccessSession(req, session)) { res.status(403).json({ error: "forbidden" }); return; }
   if (session.status !== "active") { res.status(409).json({ error: "session_not_active", status: session.status }); return; }
 
-  const billableUserId = userId ?? session.userId;
-  let firstCreditReserved = false;
-  if (isStripeConfigured() && billableUserId) {
-    const { subscriptionStatus } = await getBillingStatus(billableUserId);
-    if (subscriptionStatus === "canceled" || subscriptionStatus === "none") {
-      res.status(402).json({ error: "subscription_required", message: "An active VIBA membership is required. Visit /pricing to subscribe.", subscriptionUrl: "/pricing" });
-      return;
-    }
-    firstCreditReserved = await deductCredits(billableUserId, 1, sessionId);
-    if (!firstCreditReserved) {
-      res.status(402).json({ error: "out_of_credits", message: "You've used all your credits for this period. Top up to continue.", topUpUrl: "/billing" });
-      return;
-    }
-  }
-
+  const billableUserId = userId ?? session.userId ?? 0;
   const result = startBackgroundFullRun({
     sessionId,
-    userId: billableUserId ?? 0,
-    firstCreditAlreadyReserved: firstCreditReserved,
+    userId: billableUserId,
+    firstCreditAlreadyReserved: isStripeConfigured(),
   });
 
   res.status(result.alreadyRunning ? 200 : 202).json({
