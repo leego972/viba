@@ -4,41 +4,41 @@ import { Button } from "@/components/ui/button";
 
 const features = [
   {
-    title: "Live AI collaboration",
-    text: "Agents speak to you and to each other while work is happening.",
+    title: "Agent execution",
+    text: "Plan, build, review, and verify work through coordinated agents instead of loose one-off prompts.",
     icon: MessageSquare,
   },
   {
-    title: "Upload project context",
-    text: "Add screenshots, logs, zips, specs, and documents directly into the session.",
+    title: "Context intake",
+    text: "Add screenshots, logs, zips, specs, repos, and documents so sessions start with the right evidence.",
     icon: Paperclip,
   },
   {
-    title: "Controlled execution",
-    text: "Important actions stay permission-gated, with admin-only controls separated from user projects.",
+    title: "Proof gates",
+    text: "Important outputs are treated as drafts until the required proof, risk, and review checks are satisfied.",
     icon: ShieldCheck,
   },
   {
-    title: "Business asset engine",
-    text: "Turn buyer demand into private beta-testing, repair planning, launch-readiness, and follow-up workflows after login.",
+    title: "Revenue path",
+    text: "Turn useful work into reports, repair sprints, retainers, campaigns, and reusable business assets.",
     icon: TrendingUp,
   },
 ];
 
 const growthSteps = [
   {
-    title: "Customer demand first",
-    text: "The public message focuses on what customers need fixed or improved, not on exposing a business publicly.",
+    title: "Asset ledger",
+    text: "Every serious task becomes a clean business-asset record: status, buyer, proof, revenue path, and next action.",
     icon: Target,
   },
   {
-    title: "Private qualification",
-    text: "Inside the app, VIBA scores fit, urgency, budget signal, clarity, and delivery risk before work is packaged.",
+    title: "Proof engine",
+    text: "VIBA separates drafted, validated, ready, and scale-ready work so users do not confuse output with verified progress.",
     icon: LockKeyhole,
   },
   {
-    title: "Agent repair workflow",
-    text: "The authenticated Growth Engine routes the opportunity into beta-testing, risk, offer, and follow-up agents.",
+    title: "Agent tribunal",
+    text: "Strategist, Builder, Tester, Critic, Risk Officer, Monetiser, and Verifier roles force stronger execution quality.",
     icon: Workflow,
   },
 ];
@@ -71,10 +71,10 @@ export default function Home() {
                 <Sparkles className="h-3.5 w-3.5" /> Very Interesting Business Assets
               </div>
               <h1 className="mt-6 max-w-4xl text-5xl font-semibold tracking-tight text-slate-950 sm:text-6xl lg:text-7xl">
-                VIBA turns serious business work into controlled AI execution.
+                VIBA turns ideas into verified business assets.
               </h1>
               <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-600">
-                VIBA stands for Very Interesting Business Assets: a clean AI workspace where agents coordinate, question each other, process project context, and turn useful ideas into structured business assets.
+                VIBA is a clean AI control room for planning, building, testing, proving, and monetising serious work. It does not just chat — it pushes work through proof gates and agent review before calling it ready.
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <Link href="/dashboard">
@@ -94,7 +94,7 @@ export default function Home() {
                 </Link>
               </div>
               <div className="mt-8 flex flex-wrap gap-2 text-xs text-slate-500">
-                {['Very Interesting Business Assets', 'Groq default AI', 'Private Growth Engine', 'Admin-gated source controls'].map((item) => (
+                {['Asset Ledger', 'Proof Engine', 'Agent Tribunal', 'Revenue Path'].map((item) => (
                   <span key={item} className="rounded-full border border-slate-200 bg-white px-3 py-1.5">{item}</span>
                 ))}
               </div>
@@ -106,17 +106,17 @@ export default function Home() {
                   <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-950 text-white">V</div>
                   <div>
                     <p className="text-sm font-semibold text-slate-950">VIBA live session</p>
-                    <p className="text-xs text-slate-500">Business assets · clean execution thread</p>
+                    <p className="text-xs text-slate-500">Business asset · proof-led execution</p>
                   </div>
-                  <span className="ml-auto rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">Live</span>
+                  <span className="ml-auto rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">Verified flow</span>
                 </div>
                 <div className="space-y-3">
-                  <Bubble name="Strategist" text="I’m turning the business request into build, safety, offer, and execution tasks." />
-                  <Bubble name="Builder" text="I’m checking the project context and identifying what needs to be created, repaired, or packaged." />
-                  <Bubble name="Reviewer" text="I’ll verify the result and flag anything risky before approval." />
+                  <Bubble name="Strategist" text="I’m defining the asset, buyer, outcome, proof gate, and first success metric." />
+                  <Bubble name="Builder" text="I’m creating the execution plan and separating real actions from assumptions." />
+                  <Bubble name="Verifier" text="I will not mark this ready until the proof gates are satisfied." />
                 </div>
                 <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-400">
-                  Upload, type, send, or stop — all in one stable chatbox.
+                  Clean workflow: context → agents → proof → next action.
                 </div>
               </div>
             </div>
@@ -127,7 +127,7 @@ export default function Home() {
           <div className="mx-auto max-w-7xl">
             <div className="max-w-2xl">
               <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Simple navigation. No clutter.</h2>
-              <p className="mt-3 text-slate-600">The app is organized around the business asset being created: conversation in the center, command box at the bottom, secondary panels around it only when useful.</p>
+              <p className="mt-3 text-slate-600">The app stays organized around the asset being created: session, workbench, Growth Engine, settings. Every visible action either starts work, copies an asset, or opens a real route.</p>
             </div>
             <div className="mt-8 grid gap-4 md:grid-cols-4">
               {features.map(({ title, text, icon: Icon }) => (
@@ -149,9 +149,9 @@ export default function Home() {
               <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
                 <LockKeyhole className="h-3.5 w-3.5" /> Feature runs after login
               </div>
-              <h2 className="mt-5 text-4xl font-semibold tracking-tight text-slate-950">Private Growth Engine for business-asset revenue workflows.</h2>
+              <h2 className="mt-5 text-4xl font-semibold tracking-tight text-slate-950">Private Growth Engine for verified revenue workflows.</h2>
               <p className="mt-4 text-base leading-7 text-slate-600">
-                VIBA explains the advertising system publicly but keeps the actual engine behind login. The system is not a shame board. It captures customer demand, qualifies the opportunity, and turns it into private beta-testing, repair, launch-protection, and sellable business assets.
+                The Growth Engine keeps the powerful part private. It captures buyer demand, scores the opportunity, creates the asset ledger, checks proof gates, runs the agent tribunal, and turns useful work into a clear revenue path.
               </p>
               <Link href="/bridge">
                 <Button className="mt-7 h-12 rounded-xl bg-slate-950 px-7 text-base text-white hover:bg-slate-800">
