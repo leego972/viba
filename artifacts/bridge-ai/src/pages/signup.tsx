@@ -104,7 +104,7 @@ export default function SignUpPage() {
         <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-2xl p-6 space-y-5">
           <div className="text-center space-y-1">
             <h2 className="text-xl font-bold text-white">Create account and start trial</h2>
-            <p className="text-sm text-gray-400">3-day VIBA trial with evaluation credits. Checkout is handled securely by Stripe.</p>
+            <p className="text-sm text-gray-400">3-day VIBA trial with 500 credits that reset daily. Checkout is handled securely by Stripe.</p>
           </div>
 
           <SocialLoginButtons mode="register" returnPath="/pricing" />
