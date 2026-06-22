@@ -28,6 +28,7 @@ import {
   Clock,
   ThumbsUp,
   Trash2,
+  ClipboardCheck,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -81,8 +82,6 @@ const REVIEW_LEVEL_CONFIG = {
   },
 };
 
-// ── History types and helpers ─────────────────────────────────────────────────
-
 interface WorkbenchResult {
   taskId: string;
   platform: string;
@@ -108,6 +107,13 @@ interface WorkbenchHistoryEntry {
   result: WorkbenchResult;
 }
 
+interface QualityGate {
+  label: string;
+  tone: "ready" | "review" | "blocked";
+  action: string;
+  checklist: string[];
+}
+
 const HISTORY_KEY = "viba_workbench_history";
 const MAX_HISTORY = 20;
 
@@ -127,6 +133,57 @@ function persistHistory(entries: WorkbenchHistoryEntry[]): void {
   } catch {
     // localStorage unavailable
   }
+}
+
+function buildQualityGate(result: WorkbenchResult): QualityGate {
+  const pct = Math.round(result.confidence * 100);
+  const riskCount = result.riskFlags.length;
+  const hasRubric = result.rubricChecklist.length > 0;
+
+  if (result.humanReviewRequired || result.reviewLevel === "human_only" || pct < 50) {
+    return {
+      label: "Blocked until human review",
+      tone: "blocked",
+      action: "Do not use this answer until you personally verify the domain facts, rubric, and risk flags.",
+      checklist: [
+        "Read the original task instructions again.",
+        "Check every risk flag before using the answer.",
+        hasRubric ? "Confirm every rubric item manually." : "No rubric was supplied — validate against the platform instructions.",
+        "Rewrite the answer yourself if the reasoning is weak or incomplete.",
+      ],
+    };
+  }
+
+  if (result.reviewLevel === "careful_review" || pct < 80 || riskCount > 0) {
+    return {
+      label: "Careful review required",
+      tone: "review",
+      action: "Use this as a strong draft, but verify the risky or uncertain parts before submitting.",
+      checklist: [
+        "Check the answer against the task wording.",
+        riskCount > 0 ? "Resolve or accept each risk flag deliberately." : "Confirm there are no hidden assumptions.",
+        hasRubric ? "Compare the answer to the rubric checklist." : "Add a quick manual rubric check before use.",
+        "Only mark as used after manual review.",
+      ],
+    };
+  }
+
+  return {
+    label: "Ready after final read",
+    tone: "ready",
+    action: "High-confidence recommendation. Read once, then use if it matches the platform task exactly.",
+    checklist: [
+      "Confirm the answer matches the task instructions.",
+      "Check there is no missing context from the original platform screen.",
+      "Copy or mark as used only after your final read.",
+    ],
+  };
+}
+
+function gateStyles(tone: QualityGate["tone"]) {
+  if (tone === "blocked") return "border-red-500/30 bg-red-500/10 text-red-600";
+  if (tone === "review") return "border-yellow-500/30 bg-yellow-500/10 text-yellow-600";
+  return "border-green-500/30 bg-green-500/10 text-green-600";
 }
 
 function ConfidenceBar({ value }: { value: number }) {
@@ -159,7 +216,6 @@ export default function Workbench() {
   const [routingMode, setRoutingMode] =
     useState<WorkbenchAnalyzeRequest["routingMode"]>("balanced");
 
-  // History state — loaded from localStorage once on mount
   const [history, setHistory] = useState<WorkbenchHistoryEntry[]>(() => loadHistory());
   const [historicResult, setHistoricResult] = useState<WorkbenchResult | null>(null);
   const [markedUsedIds, setMarkedUsedIds] = useState<Set<string>>(new Set());
@@ -199,7 +255,6 @@ export default function Workbench() {
     );
   }
 
-  // Save to history whenever a new result arrives
   useEffect(() => {
     const data = analyzeMutation.data;
     if (!data) return;
@@ -247,14 +302,44 @@ export default function Workbench() {
     });
   }
 
-  // Use a loaded historic result, or fall back to the latest mutation result
+  function copyReviewPacket() {
+    if (!result) return;
+    const gate = buildQualityGate(result as WorkbenchResult);
+    const packet = [
+      `Task ID: ${result.taskId}`,
+      `Platform: ${result.platform}`,
+      `Task type: ${result.taskType}`,
+      `Confidence: ${Math.round(result.confidence * 100)}%`,
+      `Quality gate: ${gate.label}`,
+      `Required action: ${gate.action}`,
+      "",
+      "Recommended answer:",
+      result.recommendedAnswer,
+      "",
+      "Reasoning summary:",
+      result.reasoningSummary || "No reasoning summary provided.",
+      "",
+      "Risk flags:",
+      result.riskFlags.length ? result.riskFlags.map((flag) => `- ${flag}`).join("\n") : "None reported.",
+      "",
+      "Rubric checklist:",
+      result.rubricChecklist.length ? result.rubricChecklist.map((item) => `- ${item}`).join("\n") : "No rubric checklist provided.",
+      "",
+      "Review checklist:",
+      gate.checklist.map((item) => `- ${item}`).join("\n"),
+    ].join("\n");
+    navigator.clipboard.writeText(packet).then(() => {
+      toast({ title: "Review packet copied" });
+    });
+  }
+
   const result = historicResult ?? (analyzeMutation.isPending ? undefined : analyzeMutation.data);
   const isHistoric = historicResult !== null;
+  const qualityGate = result ? buildQualityGate(result as WorkbenchResult) : null;
 
   return (
     <AppLayout>
       <div className="flex flex-col gap-6 py-8 max-w-5xl mx-auto px-4">
-        {/* Header */}
         <div className="flex items-start gap-4">
           <div className="p-2.5 rounded-lg bg-primary/10 text-primary shrink-0">
             <FlaskConical className="h-6 w-6" />
@@ -262,14 +347,12 @@ export default function Workbench() {
           <div>
             <h1 className="text-2xl font-bold">AI Trainer Workbench</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              AI-assisted analysis of training tasks. Every recommendation must be reviewed and
-              submitted manually — no automatic login, submission, or platform automation.
+              Guarded analysis for training tasks. VIBA can recommend, score, and flag risk — but final submission stays manual.
             </p>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Input panel */}
           <div className="flex flex-col gap-4">
             <Card>
               <CardHeader className="pb-3">
@@ -419,21 +502,20 @@ export default function Workbench() {
                       Analysing…
                     </>
                   ) : (
-                    "Analyse Task"
+                    "Run Guarded Analysis"
                   )}
                 </Button>
               </CardContent>
             </Card>
           </div>
 
-          {/* Results panel */}
           <div className="flex flex-col gap-4">
             {!result && !analyzeMutation.isPending && (
               <Card className="flex items-center justify-center min-h-[300px] border-dashed">
                 <div className="text-center text-muted-foreground px-8">
                   <FlaskConical className="h-10 w-10 mx-auto mb-3 opacity-30" />
                   <p className="text-sm">
-                    Fill in the task details and click Analyse to get a recommended answer.
+                    Fill in the task details and run guarded analysis to get a recommendation, risk flags, and a quality gate.
                   </p>
                 </div>
               </Card>
@@ -450,7 +532,6 @@ export default function Workbench() {
 
             {result && !analyzeMutation.isPending && (
               <>
-                {/* Review level banner */}
                 {(() => {
                   const cfg =
                     REVIEW_LEVEL_CONFIG[result.reviewLevel as keyof typeof REVIEW_LEVEL_CONFIG];
@@ -468,7 +549,31 @@ export default function Workbench() {
                   );
                 })()}
 
-                {/* Routing receipt / simulated warning */}
+                {qualityGate && (
+                  <Card className={`border ${gateStyles(qualityGate.tone)}`}>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="flex items-center gap-2 text-sm">
+                        <ShieldCheck className="h-4 w-4" />
+                        Submission Quality Gate
+                        <Badge variant="outline" className={`ml-auto ${gateStyles(qualityGate.tone)}`}>
+                          {qualityGate.label}
+                        </Badge>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3 pt-0">
+                      <p className="text-xs leading-5">{qualityGate.action}</p>
+                      <ul className="grid gap-1.5">
+                        {qualityGate.checklist.map((item) => (
+                          <li key={item} className="flex items-start gap-2 text-xs">
+                            <ClipboardCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </CardContent>
+                  </Card>
+                )}
+
                 {(result.routingReceipt as { simulated?: boolean } | null)?.simulated && (
                   <div className="flex items-start gap-3 rounded-lg border border-yellow-500/20 bg-yellow-500/10 text-yellow-600 px-4 py-3">
                     <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
@@ -482,7 +587,6 @@ export default function Workbench() {
                   </div>
                 )}
 
-                {/* Historic result indicator */}
                 {isHistoric && (
                   <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2">
                     <Clock className="h-3.5 w-3.5 text-primary shrink-0" />
@@ -498,7 +602,6 @@ export default function Workbench() {
                   </div>
                 )}
 
-                {/* Recommended answer */}
                 <Card>
                   <CardHeader className="pb-2 flex flex-row items-center justify-between">
                     <CardTitle className="text-sm">Recommended Answer</CardTitle>
@@ -519,6 +622,15 @@ export default function Workbench() {
                         variant="ghost"
                         size="sm"
                         className="h-7 gap-1.5 text-xs"
+                        onClick={copyReviewPacket}
+                      >
+                        <ClipboardCheck className="h-3.5 w-3.5" />
+                        Packet
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 gap-1.5 text-xs"
                         onClick={copyAnswer}
                       >
                         <Copy className="h-3.5 w-3.5" />
@@ -533,7 +645,6 @@ export default function Workbench() {
                   </CardContent>
                 </Card>
 
-                {/* Confidence */}
                 <Card>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm">Confidence</CardTitle>
@@ -557,7 +668,6 @@ export default function Workbench() {
                   </CardContent>
                 </Card>
 
-                {/* Rubric checklist */}
                 {result.rubricChecklist.length > 0 && (
                   <Card>
                     <CardHeader className="pb-2">
@@ -590,7 +700,6 @@ export default function Workbench() {
                   </Card>
                 )}
 
-                {/* Risk flags */}
                 {result.riskFlags.length > 0 && (
                   <Card className="border-yellow-500/30">
                     <CardHeader className="pb-2">
@@ -621,7 +730,6 @@ export default function Workbench() {
           </div>
         </div>
 
-        {/* History panel */}
         {history.length > 0 && (
           <>
             <Separator />
