@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { ArrowRight, CheckCircle2, FileText, LockKeyhole, MessageSquare, Paperclip, ShieldCheck, Sparkles, Target, TrendingUp, Workflow } from "lucide-react";
+import { ArrowRight, CheckCircle2, FileText, LockKeyhole, ShieldCheck, Sparkles, Target, TrendingUp, Workflow } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const features = [
