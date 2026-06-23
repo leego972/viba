@@ -28,6 +28,7 @@ import DoctorProposalPreview from "@/pages/doctor-proposal-preview";
 import DoctorReportDetail from "@/pages/doctor-report-detail";
 import DoctorImplementationPlan from "@/pages/doctor-implementation-plan";
 import DoctorReportChecklist from "@/pages/doctor-report-checklist";
+import ReleaseReadiness from "@/pages/release-readiness";
 import Pricing from "@/pages/pricing";
 import CheckoutSuccess from "@/pages/checkout-success";
 import AdminMaintenance from "@/pages/admin-maintenance";
@@ -105,6 +106,7 @@ function GatedRouter() {
         <Route path="/doctor/reports/:id/checklist" component={DoctorReportChecklist} />
         <Route path="/doctor/reports/:id" component={DoctorReportDetail} />
         <Route path="/doctor" component={Doctor} />
+        <Route path="/release-readiness" component={ReleaseReadiness} />
         <Route component={NotFound} />
       </Switch>
     </AuthGuard>
