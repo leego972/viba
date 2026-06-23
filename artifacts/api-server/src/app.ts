@@ -128,9 +128,16 @@ app.use(["/api/sessions/:id/run-next", "/api/sessions/:id/run-full"], async (req
       return;
     }
     if (creditsRemaining <= 0) {
-      res.status(402).json({ error: "out_of_credits", message: "Add credits in Billing to continue.", topUpUrl: "/billing" });
-      return;
-    }
+        const blockedSid = parseInt(String(req.params.id ?? ""), 10);
+        res.status(402).json({ error: "out_of_credits", message: "Add credits in Billing to continue.", topUpUrl: "/billing", sessionId: Number.isFinite(blockedSid) ? blockedSid : undefined });
+        return;
+      }
+      // Fire low-credit warning when credits approach zero (fire-and-forget, safe to repeat)
+      if (creditsRemaining <= 100) {
+        import("./lib/billingEmail").then(({ sendLowCreditsWarningIfNeeded }) => {
+          sendLowCreditsWarningIfNeeded(userId).catch(() => {});
+        }).catch(() => {});
+      }
     next();
   } catch (err) {
     logger.error({ err }, "Credit eligibility gate error");
