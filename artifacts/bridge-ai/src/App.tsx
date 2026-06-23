@@ -23,6 +23,8 @@ import Bridge from "@/pages/bridge";
 import Doctor from "@/pages/doctor";
 import DoctorHistory from "@/pages/doctor-history";
 import DoctorProposalPreview from "@/pages/doctor-proposal-preview";
+import DoctorReportDetail from "@/pages/doctor-report-detail";
+import DoctorReportChecklist from "@/pages/doctor-report-checklist";
 import Pricing from "@/pages/pricing";
 import CheckoutSuccess from "@/pages/checkout-success";
 import AdminMaintenance from "@/pages/admin-maintenance";
@@ -94,6 +96,8 @@ function GatedRouter() {
         <Route path="/bridge" component={Bridge} />
         <Route path="/doctor/history" component={DoctorHistory} />
         <Route path="/doctor/reports/:id/proposal" component={DoctorProposalPreview} />
+        <Route path="/doctor/reports/:id/checklist" component={DoctorReportChecklist} />
+        <Route path="/doctor/reports/:id" component={DoctorReportDetail} />
         <Route path="/doctor" component={Doctor} />
         <Route component={NotFound} />
       </Switch>
