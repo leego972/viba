@@ -78,15 +78,58 @@ export async function pauseSessionForActionCredits(input: {
   });
 }
 
+async function pauseSessionForBudgetCap(input: {
+  sessionId: number;
+  userId: number;
+  taskId: number;
+  requiredCredits: number;
+  budgetCapCredits: number;
+  creditsReserved: number;
+}): Promise<void> {
+  await db.update(sessionsTable).set({ status: "paused" }).where(eq(sessionsTable.id, input.sessionId));
+  await db.insert(messagesTable).values({
+    sessionId: input.sessionId,
+    agentId: null,
+    role: "assistant",
+    provider: "system",
+    agentName: "VIBA System",
+    agentRole: "Budget Control",
+    content: `Budget cap reached. This task needs ${input.requiredCredits} credits, but the session cap is ${input.budgetCapCredits} credits and ${input.creditsReserved} are already reserved. Increase the budget cap or stop the run.`,
+    messageType: "context",
+    taskId: input.taskId,
+    metadata: {
+      reason: "session_budget_cap_reached",
+      requiredCredits: input.requiredCredits,
+      budgetCapCredits: input.budgetCapCredits,
+      creditsReserved: input.creditsReserved,
+    },
+  });
+  await db.insert(auditLogsTable).values({
+    sessionId: input.sessionId,
+    eventType: "session_budget_cap_reached",
+    description: "Task execution paused because the session budget cap would be exceeded",
+    metadata: {
+      userId: input.userId,
+      taskId: input.taskId,
+      requiredCredits: input.requiredCredits,
+      budgetCapCredits: input.budgetCapCredits,
+      creditsReserved: input.creditsReserved,
+    },
+  });
+}
+
 async function persistActionCreditReceipt(input: {
   userId: number;
   sessionId: number;
   task: Task;
   agent: Agent;
   credits: number;
+  creditsReservedAfter: number;
+  budgetCapCredits: number | null;
 }): Promise<void> {
   if (input.credits <= 0) return;
-  const content = `Credit receipt: ${input.credits} credits reserved for "${input.task.title}" using ${input.agent.name}.`;
+  const capText = input.budgetCapCredits ? ` Session reserved total: ${input.creditsReservedAfter}/${input.budgetCapCredits}.` : "";
+  const content = `Credit receipt: ${input.credits} credits reserved for "${input.task.title}" using ${input.agent.name}.${capText}`;
   await db.insert(messagesTable).values({
     sessionId: input.sessionId,
     agentId: null,
@@ -105,6 +148,8 @@ async function persistActionCreditReceipt(input: {
       agentName: input.agent.name,
       provider: input.agent.provider,
       credits: input.credits,
+      creditsReservedAfter: input.creditsReservedAfter,
+      budgetCapCredits: input.budgetCapCredits,
     },
   });
 }
@@ -118,16 +163,34 @@ export async function reserveCreditsForAction(input: {
 }): Promise<{ ok: true; credits: number } | { ok: false; credits: number }> {
   if (!isStripeConfigured()) return { ok: true, credits: 0 };
   const credits = estimateActionCredits({ task: input.task, agent: input.agent, pendingQuestionCount: input.pendingQuestionCount });
+  const [session] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, input.sessionId));
+  const currentReserved = session?.creditsReserved ?? 0;
+  const budgetCap = session?.budgetCapCredits ?? null;
+  if (budgetCap !== null && currentReserved + credits > budgetCap) {
+    await pauseSessionForBudgetCap({
+      sessionId: input.sessionId,
+      userId: input.userId,
+      taskId: input.task.id,
+      requiredCredits: credits,
+      budgetCapCredits: budgetCap,
+      creditsReserved: currentReserved,
+    });
+    return { ok: false, credits };
+  }
+
   const deducted = await deductCredits(input.userId, credits, input.sessionId);
   if (!deducted) {
     await pauseSessionForActionCredits({ sessionId: input.sessionId, userId: input.userId, taskId: input.task.id, requiredCredits: credits });
     return { ok: false, credits };
   }
+
+  const creditsReservedAfter = currentReserved + credits;
+  await db.update(sessionsTable).set({ creditsReserved: creditsReservedAfter }).where(eq(sessionsTable.id, input.sessionId));
   await db.insert(auditLogsTable).values({
     sessionId: input.sessionId,
     eventType: "action_credits_reserved",
     description: `Reserved ${credits} credits for task action complexity`,
-    metadata: { userId: input.userId, taskId: input.task.id, agentId: input.agent.id, credits },
+    metadata: { userId: input.userId, taskId: input.task.id, agentId: input.agent.id, credits, creditsReservedAfter, budgetCapCredits: budgetCap },
   });
   await persistActionCreditReceipt({
     userId: input.userId,
@@ -135,6 +198,8 @@ export async function reserveCreditsForAction(input: {
     task: input.task,
     agent: input.agent,
     credits,
+    creditsReservedAfter,
+    budgetCapCredits: budgetCap,
   });
   return { ok: true, credits };
 }
