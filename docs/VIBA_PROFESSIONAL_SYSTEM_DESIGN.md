@@ -1,14 +1,14 @@
 # VIBA Professional System Design Blueprint
 
-VIBA must be organised like accounting software for AI work: strict ledgers, categories, approvals, receipts, audit trail, reconciliation, lock states, and clean reporting — but smarter because it can diagnose, route, repair, explain, and prove work.
+VIBA is **not accounting software**.
 
-The system must not be a loose chatbot with tools. It must be a controlled AI operations platform.
+VIBA is an **AI operations mission-control platform** for diagnosing, planning, repairing, and managing technical projects through a controlled collaboration pipeline of specialist AI agents.
+
+The intended visual and control style should feel like clean professional accounting software: organised, calm, ledger-aware, receipt-based, auditable, and financially clear. The product category remains AI operations, not bookkeeping.
 
 ## 1. Product definition
 
-VIBA is an AI project operations system.
-
-Its main job is to help users diagnose, plan, repair, and manage software/project work through controlled AI agents, deterministic diagnostics, and auditable billing.
+VIBA helps users run controlled AI work across projects, repositories, deployments, billing, and tools.
 
 Flagship workflow:
 
@@ -24,33 +24,103 @@ GitHub/Railway Doctor
 → audit trail
 ```
 
-## 2. Accounting-software discipline
+The system must not become a loose chatbot with tools. It must be a controlled AI collaboration system with financial-grade safeguards.
 
-Every billable or mutating action must behave like a transaction in serious finance software.
+## 2. AI collaboration pipeline
 
-Required transaction qualities:
+The AI collaboration pipeline is the core product.
+
+Required pipeline stages:
+
+```txt
+intake
+context collection
+task decomposition
+agent assignment
+agent-to-agent questions
+handoff when tools are needed
+fallback/reroute if provider fails
+approval gate for sensitive work
+credit quote/reservation
+execution
+receipt/proof report
+audit log
+```
+
+Existing pipeline components already present in the repo include:
+
+```txt
+agentLoop.ts              → task assignment, execution, credit reservation, audit events
+agentComms.ts             → task-scoped inter-agent questions and answers
+toolHandoff.ts            → handoff from text-only agent to tool-capable agent
+fallbackPool.ts           → provider fallback/rerouting
+backgroundSessionRunner.ts → full-run/background progression
+selfAudit.ts              → GitHub/self-audit/checkpoint/PR workflow foundation
+actionCreditBilling.ts    → action complexity credit estimation and reservation
+```
+
+Doctor mode must connect into this same pipeline. It should not be a separate disconnected tool.
+
+## 3. Accounting-style UI intent
+
+The UI should borrow from clean accounting software because that style is trusted for money, records, and operational control.
+
+This means:
+
+```txt
+clean tables
+simple cards
+clear balances
+transaction-like receipts
+status labels
+filters
+search
+exportable records
+low visual noise
+obvious primary action
+advanced detail hidden until expanded
+```
+
+It does **not** mean:
+
+```txt
+bookkeeping product
+invoice-only product
+generic finance app
+spreadsheet-heavy interface
+cluttered ledger screens everywhere
+```
+
+The visual feel should be professional, structured, and calm.
+
+## 4. Financial-grade control discipline
+
+Every billable or mutating AI action must behave like a controlled transaction.
+
+Required record qualities:
 
 ```txt
 unique ID
-owner/user ID
+user/session/task ID
 timestamp
 source event
-before balance
-action cost
-after balance
+before credit balance
+action quote
+credits reserved/spent
+after credit balance
 agent/provider used
 reason
-idempotency key where payment is involved
 receipt
-reversible/rollback context where possible
+idempotency key where payment is involved
 audit log entry
+rollback/checkpoint context where possible
 ```
 
-No vague billing. No hidden spend. No silent overcharging. No action without a record.
+No vague billing. No hidden provider spend. No silent overcharging. No billable action without a record.
 
-## 3. Core design principles
+## 5. Core design principles
 
-### 3.1 Finance must be perfect
+### 5.1 Finance must be exact
 
 Anything touching money must be:
 
@@ -66,24 +136,25 @@ impossible to silently overcharge
 
 If billing state cannot be verified, billable AI execution must stop.
 
-### 3.2 Provider spend is separate from user credits
+### 5.2 Provider spend is separate from user credits
 
-User credits protect VIBA revenue.
-Provider spend controls protect the owner from OpenAI/Anthropic/Gemini/Perplexity/Replit/Manus/Railway/Groq bills.
+User credits control what customers can consume.
+
+Provider spend controls protect VIBA from OpenAI, Anthropic, Gemini, Perplexity, Replit, Manus, Railway reasoning, Groq, and similar external bills.
 
 Both are mandatory.
 
-### 3.3 Cheap-first execution
+### 5.3 Cheap-first execution
 
 Execution order:
 
 1. Deterministic checks.
 2. Existing logs/evidence parsing.
 3. Cheap model summarisation only if needed.
-4. Expensive model/agent only after quote + budget cap + user approval.
+4. Expensive model/agent only after quote, budget cap, and user approval.
 5. Mutating repair only after explicit approval.
 
-### 3.4 Clean UI over feature noise
+### 5.4 Clean UI over feature noise
 
 Each screen must answer:
 
@@ -93,11 +164,11 @@ What will it cost?
 What should I do next?
 ```
 
-Advanced details must be available but collapsed by default.
+Advanced logs, raw evidence, agent chatter, and technical detail must be collapsed by default.
 
-## 4. System layers
+## 6. System layers
 
-### 4.1 Presentation layer
+### 6.1 Presentation layer
 
 Responsible for:
 
@@ -114,13 +185,15 @@ mobile shell
 
 Rules:
 
-- one primary action per screen
-- simple status card first
-- finance state visible where relevant
-- advanced evidence/logs collapsed
-- mobile stricter than desktop
+```txt
+one primary action per screen
+simple status card first
+finance state visible where relevant
+advanced evidence/logs collapsed
+mobile stricter than desktop
+```
 
-### 4.2 API/control layer
+### 6.2 API/control layer
 
 Responsible for:
 
@@ -138,7 +211,7 @@ settings/credentials routes
 
 This layer must fail closed on finance/billing uncertainty.
 
-### 4.3 Deterministic diagnostics layer
+### 6.3 Deterministic diagnostics layer
 
 Cheap checks only:
 
@@ -157,13 +230,14 @@ known error pattern detection
 
 This layer should not call paid AI providers.
 
-### 4.4 Agent orchestration layer
+### 6.4 Agent orchestration layer
 
 Responsible for:
 
 ```txt
 task routing
 agent assignment
+agent-to-agent questions
 provider adapter selection
 fallbacks
 handoff timeline
@@ -175,7 +249,7 @@ receipts
 
 This layer must respect provider safe mode and user budget caps.
 
-### 4.5 Billing/finance layer
+### 6.5 Billing/finance layer
 
 Responsible for:
 
@@ -193,7 +267,7 @@ finance audit trail
 
 This layer must never trust front-end state for billing decisions.
 
-### 4.6 Provider spend safety layer
+### 6.6 Provider spend safety layer
 
 Responsible for:
 
@@ -207,9 +281,9 @@ provider spend hard limit
 emergency shutdown path
 ```
 
-This protects the owner from runaway external provider bills.
+This protects VIBA from runaway external provider bills.
 
-### 4.7 Persistence/audit layer
+### 6.7 Persistence/audit layer
 
 Responsible for:
 
@@ -229,11 +303,11 @@ repair PR records
 
 Every financial or mutating action must leave an audit trail.
 
-## 5. GitHub/Railway Doctor design
+## 7. GitHub/Railway Doctor design
 
-Doctor mode is the flagship feature.
+Doctor mode is a flagship feature.
 
-### 5.1 Doctor v1: deterministic, cheap, safe
+### 7.1 Doctor v1: deterministic, cheap, safe
 
 Inspect:
 
@@ -273,7 +347,7 @@ merge PRs by default
 redeploy by default
 ```
 
-### 5.2 Doctor v2: paid analysis behind gates
+### 7.2 Doctor v2: paid analysis behind gates
 
 Paid analysis may happen only after:
 
@@ -285,7 +359,7 @@ user approval recorded
 safe provider allow-list checked
 ```
 
-### 5.3 Doctor v3: repair proposal
+### 7.3 Doctor v3: repair proposal
 
 Repair mode must be PR-first:
 
@@ -298,9 +372,9 @@ rollback plan included
 proof report included
 ```
 
-## 6. Billing and credit model
+## 8. Billing and credit model
 
-### 6.1 Plans
+### 8.1 Plans
 
 ```txt
 VIBA Member: $50/month, 1,500 credits
@@ -308,7 +382,7 @@ VIBA Pro: $150/month, 6,000 credits
 Trial: 500 credits/day for 3 days, daily reset, no banking
 ```
 
-### 6.2 Top-ups
+### 8.2 Top-ups
 
 ```txt
 $50  = 1,000 credits
@@ -319,7 +393,7 @@ $250 = 5,000 credits
 $300 = 6,000 credits
 ```
 
-### 6.3 Charging rule
+### 8.3 Charging rule
 
 Normal chat is free.
 
@@ -336,7 +410,7 @@ remaining balance
 receipt
 ```
 
-### 6.4 Budget cap rule
+### 8.4 Budget cap rule
 
 Background/full-run must require or strongly prompt for a session budget cap.
 
@@ -349,7 +423,7 @@ show remaining work
 ask user to increase cap or stop
 ```
 
-## 7. Auto top-up model
+## 9. Auto top-up model
 
 Auto top-up is required eventually, but must be built after the finance base is fully safe.
 
@@ -393,7 +467,7 @@ manual recovery flow
 tests
 ```
 
-## 8. Stripe design
+## 10. Stripe design
 
 Stripe owns payment methods. VIBA must never collect raw card data.
 
@@ -425,7 +499,7 @@ payment_intent.payment_failed
 
 Every webhook must be replay-safe.
 
-## 9. Railway deployment design
+## 11. Railway deployment design
 
 Railway variables must be configured in one pass after build validation.
 
@@ -452,7 +526,7 @@ server startup requirements are checked
 Railway deploy logs are reviewed
 ```
 
-## 10. Provider spend controls
+## 12. Provider spend controls
 
 Default safe deployment:
 
@@ -481,11 +555,11 @@ VIBA_BACKGROUND_MAX_TURNS=1
 
 The system must never require removing API keys to stop spend. A Railway env toggle must be enough.
 
-## 11. UI design
+## 13. UI design language
 
-### 11.1 Doctor UI
+The UI should look like clean professional accounting software, applied to AI operations.
 
-Default layout:
+Doctor UI default layout:
 
 ```txt
 Status card
@@ -497,9 +571,7 @@ Expandable evidence
 Expandable logs
 ```
 
-### 11.2 Billing UI
-
-Must clearly show:
+Billing UI must clearly show:
 
 ```txt
 current credits
@@ -511,9 +583,7 @@ billable lock state
 payment problem if any
 ```
 
-### 11.3 Agent execution UI
-
-Must show:
+Agent execution UI must show:
 
 ```txt
 next planned action
@@ -525,7 +595,7 @@ progress
 receipt
 ```
 
-## 12. Implementation order
+## 14. Implementation order
 
 Professional order:
 
@@ -542,7 +612,7 @@ Professional order:
 11. PR-based repair mode.
 12. Auto top-up only after finance tests pass.
 
-## 13. Current Manus job
+## 15. Current Manus job
 
 Manus should not build new product features in the deployment pass.
 
