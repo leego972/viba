@@ -4,7 +4,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertTriangle, ArrowLeft, CheckCircle2, ClipboardCheck, FileCheck2, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, ClipboardCheck, Copy, Download, FileCheck2, Printer, ShieldCheck } from "lucide-react";
 
 type EvidenceStatus = "green" | "yellow" | "red";
 
@@ -67,12 +67,109 @@ function evidenceIcon(status: EvidenceStatus) {
   return <AlertTriangle className="h-4 w-4 text-amber-400" />;
 }
 
+function safeFileName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "session";
+}
+
+function buildSummary(report: ProofReport): string {
+  const lines = [
+    `VIBA Proof Report — Session #${report.session.id}`,
+    `Goal: ${report.session.goal}`,
+    `Status: ${report.session.status}`,
+    `Mode: ${report.session.mode}`,
+    `Generated: ${new Date(report.generatedAt).toLocaleString()}`,
+    `Tasks: ${report.summary.completedTasks}/${report.summary.totalTasks} complete`,
+    `Blocked tasks: ${report.summary.blockedTasks}`,
+    `Approvals: ${report.summary.approvals.pending} pending / ${report.summary.approvals.rejected} rejected / ${report.summary.approvals.total} total`,
+    `Receipts: ${report.summary.creditReceipts}`,
+    `Credits reserved: ${report.summary.totalCreditsReserved}`,
+    `Risks: ${report.risks.length}`,
+    `Next action: ${report.nextAction}`,
+    report.guarantee,
+  ];
+  return lines.join("\n");
+}
+
+function buildMarkdown(report: ProofReport): string {
+  const evidence = report.evidence
+    .map((item) => `- **${item.status.toUpperCase()} — ${item.title}:** ${item.detail}`)
+    .join("\n") || "- No evidence entries.";
+  const risks = report.risks.map((risk) => `- ${risk}`).join("\n") || "- No remaining risks recorded.";
+  const receipts = report.receipts
+    .map((receipt) => `- ${receipt.credits} credits — ${receipt.agentName ?? "VIBA System"} / ${receipt.provider ?? "system"} — ${new Date(receipt.createdAt).toLocaleString()}`)
+    .join("\n") || "- No credit receipts found.";
+  const audit = report.recentAuditEvents
+    .map((event) => `- ${event.type}: ${event.description} (${new Date(event.createdAt).toLocaleString()})`)
+    .join("\n") || "- No recent audit events found.";
+
+  return [
+    `# VIBA Proof Report — Session #${report.session.id}`,
+    "",
+    `**Generated:** ${new Date(report.generatedAt).toLocaleString()}`,
+    `**Goal:** ${report.session.goal}`,
+    `**Status:** ${report.session.status}`,
+    `**Mode:** ${report.session.mode}`,
+    `**Autonomy:** ${report.session.autonomyMode}`,
+    `**Repository:** ${report.session.repoUrl ?? "Not set"}`,
+    `**Branch:** ${report.session.repoBranch ?? "Not set"}`,
+    "",
+    "## Summary",
+    "",
+    `- Tasks: ${report.summary.completedTasks}/${report.summary.totalTasks} complete`,
+    `- Blocked tasks: ${report.summary.blockedTasks}`,
+    `- Messages: ${report.summary.messages}`,
+    `- Audit events: ${report.summary.auditEvents}`,
+    `- Approvals: ${report.summary.approvals.pending} pending / ${report.summary.approvals.rejected} rejected / ${report.summary.approvals.total} total`,
+    `- Credit receipts: ${report.summary.creditReceipts}`,
+    `- Credits reserved: ${report.summary.totalCreditsReserved}`,
+    `- Budget cap: ${report.session.budgetCapCredits ?? "No cap"}`,
+    "",
+    "## Evidence",
+    "",
+    evidence,
+    "",
+    "## Credit Receipts",
+    "",
+    receipts,
+    "",
+    "## Recent Audit Events",
+    "",
+    audit,
+    "",
+    "## Risks",
+    "",
+    risks,
+    "",
+    "## Next Action",
+    "",
+    report.nextAction,
+    "",
+    "## Guarantee",
+    "",
+    report.guarantee,
+    "",
+  ].join("\n");
+}
+
+function downloadTextFile(filename: string, content: string, mimeType: string): void {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 export default function SessionProofReport() {
   const params = useParams<{ id: string }>();
   const sessionId = params.id;
   const [report, setReport] = useState<ProofReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [exportMessage, setExportMessage] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -94,6 +191,34 @@ export default function SessionProofReport() {
     return () => { cancelled = true; };
   }, [sessionId]);
 
+  async function copySummary() {
+    if (!report) return;
+    try {
+      await navigator.clipboard.writeText(buildSummary(report));
+      setExportMessage("Summary copied.");
+    } catch {
+      setExportMessage("Copy failed. Use download instead.");
+    }
+  }
+
+  function downloadJson() {
+    if (!report) return;
+    const filename = `viba-proof-report-${safeFileName(String(report.session.id))}.json`;
+    downloadTextFile(filename, JSON.stringify(report, null, 2), "application/json");
+    setExportMessage("JSON downloaded.");
+  }
+
+  function downloadMarkdown() {
+    if (!report) return;
+    const filename = `viba-proof-report-${safeFileName(String(report.session.id))}.md`;
+    downloadTextFile(filename, buildMarkdown(report), "text/markdown");
+    setExportMessage("Markdown downloaded.");
+  }
+
+  function printPage() {
+    window.print();
+  }
+
   return (
     <AppLayout>
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
@@ -108,14 +233,37 @@ export default function SessionProofReport() {
               A local report generated from stored session records, tasks, receipts, approvals, messages, and audit events. No paid providers are called.
             </p>
           </div>
-          <Link href={`/sessions/${sessionId}`}>
-            <Button variant="outline" className="gap-2">
-              <ArrowLeft className="h-4 w-4" />
-              Back to session
-            </Button>
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            {report && (
+              <>
+                <Button size="sm" variant="outline" className="gap-2" onClick={copySummary}>
+                  <Copy className="h-4 w-4" />
+                  Copy summary
+                </Button>
+                <Button size="sm" variant="outline" className="gap-2" onClick={downloadJson}>
+                  <Download className="h-4 w-4" />
+                  JSON
+                </Button>
+                <Button size="sm" variant="outline" className="gap-2" onClick={downloadMarkdown}>
+                  <Download className="h-4 w-4" />
+                  Markdown
+                </Button>
+                <Button size="sm" variant="ghost" className="gap-2" onClick={printPage}>
+                  <Printer className="h-4 w-4" />
+                  Print
+                </Button>
+              </>
+            )}
+            <Link href={`/sessions/${sessionId}`}>
+              <Button variant="outline" className="gap-2">
+                <ArrowLeft className="h-4 w-4" />
+                Back to session
+              </Button>
+            </Link>
+          </div>
         </div>
 
+        {exportMessage && <Card className="border-emerald-500/30 bg-emerald-500/5"><CardContent className="py-3 text-sm text-emerald-300">{exportMessage}</CardContent></Card>}
         {loading && <Card><CardContent className="py-6 text-sm text-muted-foreground">Loading proof report…</CardContent></Card>}
         {error && <Card className="border-red-500/30 bg-red-500/5"><CardContent className="py-6 text-sm text-red-300">{error}</CardContent></Card>}
 
