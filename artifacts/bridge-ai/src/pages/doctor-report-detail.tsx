@@ -227,8 +227,29 @@ export default function DoctorReportDetail() {
                 </div>
               </CardContent>
             </Card>
+          <div className="flex flex-wrap gap-3">
+              <Link href={`/doctor/reports/${reportId}/checklist`}>
+                <Button variant="outline" className="gap-2">
+                  <ClipboardCheck className="h-4 w-4" />
+                  Findings checklist
+                </Button>
+              </Link>
+              <Link href={`/doctor/reports/${reportId}/implementation-plan`}>
+                <Button variant="outline" className="gap-2">
+                  <FileText className="h-4 w-4" />
+                  Implementation plan
+                </Button>
+              </Link>
+              <Link href={`/doctor/reports/${reportId}/proposal`}>
+                <Button className="gap-2">
+                  <ExternalLink className="h-4 w-4" />
+                  View proposal
+                </Button>
+              </Link>
+            </div>
+
           </div>
-        )}
+        }
       </div>
     </AppLayout>
   );
