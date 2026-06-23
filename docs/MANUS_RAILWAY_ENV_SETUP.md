@@ -32,7 +32,30 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 Do **not** set `PORT`; Railway sets it automatically.
 
-## 3. Stripe billing variables
+## 3. Emergency cost-safety variables
+
+Set these during first production rollout or any period where provider spend is not yet proven safe:
+
+```env
+VIBA_COST_SAFE_MODE=true
+VIBA_LIVE_AGENTS_ENABLED=false
+VIBA_BACKGROUND_MAX_TURNS=3
+```
+
+These variables force paid/live providers into simulation mode even if API keys are present. This prevents surprise OpenAI/Anthropic/Gemini/Perplexity/Replit/Manus/Railway reasoning bills while deployment, billing, Doctor mode, and UI flows are being tested.
+
+When controlled live testing is ready, disable safe mode and allow only selected providers:
+
+```env
+VIBA_COST_SAFE_MODE=false
+VIBA_LIVE_AGENTS_ENABLED=true
+VIBA_ALLOWED_LIVE_PROVIDERS=groq,openai
+VIBA_BACKGROUND_MAX_TURNS=5
+```
+
+Do not enable all live providers at once. Raise limits only after spend is measured.
+
+## 4. Stripe billing variables
 
 Set Stripe variables on the VIBA app service.
 
@@ -70,7 +93,7 @@ STRIPE_BILLING_CREDITS_6000_PRICE_ID=price_... # $300 / 6,000 credits
 
 The backend can create Stripe products/prices if these top-up price IDs are omitted, but production should use fixed Stripe price IDs so billing is predictable and auditable.
 
-## 4. Stripe webhook setup
+## 5. Stripe webhook setup
 
 In Stripe Dashboard, create a webhook endpoint:
 
@@ -94,9 +117,9 @@ Copy the webhook signing secret into Railway:
 STRIPE_WEBHOOK_SECRET=whsec_...
 ```
 
-## 5. AI provider keys
+## 6. AI provider keys
 
-Set the providers available to VIBA. Omit any provider that should run in simulation/mock mode.
+Set only the providers intentionally allowed for live spend. Omit any provider that should run in simulation/mock mode.
 
 ```env
 OPENAI_API_KEY=sk-...
@@ -105,6 +128,8 @@ GEMINI_API_KEY=...
 PERPLEXITY_API_KEY=...
 REPLIT_API_KEY=...
 MANUS_API_KEY=...
+RAILWAY_TOKEN=...
+GITHUB_TOKEN=...
 ```
 
 Optional model overrides:
@@ -114,9 +139,10 @@ OPENAI_MODEL=gpt-4.1-mini
 ANTHROPIC_MODEL=claude-sonnet-4-5
 GEMINI_MODEL=gemini-2.0-flash
 PERPLEXITY_MODEL=sonar
+RAILWAY_REASONING_MODEL=gpt-4.1-mini
 ```
 
-## 6. Admin and internal maintenance variables
+## 7. Admin and internal maintenance variables
 
 Set admin/internal controls:
 
@@ -131,7 +157,7 @@ Optional, only if Bridge/VIBA must accept bypassed calls from Archibald Titan:
 ARCHIBALD_BYPASS_TOKEN=<shared secret matching the Archibald side>
 ```
 
-## 7. OAuth variables, if enabled
+## 8. OAuth variables, if enabled
 
 Only set these if Google/GitHub login is being used. Make sure OAuth callback URLs match the live domain.
 
@@ -149,7 +175,7 @@ https://viba.guru/api/auth/google/callback
 https://viba.guru/api/auth/github/callback
 ```
 
-## 8. Email variables, if email delivery is required
+## 9. Email variables, if email delivery is required
 
 Set SMTP variables for verification/welcome/billing emails:
 
@@ -163,7 +189,7 @@ SMTP_FROM=noreply@viba.guru
 
 If SMTP is omitted, email sending may be skipped or logged as failed depending on the route.
 
-## 9. Optional runtime controls
+## 10. Optional runtime controls
 
 ```env
 VIBA_BACKGROUND_MAX_TURNS=100
@@ -171,7 +197,7 @@ CIRCUIT_OPEN_THRESHOLD=5
 CIRCUIT_TIMEOUT_MS=300000
 ```
 
-## 10. Post-deploy verification checklist
+## 11. Post-deploy verification checklist
 
 After setting variables and redeploying, verify:
 
@@ -185,15 +211,17 @@ After setting variables and redeploying, verify:
 6. Stripe checkout opens for Pro.
 7. `/billing` shows top-up packs from $50 to $300.
 8. Stripe webhook receives `checkout.session.completed` and credits are granted.
-9. `run-next` and `run-full` only work when the user has active billing/credits.
-10. Normal chat remains free.
-11. Agent task actions deduct credits by action complexity.
-12. Out-of-credit sessions pause and point users to Billing.
+9. In safe mode, live agents fall back to simulation even when API keys exist.
+10. `run-next` and `run-full` only work when the user has active billing/credits.
+11. Normal chat remains free.
+12. Agent task actions deduct credits by action complexity.
+13. Out-of-credit sessions pause and point users to Billing.
 
-## 11. Notes for Manus
+## 12. Notes for Manus
 
 - Do not hardcode secrets into code.
 - Do not commit `.env` files.
+- If provider spend spikes, immediately set `VIBA_COST_SAFE_MODE=true`, `VIBA_LIVE_AGENTS_ENABLED=false`, and `VIBA_BACKGROUND_MAX_TURNS=1`.
 - If Stripe appears disabled even when new billing variables exist, confirm `STRIPE_PRICE_ID` is also set for legacy compatibility.
 - If Railway build passes but billing fails, check Stripe webhook secret and price IDs first.
-- If AI providers are missing keys, VIBA may fall back to mock/simulation mode for those providers.
+- If AI providers are missing keys or blocked by safe mode, VIBA falls back to mock/simulation mode for those providers.
