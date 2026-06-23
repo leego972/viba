@@ -1,12 +1,9 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
-const apiBaseUrl = process.env.VIBA_MOBILE_API_URL ?? "https://viba.guru";
-
 const config: CapacitorConfig = {
   appId: "guru.viba.app",
   appName: "VIBA",
   webDir: "dist/public",
-  bundledWebRuntime: false,
   server: {
     androidScheme: "https",
     iosScheme: "https",
@@ -26,16 +23,12 @@ const config: CapacitorConfig = {
     },
     StatusBar: {
       overlaysWebView: false,
-      style: "DARK",
       backgroundColor: "#020617",
     },
     Keyboard: {
-      resize: "body",
-      style: "dark",
       resizeOnFullScreen: true,
     },
   },
 };
 
 export default config;
-export { apiBaseUrl };
