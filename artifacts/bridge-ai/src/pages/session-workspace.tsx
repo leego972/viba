@@ -43,7 +43,7 @@ import {
   Crosshair, LineChart, Zap, FlaskConical, RotateCcw, X,
   RefreshCw, History, ShieldCheck, TrendingDown, AlertTriangle,
   Download, Brain, Copy, GitBranch, ExternalLink, Server, Pencil, Wrench,
-  CopyPlus, BarChart3, MessageSquare, ListChecks, Search,
+  CopyPlus, BarChart3, MessageSquare, ListChecks, Search, FileText,
 } from "lucide-react";
 import { useSessionStream } from "@/hooks/useSessionStream";
 import { IntelligentBuildFlow } from "@/components/IntelligentBuildFlow";
@@ -894,6 +894,18 @@ export default function SessionWorkspace() {
                   )}
                 </div>
               </details>
+
+              {/* Proof Report quick link */}
+              <Link href={`/sessions/${sessionId}/proof-report`}>
+                <button
+                  type="button"
+                  className="shrink-0 flex items-center gap-2 rounded-lg border bg-card px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors w-full"
+                >
+                  <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <span className="flex-1 text-left">Proof Report</span>
+                  <ExternalLink className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                </button>
+              </Link>
 
               {/* Workspace Context — repo, branch, environment */}
             {(session.repoUrl || session.repoBranch || session.workspaceEnv) ? (
