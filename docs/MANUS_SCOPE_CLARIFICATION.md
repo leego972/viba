@@ -32,6 +32,20 @@ safe paid-agent escalation
 PR/checkpoint-based repair flow
 ```
 
+Already implemented in this branch:
+
+```txt
+Doctor v1 deterministic backend
+Doctor UI at /doctor
+Doctor primary navigation entry
+visible intelligent flow: Scan → Diagnose → Quote → Approve → Repair → Verify
+session budget cap schema fields
+session budget cap API
+budget cap enforcement in credit reservation
+credit receipt messages for billable actions
+provider safe-mode controls
+```
+
 Product standard:
 
 ```txt
