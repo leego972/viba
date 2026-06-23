@@ -1,10 +1,8 @@
 # VIBA Professional System Design Blueprint
 
-VIBA is **not accounting software**.
-
 VIBA is an **AI operations mission-control platform** for diagnosing, planning, repairing, and managing technical projects through a controlled collaboration pipeline of specialist AI agents.
 
-The intended visual and control style should feel like clean professional accounting software: organised, calm, ledger-aware, receipt-based, auditable, and financially clear. The product category remains AI operations, not bookkeeping.
+The UI must be clean, crisp, professional, stable, and easy to understand. It must not look cheap, tacky, noisy, experimental, or unstable.
 
 ## 1. Product definition
 
@@ -50,48 +48,69 @@ audit log
 Existing pipeline components already present in the repo include:
 
 ```txt
-agentLoop.ts              → task assignment, execution, credit reservation, audit events
-agentComms.ts             → task-scoped inter-agent questions and answers
-toolHandoff.ts            → handoff from text-only agent to tool-capable agent
-fallbackPool.ts           → provider fallback/rerouting
+agentLoop.ts               → task assignment, execution, credit reservation, audit events
+agentComms.ts              → task-scoped inter-agent questions and answers
+toolHandoff.ts             → handoff from text-only agent to tool-capable agent
+fallbackPool.ts            → provider fallback/rerouting
 backgroundSessionRunner.ts → full-run/background progression
-selfAudit.ts              → GitHub/self-audit/checkpoint/PR workflow foundation
-actionCreditBilling.ts    → action complexity credit estimation and reservation
+selfAudit.ts               → GitHub/self-audit/checkpoint/PR workflow foundation
+actionCreditBilling.ts     → action complexity credit estimation and reservation
 ```
 
 Doctor mode must connect into this same pipeline. It should not be a separate disconnected tool.
 
-## 3. Accounting-style UI intent
+## 3. UI standard
 
-The UI should borrow from clean accounting software because that style is trusted for money, records, and operational control.
-
-This means:
+The UI standard is simple:
 
 ```txt
-clean tables
-simple cards
-clear balances
-transaction-like receipts
-status labels
-filters
-search
-exportable records
+clean
+crisp
+professional
+stable
+obvious
+easy to understand
 low visual noise
-obvious primary action
-advanced detail hidden until expanded
+clear status
+clear next action
+advanced details hidden until expanded
 ```
 
-It does **not** mean:
+Use:
 
 ```txt
-bookkeeping product
-invoice-only product
-generic finance app
-spreadsheet-heavy interface
-cluttered ledger screens everywhere
+simple cards
+clear section headers
+compact summary rows
+status labels
+receipts/proof cards
+search and filters where useful
+subtle borders
+limited colour
+one primary action per panel
 ```
 
-The visual feel should be professional, structured, and calm.
+Avoid:
+
+```txt
+busy dashboards
+neon clutter
+cheap/tacky gradients
+three competing primary buttons
+wall-of-text logs
+raw technical output by default
+hidden financial behaviour
+ambiguous charge language
+unstable/jumpy layouts
+```
+
+Each screen must answer:
+
+```txt
+What is happening?
+What will it cost?
+What should I do next?
+```
 
 ## 4. Financial-grade control discipline
 
@@ -155,14 +174,6 @@ Execution order:
 5. Mutating repair only after explicit approval.
 
 ### 5.4 Clean UI over feature noise
-
-Each screen must answer:
-
-```txt
-What is happening?
-What will it cost?
-What should I do next?
-```
 
 Advanced logs, raw evidence, agent chatter, and technical detail must be collapsed by default.
 
@@ -374,7 +385,7 @@ proof report included
 
 ## 8. Billing and credit model
 
-### 8.1 Plans
+Plans:
 
 ```txt
 VIBA Member: $50/month, 1,500 credits
@@ -382,7 +393,7 @@ VIBA Pro: $150/month, 6,000 credits
 Trial: 500 credits/day for 3 days, daily reset, no banking
 ```
 
-### 8.2 Top-ups
+Top-ups:
 
 ```txt
 $50  = 1,000 credits
@@ -392,8 +403,6 @@ $200 = 4,000 credits
 $250 = 5,000 credits
 $300 = 6,000 credits
 ```
-
-### 8.3 Charging rule
 
 Normal chat is free.
 
@@ -410,7 +419,7 @@ remaining balance
 receipt
 ```
 
-### 8.4 Budget cap rule
+## 9. Budget cap rule
 
 Background/full-run must require or strongly prompt for a session budget cap.
 
@@ -423,9 +432,9 @@ show remaining work
 ask user to increase cap or stop
 ```
 
-## 9. Auto top-up model
+## 10. Auto top-up model
 
-Auto top-up is required eventually, but must be built after the finance base is fully safe.
+Auto top-up is required later, but must be built only after the finance base is fully safe.
 
 It must be opt-in.
 
@@ -467,7 +476,7 @@ manual recovery flow
 tests
 ```
 
-## 10. Stripe design
+## 11. Stripe design
 
 Stripe owns payment methods. VIBA must never collect raw card data.
 
@@ -499,7 +508,7 @@ payment_intent.payment_failed
 
 Every webhook must be replay-safe.
 
-## 11. Railway deployment design
+## 12. Railway deployment design
 
 Railway variables must be configured in one pass after build validation.
 
@@ -526,7 +535,7 @@ server startup requirements are checked
 Railway deploy logs are reviewed
 ```
 
-## 12. Provider spend controls
+## 13. Provider spend controls
 
 Default safe deployment:
 
@@ -555,9 +564,9 @@ VIBA_BACKGROUND_MAX_TURNS=1
 
 The system must never require removing API keys to stop spend. A Railway env toggle must be enough.
 
-## 13. UI design language
+## 14. UI design language
 
-The UI should look like clean professional accounting software, applied to AI operations.
+The UI must look clean, crisp, professional, and easy to understand.
 
 Doctor UI default layout:
 
@@ -595,7 +604,7 @@ progress
 receipt
 ```
 
-## 14. Implementation order
+## 15. Implementation order
 
 Professional order:
 
@@ -612,7 +621,7 @@ Professional order:
 11. PR-based repair mode.
 12. Auto top-up only after finance tests pass.
 
-## 15. Current Manus job
+## 16. Current Manus job
 
 Manus should not build new product features in the deployment pass.
 
