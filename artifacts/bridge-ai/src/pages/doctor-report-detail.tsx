@@ -249,7 +249,7 @@ export default function DoctorReportDetail() {
             </div>
 
           </div>
-        }
+        )}
       </div>
     </AppLayout>
   );
