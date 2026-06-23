@@ -390,4 +390,35 @@ router.get("/doctor/reports", async (req, res): Promise<void> => {
   res.json({ reports: reports.rows });
 });
 
+
+router.get("/doctor/reports/:id", async (req, res): Promise<void> => {
+  const id = Number.parseInt(String(req.params.id ?? ""), 10);
+  if (!Number.isFinite(id) || id <= 0) { res.status(400).json({ error: "invalid_report_id" }); return; }
+  try {
+    await ensureDoctorTables();
+    const result = await pool.query<{
+      id: number; repo_full_name: string; branch: string; public_url: string | null;
+      health_score: number; report: DoctorReport; created_at: string;
+    }>(
+      `SELECT id, repo_full_name, branch, public_url, health_score, report, created_at
+         FROM viba_project_doctor_reports
+        WHERE id = $1 LIMIT 1`,
+      [id],
+    );
+    const row = result.rows[0];
+    if (!row) { res.status(404).json({ error: "doctor_report_not_found" }); return; }
+    res.json({
+      id: row.id,
+      repoFullName: row.repo_full_name,
+      branch: row.branch,
+      publicUrl: row.public_url,
+      healthScore: row.health_score,
+      report: row.report,
+      createdAt: row.created_at,
+    });
+  } catch (error) {
+    res.status(500).json({ error: "server_error", message: error instanceof Error ? error.message : "Unknown error." });
+  }
+});
+
 export default router;
