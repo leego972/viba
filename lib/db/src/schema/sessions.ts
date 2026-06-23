@@ -10,6 +10,8 @@ export const sessionsTable = pgTable("sessions", {
   autonomyMode: text("autonomy_mode").notNull().default("supervised"),
   mode: text("mode").notNull().default("simulation"),
   estimatedCost: real("estimated_cost"),
+  budgetCapCredits: integer("budget_cap_credits"),
+  creditsReserved: integer("credits_reserved").notNull().default(0),
   finalOutput: text("final_output"),
   /** Git repo URL the tool-capable agents should act on (optional). */
   repoUrl: text("repo_url"),
