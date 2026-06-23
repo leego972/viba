@@ -55,7 +55,33 @@ VIBA_BACKGROUND_MAX_TURNS=5
 
 Do not enable all live providers at once. Raise limits only after spend is measured.
 
-## 4. Stripe billing variables
+## 4. Financial fail-closed and auto-top-up defaults
+
+Set these Railway variables before enabling live billing or live AI execution. These are platform defaults only; user-level controls still need database-backed settings before auto top-up goes live.
+
+```env
+VIBA_BILLING_FAIL_CLOSED=true
+VIBA_AUTO_TOPUP_DEFAULT_ENABLED=false
+VIBA_AUTO_TOPUP_DEFAULT_PACK_KEY=credits_1000
+VIBA_AUTO_TOPUP_DEFAULT_CREDIT_FLOOR=100
+VIBA_AUTO_TOPUP_DEFAULT_MAX_PER_PERIOD=1
+VIBA_AUTO_TOPUP_REQUIRE_PAYMENT_METHOD=true
+VIBA_LOCK_BILLABLE_ON_PAYMENT_FAILURE=true
+VIBA_PROVIDER_SPEND_SAFE_MODE=true
+VIBA_PROVIDER_SPEND_MONTHLY_LIMIT_USD=100
+VIBA_PROVIDER_SPEND_WARNING_USD=50
+```
+
+Required interpretation:
+
+- `VIBA_BILLING_FAIL_CLOSED=true` means billable AI execution must block if billing cannot be verified.
+- `VIBA_AUTO_TOPUP_DEFAULT_ENABLED=false` means auto top-up is opt-in only.
+- `VIBA_AUTO_TOPUP_DEFAULT_PACK_KEY=credits_1000` means the safe default is the smallest $50 / 1,000-credit pack.
+- `VIBA_AUTO_TOPUP_DEFAULT_MAX_PER_PERIOD=1` means one automatic top-up per billing period unless the user explicitly changes it.
+- `VIBA_LOCK_BILLABLE_ON_PAYMENT_FAILURE=true` means failed payment locks billable execution until payment is resolved.
+- Provider spend warning/limit values are owner-safety controls and must not be confused with user credits.
+
+## 5. Stripe billing variables
 
 Set Stripe variables on the VIBA app service.
 
@@ -93,7 +119,33 @@ STRIPE_BILLING_CREDITS_6000_PRICE_ID=price_... # $300 / 6,000 credits
 
 The backend can create Stripe products/prices if these top-up price IDs are omitted, but production should use fixed Stripe price IDs so billing is predictable and auditable.
 
-## 5. Stripe webhook setup
+## 6. Stripe auto-top-up and payment-method setup
+
+Stripe must also be configured to support future auto top-up safely.
+
+Required in Stripe:
+
+1. Enable customers to save/update payment methods through Stripe Billing Portal.
+2. Configure the subscription/checkout flow so reusable payment methods are available for authorised future charges.
+3. Do not attempt off-session charges unless the customer has explicitly opted in and Stripe has a reusable payment method.
+4. Set top-up price metadata for every one-time credit pack:
+
+```txt
+system=viba_billing
+type=credit_pack
+credits=<credit_amount>
+packKey=credits_<credit_amount>
+```
+
+5. Enable Billing Portal customer actions:
+   - update payment method
+   - cancel subscription
+   - view invoices
+   - switch between Member and Pro if supported by the Stripe account
+
+Auto top-up must remain disabled until payment failure locking, idempotent webhooks, idempotent credit grants, and warning emails are verified.
+
+## 7. Stripe webhook setup
 
 In Stripe Dashboard, create a webhook endpoint:
 
@@ -109,6 +161,8 @@ invoice.payment_succeeded
 invoice.payment_failed
 customer.subscription.updated
 customer.subscription.deleted
+payment_intent.succeeded
+payment_intent.payment_failed
 ```
 
 Copy the webhook signing secret into Railway:
@@ -117,7 +171,7 @@ Copy the webhook signing secret into Railway:
 STRIPE_WEBHOOK_SECRET=whsec_...
 ```
 
-## 6. AI provider keys
+## 8. AI provider keys
 
 Set only the providers intentionally allowed for live spend. Omit any provider that should run in simulation/mock mode.
 
@@ -142,7 +196,7 @@ PERPLEXITY_MODEL=sonar
 RAILWAY_REASONING_MODEL=gpt-4.1-mini
 ```
 
-## 7. Admin and internal maintenance variables
+## 9. Admin and internal maintenance variables
 
 Set admin/internal controls:
 
@@ -157,7 +211,7 @@ Optional, only if Bridge/VIBA must accept bypassed calls from Archibald Titan:
 ARCHIBALD_BYPASS_TOKEN=<shared secret matching the Archibald side>
 ```
 
-## 8. OAuth variables, if enabled
+## 10. OAuth variables, if enabled
 
 Only set these if Google/GitHub login is being used. Make sure OAuth callback URLs match the live domain.
 
@@ -175,7 +229,7 @@ https://viba.guru/api/auth/google/callback
 https://viba.guru/api/auth/github/callback
 ```
 
-## 9. Email variables, if email delivery is required
+## 11. Email variables, if email delivery is required
 
 Set SMTP variables for verification/welcome/billing emails:
 
@@ -189,7 +243,7 @@ SMTP_FROM=noreply@viba.guru
 
 If SMTP is omitted, email sending may be skipped or logged as failed depending on the route.
 
-## 10. Optional runtime controls
+## 12. Optional runtime controls
 
 ```env
 VIBA_BACKGROUND_MAX_TURNS=100
@@ -197,7 +251,7 @@ CIRCUIT_OPEN_THRESHOLD=5
 CIRCUIT_TIMEOUT_MS=300000
 ```
 
-## 11. Post-deploy verification checklist
+## 13. Post-deploy verification checklist
 
 After setting variables and redeploying, verify:
 
@@ -210,18 +264,21 @@ After setting variables and redeploying, verify:
 5. Stripe checkout opens for Member.
 6. Stripe checkout opens for Pro.
 7. `/billing` shows top-up packs from $50 to $300.
-8. Stripe webhook receives `checkout.session.completed` and credits are granted.
-9. In safe mode, live agents fall back to simulation even when API keys exist.
-10. `run-next` and `run-full` only work when the user has active billing/credits.
-11. Normal chat remains free.
-12. Agent task actions deduct credits by action complexity.
-13. Out-of-credit sessions pause and point users to Billing.
+8. Stripe webhook receives `checkout.session.completed` and credits are granted once only.
+9. Stripe webhook replay does not grant duplicate credits.
+10. Failed payment locks billable execution.
+11. In safe mode, live agents fall back to simulation even when API keys exist.
+12. `run-next` and `run-full` only work when the user has active billing/credits.
+13. Normal chat remains free.
+14. Agent task actions deduct credits by action complexity.
+15. Out-of-credit sessions pause and point users to Billing.
 
-## 12. Notes for Manus
+## 14. Notes for Manus
 
 - Do not hardcode secrets into code.
 - Do not commit `.env` files.
 - If provider spend spikes, immediately set `VIBA_COST_SAFE_MODE=true`, `VIBA_LIVE_AGENTS_ENABLED=false`, and `VIBA_BACKGROUND_MAX_TURNS=1`.
+- If payment/billing state cannot be verified, billable AI execution must fail closed.
 - If Stripe appears disabled even when new billing variables exist, confirm `STRIPE_PRICE_ID` is also set for legacy compatibility.
 - If Railway build passes but billing fails, check Stripe webhook secret and price IDs first.
 - If AI providers are missing keys or blocked by safe mode, VIBA falls back to mock/simulation mode for those providers.
