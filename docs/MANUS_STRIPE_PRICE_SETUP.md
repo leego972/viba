@@ -114,7 +114,30 @@ STRIPE_BILLING_CREDITS_5000_PRICE_ID=price_...
 STRIPE_BILLING_CREDITS_6000_PRICE_ID=price_...
 ```
 
-## 4. Configure Stripe webhook
+## 4. Auto top-up Stripe requirements
+
+Auto top-up is a future billing-control feature and must not be enabled until VIBA has database-backed user controls, idempotent charge attempts, idempotent webhook handling, payment-failure locking, and warning emails.
+
+Stripe setup required before enabling auto top-up UI:
+
+1. Enable saved payment methods for customers through Stripe Checkout/Portal.
+2. Confirm subscriptions create reusable customer/payment-method references when the user consents.
+3. Enable Billing Portal payment-method updates.
+4. Do **not** collect or store raw card numbers in VIBA, Manus, Railway, or GitHub.
+5. Do **not** make off-session charges unless Stripe confirms the payment method is authorised for off-session use.
+6. Every off-session top-up attempt must use a server-side idempotency key.
+7. Every failed payment must lock billable AI execution until payment is resolved.
+
+Recommended Stripe Billing Portal settings:
+
+```txt
+allow payment method updates
+allow invoice history
+allow subscription cancellation
+allow plan switching between Member and Pro where supported
+```
+
+## 5. Configure Stripe webhook
 
 Create one webhook endpoint:
 
@@ -130,6 +153,8 @@ invoice.payment_succeeded
 invoice.payment_failed
 customer.subscription.updated
 customer.subscription.deleted
+payment_intent.succeeded
+payment_intent.payment_failed
 ```
 
 Copy the webhook signing secret into Railway:
@@ -138,7 +163,7 @@ Copy the webhook signing secret into Railway:
 STRIPE_WEBHOOK_SECRET=whsec_...
 ```
 
-## 5. Stripe Billing Portal
+## 6. Stripe Billing Portal
 
 Enable the Stripe Billing Portal so users can manage/cancel subscriptions.
 
@@ -153,7 +178,7 @@ Recommended portal settings:
 
 If plan switching is not configured, `/billing/upgrade/pro` can still open the portal, but the user may not see a Pro upgrade option.
 
-## 6. Railway verification after Stripe setup
+## 7. Railway verification after Stripe setup
 
 After setting all Stripe variables in Railway and redeploying:
 
@@ -166,11 +191,13 @@ After setting all Stripe variables in Railway and redeploying:
 5. Visit `/billing` and confirm top-up packs show $50-$300.
 6. Buy a test top-up in Stripe test mode or controlled live-mode test.
 7. Confirm webhook grants the correct number of credits.
-8. Confirm paid subscription renewal resets credits to the plan allowance:
-   - Member: 1,500
-   - Pro: 6,000
+8. Replay the webhook and confirm credits are not granted twice.
+9. Confirm failed payment locks billable execution.
+10. Confirm paid subscription renewal resets credits to the plan allowance:
+    - Member: 1,500
+    - Pro: 6,000
 
-## 7. Failure checks
+## 8. Failure checks
 
 If checkout fails:
 
@@ -185,3 +212,9 @@ If credits are not granted:
 - Confirm webhook endpoint is `https://viba.guru/api/stripe/webhook`.
 - Confirm webhook events include `checkout.session.completed` and `invoice.payment_succeeded`.
 - Confirm top-up price metadata includes `credits` and `packKey`.
+
+If auto top-up is requested before safeguards are complete:
+
+- Keep auto top-up disabled.
+- Keep `VIBA_AUTO_TOPUP_DEFAULT_ENABLED=false` in Railway.
+- Require tests for idempotency, payment failure locking, warning emails, and manual recovery before enabling it.
