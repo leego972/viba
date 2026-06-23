@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
-import { Check, Zap, Star, Shield } from "lucide-react";
+import { Check, Zap, Star, Shield, Compass, FileCheck2, TrendingUp } from "lucide-react";
 
 interface Plan {
   name: string;
@@ -31,14 +31,22 @@ function fmt(cents: number) {
   return `$${(cents / 100).toFixed(0)}`;
 }
 
-const FEATURES = [
-  "1,000 credits per month included",
-  "All 6 AI providers (ChatGPT, Claude, Gemini, Perplexity, Replit, Manus)",
-  "Unlimited collaborative sessions",
-  "Assign roles & orchestrate agents autonomously",
-  "Task routing, cost tracking & audit logs",
-  "Human-in-the-loop approval step for high-stakes actions",
-  "Full session history — data never deleted",
+const MEMBERSHIP_FEATURES = [
+  "AI Business Asset Passport workflow",
+  "Research, design, build, verify, score, improve, and monetise operating chain",
+  "Growth Engine with proof gates, readiness score, revenue path, and next best action",
+  "Workbench with guarded analysis, quality gate, risk flags, and review packet",
+  "Role-based agent sessions for strategy, research, building, testing, risk, monetisation, and verification",
+  "Workspace context for repos, builds, specs, logs, screenshots, and business documents",
+  "Human approval model for high-risk or business-critical actions",
+  "Session history and operating records for professional follow-up"
+];
+
+const PASSPORT_OUTCOMES = [
+  { title: "Know what matters", text: "Research the system, buyer, risk, offer, and evidence before spending time or money." },
+  { title: "Build with control", text: "Turn work into clear tasks, agent roles, implementation steps, and reviewable outputs." },
+  { title: "Verify before selling", text: "Use proof gates, quality checks, and readiness scoring before calling an asset ready." },
+  { title: "Improve the revenue path", text: "Package reports, campaigns, repair sprints, retainers, and next actions from the work." },
 ];
 
 export default function Pricing() {
@@ -117,15 +125,18 @@ export default function Pricing() {
 
   const plan = plans?.plan;
   const packs = plans?.creditPacks ?? [];
+  const monthlyCredits = plan?.monthlyCredits ?? 1000;
 
   return (
     <div
       className="min-h-screen text-white"
-      style={{ background: "linear-gradient(135deg,#0a0e1a 0%,#0d1224 60%,#080b16 100%)" }}
+      style={{ background: "radial-gradient(circle at top left, rgba(20,184,166,0.22), transparent 32%), linear-gradient(135deg,#070b16 0%,#0d1224 58%,#070914 100%)" }}
     >
-      {/* Nav */}
-      <nav className="flex items-center justify-between px-6 py-5 max-w-5xl mx-auto">
-        <span className="text-lg font-bold tracking-tight text-white">VIBA</span>
+      <nav className="flex items-center justify-between px-6 py-5 max-w-6xl mx-auto">
+        <button onClick={() => setLocation("/")} className="flex items-center gap-2 text-left">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-slate-950 font-bold">V</span>
+          <span className="text-lg font-bold tracking-tight text-white">VIBA</span>
+        </button>
         <div className="flex items-center gap-3">
           {isAuthenticated ? (
             <>
@@ -136,7 +147,7 @@ export default function Pricing() {
                 Billing
               </button>
               <button
-                onClick={() => setLocation("/")}
+                onClick={() => setLocation("/dashboard")}
                 className="text-sm bg-white/10 hover:bg-white/20 border border-white/10 rounded-lg px-4 py-1.5 transition-colors"
               >
                 Dashboard
@@ -161,97 +172,113 @@ export default function Pricing() {
         </div>
       </nav>
 
-      <div className="max-w-5xl mx-auto px-6 py-16 space-y-20">
-        {/* Hero */}
-        <div className="text-center space-y-4">
-          <h1 className="text-4xl sm:text-5xl font-bold tracking-tight">
-            Orchestrate AI agents,{" "}
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-violet-400">
-              together
-            </span>
-          </h1>
-          <p className="text-zinc-400 text-lg max-w-xl mx-auto">
-            Connect ChatGPT, Claude, Gemini, Perplexity and more in one session. Assign roles,
-            route tasks by capability, and collaborate autonomously.
-          </p>
-        </div>
-
-        {/* Membership plan card */}
-        <div className="max-w-lg mx-auto">
-          {plansLoading ? (
-            <div className="rounded-2xl border border-white/10 bg-white/5 h-96 animate-pulse" />
-          ) : (
-            <div className="relative rounded-2xl border border-blue-500/30 bg-gradient-to-b from-blue-950/40 to-zinc-900/60 overflow-hidden shadow-2xl shadow-blue-900/20">
-              {/* Trial badge */}
-              <div className="absolute top-0 right-0 m-4">
-                <span className="flex items-center gap-1.5 bg-emerald-500 text-white text-xs font-semibold px-3 py-1.5 rounded-full">
-                  <Star className="w-3 h-3" />
-                  7-day free trial
-                </span>
-              </div>
-
-              <div className="p-8 space-y-6">
-                {/* Plan header */}
-                <div>
-                  <p className="text-sm font-medium text-blue-400 uppercase tracking-widest mb-2">
-                    {plan?.name ?? "VIBA Member"}
-                  </p>
-                  <div className="flex items-end gap-2">
-                    <span className="text-5xl font-bold">{plan ? fmt(plan.unitAmount) : "$50"}</span>
-                    <span className="text-zinc-400 mb-1">/month</span>
-                  </div>
-                  <p className="text-zinc-500 text-sm mt-1">
-                    after your {plan?.trialDays ?? 7}-day free trial ends
-                  </p>
-                </div>
-
-                {/* Features */}
-                <ul className="space-y-3">
-                  {FEATURES.map((f) => (
-                    <li key={f} className="flex items-start gap-3 text-sm text-zinc-300">
-                      <Check className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-
-                {/* CTA */}
-                <div className="space-y-3">
-                  {checkoutError && (
-                    <p className="text-sm text-red-400 text-center">{checkoutError}</p>
-                  )}
-                  <button
-                    onClick={handleSubscribe}
-                    disabled={checkoutLoading || authLoading}
-                    className="w-full py-3.5 rounded-xl font-semibold text-white bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 disabled:opacity-60 transition-all shadow-lg shadow-blue-900/40"
-                  >
-                    {checkoutLoading
-                      ? "Redirecting to Stripe…"
-                      : authLoading
-                        ? "Loading…"
-                        : isAuthenticated
-                          ? "Start Free Trial"
-                          : "Sign up & Start Free Trial"}
-                  </button>
-                  <p className="text-center text-xs text-zinc-500 flex items-center justify-center gap-1.5">
-                    <Shield className="w-3 h-3" />
-                    No charge until day 8. Card required. Cancel anytime.
-                  </p>
-                </div>
-              </div>
+      <div className="max-w-6xl mx-auto px-6 py-14 space-y-16">
+        <section className="grid gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
+          <div className="space-y-6">
+            <div className="inline-flex items-center gap-2 rounded-full border border-teal-400/25 bg-teal-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-teal-200">
+              <Compass className="h-3.5 w-3.5" /> AI Business Asset Passport
             </div>
-          )}
-        </div>
+            <div className="space-y-4">
+              <h1 className="max-w-3xl text-4xl font-bold tracking-tight sm:text-6xl">
+                Membership for businesses that need assets built, verified, and improved.
+              </h1>
+              <p className="max-w-2xl text-lg leading-8 text-zinc-300">
+                VIBA researches, designs, builds, verifies, scores, improves, and monetises the systems your business depends on. The membership gives professionals a proof-led operating system, not another loose AI chat box.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <MiniMetric icon={FileCheck2} label="Proof-led" value="Gates before done" />
+              <MiniMetric icon={TrendingUp} label="Commercial" value="Revenue path" />
+              <MiniMetric icon={Shield} label="Private" value="No shame board" />
+            </div>
+          </div>
 
-        {/* Credit packs */}
-        <div className="space-y-8">
+          <div className="max-w-lg lg:ml-auto">
+            {plansLoading ? (
+              <div className="rounded-3xl border border-white/10 bg-white/5 h-[560px] animate-pulse" />
+            ) : (
+              <div className="relative overflow-hidden rounded-3xl border border-teal-400/30 bg-gradient-to-b from-teal-950/35 to-zinc-950/70 shadow-2xl shadow-teal-950/30">
+                <div className="absolute right-5 top-5">
+                  <span className="flex items-center gap-1.5 rounded-full bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white">
+                    <Star className="h-3 w-3" /> {plan?.trialDays ?? 7}-day trial
+                  </span>
+                </div>
+
+                <div className="p-8 space-y-6">
+                  <div>
+                    <p className="text-sm font-medium text-teal-300 uppercase tracking-widest mb-2">
+                      {plan?.name ?? "VIBA Passport Membership"}
+                    </p>
+                    <div className="flex items-end gap-2">
+                      <span className="text-5xl font-bold">{plan ? fmt(plan.unitAmount) : "$50"}</span>
+                      <span className="text-zinc-400 mb-1">/month</span>
+                    </div>
+                    <p className="text-zinc-500 text-sm mt-2">
+                      Includes {monthlyCredits.toLocaleString()} monthly credits. Extra credits are optional.
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <p className="text-sm font-semibold text-white">Best for</p>
+                    <p className="mt-1 text-sm leading-6 text-zinc-400">
+                      Professionals, founders, agencies, consultants, builders, and business owners who need systems researched, designed, built, checked, improved, and packaged into sellable assets.
+                    </p>
+                  </div>
+
+                  <ul className="space-y-3">
+                    {MEMBERSHIP_FEATURES.map((f) => (
+                      <li key={f} className="flex items-start gap-3 text-sm text-zinc-300">
+                        <Check className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
+                        <span>{f}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  <div className="space-y-3 pt-2">
+                    {checkoutError && (
+                      <p className="text-sm text-red-400 text-center">{checkoutError}</p>
+                    )}
+                    <button
+                      onClick={handleSubscribe}
+                      disabled={checkoutLoading || authLoading}
+                      className="w-full rounded-xl bg-gradient-to-r from-teal-500 to-blue-600 py-3.5 font-semibold text-white shadow-lg shadow-teal-950/40 transition-all hover:from-teal-400 hover:to-blue-500 disabled:opacity-60"
+                    >
+                      {checkoutLoading
+                        ? "Redirecting to Stripe…"
+                        : authLoading
+                          ? "Loading…"
+                          : isAuthenticated
+                            ? "Start Passport Membership"
+                            : "Sign up & Start Trial"}
+                    </button>
+                    <p className="text-center text-xs text-zinc-500 flex items-center justify-center gap-1.5">
+                      <Shield className="w-3 h-3" />
+                      No charge until trial ends. Card required. Cancel anytime.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="grid gap-4 md:grid-cols-4">
+          {PASSPORT_OUTCOMES.map((item) => (
+            <article key={item.title} className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 shadow-xl shadow-black/10">
+              <p className="font-semibold text-white">{item.title}</p>
+              <p className="mt-2 text-sm leading-6 text-zinc-400">{item.text}</p>
+            </article>
+          ))}
+        </section>
+
+        <section className="space-y-8">
           <div className="text-center space-y-2">
-            <div className="flex items-center justify-center gap-2 text-zinc-300 font-semibold text-lg">
+            <div className="flex items-center justify-center gap-2 text-zinc-200 font-semibold text-lg">
               <Zap className="w-5 h-5 text-amber-400" />
-              Need more credits?
+              Need more execution credits?
             </div>
             <p className="text-zinc-500 text-sm">
-              Top up anytime — credits are added instantly after payment.
+              Top up when you need heavier research, build, verification, or multi-agent work.
             </p>
           </div>
 
@@ -266,7 +293,7 @@ export default function Pricing() {
               {packs.map((pack) => (
                 <div
                   key={pack.key}
-                  className="relative rounded-xl border border-white/10 bg-white/5 hover:bg-white/8 hover:border-white/20 transition-all p-4 flex flex-col gap-3"
+                  className="relative rounded-xl border border-white/10 bg-white/[0.04] p-4 flex flex-col gap-3 transition-all hover:border-white/20 hover:bg-white/[0.07]"
                 >
                   {pack.badge && (
                     <span className="absolute -top-2 left-1/2 -translate-x-1/2 bg-amber-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap">
@@ -281,9 +308,9 @@ export default function Pricing() {
                   <button
                     onClick={() => handleBuyPack(pack.key)}
                     disabled={packLoading === pack.key}
-                    className="mt-auto text-xs py-2 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-60 transition-colors font-medium"
+                    className="mt-auto rounded-lg bg-white/10 py-2 text-xs font-medium transition-colors hover:bg-white/20 disabled:opacity-60"
                   >
-                    {packLoading === pack.key ? "…" : "Buy"}
+                    {packLoading === pack.key ? "…" : "Buy credits"}
                   </button>
                 </div>
               ))}
@@ -291,10 +318,20 @@ export default function Pricing() {
           )}
 
           <p className="text-center text-xs text-zinc-600">
-            Credit packs require an active VIBA membership. Credits never expire while your membership is active.
+            Credit packs require an active VIBA membership. Credits remain available while your membership is active.
           </p>
-        </div>
+        </section>
       </div>
+    </div>
+  );
+}
+
+function MiniMetric({ icon: Icon, label, value }: { icon: typeof FileCheck2; label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+      <Icon className="h-5 w-5 text-teal-300" />
+      <p className="mt-3 text-xs uppercase tracking-[0.16em] text-zinc-500">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-white">{value}</p>
     </div>
   );
 }
