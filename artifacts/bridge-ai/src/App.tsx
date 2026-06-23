@@ -16,6 +16,7 @@ import Dashboard from "@/pages/dashboard";
 import NewSession from "@/pages/new-session";
 import SessionWorkspace from "@/pages/session-workspace";
 import SessionProofReport from "@/pages/session-proof-report";
+import SessionBudget from "@/pages/session-budget";
 import Settings from "@/pages/settings";
 import Workbench from "@/pages/workbench";
 import Bridge from "@/pages/bridge";
@@ -84,6 +85,7 @@ function GatedRouter() {
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/sessions/new" component={NewSession} />
         <Route path="/sessions/:id/proof-report" component={SessionProofReport} />
+        <Route path="/sessions/:id/budget" component={SessionBudget} />
         <Route path="/sessions/:id" component={SessionWorkspace} />
         <Route path="/settings" component={Settings} />
         <Route path="/billing" component={Billing} />
