@@ -78,6 +78,37 @@ export async function pauseSessionForActionCredits(input: {
   });
 }
 
+async function persistActionCreditReceipt(input: {
+  userId: number;
+  sessionId: number;
+  task: Task;
+  agent: Agent;
+  credits: number;
+}): Promise<void> {
+  if (input.credits <= 0) return;
+  const content = `Credit receipt: ${input.credits} credits reserved for "${input.task.title}" using ${input.agent.name}.`;
+  await db.insert(messagesTable).values({
+    sessionId: input.sessionId,
+    agentId: null,
+    role: "assistant",
+    provider: "system",
+    agentName: "VIBA System",
+    agentRole: "Billing",
+    content,
+    messageType: "context",
+    taskId: input.task.id,
+    metadata: {
+      type: "action_credit_receipt",
+      userId: input.userId,
+      taskId: input.task.id,
+      agentId: input.agent.id,
+      agentName: input.agent.name,
+      provider: input.agent.provider,
+      credits: input.credits,
+    },
+  });
+}
+
 export async function reserveCreditsForAction(input: {
   userId: number;
   sessionId: number;
@@ -97,6 +128,13 @@ export async function reserveCreditsForAction(input: {
     eventType: "action_credits_reserved",
     description: `Reserved ${credits} credits for task action complexity`,
     metadata: { userId: input.userId, taskId: input.task.id, agentId: input.agent.id, credits },
+  });
+  await persistActionCreditReceipt({
+    userId: input.userId,
+    sessionId: input.sessionId,
+    task: input.task,
+    agent: input.agent,
+    credits,
   });
   return { ok: true, credits };
 }
