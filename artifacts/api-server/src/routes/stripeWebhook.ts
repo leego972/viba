@@ -23,7 +23,7 @@ import {
 } from "../lib/billingEmail";
 
 const MEMBER_MONTHLY_CREDITS = 1500;
-const PRO_MONTHLY_CREDITS = 4500;
+const PRO_MONTHLY_CREDITS = 6000;
 
 function tsToDate(ts: number | null | undefined): Date | null {
   return ts != null ? new Date(ts * 1000) : null;
