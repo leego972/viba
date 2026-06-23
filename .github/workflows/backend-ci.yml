@@ -31,5 +31,8 @@ jobs:
       - name: Typecheck backend and workspace
         run: pnpm run typecheck
 
-      - name: Production build
-        run: pnpm run build
+      - name: Build API server
+        run: pnpm --filter @workspace/api-server run build
+
+      - name: Build Bridge AI frontend
+        run: pnpm --filter @workspace/bridge-ai run build
