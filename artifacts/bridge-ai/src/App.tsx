@@ -18,6 +18,7 @@ import SessionWorkspace from "@/pages/session-workspace";
 import Settings from "@/pages/settings";
 import Workbench from "@/pages/workbench";
 import Bridge from "@/pages/bridge";
+import Doctor from "@/pages/doctor";
 import Pricing from "@/pages/pricing";
 import CheckoutSuccess from "@/pages/checkout-success";
 import AdminMaintenance from "@/pages/admin-maintenance";
@@ -85,6 +86,7 @@ function GatedRouter() {
         <Route path="/billing" component={Billing} />
         <Route path="/workbench" component={Workbench} />
         <Route path="/bridge" component={Bridge} />
+        <Route path="/doctor" component={Doctor} />
         <Route component={NotFound} />
       </Switch>
     </AuthGuard>
