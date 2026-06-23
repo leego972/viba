@@ -1,9 +1,10 @@
 import { Link, useLocation } from "wouter";
-import { Settings, FlaskConical, CreditCard, Zap, LayoutDashboard, Radio, Plus } from "lucide-react";
+import { Settings, FlaskConical, CreditCard, Zap, LayoutDashboard, Radio, Plus, Stethoscope } from "lucide-react";
 import { CreditBalancePill } from "@/components/CreditBalancePill";
 
 const NAV_LINKS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, match: (l: string) => l.startsWith("/dashboard") || l.startsWith("/sessions") },
+  { href: "/doctor",    label: "Doctor",    icon: Stethoscope,     match: (l: string) => l.startsWith("/doctor") },
   { href: "/workbench", label: "Workbench",  icon: FlaskConical,    match: (l: string) => l.startsWith("/workbench") },
   { href: "/bridge",    label: "Bridge",    icon: Radio,            match: (l: string) => l.startsWith("/bridge") },
   { href: "/billing",   label: "Billing",   icon: CreditCard,       match: (l: string) => l.startsWith("/billing") || l.startsWith("/pricing") },
