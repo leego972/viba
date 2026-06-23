@@ -1,7 +1,7 @@
 import { db, sessionsTable, messagesTable, auditLogsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { runNextAgentStep } from "./agentLoop";
-import { deductCredits, getBillingStatus, isStripeConfigured } from "./billing";
+import { getBillingStatus, isStripeConfigured } from "./billing";
 import { logger } from "./logger";
 
 const MAX_BACKGROUND_TURNS = Number(process.env["VIBA_BACKGROUND_MAX_TURNS"] ?? "100");
@@ -11,7 +11,6 @@ type BackgroundRun = {
   userId: number;
   startedAt: number;
   stepsRun: number;
-  firstCreditAlreadyReserved: boolean;
 };
 
 const activeRuns = new Map<number, BackgroundRun>();
@@ -44,21 +43,10 @@ async function pauseForCredits(sessionId: number, userId: number) {
   await logAudit(sessionId, "credits_exhausted", "Background workflow paused because credits are finished", { userId });
 }
 
-async function canSpendCredit(input: BackgroundRun): Promise<boolean> {
+async function canRunNextAction(input: BackgroundRun): Promise<boolean> {
   if (!isStripeConfigured()) return true;
-  if (input.firstCreditAlreadyReserved) {
-    input.firstCreditAlreadyReserved = false;
-    return true;
-  }
-
   const status = await getBillingStatus(input.userId);
-  if (status.subscriptionStatus === "canceled" || status.subscriptionStatus === "none") {
-    await pauseForCredits(input.sessionId, input.userId);
-    return false;
-  }
-
-  const deducted = await deductCredits(input.userId, 1, input.sessionId);
-  if (!deducted) {
+  if (status.subscriptionStatus === "canceled" || status.subscriptionStatus === "none" || status.creditsRemaining <= 0) {
     await pauseForCredits(input.sessionId, input.userId);
     return false;
   }
@@ -94,7 +82,6 @@ export function startBackgroundFullRun(input: {
     userId: input.userId,
     startedAt: Date.now(),
     stepsRun: 0,
-    firstCreditAlreadyReserved: input.firstCreditAlreadyReserved ?? false,
   };
   activeRuns.set(input.sessionId, run);
 
@@ -116,8 +103,8 @@ async function runLoop(run: BackgroundRun): Promise<void> {
       const [session] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, run.sessionId));
       if (!session || session.status !== "active") break;
 
-      const hasCredit = await canSpendCredit(run);
-      if (!hasCredit) break;
+      const canRun = await canRunNextAction(run);
+      if (!canRun) break;
 
       const result = await runNextAgentStep(run.sessionId);
       run.stepsRun += 1;
