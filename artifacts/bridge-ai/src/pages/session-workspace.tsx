@@ -907,6 +907,18 @@ export default function SessionWorkspace() {
                 </button>
               </Link>
 
+              {/* Next Action quick link */}
+              <Link href={`/sessions/${sessionId}/next-action`}>
+                <button
+                  type="button"
+                  className="shrink-0 flex items-center gap-2 rounded-lg border bg-card px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors w-full"
+                >
+                  <ListChecks className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <span className="flex-1 text-left">Next Action</span>
+                  <ExternalLink className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                </button>
+              </Link>
+
               {/* Workspace Context — repo, branch, environment */}
             {(session.repoUrl || session.repoBranch || session.workspaceEnv) ? (
               <details className="group/wctx shrink-0">
