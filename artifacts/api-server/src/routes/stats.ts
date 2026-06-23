@@ -7,6 +7,7 @@ import { sendSpikeNotifications, sendTestWebhookNotification, getLastNotificatio
 import { sendTestEmail } from "../lib/emailNotify";
 import doctorRouter from "./projectDoctor";
 import sessionBudgetRouter from "./sessionBudget";
+import sessionProofReportRouter from "./sessionProofReport";
 
 // 5 req/min — this route fires outbound HTTP and SMTP; keep tight
   const testNotificationLimiter = createRateLimiter({
@@ -18,6 +19,7 @@ import sessionBudgetRouter from "./sessionBudget";
   const router: IRouter = Router();
 router.use(doctorRouter);
 router.use(sessionBudgetRouter);
+router.use(sessionProofReportRouter);
 
 const DEFAULT_ALERT_THRESHOLD = 5;
 const ALERT_WINDOW_HOURS = 1;
