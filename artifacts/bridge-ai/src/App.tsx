@@ -22,6 +22,7 @@ import Workbench from "@/pages/workbench";
 import Bridge from "@/pages/bridge";
 import Doctor from "@/pages/doctor";
 import DoctorHistory from "@/pages/doctor-history";
+import DoctorProposalPreview from "@/pages/doctor-proposal-preview";
 import Pricing from "@/pages/pricing";
 import CheckoutSuccess from "@/pages/checkout-success";
 import AdminMaintenance from "@/pages/admin-maintenance";
@@ -92,6 +93,7 @@ function GatedRouter() {
         <Route path="/workbench" component={Workbench} />
         <Route path="/bridge" component={Bridge} />
         <Route path="/doctor/history" component={DoctorHistory} />
+        <Route path="/doctor/reports/:id/proposal" component={DoctorProposalPreview} />
         <Route path="/doctor" component={Doctor} />
         <Route component={NotFound} />
       </Switch>
