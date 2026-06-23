@@ -1,10 +1,11 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { AlertTriangle, CheckCircle2, GitBranch, Loader2, ShieldCheck, Stethoscope, Wrench } from "lucide-react";
+import { AlertTriangle, CheckCircle2, GitBranch, History, Loader2, ShieldCheck, Stethoscope, Wrench } from "lucide-react";
 
 type Severity = "critical" | "high" | "medium" | "low" | "info";
 type Evidence = "green" | "yellow" | "red";
@@ -104,15 +105,23 @@ export default function Doctor() {
   return (
     <AppLayout>
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Stethoscope className="h-4 w-4" />
-            GitHub / Railway Doctor
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Stethoscope className="h-4 w-4" />
+              GitHub / Railway Doctor
+            </div>
+            <h1 className="text-3xl font-semibold tracking-tight">Project Doctor</h1>
+            <p className="max-w-3xl text-sm text-muted-foreground">
+              Run a cheap deterministic diagnosis before spending credits on deeper agent analysis or repair. Doctor v1 does not mutate GitHub, change Railway, or call paid AI providers.
+            </p>
           </div>
-          <h1 className="text-3xl font-semibold tracking-tight">Project Doctor</h1>
-          <p className="max-w-3xl text-sm text-muted-foreground">
-            Run a cheap deterministic diagnosis before spending credits on deeper agent analysis or repair. Doctor v1 does not mutate GitHub, change Railway, or call paid AI providers.
-          </p>
+          <Link href="/doctor/history">
+            <Button variant="outline" className="gap-2">
+              <History className="h-4 w-4" />
+              History
+            </Button>
+          </Link>
         </div>
 
         <Card className="border-border/70 shadow-sm">
