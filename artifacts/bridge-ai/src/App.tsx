@@ -17,6 +17,7 @@ import NewSession from "@/pages/new-session";
 import SessionWorkspace from "@/pages/session-workspace";
 import SessionProofReport from "@/pages/session-proof-report";
 import SessionBudget from "@/pages/session-budget";
+import SessionApprovals from "@/pages/session-approvals";
 import SessionNextAction from "@/pages/session-next-action";
 import Settings from "@/pages/settings";
 import Workbench from "@/pages/workbench";
@@ -25,6 +26,7 @@ import Doctor from "@/pages/doctor";
 import DoctorHistory from "@/pages/doctor-history";
 import DoctorProposalPreview from "@/pages/doctor-proposal-preview";
 import DoctorReportDetail from "@/pages/doctor-report-detail";
+import DoctorImplementationPlan from "@/pages/doctor-implementation-plan";
 import DoctorReportChecklist from "@/pages/doctor-report-checklist";
 import Pricing from "@/pages/pricing";
 import CheckoutSuccess from "@/pages/checkout-success";
@@ -90,6 +92,7 @@ function GatedRouter() {
         <Route path="/sessions/new" component={NewSession} />
         <Route path="/sessions/:id/proof-report" component={SessionProofReport} />
         <Route path="/sessions/:id/budget" component={SessionBudget} />
+        <Route path="/sessions/:id/approvals" component={SessionApprovals} />
         <Route path="/sessions/:id/next-action" component={SessionNextAction} />
         <Route path="/sessions/:id" component={SessionWorkspace} />
         <Route path="/settings" component={Settings} />
@@ -98,6 +101,7 @@ function GatedRouter() {
         <Route path="/bridge" component={Bridge} />
         <Route path="/doctor/history" component={DoctorHistory} />
         <Route path="/doctor/reports/:id/proposal" component={DoctorProposalPreview} />
+        <Route path="/doctor/reports/:id/implementation-plan" component={DoctorImplementationPlan} />
         <Route path="/doctor/reports/:id/checklist" component={DoctorReportChecklist} />
         <Route path="/doctor/reports/:id" component={DoctorReportDetail} />
         <Route path="/doctor" component={Doctor} />
