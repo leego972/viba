@@ -28,9 +28,9 @@ const SUBSCRIPTION_PLANS = [
     displayName: "VIBA Pro",
     unitAmount: 15000,
     currency: "usd",
-    credits: 4500,
+    credits: 6000,
     trialDays: VIBA_PLAN.trialDays,
-    badge: "Triple Credits",
+    badge: "Best Value",
   },
 ] as const;
 
