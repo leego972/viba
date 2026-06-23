@@ -7,19 +7,21 @@ import { logger } from "./logger";
 const MAX_OUTBOUND_QUESTIONS_PER_STEP = 3;
 
 /**
- * Fetch unanswered question messages directed at the given agent for this task.
+ * Fetch unanswered question messages directed at the given agent.
  *
- * Strictly task-scoped: only questions whose taskId matches the recipient's
- * current taskId are delivered. This prevents questions from Task A being
- * injected into the agent's context while they are executing Task B.
+ * Questions are fetched by recipient (`toAgentId`) and session — NOT filtered
+ * by the recipient's current taskId. This is intentional: questions are stored
+ * with the *sender's* taskId for display/threading purposes, but the recipient
+ * typically executes a later task when they answer. Filtering by the recipient's
+ * current taskId would permanently lose cross-task questions.
  *
- * Questions are stored with the *sender's* taskId (set in persistOutboundQuestions),
- * so matching on taskId here ensures delivery only happens within the same task thread.
+ * The `_currentTaskId` parameter is accepted for call-site compatibility but
+ * is not used for filtering.
  */
 export async function processPendingQuestions(
   sessionId: number,
   agentId: number,
-  taskId: number,
+  _currentTaskId: number,
 ): Promise<Array<{ fromAgent: string; question: string; messageId: number }>> {
   const questions = await db
     .select()
@@ -29,7 +31,9 @@ export async function processPendingQuestions(
         eq(messagesTable.sessionId, sessionId),
         eq(messagesTable.messageType, "question"),
         eq(messagesTable.toAgentId, agentId),
-        eq(messagesTable.taskId, taskId),
+        // NOTE: no taskId filter here — questions directed at this agent must be
+        // deliverable even when the recipient is executing a later task.
+        // Task-threading context is preserved in the stored taskId field for display.
       ),
     )
     .orderBy(asc(messagesTable.id));
