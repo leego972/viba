@@ -4,7 +4,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertTriangle, CheckCircle2, Clock, History, Stethoscope } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, FileText, History, Stethoscope } from "lucide-react";
 
 type DoctorReportRow = {
   id: number;
@@ -99,9 +99,17 @@ export default function DoctorHistory() {
                       {report.public_url && <span>{report.public_url}</span>}
                     </div>
                   </div>
-                  <Badge variant="outline" className={scoreBadge(report.health_score)}>
-                    {report.health_score} health score
-                  </Badge>
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <Badge variant="outline" className={scoreBadge(report.health_score)}>
+                      {report.health_score} health score
+                    </Badge>
+                    <Link href={`/doctor/reports/${report.id}/proposal`}>
+                      <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs">
+                        <FileText className="h-3.5 w-3.5" />
+                        Proposal
+                      </Button>
+                    </Link>
+                  </div>
                 </div>
               </div>
             ))}
