@@ -56,6 +56,7 @@ export default function DoctorProposalPreview() {
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -73,9 +74,14 @@ export default function DoctorProposalPreview() {
         if (!cancelled) setLoading(false);
       }
     }
-    if (reportId) void loadProposal();
+    if (!reportId) {
+      setLoading(false);
+      setError("No report ID specified. Return to Doctor history and select a report.");
+      return;
+    }
+    void loadProposal();
     return () => { cancelled = true; };
-  }, [reportId]);
+  }, [reportId, retryCount]);
 
   return (
     <AppLayout>
@@ -99,8 +105,36 @@ export default function DoctorProposalPreview() {
           </Link>
         </div>
 
-        {loading && <Card><CardContent className="py-6 text-sm text-muted-foreground">Loading proposal…</CardContent></Card>}
-        {error && <Card className="border-red-500/30 bg-red-500/5"><CardContent className="py-6 text-sm text-red-300">{error}</CardContent></Card>}
+        {loading && (
+          <Card>
+            <CardContent className="flex items-center gap-3 py-8 px-6">
+              <div className="h-4 w-4 rounded-full border-2 border-muted-foreground/30 border-t-primary animate-spin shrink-0" />
+              <p className="text-sm text-muted-foreground">Loading proposal…</p>
+            </CardContent>
+          </Card>
+        )}
+        {error && (
+          <Card className="border-red-500/30 bg-red-500/5">
+            <CardContent className="flex flex-col items-start gap-4 py-8 px-6">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-red-400 shrink-0" />
+                <p className="text-sm font-medium text-red-300">Could not load proposal</p>
+              </div>
+              <p className="text-sm text-muted-foreground">{error}</p>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={() => setRetryCount(c => c + 1)}>
+                  Try again
+                </Button>
+                <Link href="/doctor/history">
+                  <Button size="sm" variant="ghost" className="gap-1.5">
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    Back to history
+                  </Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {proposal && (
           <div className="grid gap-5">
@@ -130,7 +164,11 @@ export default function DoctorProposalPreview() {
               <CardHeader><CardTitle className="text-base">Review steps</CardTitle></CardHeader>
               <CardContent className="space-y-3">
                 {proposal.proposal.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No proposal needed.</p>
+                  <div className="rounded-xl border border-dashed p-8 text-center space-y-2">
+                    <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-400" />
+                    <p className="text-sm font-medium">No issues to address</p>
+                    <p className="text-xs text-muted-foreground">This project scored clean — no repair steps are needed.</p>
+                  </div>
                 ) : proposal.proposal.map((step, index) => (
                   <div key={`${step.area}-${index}`} className="rounded-xl border p-4">
                     <div className="flex flex-wrap items-center gap-2">
