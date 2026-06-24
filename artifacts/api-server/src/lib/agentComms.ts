@@ -7,25 +7,22 @@ import { logger } from "./logger";
 const MAX_OUTBOUND_QUESTIONS_PER_STEP = 3;
 
 /**
- * Fetch unanswered question messages directed at the given agent.
+ * Fetch unanswered question messages directed at the given agent for the
+ * current task only.
  *
- * Questions are fetched by recipient and session — NOT filtered by the
- * recipient's current taskId. In this sequential single-assignee model, the
- * recipient always executes a later task than the sender, so a taskId filter
- * would make questions permanently undeliverable.
+ * Questions are strictly task-scoped: only messages stored with the same
+ * taskId as the recipient's current task are eligible for delivery.
+ * Cross-task questions (sent during a different task) are not visible here,
+ * enforcing the invariant that Q/A pairs live entirely within one task thread.
  *
- * Task scoping is expressed through STORAGE, not delivery:
- *  - Each question is stored with the sender's taskId for display threading.
- *  - Each answer is stored under the question's original taskId (see persistAnswers).
- * This ensures Q/A pairs stay in the correct task thread for the UI
- * without blocking cross-task delivery.
- *
- * The `_currentTaskId` parameter is retained for call-site compatibility.
+ * Storage mirrors delivery:
+ *  - Questions are persisted with the sender's taskId (see persistOutboundQuestions).
+ *  - Answers are stored under the question's original taskId (see persistAnswers).
  */
 export async function processPendingQuestions(
   sessionId: number,
   agentId: number,
-  _currentTaskId: number,
+  currentTaskId: number,
 ): Promise<Array<{ fromAgent: string; question: string; messageId: number }>> {
   const questions = await db
     .select()
@@ -35,6 +32,7 @@ export async function processPendingQuestions(
         eq(messagesTable.sessionId, sessionId),
         eq(messagesTable.messageType, "question"),
         eq(messagesTable.toAgentId, agentId),
+        eq(messagesTable.taskId, currentTaskId),
       ),
     )
     .orderBy(asc(messagesTable.id));

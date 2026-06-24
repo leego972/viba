@@ -59,7 +59,7 @@ describe("processPendingQuestions", () => {
     const questionRow = makeQuestionRow();
 
     (db.select as ReturnType<typeof vi.fn>)
-      // First call: fetch questions (includes taskId filter) — uses orderBy
+      // First call: fetch questions filtered by taskId — uses orderBy
       .mockReturnValueOnce({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({
@@ -85,35 +85,26 @@ describe("processPendingQuestions", () => {
     });
   });
 
-  it("delivers a question to the recipient even when they are executing a later task (cross-task delivery)", async () => {
+  it("does not deliver questions from a different task (strict task scoping)", async () => {
     // Scenario: Agent A (task 10) asks Agent B a question.
-    // Agent B later runs task 11. The question must still arrive — filtering by
-    // recipient's current taskId would permanently lose it.
+    // Agent B is executing task 11. The DB WHERE clause filters by taskId=11,
+    // so the task-10 question is never returned — it stays in its own task thread.
     const { db } = await import("@workspace/db");
-    const questionFromTask10 = makeQuestionRow({ id: 5, taskId: 10, toAgentId: 2 });
 
     (db.select as ReturnType<typeof vi.fn>)
-      // First call: fetch questions — no taskId filter, so DB returns the question
-      // even though Agent B is now executing task 11.
+      // DB returns empty because taskId=11 filter excludes the task-10 question
       .mockReturnValueOnce({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({
-            orderBy: vi.fn().mockResolvedValue([questionFromTask10]),
+            orderBy: vi.fn().mockResolvedValue([]),
           }),
-        }),
-      })
-      // Second call: fetch answers — none yet
-      .mockReturnValueOnce({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([]),
         }),
       });
 
     const { processPendingQuestions } = await import("./agentComms");
-    // Agent 2 is currently on task 11 — but must still receive the question from task 10
+    // Agent 2 is on task 11 — must NOT receive questions stored under task 10
     const result = await processPendingQuestions(1, 2, 11);
-    expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({ fromAgent: "Claude", question: "Which module handles auth?", messageId: 5 });
+    expect(result).toHaveLength(0);
   });
 
   it("filters out questions that are already answered", async () => {
