@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Settings, FlaskConical, CreditCard, Zap, LayoutDashboard, Radio, Plus, Cpu, Rocket, ClipboardList, ShieldCheck } from "lucide-react";
+import { Settings, FlaskConical, CreditCard, Zap, LayoutDashboard, Radio, Plus, Cpu, Rocket, Bot } from "lucide-react";
 
 interface NavLink {
   href: string;
@@ -17,9 +17,8 @@ const NAV_LINKS: NavLink[] = [
   { href: "/bridge",           label: "Bridge",       icon: Radio,           match: (l) => l.startsWith("/bridge") },
   { href: "/billing",          label: "Billing",      icon: CreditCard,      match: (l) => l.startsWith("/billing") || l.startsWith("/pricing") },
   { href: "/settings",         label: "Settings",     icon: Settings,        match: (l) => l === "/settings" },
-  { href: "/market-readiness", label: "Launch",       icon: Rocket,          match: (l) => l.startsWith("/market-readiness") || l.startsWith("/owner-actions"), desktopOnly: true },
-  { href: "/owner-actions",    label: "Owner Actions",icon: ClipboardList,   match: (l) => l.startsWith("/owner-actions"), desktopOnly: true },
-  { href: "/setup-assistant",  label: "Setup",         icon: ShieldCheck,    match: (l) => l.startsWith("/setup-assistant"), desktopOnly: true },
+  { href: "/market-readiness", label: "Launch",       icon: Rocket,          match: (l) => l.startsWith("/market-readiness"), desktopOnly: true },
+  { href: "/assisted-browser", label: "Browser",      icon: Bot,             match: (l) => l.startsWith("/assisted-browser"), desktopOnly: true },
 ];
 
 export function Navbar() {
