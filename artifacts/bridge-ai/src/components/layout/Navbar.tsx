@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Settings, FlaskConical, CreditCard, Zap, LayoutDashboard, Radio, Plus, Cpu, Rocket, Bot } from "lucide-react";
+import { Settings, FlaskConical, CreditCard, Zap, LayoutDashboard, Radio, Plus, Cpu, Rocket, Bot, ShieldCheck } from "lucide-react";
 
 interface NavLink {
   href: string;
@@ -14,6 +14,7 @@ const NAV_LINKS: NavLink[] = [
   { href: "/dashboard",        label: "Dashboard",    icon: LayoutDashboard, match: (l) => l.startsWith("/dashboard") || l.startsWith("/sessions") },
   { href: "/workbench",        label: "Workbench",    icon: FlaskConical,    match: (l) => l.startsWith("/workbench") },
   { href: "/providers",        label: "AI Providers", icon: Cpu,             match: (l) => l.startsWith("/providers") || l.startsWith("/doctor") },
+  { href: "/credentials",      label: "Vault",        icon: ShieldCheck,     match: (l) => l.startsWith("/credentials"), desktopOnly: true },
   { href: "/bridge",           label: "Bridge",       icon: Radio,           match: (l) => l.startsWith("/bridge") },
   { href: "/billing",          label: "Billing",      icon: CreditCard,      match: (l) => l.startsWith("/billing") || l.startsWith("/pricing") },
   { href: "/settings",         label: "Settings",     icon: Settings,        match: (l) => l === "/settings" },
