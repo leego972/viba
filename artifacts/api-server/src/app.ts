@@ -11,6 +11,7 @@ import { logger } from "./lib/logger";
 import { createRateLimiter } from "./middlewares/rateLimiter";
 import { requireSession } from "./middlewares/requireSession";
 import { requireAdmin } from "./middlewares/adminAuth";
+import { accessTokenMiddleware } from "./middlewares/accessToken";
 import { webhookHandler } from "./routes/stripeWebhook";
 import adminRouter from "./routes/admin";
 import { pool } from "@workspace/db";
@@ -388,13 +389,16 @@ const AUTH_EXEMPT_PATHS = new Set([
   "/healthz",
 ]);
 
-// All other /api routes: general rate limit + session gate
+// All other /api routes: rate limit + ACCESS_TOKEN gate + session gate.
+// AUTH_EXEMPT_PATHS bypasses both gates so auth bootstrap flows work before
+// the user has obtained a token or logged in.
 app.use(
   "/api",
   apiLimiter,
   (req, res, next) => {
     if (AUTH_EXEMPT_PATHS.has(req.path)) { next(); return; }
-    requireSession(req, res, next);
+    // Access token check (no-op when ACCESS_TOKEN env var is not set)
+    accessTokenMiddleware(req, res, () => requireSession(req, res, next));
   },
   router,
 );
