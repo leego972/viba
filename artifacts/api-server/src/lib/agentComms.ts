@@ -7,21 +7,18 @@ import { logger } from "./logger";
 const MAX_OUTBOUND_QUESTIONS_PER_STEP = 3;
 
 /**
- * Fetch unanswered question messages directed at the given agent.
+ * Fetch unanswered question messages directed at the given agent, strictly
+ * scoped to the current task.
  *
- * Questions are fetched by recipient (`toAgentId`) and session — NOT filtered
- * by the recipient's current taskId. This is intentional: questions are stored
- * with the *sender's* taskId for display/threading purposes, but the recipient
- * typically executes a later task when they answer. Filtering by the recipient's
- * current taskId would permanently lose cross-task questions.
- *
- * The `_currentTaskId` parameter is accepted for call-site compatibility but
- * is not used for filtering.
+ * Questions are filtered by both recipient (`toAgentId`) and the caller's
+ * `currentTaskId` so that inter-agent comms stay within the active task
+ * boundary. Questions sent during a different task are not delivered here;
+ * the Q/A pair remains stored under the sender's taskId for display threading.
  */
 export async function processPendingQuestions(
   sessionId: number,
   agentId: number,
-  _currentTaskId: number,
+  currentTaskId: number,
 ): Promise<Array<{ fromAgent: string; question: string; messageId: number }>> {
   const questions = await db
     .select()
@@ -31,9 +28,7 @@ export async function processPendingQuestions(
         eq(messagesTable.sessionId, sessionId),
         eq(messagesTable.messageType, "question"),
         eq(messagesTable.toAgentId, agentId),
-        // NOTE: no taskId filter here — questions directed at this agent must be
-        // deliverable even when the recipient is executing a later task.
-        // Task-threading context is preserved in the stored taskId field for display.
+        eq(messagesTable.taskId, currentTaskId),
       ),
     )
     .orderBy(asc(messagesTable.id));
