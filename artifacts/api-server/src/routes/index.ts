@@ -23,9 +23,9 @@ import webResearchRouter from "./webResearch";
 import pricingResearchRouter from "./pricingResearch";
 import providersRouter from "./providers";
 import doctorRouter from "./doctor";
-import focusedValueRouter from "./focusedValue";
 import marketCompletionRouter from "./marketCompletion";
-import setupRunnerRouter from "./setupRunner";
+import assistedBrowserRouter from "./assistedBrowser";
+import railwayConnectorRouter from "./railwayConnector";
 
 const router: IRouter = Router();
 
@@ -35,7 +35,6 @@ router.use(healthRouter);
 router.use(sessionAccessRouter);
 router.use(coreDefaultsRouter);
 router.use(backgroundSessionsRouter);
-router.use(focusedValueRouter);
 router.use(sessionsRouter);
 router.use(attachmentsRouter);
 router.use(selfRepairAutoRouter);
@@ -56,6 +55,7 @@ router.use(pricingResearchRouter);
 router.use(providersRouter);
 router.use(doctorRouter);
 router.use(marketCompletionRouter);
-router.use(setupRunnerRouter);
+router.use(assistedBrowserRouter);
+router.use(railwayConnectorRouter);
 
 export default router;
