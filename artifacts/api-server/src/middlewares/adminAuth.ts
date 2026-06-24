@@ -1,18 +1,11 @@
 import type { RequestHandler } from "express";
 import crypto from "node:crypto";
-import { pool } from "@workspace/db";
 
 const ADMIN_TOKEN = process.env["ADMIN_TOKEN"]?.trim() || null;
-const ADMIN_EMAILS = new Set(
-  (process.env["VIBA_ADMIN_EMAILS"]
-    || process.env["VIBA_ADMIN_EMAIL"]
-    || process.env["ADMIN_BOOTSTRAP_EMAIL"]
-    || "leego972@gmail.com")
-    .split(",")
-    .map((email) => email.trim().toLowerCase())
-    .filter(Boolean),
-);
 
+/**
+ * Timing-safe string comparison — prevents timing attacks on token values.
+ */
 function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) {
     crypto.timingSafeEqual(Buffer.from(a), Buffer.from(a));
@@ -21,41 +14,36 @@ function timingSafeEqual(a: string, b: string): boolean {
   return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }
 
-async function loggedInAdminEmail(userId: number | undefined): Promise<string | null> {
-  if (!userId) return null;
-  const { rows } = await pool.query<{ email: string }>("SELECT email FROM users WHERE id = $1 LIMIT 1", [userId]);
-  const email = rows[0]?.email?.toLowerCase() ?? null;
-  return email && ADMIN_EMAILS.has(email) ? email : null;
-}
-
 /**
- * Admin middleware.
- * Preferred access: logged-in user whose email is listed in VIBA_ADMIN_EMAILS / VIBA_ADMIN_EMAIL.
- * Backward-compatible server/API access: ADMIN_TOKEN bearer token, when configured.
+ * Middleware: requires a valid ADMIN_TOKEN bearer token.
+ * Returns 503 if ADMIN_TOKEN env var is not set (misconfigured server).
+ * Returns 401 if token is missing or wrong.
+ *
+ * TEST_BYPASS_ADMIN=1 lets integration tests call admin routes without a real
+ * token. Only active when NODE_ENV=test.
  */
-export const requireAdmin: RequestHandler = async (req, res, next) => {
-  try {
-    const adminEmail = await loggedInAdminEmail(req.session?.userId);
-    if (adminEmail) {
-      res.locals.adminEmail = adminEmail;
-      next();
-      return;
-    }
-
-    const auth = req.headers["authorization"] ?? "";
-    const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-    if (ADMIN_TOKEN && token && timingSafeEqual(token, ADMIN_TOKEN)) {
-      next();
-      return;
-    }
-
-    res.status(403).json({ error: "Admin access denied" });
-  } catch (error) {
-    req.log?.error?.({ error }, "admin auth failed");
-    res.status(500).json({ error: "Internal server error" });
+export const requireAdmin: RequestHandler = (req, res, next) => {
+  if (process.env.NODE_ENV === "test" && process.env.TEST_BYPASS_ADMIN === "1") { next(); return; }
+  if (!ADMIN_TOKEN) {
+    res.status(503).json({
+      error: "Admin not configured — set ADMIN_TOKEN environment variable on the server",
+    });
+    return;
   }
+  const auth = req.headers["authorization"] ?? "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  if (!token || !timingSafeEqual(token, ADMIN_TOKEN)) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  next();
 };
 
+/**
+ * Middleware: guards destructive actions. Caller must include
+ * the header  X-Admin-Confirm: true  to proceed.
+ * Without it the request is rejected with 428 Precondition Required.
+ */
 export const requireConfirmation: RequestHandler = (req, res, next) => {
   if (req.headers["x-admin-confirm"] !== "true") {
     res.status(428).json({

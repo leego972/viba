@@ -5,6 +5,8 @@ import { resetAllCircuits, runAdapterWithRetry, loadCircuitStateFromDb } from ".
 import type { AgentAdapter, AgentTaskInput, AgentTaskResult } from "../lib/adapters/interface";
 
 vi.mock("@workspace/db", () => ({
+  // pool is required by app.ts for the express-session PgStore
+  pool: { on: vi.fn(), end: vi.fn() },
   db: {
     select: vi.fn().mockReturnValue({
       from: vi.fn().mockReturnValue({

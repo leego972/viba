@@ -37,6 +37,8 @@ import type { Request, Response, NextFunction } from "express";
     } = opts;
 
     return (req: Request, res: Response, next: NextFunction): void => {
+      // Skip rate limiting in test environment so test suites don't exhaust limits
+      if (process.env.NODE_ENV === "test") { next(); return; }
       const ip = req.ip ?? req.socket?.remoteAddress ?? "unknown";
       const now = Date.now();
       const record = windows.get(ip);
