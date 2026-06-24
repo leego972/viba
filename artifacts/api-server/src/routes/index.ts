@@ -23,6 +23,7 @@ import webResearchRouter from "./webResearch";
 import pricingResearchRouter from "./pricingResearch";
 import providersRouter from "./providers";
 import doctorRouter from "./doctor";
+import focusedValueRouter from "./focusedValue";
 import marketCompletionRouter from "./marketCompletion";
 
 const router: IRouter = Router();
@@ -33,6 +34,7 @@ router.use(healthRouter);
 router.use(sessionAccessRouter);
 router.use(coreDefaultsRouter);
 router.use(backgroundSessionsRouter);
+router.use(focusedValueRouter);
 router.use(sessionsRouter);
 router.use(attachmentsRouter);
 router.use(selfRepairAutoRouter);
