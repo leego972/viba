@@ -7,22 +7,25 @@ import { logger } from "./logger";
 const MAX_OUTBOUND_QUESTIONS_PER_STEP = 3;
 
 /**
- * Fetch unanswered question messages directed at the given agent for the
- * current task only.
+ * Fetch unanswered question messages directed at the given agent.
  *
- * Questions are strictly task-scoped: only messages stored with the same
- * taskId as the recipient's current task are eligible for delivery.
- * Cross-task questions (sent during a different task) are not visible here,
- * enforcing the invariant that Q/A pairs live entirely within one task thread.
+ * Delivery is scoped to: session + recipient agent + unanswered questions.
+ * It is NOT filtered by the recipient's current task — agents must be able to
+ * receive questions that were asked during an earlier task and are still
+ * pending when the recipient reaches a later task.  This preserves VIBA's
+ * core collaboration model where agents communicate across task boundaries.
  *
- * Storage mirrors delivery:
- *  - Questions are persisted with the sender's taskId (see persistOutboundQuestions).
- *  - Answers are stored under the question's original taskId (see persistAnswers).
+ * Storage vs. delivery distinction:
+ *  - Questions are stored with the sender's taskId for UI threading
+ *    (see persistOutboundQuestions).
+ *  - Answers are stored under the question's original taskId so the Q/A pair
+ *    stays in the same thread (see persistAnswers).
+ *  - Delivery must not lose cross-task questions by filtering on taskId here.
  */
 export async function processPendingQuestions(
   sessionId: number,
   agentId: number,
-  currentTaskId: number,
+  _currentTaskId: number,
 ): Promise<Array<{ fromAgent: string; question: string; messageId: number }>> {
   const questions = await db
     .select()
@@ -32,7 +35,6 @@ export async function processPendingQuestions(
         eq(messagesTable.sessionId, sessionId),
         eq(messagesTable.messageType, "question"),
         eq(messagesTable.toAgentId, agentId),
-        eq(messagesTable.taskId, currentTaskId),
       ),
     )
     .orderBy(asc(messagesTable.id));
