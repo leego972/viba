@@ -271,6 +271,20 @@ async function runStartupMigrations(): Promise<void> {
   // ── users: low_credits_notified_at column ─────────────────────────────────
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS low_credits_notified_at TIMESTAMPTZ`);
 
+  // ── user_sessions table for connect-pg-simple ─────────────────────────────
+  // connect-pg-simple's createTableIfMissing reads table.sql from its own
+  // package directory, which is unavailable in the esbuild bundle. Pre-create
+  // the table here instead so session.regenerate() never fails on a fresh env.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "user_sessions" (
+      "sid"    varchar     NOT NULL,
+      "sess"   json        NOT NULL,
+      "expire" timestamp(6) NOT NULL,
+      CONSTRAINT "user_sessions_pkey" PRIMARY KEY ("sid") NOT DEFERRABLE INITIALLY IMMEDIATE
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "IDX_user_sessions_expire" ON "user_sessions" ("expire")`);
+
   logger.info("Startup migrations complete");
 }
 
