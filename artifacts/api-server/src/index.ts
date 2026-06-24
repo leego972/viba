@@ -291,6 +291,45 @@ async function runStartupMigrations(): Promise<void> {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS "IDX_user_sessions_expire" ON "user_sessions" ("expire")`);
 
+  // ── viba_team_members ─────────────────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS viba_team_members (
+      id         SERIAL      PRIMARY KEY,
+      user_id    INTEGER,
+      email      TEXT        NOT NULL,
+      role       TEXT        NOT NULL DEFAULT 'viewer',
+      status     TEXT        NOT NULL DEFAULT 'active',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_viba_team_members_email ON viba_team_members(email)`);
+
+  // ── viba_clients ──────────────────────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS viba_clients (
+      id         SERIAL      PRIMARY KEY,
+      user_id    INTEGER,
+      name       TEXT        NOT NULL,
+      notes      TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  // ── viba_client_reports ───────────────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS viba_client_reports (
+      id          SERIAL      PRIMARY KEY,
+      client_id   INTEGER     NOT NULL,
+      report_type TEXT        NOT NULL,
+      source_id   TEXT        NOT NULL,
+      title       TEXT,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_viba_client_reports_client_id ON viba_client_reports(client_id)`);
+
   logger.info("Startup migrations complete");
 }
 
