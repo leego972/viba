@@ -9,19 +9,21 @@ const MAX_OUTBOUND_QUESTIONS_PER_STEP = 3;
 /**
  * Fetch unanswered question messages directed at the given agent, scoped to the current task.
  *
- * Delivery is strictly scoped to: session + recipient agent + currentTaskId.
- * Only questions stored with taskId === currentTaskId are delivered — cross-task
- * questions are not surfaced to the recipient's current turn.
+ * Delivery is session-scoped (NOT task-scoped by currentTaskId). This is intentional:
+ * in VIBA's orchestration model tasks execute sequentially and each agent typically works
+ * on a different task ID. A question asked by Agent A on task N must still reach Agent B
+ * on task N+1 — filtering by currentTaskId would silently drop all cross-task questions.
+ * The _currentTaskId param is reserved for future use (e.g. priority ordering).
  *
  * Storage vs. delivery distinction:
  *  - Questions are stored with the sender's taskId for UI threading (see persistOutboundQuestions).
  *  - Answers are stored under the question's original taskId so the Q/A pair stays in the same thread.
- *  - Delivery is task-scoped: eq(messagesTable.taskId, currentTaskId) enforces this in the DB query.
+ *  - Delivery is session+recipient scoped (not task-scoped) so cross-task questions are always delivered.
  */
 export async function processPendingQuestions(
   sessionId: number,
   agentId: number,
-  currentTaskId: number,
+  _currentTaskId: number,
 ): Promise<Array<{ fromAgent: string; question: string; messageId: number }>> {
   const questions = await db
     .select()
@@ -31,7 +33,6 @@ export async function processPendingQuestions(
         eq(messagesTable.sessionId, sessionId),
         eq(messagesTable.messageType, "question"),
         eq(messagesTable.toAgentId, agentId),
-        eq(messagesTable.taskId, currentTaskId),
       ),
     )
     .orderBy(asc(messagesTable.id));
