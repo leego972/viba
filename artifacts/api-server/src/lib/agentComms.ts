@@ -7,18 +7,25 @@ import { logger } from "./logger";
 const MAX_OUTBOUND_QUESTIONS_PER_STEP = 3;
 
 /**
- * Fetch unanswered question messages directed at the given agent, strictly
- * scoped to the current task.
+ * Fetch unanswered question messages directed at the given agent.
  *
- * Questions are filtered by both recipient (`toAgentId`) and the caller's
- * `currentTaskId` so that inter-agent comms stay within the active task
- * boundary. Questions sent during a different task are not delivered here;
- * the Q/A pair remains stored under the sender's taskId for display threading.
+ * Questions are fetched by recipient and session — NOT filtered by the
+ * recipient's current taskId. In this sequential single-assignee model, the
+ * recipient always executes a later task than the sender, so a taskId filter
+ * would make questions permanently undeliverable.
+ *
+ * Task scoping is expressed through STORAGE, not delivery:
+ *  - Each question is stored with the sender's taskId for display threading.
+ *  - Each answer is stored under the question's original taskId (see persistAnswers).
+ * This ensures Q/A pairs stay in the correct task thread for the UI
+ * without blocking cross-task delivery.
+ *
+ * The `_currentTaskId` parameter is retained for call-site compatibility.
  */
 export async function processPendingQuestions(
   sessionId: number,
   agentId: number,
-  currentTaskId: number,
+  _currentTaskId: number,
 ): Promise<Array<{ fromAgent: string; question: string; messageId: number }>> {
   const questions = await db
     .select()
@@ -28,7 +35,6 @@ export async function processPendingQuestions(
         eq(messagesTable.sessionId, sessionId),
         eq(messagesTable.messageType, "question"),
         eq(messagesTable.toAgentId, agentId),
-        eq(messagesTable.taskId, currentTaskId),
       ),
     )
     .orderBy(asc(messagesTable.id));
