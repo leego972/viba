@@ -23,6 +23,7 @@ import VerifyEmail from "@/pages/verify-email";
 import Billing from "@/pages/billing";
 import ProvidersPage from "@/pages/providers";
 import DoctorPage from "@/pages/doctor";
+import OwnerActions from "@/pages/owner-actions";
 import CompletionPage, {
   CollaborationMapPage,
   DemoDoctorReport,
@@ -99,6 +100,7 @@ function GatedRouter() {
         <Route path="/security-evidence" component={CompletionPage} />
         <Route path="/reports/compare" component={CompletionPage} />
         <Route path="/market-readiness" component={CompletionPage} />
+        <Route path="/owner-actions" component={OwnerActions} />
         <Route component={NotFound} />
       </Switch>
     </AuthGuard>
