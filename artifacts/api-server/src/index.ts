@@ -249,6 +249,12 @@ async function runStartupMigrations(): Promise<void> {
   // Note: sessions table has no user_id column — agents/tasks are indexed by session_id
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_agents_session_id ON agents(session_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_session_id ON tasks(session_id)`);
+  // users.email — every login/register lookup hits this column; must be indexed
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`);
+  // messages.task_id — task-scoped message queries in processPendingQuestions / session feed
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_messages_task_id ON messages(task_id)`);
+  // audit_logs.created_at — time-range error dashboard queries (last 24h / 7d)
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at)`);
 
   // ── email_verification_tokens table ───────────────────────────────────────
   await pool.query(`

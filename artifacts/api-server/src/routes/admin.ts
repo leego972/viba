@@ -76,14 +76,23 @@ router.get("/overview", async (req, res): Promise<void> => {
 });
 
 // ─── GET /api/admin/users ─────────────────────────────────────────────────────
+// Queries the `users` table (email/password + OAuth + billing accounts).
+// Supports optional ?email= partial-match filter.
 router.get("/users", async (req, res): Promise<void> => {
   const emailSearch = String(req.query.email ?? "").trim().toLowerCase();
-  const emailClause = emailSearch ? sql` AND LOWER(email) LIKE ${"%" + emailSearch + "%"}` : sql``;
+  const emailClause = emailSearch ? sql` AND LOWER(u.email) LIKE ${"%" + emailSearch + "%"}` : sql``;
   const rows = await db.execute(
-    sql`SELECT id, email, status, stripe_customer_id, stripe_subscription_id,
-               right(access_token, 8) AS token_suffix,
-               trial_end, current_period_end, created_at, updated_at
-        FROM subscribers WHERE 1=1 ${emailClause} ORDER BY created_at DESC LIMIT 500`
+    sql`SELECT u.id, u.email, u.name,
+               u.subscription_status, u.credits_remaining, u.credits_period_end,
+               u.stripe_customer_id, u.stripe_subscription_id,
+               u.email_verified,
+               u.google_id IS NOT NULL AS has_google,
+               u.github_id IS NOT NULL AS has_github,
+               u.created_at, u.updated_at
+        FROM users u
+        WHERE 1=1 ${emailClause}
+        ORDER BY u.created_at DESC
+        LIMIT 500`
   );
   res.json({ users: rows.rows });
 });
