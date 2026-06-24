@@ -1,233 +1,365 @@
 import { Router, type IRouter } from "express";
-import crypto from "node:crypto";
+import { pool } from "@workspace/db";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
-type BrowserJobStatus =
-  | "queued"
+// ── Types ──────────────────────────────────────────────────────────────────────
+
+export type JobStatus =
+  | "created"
   | "running"
-  | "waiting_for_user_authorization"
   | "paused"
+  | "waiting_for_user_authorization"
   | "completed"
   | "failed";
 
-type AuthorizationType = "oauth" | "two_factor" | "email_link" | "passkey" | "manual_approval";
+export type CreditState =
+  | "idle"
+  | "consuming"
+  | "paused_waiting_for_user"
+  | "completed";
 
-type BrowserTaskTemplate = {
+export type WaitingForType = "oauth" | "2fa" | "passkey" | "email_link" | "manual" | null;
+
+export interface BrowserOperatorJob {
   id: string;
-  name: string;
+  user_id: number | null;
+  template_id: string | null;
   provider: string;
-  description: string;
-  requiresLogin: boolean;
-  likelyAuthorization: AuthorizationType[];
-  outputs: string[];
-  destructiveActionsRequireApproval: boolean;
-};
+  target_url: string;
+  status: JobStatus;
+  credit_state: CreditState;
+  current_step: string | null;
+  waiting_for_type: WaitingForType;
+  waiting_for_reason: string | null;
+  outputs_json: Record<string, unknown>;
+  audit_json: Array<{ ts: string; event: string; detail?: string }>;
+  created_at: string;
+  updated_at: string;
+}
 
-type BrowserJob = {
-  id: string;
-  userId: number | null;
-  templateId: string;
-  provider: string;
-  targetUrl: string | null;
-  status: BrowserJobStatus;
-  creditState: "consuming" | "paused_waiting_for_user" | "stopped";
-  currentStep: string;
-  waitingFor: null | { type: AuthorizationType; reason: string; createdAt: string };
-  outputs: Array<{ key: string; status: "found" | "pending" | "blocked"; redacted: string }>;
-  audit: Array<{ at: string; event: string; detail: string }>;
-  createdAt: string;
-  updatedAt: string;
-};
+// ── DB helpers ─────────────────────────────────────────────────────────────────
 
-const templates: BrowserTaskTemplate[] = [
+async function ensureTable(): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS browser_operator_jobs (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      user_id INTEGER,
+      template_id TEXT,
+      provider TEXT NOT NULL,
+      target_url TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'created',
+      credit_state TEXT NOT NULL DEFAULT 'idle',
+      current_step TEXT,
+      waiting_for_type TEXT,
+      waiting_for_reason TEXT,
+      outputs_json JSONB NOT NULL DEFAULT '{}',
+      audit_json JSONB NOT NULL DEFAULT '[]',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_browser_operator_jobs_user ON browser_operator_jobs (user_id, status, created_at DESC)`);
+}
+
+function safeRow(row: Record<string, unknown>): BrowserOperatorJob {
+  return {
+    id: String(row.id ?? ""),
+    user_id: typeof row.user_id === "number" ? row.user_id : null,
+    template_id: row.template_id != null ? String(row.template_id) : null,
+    provider: String(row.provider ?? ""),
+    target_url: String(row.target_url ?? ""),
+    status: (row.status as JobStatus) ?? "created",
+    credit_state: (row.credit_state as CreditState) ?? "idle",
+    current_step: row.current_step != null ? String(row.current_step) : null,
+    waiting_for_type: (row.waiting_for_type as WaitingForType) ?? null,
+    waiting_for_reason: row.waiting_for_reason != null ? String(row.waiting_for_reason) : null,
+    outputs_json: (row.outputs_json as Record<string, unknown>) ?? {},
+    audit_json: (row.audit_json as Array<{ ts: string; event: string; detail?: string }>) ?? [],
+    created_at: String(row.created_at ?? ""),
+    updated_at: String(row.updated_at ?? ""),
+  };
+}
+
+async function appendAudit(
+  id: string,
+  event: string,
+  detail?: string,
+): Promise<void> {
+  const entry = JSON.stringify({ ts: new Date().toISOString(), event, ...(detail ? { detail } : {}) });
+  await pool.query(
+    `UPDATE browser_operator_jobs
+        SET audit_json = audit_json || $1::jsonb,
+            updated_at = NOW()
+      WHERE id = $2`,
+    [`[${entry}]`, id],
+  );
+}
+
+// ── Templates ──────────────────────────────────────────────────────────────────
+
+const TEMPLATES = [
   {
-    id: "stripe-billing-setup",
-    name: "Stripe billing setup",
-    provider: "stripe",
-    description: "Navigate Stripe to locate publishable/secret key locations, product price IDs, webhook setup, and signing secret workflow.",
-    requiresLogin: true,
-    likelyAuthorization: ["oauth", "two_factor", "passkey", "manual_approval"],
-    outputs: ["STRIPE_PUBLISHABLE_KEY", "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "Stripe price IDs"],
-    destructiveActionsRequireApproval: true,
-  },
-  {
-    id: "railway-env-setup",
-    name: "Railway environment setup",
+    id: "railway-env-vars",
+    label: "Railway — Set Environment Variables",
     provider: "railway",
-    description: "Navigate Railway project/service/environment screens, find project/service/environment IDs, verify env vars, and prepare Setup Runner apply.",
-    requiresLogin: true,
-    likelyAuthorization: ["oauth", "two_factor", "manual_approval"],
-    outputs: ["Railway project ID", "Railway environment ID", "Railway service ID", "Railway DNS target"],
-    destructiveActionsRequireApproval: true,
+    target_url: "https://railway.app",
+    description: "Assisted login and variable management on Railway dashboard.",
+    steps: ["Open Railway", "Log in (OAuth / 2FA if required)", "Navigate to project variables", "Apply changes"],
   },
   {
-    id: "godaddy-dns-setup",
-    name: "GoDaddy DNS setup",
+    id: "stripe-webhook",
+    label: "Stripe — Configure Webhook",
+    provider: "stripe",
+    target_url: "https://dashboard.stripe.com",
+    description: "Assisted login and webhook endpoint setup on Stripe.",
+    steps: ["Open Stripe dashboard", "Log in (2FA if required)", "Navigate to Developers → Webhooks", "Add endpoint"],
+  },
+  {
+    id: "godaddy-dns",
+    label: "GoDaddy — Update DNS Records",
     provider: "godaddy",
-    description: "Navigate GoDaddy DNS management, identify existing root/www records, prepare DNS changes for Railway custom domains, and pause for approval before edits.",
-    requiresLogin: true,
-    likelyAuthorization: ["two_factor", "email_link", "passkey", "manual_approval"],
-    outputs: ["Root DNS records", "www DNS records", "Conflicting A/CNAME records", "Required Railway target records"],
-    destructiveActionsRequireApproval: true,
+    target_url: "https://dcc.godaddy.com",
+    description: "Assisted login and DNS record management for viba.guru.",
+    steps: ["Open GoDaddy Domain Control Center", "Log in", "Select domain", "Edit DNS records"],
   },
   {
-    id: "github-token-setup",
-    name: "GitHub repo/token setup",
+    id: "github-secrets",
+    label: "GitHub — Add Repository Secrets",
     provider: "github",
-    description: "Guide OAuth/PAT/repo access setup, verify repository permissions, and check deployment-related GitHub configuration.",
-    requiresLogin: true,
-    likelyAuthorization: ["oauth", "two_factor", "manual_approval"],
-    outputs: ["Repository access status", "GitHub token location guidance", "Webhook/install status"],
-    destructiveActionsRequireApproval: true,
+    target_url: "https://github.com",
+    description: "Assisted login and GitHub Actions secrets management.",
+    steps: ["Open GitHub", "Log in (2FA if required)", "Navigate to repo Settings → Secrets", "Add secrets"],
   },
   {
-    id: "smtp-provider-setup",
-    name: "SMTP provider setup",
+    id: "smtp-verify",
+    label: "SMTP — Verify Email Provider",
     provider: "smtp",
-    description: "Navigate email provider setup screens and collect SMTP host, port, sender identity, and app-password workflow guidance.",
-    requiresLogin: true,
-    likelyAuthorization: ["two_factor", "email_link", "manual_approval"],
-    outputs: ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_FROM", "SMTP_PASS workflow"],
-    destructiveActionsRequireApproval: false,
+    target_url: "https://app.mailgun.com",
+    description: "Assisted login and SMTP credential verification.",
+    steps: ["Open email provider dashboard", "Log in", "Locate SMTP credentials", "Copy to VIBA settings"],
   },
 ];
 
-const jobs = new Map<string, BrowserJob>();
+// ── Helper ─────────────────────────────────────────────────────────────────────
 
-function now() { return new Date().toISOString(); }
-function jobId() { return `abo_${crypto.randomBytes(12).toString("hex")}`; }
-function actor(req: Parameters<Parameters<IRouter["get"]>[1]>[0]): number | null {
+function userId(req: { session?: { userId?: number } }): number | null {
   return typeof req.session?.userId === "number" ? req.session.userId : null;
 }
-function audit(job: BrowserJob, event: string, detail: string) {
-  job.audit.push({ at: now(), event, detail });
-  job.updatedAt = now();
-}
-function publicJob(job: BrowserJob) {
-  return {
-    ...job,
-    valuesReturned: false,
-    passwordStorage: false,
-    secretStorage: false,
-  };
-}
 
+// ── Routes ─────────────────────────────────────────────────────────────────────
+
+// GET /api/browser-operator/templates
 router.get("/browser-operator/templates", (_req, res): void => {
-  res.json({
-    templates,
-    capabilities: {
-      chromiumWorkerImplemented: false,
-      jobQueueImplemented: true,
-      humanAuthorizationPauseImplemented: true,
-      creditPauseModelImplemented: true,
-      secretStorageAllowed: false,
-      passwordStorageAllowed: false,
-    },
-    safety: [
-      "No password storage",
-      "No raw secret return",
-      "Human authorization required for OAuth/2FA/passkey/manual approval",
-      "Credits pause while waiting for user authorization",
-      "Destructive actions require explicit approval",
-    ],
-  });
+  res.json({ templates: TEMPLATES });
 });
 
-router.post("/browser-operator/jobs", (req, res): void => {
-  const body = req.body as { templateId?: unknown; targetUrl?: unknown };
-  const templateId = typeof body.templateId === "string" ? body.templateId.trim() : "";
-  const template = templates.find((item) => item.id === templateId);
-  if (!template) { res.status(400).json({ error: "unknown_template" }); return; }
-  const id = jobId();
-  const createdAt = now();
-  const job: BrowserJob = {
-    id,
-    userId: actor(req),
-    templateId: template.id,
-    provider: template.provider,
-    targetUrl: typeof body.targetUrl === "string" && body.targetUrl.trim() ? body.targetUrl.trim() : null,
-    status: "queued",
-    creditState: "consuming",
-    currentStep: "Job created. Waiting for browser worker assignment.",
-    waitingFor: null,
-    outputs: template.outputs.map((key) => ({ key, status: "pending", redacted: "PENDING" })),
-    audit: [{ at: createdAt, event: "job_created", detail: `Created ${template.name}` }],
-    createdAt,
-    updatedAt: createdAt,
-  };
-  jobs.set(id, job);
-  res.status(201).json({ job: publicJob(job) });
-});
+// POST /api/browser-operator/jobs
+router.post("/browser-operator/jobs", async (req, res): Promise<void> => {
+  try {
+    await ensureTable();
+    const uid = userId(req);
+    const body = req.body as Record<string, unknown>;
+    const templateId = typeof body.template_id === "string" ? body.template_id : null;
+    const template = templateId ? TEMPLATES.find((t) => t.id === templateId) : null;
+    const provider = typeof body.provider === "string" ? body.provider : (template?.provider ?? "custom");
+    const targetUrl = typeof body.target_url === "string" ? body.target_url : (template?.target_url ?? "");
 
-router.get("/browser-operator/jobs/:id", (req, res): void => {
-  const job = jobs.get(String(req.params.id));
-  if (!job) { res.status(404).json({ error: "job_not_found" }); return; }
-  res.json({ job: publicJob(job) });
-});
+    if (!targetUrl) {
+      res.status(400).json({ error: "target_url is required" });
+      return;
+    }
 
-router.post("/browser-operator/jobs/:id/start", (req, res): void => {
-  const job = jobs.get(String(req.params.id));
-  if (!job) { res.status(404).json({ error: "job_not_found" }); return; }
-  if (job.status !== "queued" && job.status !== "paused") { res.status(409).json({ error: "job_not_startable", status: job.status }); return; }
-  job.status = "running";
-  job.creditState = "consuming";
-  job.currentStep = "Browser operator running. It will pause only for required user authorization.";
-  audit(job, "job_started", "Job moved to running state");
-  res.json({ job: publicJob(job) });
-});
-
-router.post("/browser-operator/jobs/:id/waiting-for-user", (req, res): void => {
-  const job = jobs.get(String(req.params.id));
-  if (!job) { res.status(404).json({ error: "job_not_found" }); return; }
-  const body = req.body as { type?: unknown; reason?: unknown };
-  const type = typeof body.type === "string" ? body.type : "manual_approval";
-  const allowed: AuthorizationType[] = ["oauth", "two_factor", "email_link", "passkey", "manual_approval"];
-  if (!allowed.includes(type as AuthorizationType)) { res.status(400).json({ error: "invalid_authorization_type" }); return; }
-  const reason = typeof body.reason === "string" && body.reason.trim()
-    ? body.reason.trim().slice(0, 500)
-    : "User authorization required to continue.";
-  job.status = "waiting_for_user_authorization";
-  job.creditState = "paused_waiting_for_user";
-  job.waitingFor = { type: type as AuthorizationType, reason, createdAt: now() };
-  job.currentStep = reason;
-  audit(job, "waiting_for_user_authorization", `${type}: ${reason}`);
-  res.json({ job: publicJob(job) });
-});
-
-router.post("/browser-operator/jobs/:id/authorize", (req, res): void => {
-  const job = jobs.get(String(req.params.id));
-  if (!job) { res.status(404).json({ error: "job_not_found" }); return; }
-  if (job.status !== "waiting_for_user_authorization") {
-    res.status(409).json({ error: "job_not_waiting_for_authorization", status: job.status }); return;
+    const { rows } = await pool.query(
+      `INSERT INTO browser_operator_jobs (user_id, template_id, provider, target_url, status, credit_state, audit_json)
+       VALUES ($1, $2, $3, $4, 'created', 'idle', $5::jsonb)
+       RETURNING *`,
+      [uid, templateId, provider, targetUrl, JSON.stringify([{ ts: new Date().toISOString(), event: "job_created" }])],
+    );
+    const job = safeRow(rows[0] as Record<string, unknown>);
+    logger.info({ jobId: job.id, provider, templateId }, "Browser operator job created");
+    res.status(201).json({ job });
+  } catch (err) {
+    logger.error({ err }, "Failed to create browser operator job");
+    res.status(500).json({ error: "Failed to create job" });
   }
-  job.status = "running";
-  job.creditState = "consuming";
-  job.waitingFor = null;
-  job.currentStep = "User authorization received. Browser operator resumed.";
-  audit(job, "user_authorized_resume", "User authorization received; no raw 2FA/password value stored");
-  res.json({ job: publicJob(job) });
 });
 
-router.post("/browser-operator/jobs/:id/pause", (req, res): void => {
-  const job = jobs.get(String(req.params.id));
-  if (!job) { res.status(404).json({ error: "job_not_found" }); return; }
-  job.status = "paused";
-  job.creditState = "stopped";
-  job.currentStep = "Paused by user or system.";
-  audit(job, "job_paused", "Job paused outside automatic user-authorization wait");
-  res.json({ job: publicJob(job) });
+// GET /api/browser-operator/jobs/:id
+router.get("/browser-operator/jobs/:id", async (req, res): Promise<void> => {
+  try {
+    await ensureTable();
+    const uid = userId(req);
+    const jobId = String(req.params["id"] ?? "");
+    const { rows } = await pool.query(
+      `SELECT * FROM browser_operator_jobs WHERE id = $1 AND (user_id = $2 OR user_id IS NULL) LIMIT 1`,
+      [jobId, uid],
+    );
+    if (!rows.length) {
+      res.status(404).json({ error: "Job not found" });
+      return;
+    }
+    res.json({ job: safeRow(rows[0] as Record<string, unknown>) });
+  } catch (err) {
+    logger.error({ err }, "Failed to get browser operator job");
+    res.status(500).json({ error: "Failed to get job" });
+  }
 });
 
-router.post("/browser-operator/jobs/:id/complete", (req, res): void => {
-  const job = jobs.get(String(req.params.id));
-  if (!job) { res.status(404).json({ error: "job_not_found" }); return; }
-  job.status = "completed";
-  job.creditState = "stopped";
-  job.currentStep = "Completed. Review evidence and apply outputs through Setup Runner where required.";
-  job.outputs = job.outputs.map((item) => item.status === "pending" ? { ...item, status: "found", redacted: "SET_OR_DOCUMENTED" } : item);
-  audit(job, "job_completed", "Job completed with redacted outputs only");
-  res.json({ job: publicJob(job) });
+// POST /api/browser-operator/jobs/:id/start
+router.post("/browser-operator/jobs/:id/start", async (req, res): Promise<void> => {
+  try {
+    await ensureTable();
+    const uid = userId(req);
+    const jobId = String(req.params["id"] ?? "");
+    const { rows } = await pool.query(
+      `UPDATE browser_operator_jobs
+          SET status = 'running', credit_state = 'consuming', current_step = COALESCE(current_step, 'Opening browser'), updated_at = NOW()
+        WHERE id = $1 AND (user_id = $2 OR user_id IS NULL) AND status IN ('created', 'paused')
+        RETURNING *`,
+      [jobId, uid],
+    );
+    if (!rows.length) {
+      res.status(404).json({ error: "Job not found or not startable" });
+      return;
+    }
+    await appendAudit(jobId, "job_started");
+    logger.info({ jobId }, "Browser operator job started");
+    res.json({ job: safeRow(rows[0] as Record<string, unknown>) });
+  } catch (err) {
+    logger.error({ err }, "Failed to start browser operator job");
+    res.status(500).json({ error: "Failed to start job" });
+  }
+});
+
+// POST /api/browser-operator/jobs/:id/waiting-for-user
+router.post("/browser-operator/jobs/:id/waiting-for-user", async (req, res): Promise<void> => {
+  try {
+    await ensureTable();
+    const uid = userId(req);
+    const jobId = String(req.params["id"] ?? "");
+    const body = req.body as Record<string, unknown>;
+    const waitType = (body.waiting_for_type as WaitingForType) ?? "manual";
+    const reason = typeof body.reason === "string" ? body.reason : "User authorization required";
+
+    const { rows } = await pool.query(
+      `UPDATE browser_operator_jobs
+          SET status = 'waiting_for_user_authorization',
+              credit_state = 'paused_waiting_for_user',
+              waiting_for_type = $3,
+              waiting_for_reason = $4,
+              updated_at = NOW()
+        WHERE id = $1 AND (user_id = $2 OR user_id IS NULL) AND status = 'running'
+        RETURNING *`,
+      [jobId, uid, waitType, reason],
+    );
+    if (!rows.length) {
+      res.status(404).json({ error: "Job not found or not in running state" });
+      return;
+    }
+    await appendAudit(jobId, "waiting_for_user", `type=${waitType} reason=${reason}`);
+    logger.info({ jobId, waitType }, "Browser operator job waiting for user");
+    res.json({ job: safeRow(rows[0] as Record<string, unknown>) });
+  } catch (err) {
+    logger.error({ err }, "Failed to set waiting-for-user on job");
+    res.status(500).json({ error: "Failed to update job" });
+  }
+});
+
+// POST /api/browser-operator/jobs/:id/authorize
+router.post("/browser-operator/jobs/:id/authorize", async (req, res): Promise<void> => {
+  try {
+    await ensureTable();
+    const uid = userId(req);
+    const jobId = String(req.params["id"] ?? "");
+    const body = req.body as Record<string, unknown>;
+    const nextStep = typeof body.next_step === "string" ? body.next_step : null;
+
+    const { rows } = await pool.query(
+      `UPDATE browser_operator_jobs
+          SET status = 'running',
+              credit_state = 'consuming',
+              waiting_for_type = NULL,
+              waiting_for_reason = NULL,
+              current_step = COALESCE($3, current_step),
+              updated_at = NOW()
+        WHERE id = $1 AND (user_id = $2 OR user_id IS NULL) AND status = 'waiting_for_user_authorization'
+        RETURNING *`,
+      [jobId, uid, nextStep],
+    );
+    if (!rows.length) {
+      res.status(404).json({ error: "Job not found or not awaiting authorization" });
+      return;
+    }
+    await appendAudit(jobId, "user_authorized");
+    logger.info({ jobId }, "Browser operator job authorized by user");
+    res.json({ job: safeRow(rows[0] as Record<string, unknown>) });
+  } catch (err) {
+    logger.error({ err }, "Failed to authorize browser operator job");
+    res.status(500).json({ error: "Failed to authorize job" });
+  }
+});
+
+// POST /api/browser-operator/jobs/:id/pause
+router.post("/browser-operator/jobs/:id/pause", async (req, res): Promise<void> => {
+  try {
+    await ensureTable();
+    const uid = userId(req);
+    const jobId = String(req.params["id"] ?? "");
+
+    const { rows } = await pool.query(
+      `UPDATE browser_operator_jobs
+          SET status = 'paused', credit_state = 'idle', updated_at = NOW()
+        WHERE id = $1 AND (user_id = $2 OR user_id IS NULL) AND status IN ('running', 'waiting_for_user_authorization')
+        RETURNING *`,
+      [jobId, uid],
+    );
+    if (!rows.length) {
+      res.status(404).json({ error: "Job not found or not pausable" });
+      return;
+    }
+    await appendAudit(jobId, "job_paused");
+    logger.info({ jobId }, "Browser operator job paused");
+    res.json({ job: safeRow(rows[0] as Record<string, unknown>) });
+  } catch (err) {
+    logger.error({ err }, "Failed to pause browser operator job");
+    res.status(500).json({ error: "Failed to pause job" });
+  }
+});
+
+// POST /api/browser-operator/jobs/:id/complete
+router.post("/browser-operator/jobs/:id/complete", async (req, res): Promise<void> => {
+  try {
+    await ensureTable();
+    const uid = userId(req);
+    const jobId = String(req.params["id"] ?? "");
+    const body = req.body as Record<string, unknown>;
+    const outputs = typeof body.outputs === "object" && body.outputs !== null ? body.outputs : {};
+
+    const { rows } = await pool.query(
+      `UPDATE browser_operator_jobs
+          SET status = 'completed',
+              credit_state = 'completed',
+              outputs_json = $3::jsonb,
+              waiting_for_type = NULL,
+              waiting_for_reason = NULL,
+              updated_at = NOW()
+        WHERE id = $1 AND (user_id = $2 OR user_id IS NULL) AND status IN ('running', 'paused', 'waiting_for_user_authorization')
+        RETURNING *`,
+      [jobId, uid, JSON.stringify(outputs)],
+    );
+    if (!rows.length) {
+      res.status(404).json({ error: "Job not found or already completed" });
+      return;
+    }
+    await appendAudit(jobId, "job_completed");
+    logger.info({ jobId }, "Browser operator job completed");
+    res.json({ job: safeRow(rows[0] as Record<string, unknown>) });
+  } catch (err) {
+    logger.error({ err }, "Failed to complete browser operator job");
+    res.status(500).json({ error: "Failed to complete job" });
+  }
 });
 
 export default router;
