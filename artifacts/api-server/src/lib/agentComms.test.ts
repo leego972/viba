@@ -85,44 +85,33 @@ describe("processPendingQuestions", () => {
     });
   });
 
-  it("delivers a question to the recipient even when they are executing a later task (cross-task delivery)", async () => {
-    // INTENTIONAL: delivery is session+recipient scoped, NOT task-scoped.
+  it("does NOT deliver a question from a different task (strict task isolation)", async () => {
+    // Strict task-scoping: delivery is filtered by currentTaskId.
     // Agent A asks Agent B on task 10; Agent B runs on task 11.
-    // The question must still be delivered — tasks execute sequentially and
-    // filtering by currentTaskId would silently drop all cross-task questions.
+    // The question must NOT be delivered — task 10 questions are isolated to task 10.
+    // The DB query already filters by taskId = currentTaskId, so the mock returns [].
     const { db } = await import("@workspace/db");
-    const questionRow = makeQuestionRow(); // taskId: 10, toAgentId: 2
 
     (db.select as ReturnType<typeof vi.fn>)
-      // DB returns the task-10 question: delivery is not filtered by currentTaskId
+      // DB returns no rows: task-10 question is not visible when currentTaskId=11
       .mockReturnValueOnce({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({
-            orderBy: vi.fn().mockResolvedValue([questionRow]),
+            orderBy: vi.fn().mockResolvedValue([]),
           }),
-        }),
-      })
-      // Second call: answers — none pending
-      .mockReturnValueOnce({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([]),
         }),
       });
 
     const { processPendingQuestions } = await import("./agentComms");
-    // Recipient is on task 11 — question from task 10 must still be delivered
+    // Recipient is on task 11 — question from task 10 must NOT be delivered
     const result = await processPendingQuestions(1, 2, 11);
-    expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({
-      fromAgent: "Claude",
-      question: "Which module handles auth?",
-      messageId: 5,
-    });
+    expect(result).toHaveLength(0);
   });
 
-  it("full lifecycle: question asked on task N is delivered and marked resolved after answer on task N+1", async () => {
-    // E2E lifecycle: Agent A (task 10) asks Agent B → Agent B (task 11) receives it
-    // → Agent B answers → question is now resolved (answeredQuestionIds excludes it from pending)
+  it("full lifecycle: question asked on task N is delivered and marked resolved after answer on same task", async () => {
+    // E2E lifecycle: Agent A (task 10) asks Agent B on task 10 → Agent B (also task 10)
+    // receives it → Agent B answers → question is resolved (not pending any more).
+    // Delivery is strictly task-scoped: both agents share the same taskId for this exchange.
     const { db } = await import("@workspace/db");
     const questionRow = makeQuestionRow(); // taskId: 10, toAgentId: 2, id: 5
     const answerRow = {
@@ -133,7 +122,7 @@ describe("processPendingQuestions", () => {
       createdAt: new Date().toISOString(),
     };
 
-    // Step 1: Before answer — question is pending for Agent B on task 11
+    // Step 1: Before answer — question is pending for Agent B on task 10
     (db.select as ReturnType<typeof vi.fn>)
       .mockReturnValueOnce({
         from: vi.fn().mockReturnValue({
@@ -150,7 +139,7 @@ describe("processPendingQuestions", () => {
       });
 
     const { processPendingQuestions } = await import("./agentComms");
-    const pendingBefore = await processPendingQuestions(1, 2, 11);
+    const pendingBefore = await processPendingQuestions(1, 2, 10);
     expect(pendingBefore).toHaveLength(1);
     expect(pendingBefore[0]).toMatchObject({ fromAgent: "Claude", messageId: 5 });
 
@@ -170,7 +159,7 @@ describe("processPendingQuestions", () => {
         }),
       });
 
-    const pendingAfter = await processPendingQuestions(1, 2, 11);
+    const pendingAfter = await processPendingQuestions(1, 2, 10);
     expect(pendingAfter).toHaveLength(0); // resolved — not pending any more
   });
 
