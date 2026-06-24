@@ -8,7 +8,9 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --config vitest.config.ts"
+    "test": "vitest run --config vitest.config.ts",
+    "browser:install": "playwright install chromium",
+    "browser:check": "node ./scripts/check-browser.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.1",
@@ -27,6 +29,7 @@
     "openai": "^6.34.0",
     "pino": "^9",
     "pino-http": "^10",
+    "playwright": "^1.57.0",
     "stripe": "^17",
     "zod": "catalog:"
   },
