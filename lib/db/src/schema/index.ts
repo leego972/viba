@@ -12,3 +12,6 @@ export * from "./subscribers";
 export * from "./users";
 export * from "./passwordResetTokens";
 export * from "./creditTransactions";
+export * from "./teamMembers";
+export * from "./clients";
+export * from "./clientReports";

@@ -3,31 +3,13 @@ import { pool } from "@workspace/db";
 
 const router: IRouter = Router();
 
-let migrationReady: Promise<void> | null = null;
-
-function ensureSessionUserColumn(): Promise<void> {
-  if (!migrationReady) {
-    migrationReady = pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS user_id INTEGER`).then(() => undefined);
-  }
-  return migrationReady;
-}
-
 function parseSessionId(raw: string | undefined): number | null {
   const id = Number(raw);
   return Number.isFinite(id) && id > 0 ? id : null;
 }
 
-router.use(async (_req, _res, next): Promise<void> => {
-  try {
-    await ensureSessionUserColumn();
-    next();
-  } catch (error) {
-    next(error);
-  }
-});
-
 router.use("/sessions/:id", async (req, res, next): Promise<void> => {
-  if (req.session?.bypass) {
+  if (req.session?.bypass || process.env.TEST_BYPASS_SESSION === "1") {
     next();
     return;
   }

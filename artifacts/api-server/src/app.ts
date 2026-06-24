@@ -389,6 +389,11 @@ const AUTH_EXEMPT_PATHS = new Set([
   "/healthz",
 ]);
 
+// Paths with dynamic segments that must be publicly accessible (prefix match)
+const AUTH_EXEMPT_PREFIXES = [
+  "/share/reports/", // Shared report viewer — no login required
+];
+
 // All other /api routes: rate limit + ACCESS_TOKEN gate + session gate.
 // AUTH_EXEMPT_PATHS bypasses both gates so auth bootstrap flows work before
 // the user has obtained a token or logged in.
@@ -396,7 +401,9 @@ app.use(
   "/api",
   apiLimiter,
   (req, res, next) => {
-    if (AUTH_EXEMPT_PATHS.has(req.path)) { next(); return; }
+    const isExactExempt = AUTH_EXEMPT_PATHS.has(req.path);
+    const isPrefixExempt = AUTH_EXEMPT_PREFIXES.some((p) => req.path.startsWith(p));
+    if (isExactExempt || isPrefixExempt) { next(); return; }
     // Access token check (no-op when ACCESS_TOKEN env var is not set)
     accessTokenMiddleware(req, res, () => requireSession(req, res, next));
   },

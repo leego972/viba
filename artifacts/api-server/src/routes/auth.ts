@@ -83,45 +83,51 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     return;
   }
 
+  // DB operations only — session callbacks live outside this try/catch to
+  // prevent double-send if the session store throws AND fires its callback.
+  let user: UserRow;
   try {
     const { rows } = await pool.query<UserRow>(
       "SELECT * FROM users WHERE email = $1",
       [email],
     );
-    const user = rows[0];
+    const found = rows[0];
 
-    if (!user || !user.password_hash) {
+    if (!found || !found.password_hash) {
       res.status(401).json({ error: "Invalid email or password." });
       return;
     }
 
-    const valid = await bcrypt.compare(password, user.password_hash);
+    const valid = await bcrypt.compare(password, found.password_hash);
     if (!valid) {
       res.status(401).json({ error: "Invalid email or password." });
       return;
     }
 
-    // Session fixation protection: regenerate session ID before assigning user
-    req.session.regenerate((regenErr) => {
-      if (regenErr) {
-        req.log?.error?.({ err: regenErr }, "session regenerate error on login");
-        res.status(500).json({ error: "Internal server error" });
-        return;
-      }
-      req.session.userId = user.id;
-      req.session.save((saveErr) => {
-        if (saveErr) {
-          req.log?.error?.({ err: saveErr }, "session save error on login");
-          res.status(500).json({ error: "Internal server error" });
-          return;
-        }
-        res.json({ user: { id: user.id, email: user.email, name: user.name } });
-      });
-    });
+    user = found;
   } catch (err) {
     req.log?.error?.({ err }, "auth/login error");
     res.status(500).json({ error: "Internal server error" });
+    return;
   }
+
+  // Session fixation protection: regenerate outside try/catch to avoid double-send
+  req.session.regenerate((regenErr) => {
+    if (regenErr) {
+      req.log?.error?.({ err: regenErr }, "session regenerate error on login");
+      res.status(500).json({ error: "Internal server error" });
+      return;
+    }
+    req.session.userId = user.id;
+    req.session.save((saveErr) => {
+      if (saveErr) {
+        req.log?.error?.({ err: saveErr }, "session save error on login");
+        res.status(500).json({ error: "Internal server error" });
+        return;
+      }
+      res.json({ user: { id: user.id, email: user.email, name: user.name } });
+    });
+  });
 });
 
 // ─── POST /auth/register ──────────────────────────────────────────────────────
@@ -140,6 +146,9 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     return;
   }
 
+  // DB operations only — session callbacks live outside this try/catch to
+  // prevent double-send if the session store throws AND fires its callback.
+  let user: UserRow;
   try {
     const existing = await pool.query("SELECT id FROM users WHERE email = $1", [email]);
     if (existing.rows.length > 0) {
@@ -152,35 +161,34 @@ router.post("/auth/register", async (req, res): Promise<void> => {
       "INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING *",
       [email, hash, name],
     );
-    const user = rows[0]!;
-
-    // Send verification email (fire-and-forget)
-    sendVerificationEmail(user.id, email, name ?? undefined, getBaseUrl(req)).catch(() => {});
-
-    // Send welcome email (fire-and-forget)
-    sendWelcomeEmail(email, name ?? undefined).catch(() => {});
-
-    // Session fixation protection: regenerate session ID before assigning user
-    req.session.regenerate((regenErr) => {
-      if (regenErr) {
-        req.log?.error?.({ err: regenErr }, "session regenerate error on register");
-        res.status(500).json({ error: "Internal server error" });
-        return;
-      }
-      req.session.userId = user.id;
-      req.session.save((saveErr) => {
-        if (saveErr) {
-          req.log?.error?.({ err: saveErr }, "session save error on register");
-          res.status(500).json({ error: "Internal server error" });
-          return;
-        }
-        res.status(201).json({ user: { id: user.id, email: user.email, name: user.name } });
-      });
-    });
+    user = rows[0]!;
   } catch (err) {
     req.log?.error?.({ err }, "auth/register error");
     res.status(500).json({ error: "Internal server error" });
+    return;
   }
+
+  // Fire-and-forget emails — outside try/catch so errors never reach catch above
+  sendVerificationEmail(user.id, email, name ?? undefined, getBaseUrl(req)).catch(() => {});
+  sendWelcomeEmail(email, name ?? undefined).catch(() => {});
+
+  // Session fixation protection: regenerate outside try/catch to avoid double-send
+  req.session.regenerate((regenErr) => {
+    if (regenErr) {
+      req.log?.error?.({ err: regenErr }, "session regenerate error on register");
+      res.status(500).json({ error: "Internal server error" });
+      return;
+    }
+    req.session.userId = user.id;
+    req.session.save((saveErr) => {
+      if (saveErr) {
+        req.log?.error?.({ err: saveErr }, "session save error on register");
+        res.status(500).json({ error: "Internal server error" });
+        return;
+      }
+      res.status(201).json({ user: { id: user.id, email: user.email, name: user.name } });
+    });
+  });
 });
 
 // ─── POST /auth/logout ────────────────────────────────────────────────────────

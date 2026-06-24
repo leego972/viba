@@ -147,7 +147,8 @@ export async function runNextAgentStep(sessionId: number): Promise<{
 
   const [memory] = await db.select().from(memoryTable).where(eq(memoryTable.sessionId, sessionId));
 
-  // Fetch pending questions directed at this agent — strictly scoped to this task
+  // Fetch pending questions directed at this agent — session + recipient scoped,
+  // NOT filtered by taskId so cross-task questions are delivered (see agentComms.ts)
   const pendingQuestions = await processPendingQuestions(sessionId, assignedAgent.id, nextTask.id);
 
   // Emit a "running" audit event on every poll cycle so the session feed shows live progress

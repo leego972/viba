@@ -9,18 +9,18 @@ const MAX_OUTBOUND_QUESTIONS_PER_STEP = 3;
 /**
  * Fetch unanswered question messages directed at the given agent.
  *
- * Questions are fetched by recipient and session — NOT filtered by the
- * recipient's current taskId. In this sequential single-assignee model, the
- * recipient always executes a later task than the sender, so a taskId filter
- * would make questions permanently undeliverable.
+ * Delivery is scoped to: session + recipient agent + unanswered questions.
+ * It is NOT filtered by the recipient's current task — agents must be able to
+ * receive questions that were asked during an earlier task and are still
+ * pending when the recipient reaches a later task.  This preserves VIBA's
+ * core collaboration model where agents communicate across task boundaries.
  *
- * Task scoping is expressed through STORAGE, not delivery:
- *  - Each question is stored with the sender's taskId for display threading.
- *  - Each answer is stored under the question's original taskId (see persistAnswers).
- * This ensures Q/A pairs stay in the correct task thread for the UI
- * without blocking cross-task delivery.
- *
- * The `_currentTaskId` parameter is retained for call-site compatibility.
+ * Storage vs. delivery distinction:
+ *  - Questions are stored with the sender's taskId for UI threading
+ *    (see persistOutboundQuestions).
+ *  - Answers are stored under the question's original taskId so the Q/A pair
+ *    stays in the same thread (see persistAnswers).
+ *  - Delivery must not lose cross-task questions by filtering on taskId here.
  */
 export async function processPendingQuestions(
   sessionId: number,

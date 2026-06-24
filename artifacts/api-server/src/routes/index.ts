@@ -1,34 +1,40 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
-import sessionAccessRouter from "./sessionPrivacy";
-import coreDefaultsRouter from "./coreDefaults";
-import backgroundSessionsRouter from "./backgroundSessions";
 import sessionsRouter from "./sessions";
-import attachmentsRouter from "./attachments";
-import selfRepairAutoRouter from "./selfRepairAuto";
-import selfAuditMergeSafetyRouter from "./selfAuditMergeSafety";
-import selfAuditRouter from "./selfAudit";
 import settingsRouter from "./settings";
 import statsRouter from "./stats";
 import circuitStatusRouter from "./circuitStatus";
 import workbenchRouter from "../workbench/serverRoutes";
 import authRouter from "./auth";
 import stripeRouter from "./stripe";
-import annualBillingRouter from "./annualBilling";
 import billingRouter from "./billing";
 import githubRouter from "./github";
+import sessionAccessRouter from "./sessionPrivacy";
+import coreDefaultsRouter from "./coreDefaults";
+import backgroundSessionsRouter from "./backgroundSessions";
+import attachmentsRouter from "./attachments";
+import selfRepairAutoRouter from "./selfRepairAuto";
+import selfAuditMergeSafetyRouter from "./selfAuditMergeSafety";
+import selfAuditRouter from "./selfAudit";
+import annualBillingRouter from "./annualBilling";
 import connectionsRouter from "./connections";
 import vibaKeysRouter from "./credentials";
 import webResearchRouter from "./webResearch";
 import pricingResearchRouter from "./pricingResearch";
+import providersRouter from "./providers";
+import doctorRouter from "./doctor";
+import focusedValueRouter from "./focusedValue";
+import marketCompletionRouter from "./marketCompletion";
 
 const router: IRouter = Router();
 
+// auth routes are registered first and bypass the ACCESS_TOKEN gate in app.ts
 router.use(authRouter);
 router.use(healthRouter);
 router.use(sessionAccessRouter);
 router.use(coreDefaultsRouter);
 router.use(backgroundSessionsRouter);
+router.use(focusedValueRouter);
 router.use(sessionsRouter);
 router.use(attachmentsRouter);
 router.use(selfRepairAutoRouter);
@@ -46,5 +52,8 @@ router.use(connectionsRouter);
 router.use(vibaKeysRouter);
 router.use(webResearchRouter);
 router.use(pricingResearchRouter);
+router.use(providersRouter);
+router.use(doctorRouter);
+router.use(marketCompletionRouter);
 
 export default router;

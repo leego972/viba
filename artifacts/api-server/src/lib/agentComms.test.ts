@@ -59,7 +59,7 @@ describe("processPendingQuestions", () => {
     const questionRow = makeQuestionRow();
 
     (db.select as ReturnType<typeof vi.fn>)
-      // First call: fetch questions (includes taskId filter) — uses orderBy
+      // First call: fetch questions (session + recipient + unanswered) — uses orderBy
       .mockReturnValueOnce({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({
@@ -86,23 +86,23 @@ describe("processPendingQuestions", () => {
   });
 
   it("delivers a question to the recipient even when they are executing a later task (cross-task delivery)", async () => {
-    // Scenario: Agent A (task 10) asks Agent B a question.
-    // Agent B later runs task 11. The question must still arrive — filtering by
-    // recipient's current taskId would permanently lose it.
+    // Scenario: Agent A asks Agent B a question during task 10.
+    // Agent B is now executing task 11.
+    // Delivery must NOT be gated on currentTaskId — the question must still arrive.
+    // Questions are stored with sender's taskId for threading; delivery is session-scoped.
     const { db } = await import("@workspace/db");
-    const questionFromTask10 = makeQuestionRow({ id: 5, taskId: 10, toAgentId: 2 });
+    const questionRow = makeQuestionRow(); // taskId: 10, toAgentId: 2
 
     (db.select as ReturnType<typeof vi.fn>)
-      // First call: fetch questions — no taskId filter, so DB returns the question
-      // even though Agent B is now executing task 11.
+      // DB returns the task-10 question because delivery is not filtered by taskId
       .mockReturnValueOnce({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({
-            orderBy: vi.fn().mockResolvedValue([questionFromTask10]),
+            orderBy: vi.fn().mockResolvedValue([questionRow]),
           }),
         }),
       })
-      // Second call: fetch answers — none yet
+      // Second call: answers — none pending
       .mockReturnValueOnce({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockResolvedValue([]),
@@ -110,10 +110,14 @@ describe("processPendingQuestions", () => {
       });
 
     const { processPendingQuestions } = await import("./agentComms");
-    // Agent 2 is currently on task 11 — but must still receive the question from task 10
+    // Recipient is on task 11 — question from task 10 must still be delivered
     const result = await processPendingQuestions(1, 2, 11);
     expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({ fromAgent: "Claude", question: "Which module handles auth?", messageId: 5 });
+    expect(result[0]).toMatchObject({
+      fromAgent: "Claude",
+      question: "Which module handles auth?",
+      messageId: 5,
+    });
   });
 
   it("filters out questions that are already answered", async () => {
