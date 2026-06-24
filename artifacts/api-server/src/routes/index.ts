@@ -26,6 +26,7 @@ import doctorRouter from "./doctor";
 import marketCompletionRouter from "./marketCompletion";
 import assistedBrowserRouter from "./assistedBrowser";
 import railwayConnectorRouter from "./railwayConnector";
+import fileBuildSafetyRouter from "./fileBuildSafety";
 
 const router: IRouter = Router();
 
@@ -57,5 +58,6 @@ router.use(doctorRouter);
 router.use(marketCompletionRouter);
 router.use(assistedBrowserRouter);
 router.use(railwayConnectorRouter);
+router.use(fileBuildSafetyRouter);
 
 export default router;
