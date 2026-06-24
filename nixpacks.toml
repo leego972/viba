@@ -1,12 +1,45 @@
 [phases.setup]
-      nixPkgs = ["nodejs_24", "pnpm"]
+nixPkgs = [
+  "nodejs_24",
+  "pnpm",
+  "nss",
+  "nspr",
+  "atk",
+  "at-spi2-atk",
+  "cups",
+  "drm",
+  "dbus",
+  "xorg.libX11",
+  "xorg.libXcomposite",
+  "xorg.libXdamage",
+  "xorg.libXext",
+  "xorg.libXfixes",
+  "xorg.libXrandr",
+  "xorg.libxcb",
+  "pango",
+  "cairo",
+  "glib",
+  "gtk3",
+  "alsa-lib",
+  "expat",
+  "fontconfig",
+  "freetype",
+  "libuuid",
+  "libgbm",
+  "libxshmfence"
+]
 
-    [phases.install]
-      cmds = ["pnpm install --no-frozen-lockfile"]
+[phases.install]
+cmds = [
+  "pnpm install --no-frozen-lockfile",
+  "pnpm --filter @workspace/api-server run browser:install"
+]
 
-    [phases.build]
-      cmds = ["NODE_ENV=production BASE_PATH=/ PORT=8080 pnpm --filter @workspace/bridge-ai run build && pnpm --filter @workspace/api-server run build"]
+[phases.build]
+cmds = [
+  "NODE_ENV=production BASE_PATH=/ PORT=8080 pnpm --filter @workspace/bridge-ai run build && pnpm --filter @workspace/api-server run build",
+  "pnpm --filter @workspace/api-server run browser:check"
+]
 
-    [start]
-      cmd = "sh ./start.sh"
-  
+[start]
+cmd = "sh ./start.sh"
