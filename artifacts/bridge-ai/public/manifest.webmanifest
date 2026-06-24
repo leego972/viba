@@ -1,0 +1,27 @@
+{
+  "name": "VIBA — Bridge AI",
+  "short_name": "VIBA",
+  "description": "A mobile-ready multi-agent AI control room for serious project builds.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "browser"],
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "orientation": "portrait-primary",
+  "categories": ["productivity", "business", "developer"],
+  "icons": [
+    {
+      "src": "/viba-logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/viba-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

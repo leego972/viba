@@ -5,6 +5,9 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import VibaFooter from "@/components/VibaFooterFinal";
+import { MobileShell } from "@/mobile/MobileShell";
+import "@/mobile/mobileStyles.css";
+import { installMobileViewportFix } from "@/mobile/viewport";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import UserInstructions from "@/pages/user-instructions";
@@ -12,9 +15,20 @@ import Terms from "@/pages/terms";
 import Dashboard from "@/pages/dashboard";
 import NewSession from "@/pages/new-session";
 import SessionWorkspace from "@/pages/session-workspace";
+import SessionProofReport from "@/pages/session-proof-report";
+import SessionBudget from "@/pages/session-budget";
+import SessionApprovals from "@/pages/session-approvals";
+import SessionNextAction from "@/pages/session-next-action";
 import Settings from "@/pages/settings";
 import Workbench from "@/pages/workbench";
 import Bridge from "@/pages/bridge";
+import Doctor from "@/pages/doctor";
+import DoctorHistory from "@/pages/doctor-history";
+import DoctorProposalPreview from "@/pages/doctor-proposal-preview";
+import DoctorReportDetail from "@/pages/doctor-report-detail";
+import DoctorImplementationPlan from "@/pages/doctor-implementation-plan";
+import DoctorReportChecklist from "@/pages/doctor-report-checklist";
+import ReleaseReadiness from "@/pages/release-readiness";
 import Pricing from "@/pages/pricing";
 import CheckoutSuccess from "@/pages/checkout-success";
 import AdminMaintenance from "@/pages/admin-maintenance";
@@ -77,11 +91,22 @@ function GatedRouter() {
         <Route path="/" component={Home} />
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/sessions/new" component={NewSession} />
+        <Route path="/sessions/:id/proof-report" component={SessionProofReport} />
+        <Route path="/sessions/:id/budget" component={SessionBudget} />
+        <Route path="/sessions/:id/approvals" component={SessionApprovals} />
+        <Route path="/sessions/:id/next-action" component={SessionNextAction} />
         <Route path="/sessions/:id" component={SessionWorkspace} />
         <Route path="/settings" component={Settings} />
         <Route path="/billing" component={Billing} />
         <Route path="/workbench" component={Workbench} />
         <Route path="/bridge" component={Bridge} />
+        <Route path="/doctor/history" component={DoctorHistory} />
+        <Route path="/doctor/reports/:id/proposal" component={DoctorProposalPreview} />
+        <Route path="/doctor/reports/:id/implementation-plan" component={DoctorImplementationPlan} />
+        <Route path="/doctor/reports/:id/checklist" component={DoctorReportChecklist} />
+        <Route path="/doctor/reports/:id" component={DoctorReportDetail} />
+        <Route path="/doctor" component={Doctor} />
+        <Route path="/release-readiness" component={ReleaseReadiness} />
         <Route component={NotFound} />
       </Switch>
     </AuthGuard>
@@ -89,28 +114,34 @@ function GatedRouter() {
 }
 
 function App() {
+  useEffect(() => {
+    installMobileViewportFix();
+  }, []);
+
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={basePath}>
-          <ErrorBoundary>
-            <Switch>
-              <Route path="/login" component={LoginPage} />
-              <Route path="/signup" component={SignUpPage} />
-              <Route path="/forgot-password" component={ForgotPassword} />
-              <Route path="/reset-password" component={ResetPassword} />
-              <Route path="/verify-email" component={VerifyEmail} />
-              <Route path="/pricing" component={Pricing} />
-              <Route path="/user-instructions" component={UserInstructions} />
-              <Route path="/terms" component={Terms} />
-              <Route path="/checkout/success" component={CheckoutSuccess} />
-              <Route path="/admin/maintenance" component={AdminMaintenanceRoute} />
-              <Route path="/admin" component={AdminMaintenanceRoute} />
-              <Route component={GatedRouter} />
-            </Switch>
-          </ErrorBoundary>
-          <VibaFooter />
+          <MobileShell>
+            <ErrorBoundary>
+              <Switch>
+                <Route path="/login" component={LoginPage} />
+                <Route path="/signup" component={SignUpPage} />
+                <Route path="/forgot-password" component={ForgotPassword} />
+                <Route path="/reset-password" component={ResetPassword} />
+                <Route path="/verify-email" component={VerifyEmail} />
+                <Route path="/pricing" component={Pricing} />
+                <Route path="/user-instructions" component={UserInstructions} />
+                <Route path="/terms" component={Terms} />
+                <Route path="/checkout/success" component={CheckoutSuccess} />
+                <Route path="/admin/maintenance" component={AdminMaintenanceRoute} />
+                <Route path="/admin" component={AdminMaintenanceRoute} />
+                <Route component={GatedRouter} />
+              </Switch>
+            </ErrorBoundary>
+            <VibaFooter />
+          </MobileShell>
         </WouterRouter>
         <Toaster />
       </TooltipProvider>

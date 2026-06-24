@@ -7,9 +7,9 @@ on:
     branches: [main]
 
 jobs:
-  typecheck:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,7 +26,13 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile=false
 
       - name: Typecheck backend and workspace
         run: pnpm run typecheck
+
+      - name: Build API server
+        run: pnpm --filter @workspace/api-server run build
+
+      - name: Build Bridge AI frontend
+        run: pnpm --filter @workspace/bridge-ai run build

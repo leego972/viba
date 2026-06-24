@@ -85,26 +85,35 @@ describe("processPendingQuestions", () => {
     });
   });
 
-  it("does NOT deliver questions from a different task (cross-task isolation)", async () => {
+  it("delivers a question to the recipient even when they are executing a later task (cross-task delivery)", async () => {
+    // Scenario: Agent A (task 10) asks Agent B a question.
+    // Agent B later runs task 11. The question must still arrive — filtering by
+    // recipient's current taskId would permanently lose it.
     const { db } = await import("@workspace/db");
+    const questionFromTask10 = makeQuestionRow({ id: 5, taskId: 10, toAgentId: 2 });
 
-    // The DB query itself enforces the taskId filter, so with the correct WHERE
-    // clause only questions for taskId=10 should be returned. Simulate the DB
-    // returning no rows (as it would when filtered to task 99).
     (db.select as ReturnType<typeof vi.fn>)
+      // First call: fetch questions — no taskId filter, so DB returns the question
+      // even though Agent B is now executing task 11.
       .mockReturnValueOnce({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({
-            // DB returns empty — the taskId=99 filter matched nothing for task 10's question
-            orderBy: vi.fn().mockResolvedValue([]),
+            orderBy: vi.fn().mockResolvedValue([questionFromTask10]),
           }),
+        }),
+      })
+      // Second call: fetch answers — none yet
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([]),
         }),
       });
 
     const { processPendingQuestions } = await import("./agentComms");
-    // Agent 2 is currently on task 99; task 10's question must not be delivered
-    const result = await processPendingQuestions(1, 2, 99);
-    expect(result).toHaveLength(0);
+    // Agent 2 is currently on task 11 — but must still receive the question from task 10
+    const result = await processPendingQuestions(1, 2, 11);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ fromAgent: "Claude", question: "Which module handles auth?", messageId: 5 });
   });
 
   it("filters out questions that are already answered", async () => {

@@ -1,9 +1,10 @@
 import { Link, useLocation } from "wouter";
-import { Button } from "@/components/ui/button";
-import { Settings, FlaskConical, CreditCard, Zap, LayoutDashboard, Radio, Plus } from "lucide-react";
+import { Settings, FlaskConical, CreditCard, Zap, LayoutDashboard, Radio, Plus, Stethoscope } from "lucide-react";
+import { CreditBalancePill } from "@/components/CreditBalancePill";
 
 const NAV_LINKS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, match: (l: string) => l.startsWith("/dashboard") || l.startsWith("/sessions") },
+  { href: "/doctor",    label: "Doctor",    icon: Stethoscope,     match: (l: string) => l.startsWith("/doctor") },
   { href: "/workbench", label: "Workbench",  icon: FlaskConical,    match: (l: string) => l.startsWith("/workbench") },
   { href: "/bridge",    label: "Bridge",    icon: Radio,            match: (l: string) => l.startsWith("/bridge") },
   { href: "/billing",   label: "Billing",   icon: CreditCard,       match: (l: string) => l.startsWith("/billing") || l.startsWith("/pricing") },
@@ -77,6 +78,9 @@ export function Navbar() {
             );
           })}
         </nav>
+
+        <CreditBalancePill className="hidden lg:inline-flex" />
+        <CreditBalancePill compact className="hidden sm:inline-flex lg:hidden" />
 
         {/* New Session CTA */}
         <Link href="/sessions/new" className="shrink-0">

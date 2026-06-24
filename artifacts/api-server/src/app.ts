@@ -15,8 +15,7 @@ import { webhookHandler } from "./routes/stripeWebhook";
 import adminRouter from "./routes/admin";
 import adminMaintenanceRouter from "./routes/adminMaintenance";
 import { pool } from "@workspace/db";
-import { getBillingStatus, deductCredits, isStripeConfigured } from "./lib/billing";
-import { sendCreditsExhaustedReminder, sendLowCreditsWarningIfNeeded } from "./lib/billingEmail";
+import { getBillingStatus, isStripeConfigured } from "./lib/billing";
 import { buildAdapter, buildMockAdapter } from "./lib/agentFactory";
 import { startWeeklyMaintenanceScheduler } from "./lib/maintenanceScheduler";
 import { assertSelfRepo, configuredSelfRepo } from "./lib/selfRepoGuard";
@@ -123,23 +122,26 @@ app.use(["/api/sessions/:id/run-next", "/api/sessions/:id/run-full"], async (req
   if (!userId) { next(); return; }
   if (!isStripeConfigured()) { next(); return; }
   try {
-    const { subscriptionStatus } = await getBillingStatus(userId);
+    const { subscriptionStatus, creditsRemaining } = await getBillingStatus(userId);
     if (subscriptionStatus === "canceled" || subscriptionStatus === "none") {
       res.status(402).json({ error: "subscription_required", message: "An active VIBA membership is required. Visit /pricing to subscribe.", subscriptionUrl: "/pricing" });
       return;
     }
-    const sessionIdForBilling = parseInt(String(req.params.id ?? ""), 10) || undefined;
-    const deducted = await deductCredits(userId, 1, sessionIdForBilling);
-    if (!deducted) {
-      sendCreditsExhaustedReminder(userId).catch(() => {});
-      res.status(402).json({ error: "out_of_credits", message: "You've used all your credits for this period. Top up to continue.", topUpUrl: "/billing" });
-      return;
-    }
-    sendLowCreditsWarningIfNeeded(userId).catch(() => {});
+    if (creditsRemaining <= 0) {
+        const blockedSid = parseInt(String(req.params.id ?? ""), 10);
+        res.status(402).json({ error: "out_of_credits", message: "Add credits in Billing to continue.", topUpUrl: "/billing", sessionId: Number.isFinite(blockedSid) ? blockedSid : undefined });
+        return;
+      }
+      // Fire low-credit warning when credits approach zero (fire-and-forget, safe to repeat)
+      if (creditsRemaining <= 100) {
+        import("./lib/billingEmail").then(({ sendLowCreditsWarningIfNeeded }) => {
+          sendLowCreditsWarningIfNeeded(userId).catch(() => {});
+        }).catch(() => {});
+      }
     next();
   } catch (err) {
-    logger.error({ err }, "Credit gate error — failing open to avoid blocking users");
-    next();
+    logger.error({ err }, "Credit eligibility gate error");
+    res.status(503).json({ error: "credit_check_failed", message: "Could not verify credits. Try again shortly." });
   }
 });
 

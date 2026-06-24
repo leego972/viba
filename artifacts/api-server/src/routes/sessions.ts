@@ -434,4 +434,42 @@ router.get("/sessions/:id/export", async (req, res): Promise<void> => {
   res.send(markdown);
 });
 
-export default router;
+  // ─── GET /sessions/:id/budget ─────────────────────────────────────────────────
+  router.get("/sessions/:id/budget", async (req, res): Promise<void> => {
+    const id = parseInt(String(req.params.id ?? ""), 10);
+    if (isNaN(id) || id <= 0) { res.status(400).json({ error: "Invalid session id" }); return; }
+    const [row] = await db.select({
+      id: sessionsTable.id,
+      budgetCapCredits: sessionsTable.budgetCapCredits,
+      creditsReserved: sessionsTable.creditsReserved,
+    }).from(sessionsTable).where(eq(sessionsTable.id, id));
+    if (!row) { res.status(404).json({ error: "Session not found" }); return; }
+    const cap = row.budgetCapCredits ?? null;
+    res.json(serialize({ sessionId: id, budgetCapCredits: cap, creditsReserved: row.creditsReserved, creditsRemaining: cap !== null ? Math.max(0, cap - row.creditsReserved) : null }));
+  });
+
+  // ─── PATCH /sessions/:id/budget ───────────────────────────────────────────────
+  router.patch("/sessions/:id/budget", async (req, res): Promise<void> => {
+    const id = parseInt(String(req.params.id ?? ""), 10);
+    if (isNaN(id) || id <= 0) { res.status(400).json({ error: "Invalid session id" }); return; }
+    const body = req.body as { budgetCapCredits?: unknown };
+    const raw = body.budgetCapCredits;
+    let cap: number | null;
+    if (raw === null || raw === undefined) {
+      cap = null;
+    } else {
+      const n = Number(raw);
+      if (!Number.isFinite(n) || n < 0) { res.status(400).json({ error: "budgetCapCredits must be a non-negative number or null to clear" }); return; }
+      cap = Math.round(n);
+    }
+    const [updated] = await db
+      .update(sessionsTable)
+      .set({ budgetCapCredits: cap })
+      .where(eq(sessionsTable.id, id))
+      .returning({ id: sessionsTable.id, budgetCapCredits: sessionsTable.budgetCapCredits, creditsReserved: sessionsTable.creditsReserved });
+    if (!updated) { res.status(404).json({ error: "Session not found" }); return; }
+    const updatedCap = updated.budgetCapCredits ?? null;
+    res.json(serialize({ sessionId: id, budgetCapCredits: updatedCap, creditsReserved: updated.creditsReserved, creditsRemaining: updatedCap !== null ? Math.max(0, updatedCap - updated.creditsReserved) : null }));
+  });
+
+  export default router;

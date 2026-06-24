@@ -36,6 +36,27 @@ function isValidKey(key: string | null): key is string {
   return typeof key === "string" && key.length > 10;
 }
 
+function envFlag(name: string): string | null {
+  const value = process.env[name];
+  return typeof value === "string" ? value.trim().toLowerCase() : null;
+}
+
+function liveProviderAllowed(provider: string): boolean {
+  if (envFlag("VIBA_LIVE_AGENTS_ENABLED") === "false") return false;
+  if (envFlag("VIBA_COST_SAFE_MODE") === "true") {
+    if (provider === "ollama" && envFlag("VIBA_ALLOW_OLLAMA_IN_SAFE_MODE") === "true") return true;
+    return false;
+  }
+
+  const allowList = process.env["VIBA_ALLOWED_LIVE_PROVIDERS"];
+  if (allowList && allowList.trim()) {
+    const allowed = new Set(allowList.split(",").map((item) => item.trim().toLowerCase()).filter(Boolean));
+    return allowed.has(provider);
+  }
+
+  return true;
+}
+
 export function buildMockAdapter(agent: Agent): AgentAdapter {
   const provider = agent.provider.toLowerCase();
   if (provider === "anthropic") return new ClaudeMockAdapter(String(agent.id), agent.name, agent.role);
@@ -51,6 +72,11 @@ export function buildMockAdapter(agent: Agent): AgentAdapter {
 
 export async function buildAdapter(agent: Agent): Promise<AgentAdapter> {
   const provider = agent.provider.toLowerCase();
+
+  if (!liveProviderAllowed(provider)) {
+    logger.warn({ provider }, "Live provider disabled by VIBA cost safety settings — using simulation mode");
+    return buildMockAdapter(agent);
+  }
 
   // Shared tool tokens — loaded once and reused across tool-capable adapters
   const [railwayToken, githubToken] = await Promise.all([
