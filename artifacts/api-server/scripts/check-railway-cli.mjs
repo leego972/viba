@@ -6,9 +6,9 @@ const execFileAsync = promisify(execFile);
 async function main() {
   try {
     const { stdout } = await execFileAsync("railway", ["--version"], { timeout: 5000 });
-    console.log(JSON.stringify({ railwayCliAvailable: true, version: stdout.trim() || "unknown" }, null, 2));
+    console.log(JSON.stringify({ available: true, version: stdout.trim() || "unknown" }, null, 2));
   } catch {
-    console.log(JSON.stringify({ railwayCliAvailable: false, version: null }, null, 2));
+    console.log(JSON.stringify({ available: false, version: null }, null, 2));
   }
 }
 
