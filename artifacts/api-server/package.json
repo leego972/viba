@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --config vitest.config.ts",
     "browser:install": "playwright install chromium",
-    "browser:check": "node ./scripts/check-browser.mjs"
+    "browser:check": "node ./scripts/check-browser.mjs",
+    "railway:cli-check": "node ./scripts/check-railway-cli.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.1",
