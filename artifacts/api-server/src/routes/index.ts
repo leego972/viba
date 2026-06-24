@@ -25,6 +25,7 @@ import providersRouter from "./providers";
 import doctorRouter from "./doctor";
 import focusedValueRouter from "./focusedValue";
 import marketCompletionRouter from "./marketCompletion";
+import setupRunnerRouter from "./setupRunner";
 
 const router: IRouter = Router();
 
@@ -55,5 +56,6 @@ router.use(pricingResearchRouter);
 router.use(providersRouter);
 router.use(doctorRouter);
 router.use(marketCompletionRouter);
+router.use(setupRunnerRouter);
 
 export default router;
