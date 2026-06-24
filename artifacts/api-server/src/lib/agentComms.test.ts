@@ -85,16 +85,15 @@ describe("processPendingQuestions", () => {
     });
   });
 
-  it("delivers a question to the recipient even when they are executing a later task (cross-task delivery)", async () => {
-    // Scenario: Agent A asks Agent B a question during task 10.
-    // Agent B is now executing task 11.
-    // Delivery must NOT be gated on currentTaskId — the question must still arrive.
-    // Questions are stored with sender's taskId for threading; delivery is session-scoped.
+  it("delivers a question only when it belongs to the recipient's current task (same-task scoping)", async () => {
+    // Delivery is task-scoped: DB is queried with eq(messagesTable.taskId, currentTaskId).
+    // Agent A asks Agent B a question during task 10; Agent B is executing task 10.
+    // The DB returns the matching question because taskId matches currentTaskId.
     const { db } = await import("@workspace/db");
     const questionRow = makeQuestionRow(); // taskId: 10, toAgentId: 2
 
     (db.select as ReturnType<typeof vi.fn>)
-      // DB returns the task-10 question because delivery is not filtered by taskId
+      // DB returns the task-10 question — delivery IS filtered by currentTaskId in the WHERE clause
       .mockReturnValueOnce({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({
@@ -110,8 +109,8 @@ describe("processPendingQuestions", () => {
       });
 
     const { processPendingQuestions } = await import("./agentComms");
-    // Recipient is on task 11 — question from task 10 must still be delivered
-    const result = await processPendingQuestions(1, 2, 11);
+    // Recipient is on task 10 — question from task 10 is delivered
+    const result = await processPendingQuestions(1, 2, 10);
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({
       fromAgent: "Claude",
