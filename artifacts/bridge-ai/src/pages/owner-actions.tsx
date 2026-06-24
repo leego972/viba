@@ -109,6 +109,10 @@ export default function OwnerActions() {
           </section>
         ))}
       </div>
+
+      <div className="mt-6 flex justify-center">
+        <Link href="/setup-assistant" className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-5 py-3 text-sm font-medium transition hover:bg-white/[0.06]">Open Setup Assistant</Link>
+      </div>
     </AppLayout>
   );
 }
