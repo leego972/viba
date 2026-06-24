@@ -22,6 +22,8 @@ import ResetPassword from "@/pages/reset-password";
 import VerifyEmail from "@/pages/verify-email";
 import Billing from "@/pages/billing";
 import ProvidersPage from "@/pages/providers";
+import VaultPage from "@/pages/vault";
+import AgentConsolePage from "@/pages/agent-console";
 import DoctorPage from "@/pages/doctor";
 import AssistedBrowserPage from "@/pages/assisted-browser";
 import CompletionPage, {
@@ -86,6 +88,8 @@ function GatedRouter() {
         <Route path="/workbench" component={Workbench} />
         <Route path="/bridge" component={Bridge} />
         <Route path="/providers" component={ProvidersPage} />
+        <Route path="/credentials" component={VaultPage} />
+        <Route path="/agent-console" component={AgentConsolePage} />
         <Route path="/doctor" component={DoctorPage} />
         <Route path="/connectors" component={CompletionPage} />
         <Route path="/self-audit" component={CompletionPage} />
