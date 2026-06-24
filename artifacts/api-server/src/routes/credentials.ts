@@ -1,6 +1,8 @@
 import { Router, type IRouter } from "express";
 import {
   listVibaCredentials,
+  listCredentialAccessLogs,
+  deleteVibaCredential,
   logVibaEvent,
   markVibaCredential,
   resolveVibaCredential,
@@ -169,6 +171,69 @@ router.post("/credentials/browser-profile-note", async (req, res): Promise<void>
     provider: body.provider,
     message: "Browser-based access should be supervised and used only for accounts the user owns. API tokens are preferred. Do not bypass MFA, CAPTCHA, or platform security checks.",
   });
+});
+
+/**
+ * GET /api/credentials/vault-list
+ * Returns metadata for all saved credentials. Raw values NEVER returned.
+ */
+router.get("/credentials/vault-list", async (req, res): Promise<void> => {
+  const uid = userId(req);
+  const all = await listVibaCredentials(uid);
+  const credentials = all.map((c) => ({
+    provider: c["provider"],
+    kind: c["kind"],
+    label: c["label"],
+    scope: c["scope"],
+    status: c["status"],
+    configured: true,
+    expires_at: c["expires_at"],
+    last_used_at: c["last_used_at"],
+    last_validated_at: c["last_validated_at"],
+    last_error: c["last_error"],
+    updated_at: c["updated_at"],
+    rawValueReturned: false,
+  }));
+  res.json({ credentials, rawValueReturned: false });
+});
+
+/**
+ * GET /api/credentials/access-logs
+ * Returns access log entries for the current user. No raw values.
+ */
+router.get("/credentials/access-logs", async (req, res): Promise<void> => {
+  const uid = userId(req);
+  const provider = typeof req.query.provider === "string" ? req.query.provider : undefined;
+  const limit = Math.min(Number(req.query.limit ?? 100), 500);
+  const all = await listCredentialAccessLogs({ userId: uid, provider, limit });
+  const logs = all.map((l) => ({
+    provider: l["provider"],
+    kind: l["kind"],
+    label: l["label"],
+    purpose: l["purpose"],
+    job_id: l["job_id"],
+    scope: l["scope"],
+    source: l["source"],
+    status: l["status"],
+    created_at: l["created_at"],
+  }));
+  res.json({ logs, rawValuesReturned: false });
+});
+
+/**
+ * DELETE /api/credentials
+ * Deletes a saved credential by (provider, kind, label). Cannot recover.
+ */
+router.delete("/credentials", async (req, res): Promise<void> => {
+  const body = req.body as { provider?: unknown; kind?: unknown; label?: unknown };
+  const provider = typeof body.provider === "string" ? body.provider.trim() : "";
+  const kind = typeof body.kind === "string" ? body.kind.trim() : "token";
+  const label = typeof body.label === "string" && body.label.trim() ? body.label.trim() : "default";
+  if (!provider) { res.status(400).json({ error: "provider is required" }); return; }
+  const result = await deleteVibaCredential({ userId: userId(req), provider, kind, label });
+  if (!result.deleted) { res.status(404).json({ error: "Credential not found or already deleted." }); return; }
+  await logVibaEvent({ userId: userId(req), eventType: "credential_deleted", provider, status: "deleted", message: `${provider} ${kind} credential deleted.`, metadata: { label } });
+  res.json({ ok: true, provider, kind, label, message: "Credential deleted. Existing provider accounts are not affected." });
 });
 
 router.get("/viba/logs", async (req, res): Promise<void> => {
