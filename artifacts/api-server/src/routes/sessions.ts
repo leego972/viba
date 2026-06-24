@@ -692,6 +692,32 @@ router.get("/sessions/:id/messages", async (req, res): Promise<void> => {
   res.json(serialize(rawMessages.map((m) => formatMessage(m, msgAgentNameMap))));
 });
 
+// GET /sessions/:id/timeline — messages formatted as ordered timeline events
+router.get("/sessions/:id/timeline", async (req, res): Promise<void> => {
+  const params = ListMessagesParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const [rawMessages, msgAgents] = await Promise.all([
+    db
+      .select()
+      .from(messagesTable)
+      .where(eq(messagesTable.sessionId, params.data.id))
+      .orderBy(asc(messagesTable.id)),
+    db
+      .select({ id: agentsTable.id, name: agentsTable.name })
+      .from(agentsTable)
+      .where(eq(agentsTable.sessionId, params.data.id)),
+  ]);
+  const agentNameMap = new Map(msgAgents.map((a) => [a.id, a.name]));
+  const events = rawMessages.map((m, i) => ({
+    sequence: i + 1,
+    ...formatMessage(m, agentNameMap),
+  }));
+  res.json(serialize({ events, total: events.length }));
+});
+
 // GET /sessions/:id/memory
 router.get("/sessions/:id/memory", async (req, res): Promise<void> => {
   const params = GetMemoryParams.safeParse(req.params);

@@ -164,6 +164,24 @@ router.get("/providers", async (_req, res): Promise<void> => {
   res.json({ providers });
 });
 
+// POST /providers — bulk-enable/configure multiple providers in one request
+router.post("/providers", async (req, res): Promise<void> => {
+  const body = req.body as { providers?: Array<{ id: string; enabled?: boolean; model?: string }> };
+  if (!Array.isArray(body.providers)) {
+    res.status(400).json({ error: "providers array is required" });
+    return;
+  }
+  const results: Array<{ id: string; ok: boolean; error?: string }> = [];
+  for (const p of body.providers) {
+    const def = PROVIDER_DEFS.find((d) => d.id === p.id);
+    if (!def) { results.push({ id: p.id, ok: false, error: "Unknown provider" }); continue; }
+    if (p.enabled !== undefined) await upsertSetting(`${def.id.toUpperCase()}_ENABLED`, String(p.enabled));
+    if (p.model !== undefined && def.modelSettingKey) await upsertSetting(def.modelSettingKey, p.model);
+    results.push({ id: p.id, ok: true });
+  }
+  res.json({ ok: true, results });
+});
+
 // PATCH /providers/:provider — update non-secret config + enable/disable + key
 router.patch("/providers/:provider", async (req, res): Promise<void> => {
   const id = String(req.params["provider"] ?? "");
