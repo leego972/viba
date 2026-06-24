@@ -1,0 +1,415 @@
+/**
+ * VIBA Tool Registry
+ *
+ * Defines every tool agents can request through the Tool Action Broker.
+ * No tool may claim outputsSecretValues: true.
+ * Agents never call tools directly — they request through the broker.
+ */
+
+export type ToolCategory =
+  | "repository"
+  | "deployment"
+  | "payments"
+  | "dns"
+  | "email"
+  | "browser"
+  | "build"
+  | "security"
+  | "vault"
+  | "ai"
+  | "storage"
+  | "reports";
+
+export type RiskLevel = "read_only" | "low" | "medium" | "high" | "destructive";
+
+export type PermissionType =
+  | "none"
+  | "login_required"
+  | "vault_required"
+  | "owner_approval_required"
+  | "admin_required"
+  | "dry_run_required"
+  | "safe_build_required";
+
+export interface ToolDefinition {
+  toolId: string;
+  label: string;
+  category: ToolCategory;
+  description: string;
+  riskLevel: RiskLevel;
+  permissionsRequired: PermissionType[];
+  credentialProvider: string | null;
+  credentialKind: string | null;
+  supportsDryRun: boolean;
+  requiresApproval: boolean;
+  requiresSafeBuild: boolean;
+  outputsSecretValues: false;
+}
+
+export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
+  "github.repo.read": {
+    toolId: "github.repo.read",
+    label: "GitHub: Read Repository",
+    category: "repository",
+    description: "Read repository contents, files, branches, and metadata from GitHub.",
+    riskLevel: "read_only",
+    permissionsRequired: ["vault_required"],
+    credentialProvider: "github",
+    credentialKind: "token",
+    supportsDryRun: false,
+    requiresApproval: false,
+    requiresSafeBuild: false,
+    outputsSecretValues: false,
+  },
+  "github.repo.write": {
+    toolId: "github.repo.write",
+    label: "GitHub: Write Repository",
+    category: "repository",
+    description: "Create or update files, branches, and commits in a GitHub repository.",
+    riskLevel: "medium",
+    permissionsRequired: ["vault_required", "dry_run_required"],
+    credentialProvider: "github",
+    credentialKind: "token",
+    supportsDryRun: true,
+    requiresApproval: false,
+    requiresSafeBuild: false,
+    outputsSecretValues: false,
+  },
+  "github.pr.create": {
+    toolId: "github.pr.create",
+    label: "GitHub: Create Pull Request",
+    category: "repository",
+    description: "Open a pull request on GitHub for review.",
+    riskLevel: "low",
+    permissionsRequired: ["vault_required"],
+    credentialProvider: "github",
+    credentialKind: "token",
+    supportsDryRun: true,
+    requiresApproval: false,
+    requiresSafeBuild: false,
+    outputsSecretValues: false,
+  },
+  "github.pr.merge": {
+    toolId: "github.pr.merge",
+    label: "GitHub: Merge Pull Request",
+    category: "repository",
+    description: "Merge an approved pull request on GitHub.",
+    riskLevel: "high",
+    permissionsRequired: ["vault_required", "owner_approval_required", "safe_build_required"],
+    credentialProvider: "github",
+    credentialKind: "token",
+    supportsDryRun: true,
+    requiresApproval: true,
+    requiresSafeBuild: true,
+    outputsSecretValues: false,
+  },
+  "railway.env.read": {
+    toolId: "railway.env.read",
+    label: "Railway: Read Environment Variables",
+    category: "deployment",
+    description: "Read environment variable keys (not values) from a Railway service.",
+    riskLevel: "read_only",
+    permissionsRequired: ["vault_required"],
+    credentialProvider: "railway",
+    credentialKind: "token",
+    supportsDryRun: false,
+    requiresApproval: false,
+    requiresSafeBuild: false,
+    outputsSecretValues: false,
+  },
+  "railway.env.write": {
+    toolId: "railway.env.write",
+    label: "Railway: Write Environment Variables",
+    category: "deployment",
+    description: "Set or update environment variables in a Railway service. Triggers redeploy.",
+    riskLevel: "high",
+    permissionsRequired: ["vault_required", "owner_approval_required", "dry_run_required"],
+    credentialProvider: "railway",
+    credentialKind: "token",
+    supportsDryRun: true,
+    requiresApproval: true,
+    requiresSafeBuild: false,
+    outputsSecretValues: false,
+  },
+  "railway.deploy.status": {
+    toolId: "railway.deploy.status",
+    label: "Railway: Check Deployment Status",
+    category: "deployment",
+    description: "Check the current status of a Railway deployment.",
+    riskLevel: "read_only",
+    permissionsRequired: ["vault_required"],
+    credentialProvider: "railway",
+    credentialKind: "token",
+    supportsDryRun: false,
+    requiresApproval: false,
+    requiresSafeBuild: false,
+    outputsSecretValues: false,
+  },
+  "railway.deploy.trigger": {
+    toolId: "railway.deploy.trigger",
+    label: "Railway: Trigger Deployment",
+    category: "deployment",
+    description: "Trigger a Railway deployment. Requires safe build gate and user approval.",
+    riskLevel: "destructive",
+    permissionsRequired: ["vault_required", "owner_approval_required", "dry_run_required", "safe_build_required"],
+    credentialProvider: "railway",
+    credentialKind: "token",
+    supportsDryRun: true,
+    requiresApproval: true,
+    requiresSafeBuild: true,
+    outputsSecretValues: false,
+  },
+  "stripe.products.read": {
+    toolId: "stripe.products.read",
+    label: "Stripe: Read Products & Prices",
+    category: "payments",
+    description: "Read product and price data from Stripe.",
+    riskLevel: "read_only",
+    permissionsRequired: ["vault_required"],
+    credentialProvider: "stripe",
+    credentialKind: "api_key",
+    supportsDryRun: false,
+    requiresApproval: false,
+    requiresSafeBuild: false,
+    outputsSecretValues: false,
+  },
+  "stripe.products.write": {
+    toolId: "stripe.products.write",
+    label: "Stripe: Create/Update Products",
+    category: "payments",
+    description: "Create or update products and prices in Stripe.",
+    riskLevel: "high",
+    permissionsRequired: ["vault_required", "owner_approval_required", "dry_run_required"],
+    credentialProvider: "stripe",
+    credentialKind: "api_key",
+    supportsDryRun: true,
+    requiresApproval: true,
+    requiresSafeBuild: false,
+    outputsSecretValues: false,
+  },
+  "stripe.webhook.verify": {
+    toolId: "stripe.webhook.verify",
+    label: "Stripe: Verify Webhook",
+    category: "payments",
+    description: "Verify a Stripe webhook signature. Read-only validation.",
+    riskLevel: "read_only",
+    permissionsRequired: ["vault_required"],
+    credentialProvider: "stripe",
+    credentialKind: "api_key",
+    supportsDryRun: false,
+    requiresApproval: false,
+    requiresSafeBuild: false,
+    outputsSecretValues: false,
+  },
+  "credits.ledger.read": {
+    toolId: "credits.ledger.read",
+    label: "Credits: Read Ledger",
+    category: "payments",
+    description: "Read credit balance and transaction history for a user.",
+    riskLevel: "read_only",
+    permissionsRequired: ["login_required"],
+    credentialProvider: null,
+    credentialKind: null,
+    supportsDryRun: false,
+    requiresApproval: false,
+    requiresSafeBuild: false,
+    outputsSecretValues: false,
+  },
+  "credits.ledger.write": {
+    toolId: "credits.ledger.write",
+    label: "Credits: Write Ledger",
+    category: "payments",
+    description: "Adjust credit balance. Admin only. Requires audit log.",
+    riskLevel: "destructive",
+    permissionsRequired: ["admin_required", "owner_approval_required"],
+    credentialProvider: null,
+    credentialKind: null,
+    supportsDryRun: true,
+    requiresApproval: true,
+    requiresSafeBuild: false,
+    outputsSecretValues: false,
+  },
+  "dns.records.read": {
+    toolId: "dns.records.read",
+    label: "DNS: Read Records",
+    category: "dns",
+    description: "Read DNS records for a domain.",
+    riskLevel: "read_only",
+    permissionsRequired: ["none"],
+    credentialProvider: null,
+    credentialKind: null,
+    supportsDryRun: false,
+    requiresApproval: false,
+    requiresSafeBuild: false,
+    outputsSecretValues: false,
+  },
+  "dns.records.write": {
+    toolId: "dns.records.write",
+    label: "DNS: Write Records",
+    category: "dns",
+    description: "Create or update DNS records. Shows exact changes before execute. Approval required.",
+    riskLevel: "high",
+    permissionsRequired: ["owner_approval_required", "dry_run_required"],
+    credentialProvider: null,
+    credentialKind: null,
+    supportsDryRun: true,
+    requiresApproval: true,
+    requiresSafeBuild: false,
+    outputsSecretValues: false,
+  },
+  "smtp.test": {
+    toolId: "smtp.test",
+    label: "SMTP: Send Test Email",
+    category: "email",
+    description: "Send a test email to verify SMTP configuration.",
+    riskLevel: "low",
+    permissionsRequired: ["vault_required"],
+    credentialProvider: "smtp",
+    credentialKind: "password",
+    supportsDryRun: true,
+    requiresApproval: false,
+    requiresSafeBuild: false,
+    outputsSecretValues: false,
+  },
+  "browser.open": {
+    toolId: "browser.open",
+    label: "Browser: Open URL",
+    category: "browser",
+    description: "Open a URL in the supervised browser operator.",
+    riskLevel: "low",
+    permissionsRequired: ["login_required"],
+    credentialProvider: null,
+    credentialKind: null,
+    supportsDryRun: true,
+    requiresApproval: false,
+    requiresSafeBuild: false,
+    outputsSecretValues: false,
+  },
+  "browser.authorized_action": {
+    toolId: "browser.authorized_action",
+    label: "Browser: Authorized Action",
+    category: "browser",
+    description: "Perform a supervised browser action (form submit, OAuth flow, etc.). User authorization required. Downloads quarantined.",
+    riskLevel: "high",
+    permissionsRequired: ["login_required", "owner_approval_required"],
+    credentialProvider: null,
+    credentialKind: null,
+    supportsDryRun: true,
+    requiresApproval: true,
+    requiresSafeBuild: false,
+    outputsSecretValues: false,
+  },
+  "build.safe_build": {
+    toolId: "build.safe_build",
+    label: "Build: Safe Build Gate",
+    category: "build",
+    description: "Run pnpm run safe-build: typecheck, API tests, API build, frontend build. Must pass before deploy.",
+    riskLevel: "read_only",
+    permissionsRequired: ["none"],
+    credentialProvider: null,
+    credentialKind: null,
+    supportsDryRun: false,
+    requiresApproval: false,
+    requiresSafeBuild: false,
+    outputsSecretValues: false,
+  },
+  "security.business_plan": {
+    toolId: "security.business_plan",
+    label: "Security: Business Security Plan",
+    category: "security",
+    description: "Generate a tailored security hardening plan for the project.",
+    riskLevel: "read_only",
+    permissionsRequired: ["none"],
+    credentialProvider: null,
+    credentialKind: null,
+    supportsDryRun: false,
+    requiresApproval: false,
+    requiresSafeBuild: false,
+    outputsSecretValues: false,
+  },
+  "security.malware_plan": {
+    toolId: "security.malware_plan",
+    label: "Security: Malware/Build Safety",
+    category: "security",
+    description: "Evaluate uploaded code and build artifacts for safety issues.",
+    riskLevel: "read_only",
+    permissionsRequired: ["none"],
+    credentialProvider: null,
+    credentialKind: null,
+    supportsDryRun: false,
+    requiresApproval: false,
+    requiresSafeBuild: false,
+    outputsSecretValues: false,
+  },
+  "vault.credential.status": {
+    toolId: "vault.credential.status",
+    label: "Vault: Credential Status",
+    category: "vault",
+    description: "Check whether a vault credential exists (metadata only, no raw value).",
+    riskLevel: "read_only",
+    permissionsRequired: ["login_required"],
+    credentialProvider: null,
+    credentialKind: null,
+    supportsDryRun: false,
+    requiresApproval: false,
+    requiresSafeBuild: false,
+    outputsSecretValues: false,
+  },
+  "vault.credential.use": {
+    toolId: "vault.credential.use",
+    label: "Vault: Use Credential (Server-Side)",
+    category: "vault",
+    description: "Resolve and use an encrypted credential server-side. Raw value never exposed to frontend or agents.",
+    riskLevel: "medium",
+    permissionsRequired: ["vault_required", "login_required"],
+    credentialProvider: null,
+    credentialKind: null,
+    supportsDryRun: false,
+    requiresApproval: false,
+    requiresSafeBuild: false,
+    outputsSecretValues: false,
+  },
+  "ai.custom.use": {
+    toolId: "ai.custom.use",
+    label: "AI: Use Custom BYOK Provider",
+    category: "ai",
+    description: "Route a task to a user-saved custom AI provider (BYOK). Credentials resolved server-side.",
+    riskLevel: "low",
+    permissionsRequired: ["vault_required"],
+    credentialProvider: "custom_ai",
+    credentialKind: "api_key",
+    supportsDryRun: false,
+    requiresApproval: false,
+    requiresSafeBuild: false,
+    outputsSecretValues: false,
+  },
+  "report.evidence.generate": {
+    toolId: "report.evidence.generate",
+    label: "Reports: Generate Evidence Report",
+    category: "reports",
+    description: "Generate a final evidence report for a completed task. No secrets included.",
+    riskLevel: "read_only",
+    permissionsRequired: ["login_required"],
+    credentialProvider: null,
+    credentialKind: null,
+    supportsDryRun: false,
+    requiresApproval: false,
+    requiresSafeBuild: false,
+    outputsSecretValues: false,
+  },
+};
+
+export function getToolById(toolId: string): ToolDefinition | undefined {
+  return TOOL_REGISTRY[toolId];
+}
+
+export function getAllTools(): ToolDefinition[] {
+  return Object.values(TOOL_REGISTRY);
+}
+
+export function getToolsByCategory(category: ToolCategory): ToolDefinition[] {
+  return getAllTools().filter((t) => t.category === category);
+}
+
+export const VALID_RISK_LEVELS: RiskLevel[] = ["read_only", "low", "medium", "high", "destructive"];
+export const TOOL_IDS = Object.keys(TOOL_REGISTRY);
