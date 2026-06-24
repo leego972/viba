@@ -151,17 +151,18 @@ export class ManusAdapter implements AgentAdapter {
   capabilities = ["research", "execution", "data_gathering", "analysis"];
   role: string;
   isMock = false;
-  canUseTools = true;
+  canUseTools: boolean;
 
   private apiKey: string;
   model: string;
 
-  constructor(id: string, name: string, role: string, apiKey: string, model?: string) {
+  constructor(id: string, name: string, role: string, apiKey: string, model?: string, canUseTools = true) {
     this.id = id;
     this.name = name;
     this.role = role;
     this.apiKey = apiKey;
     this.model = model ?? process.env["MANUS_MODEL"] ?? "manus-deep-research-1";
+    this.canUseTools = canUseTools;
   }
 
   async runTask(input: AgentTaskInput): Promise<AgentTaskResult> {

@@ -145,17 +145,18 @@ export class ReplitAdapter implements AgentAdapter {
   capabilities = ["build", "code", "deployment", "implementation"];
   role: string;
   isMock = false;
-  canUseTools = true;
+  canUseTools: boolean;
 
   private apiKey: string;
   model: string;
 
-  constructor(id: string, name: string, role: string, apiKey: string, model?: string) {
+  constructor(id: string, name: string, role: string, apiKey: string, model?: string, canUseTools = true) {
     this.id = id;
     this.name = name;
     this.role = role;
     this.apiKey = apiKey;
     this.model = model ?? process.env["REPLIT_MODEL"] ?? "replit-code-v1-3b";
+    this.canUseTools = canUseTools;
   }
 
   async runTask(input: AgentTaskInput): Promise<AgentTaskResult> {

@@ -289,7 +289,8 @@ function simulateToolOutputs(taskType: string, repoUrl?: string, branch?: string
 }
 
 abstract class ToolCapableMockAdapter extends MockAdapter {
-  canUseTools = true;
+  canUseTools: boolean;
+  constructor(canUseTools = true) { super(); this.canUseTools = canUseTools; }
 
   async runTask(input: AgentTaskInput): Promise<AgentTaskResult> {
     await delay(500 + Math.random() * 800);
@@ -478,7 +479,7 @@ export class ManusMockAdapter extends ToolCapableMockAdapter {
   id: string; name: string; provider = "manus"; model = "manus-deep-research-1 (sim)"; role: string;
   capabilities = ["research", "execution", "data_gathering", "analysis"];
 
-  constructor(id: string, name: string, role: string) { super(); this.id = id; this.name = name; this.role = role; }
+  constructor(id: string, name: string, role: string, canUseTools = true) { super(canUseTools); this.id = id; this.name = name; this.role = role; }
 
   generateResponse(input: AgentTaskInput): string {
     const goal = input.projectGoal;
@@ -586,7 +587,7 @@ export class ReplitMockAdapter extends ToolCapableMockAdapter {
   id: string; name: string; provider = "replit"; model = "replit-code-v1-3b (sim)"; role: string;
   capabilities = ["build", "code", "deployment", "implementation"];
 
-  constructor(id: string, name: string, role: string) { super(); this.id = id; this.name = name; this.role = role; }
+  constructor(id: string, name: string, role: string, canUseTools = true) { super(canUseTools); this.id = id; this.name = name; this.role = role; }
 
   generateResponse(input: AgentTaskInput): string {
     const goal = input.projectGoal;

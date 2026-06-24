@@ -36,34 +36,14 @@ function isValidKey(key: string | null): key is string {
   return typeof key === "string" && key.length > 10;
 }
 
-function envFlag(name: string): string | null {
-  const value = process.env[name];
-  return typeof value === "string" ? value.trim().toLowerCase() : null;
-}
-
-function liveProviderAllowed(provider: string): boolean {
-  if (envFlag("VIBA_LIVE_AGENTS_ENABLED") === "false") return false;
-  if (envFlag("VIBA_COST_SAFE_MODE") === "true") {
-    if (provider === "ollama" && envFlag("VIBA_ALLOW_OLLAMA_IN_SAFE_MODE") === "true") return true;
-    return false;
-  }
-
-  const allowList = process.env["VIBA_ALLOWED_LIVE_PROVIDERS"];
-  if (allowList && allowList.trim()) {
-    const allowed = new Set(allowList.split(",").map((item) => item.trim().toLowerCase()).filter(Boolean));
-    return allowed.has(provider);
-  }
-
-  return true;
-}
-
 export function buildMockAdapter(agent: Agent): AgentAdapter {
   const provider = agent.provider.toLowerCase();
   if (provider === "anthropic") return new ClaudeMockAdapter(String(agent.id), agent.name, agent.role);
   if (provider === "google") return new GeminiMockAdapter(String(agent.id), agent.name, agent.role);
   if (provider === "perplexity") return new PerplexityMockAdapter(String(agent.id), agent.name, agent.role);
-  if (provider === "replit") return new ReplitMockAdapter(String(agent.id), agent.name, agent.role);
-  if (provider === "manus") return new ManusMockAdapter(String(agent.id), agent.name, agent.role);
+  // Pass agent.canUseTools so simulation mode preserves the same handoff/capability semantics as live mode
+  if (provider === "replit") return new ReplitMockAdapter(String(agent.id), agent.name, agent.role, agent.canUseTools);
+  if (provider === "manus") return new ManusMockAdapter(String(agent.id), agent.name, agent.role, agent.canUseTools);
   if (provider === "railway") return new RailwayMockAdapter(String(agent.id), agent.name, agent.role);
   if (provider === "groq") return new GroqMockAdapter(String(agent.id), agent.name, agent.role);
   if (provider === "ollama") return new OllamaMockAdapter(String(agent.id), agent.name, agent.role);
@@ -72,11 +52,6 @@ export function buildMockAdapter(agent: Agent): AgentAdapter {
 
 export async function buildAdapter(agent: Agent): Promise<AgentAdapter> {
   const provider = agent.provider.toLowerCase();
-
-  if (!liveProviderAllowed(provider)) {
-    logger.warn({ provider }, "Live provider disabled by VIBA cost safety settings — using simulation mode");
-    return buildMockAdapter(agent);
-  }
 
   // Shared tool tokens — loaded once and reused across tool-capable adapters
   const [railwayToken, githubToken] = await Promise.all([
@@ -127,10 +102,10 @@ export async function buildAdapter(agent: Agent): Promise<AgentAdapter> {
   if (provider === "replit") {
     const apiKey = await getSetting("REPLIT_API_KEY") ?? process.env["REPLIT_API_KEY"] ?? "";
     if (isValidKey(apiKey)) {
-      return new ReplitAdapter(String(agent.id), agent.name, agent.role, apiKey);
+      return new ReplitAdapter(String(agent.id), agent.name, agent.role, apiKey, undefined, agent.canUseTools);
     }
     logger.warn({ provider }, "No Replit API key found — using simulation mode");
-    return new ReplitMockAdapter(String(agent.id), agent.name, agent.role);
+    return new ReplitMockAdapter(String(agent.id), agent.name, agent.role, agent.canUseTools);
   }
 
   if (provider === "groq") {
@@ -171,10 +146,10 @@ export async function buildAdapter(agent: Agent): Promise<AgentAdapter> {
   if (provider === "manus") {
     const apiKey = await getSetting("MANUS_API_KEY") ?? process.env["MANUS_API_KEY"] ?? "";
     if (isValidKey(apiKey)) {
-      return new ManusAdapter(String(agent.id), agent.name, agent.role, apiKey);
+      return new ManusAdapter(String(agent.id), agent.name, agent.role, apiKey, undefined, agent.canUseTools);
     }
     logger.warn({ provider }, "No Manus API key found — using simulation mode");
-    return new ManusMockAdapter(String(agent.id), agent.name, agent.role);
+    return new ManusMockAdapter(String(agent.id), agent.name, agent.role, agent.canUseTools);
   }
 
   logger.warn({ provider }, "Unknown provider — using simulation mode");
