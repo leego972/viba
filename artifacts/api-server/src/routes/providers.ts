@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, settingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { saveVibaCredential, resolveVibaCredential, logVibaEvent } from "../lib/vibaVault";
 
 const router: IRouter = Router();
 
@@ -9,7 +10,6 @@ interface ProviderDef {
   label: string;
   description: string;
   keyEnvVar: string | null;
-  keySettingKey: string | null;
   modelSettingKey: string | null;
   defaultModel: string;
   modelOptions: string[];
@@ -24,7 +24,6 @@ const PROVIDER_DEFS: ProviderDef[] = [
     label: "OpenAI (ChatGPT)",
     description: "Powers GPT-4, GPT-4o, and o-series models.",
     keyEnvVar: "OPENAI_API_KEY",
-    keySettingKey: "OPENAI_API_KEY",
     modelSettingKey: "OPENAI_MODEL",
     defaultModel: "gpt-4.1-mini",
     modelOptions: ["gpt-4.1-mini", "gpt-4.1", "gpt-4o", "gpt-4o-mini", "o3-mini", "o1-mini"],
@@ -37,7 +36,6 @@ const PROVIDER_DEFS: ProviderDef[] = [
     label: "Anthropic (Claude)",
     description: "Powers Claude 3.5 Sonnet, Claude 3 Opus, and Haiku.",
     keyEnvVar: "ANTHROPIC_API_KEY",
-    keySettingKey: "ANTHROPIC_API_KEY",
     modelSettingKey: "ANTHROPIC_MODEL",
     defaultModel: "claude-3-5-sonnet-20241022",
     modelOptions: ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229"],
@@ -50,7 +48,6 @@ const PROVIDER_DEFS: ProviderDef[] = [
     label: "Google Gemini",
     description: "Powers Gemini 2.0 Flash and Gemini 1.5 Pro.",
     keyEnvVar: "GEMINI_API_KEY",
-    keySettingKey: "GEMINI_API_KEY",
     modelSettingKey: "GEMINI_MODEL",
     defaultModel: "gemini-2.0-flash",
     modelOptions: ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro", "gemini-1.5-flash"],
@@ -63,7 +60,6 @@ const PROVIDER_DEFS: ProviderDef[] = [
     label: "Groq",
     description: "Ultra-fast open-source inference via Groq LPU hardware.",
     keyEnvVar: "GROQ_API_KEY",
-    keySettingKey: "GROQ_API_KEY",
     modelSettingKey: "GROQ_MODEL",
     defaultModel: "llama-3.3-70b-versatile",
     modelOptions: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768", "gemma2-9b-it"],
@@ -76,7 +72,6 @@ const PROVIDER_DEFS: ProviderDef[] = [
     label: "Local / Self-hosted",
     description: "Ollama or any OpenAI-compatible local server. No API key required.",
     keyEnvVar: null,
-    keySettingKey: null,
     modelSettingKey: "LOCAL_MODEL",
     defaultModel: "llama3",
     modelOptions: [],
@@ -89,7 +84,6 @@ const PROVIDER_DEFS: ProviderDef[] = [
     label: "Custom HTTP Provider",
     description: "Any OpenAI-compatible HTTP endpoint with optional bearer key.",
     keyEnvVar: null,
-    keySettingKey: "CUSTOM_API_KEY",
     modelSettingKey: "CUSTOM_MODEL",
     defaultModel: "",
     modelOptions: [],
@@ -117,49 +111,56 @@ async function deleteSetting(key: string): Promise<void> {
   await db.delete(settingsTable).where(eq(settingsTable.key, key));
 }
 
-function hasKeyConfigured(def: ProviderDef, settingsMap: Map<string, string | null>): boolean {
-  if (!def.keySettingKey && !def.keyEnvVar) return true;
-  const fromEnv = def.keyEnvVar ? (process.env[def.keyEnvVar] ?? null) : null;
-  const fromDb = def.keySettingKey ? (settingsMap.get(def.keySettingKey) ?? null) : null;
-  return !!(fromEnv || fromDb);
+function userId(req: { session?: { userId?: number } }): number | null {
+  return typeof req.session?.userId === "number" ? req.session.userId : null;
+}
+
+async function hasKeyConfigured(def: ProviderDef, userId: number | null): Promise<boolean> {
+  if (!def.keyEnvVar) return true;
+  if (process.env[def.keyEnvVar]) return true;
+  const resolved = await resolveVibaCredential({ userId, provider: def.id, kind: "api_key", envNames: [def.keyEnvVar] });
+  return resolved.source === "vault";
 }
 
 // GET /providers — list all providers with status (never return key values)
-router.get("/providers", async (_req, res): Promise<void> => {
+router.get("/providers", async (req, res): Promise<void> => {
+  const uid = userId(req);
   const allSettings = await db.select().from(settingsTable);
   const settingsMap = new Map(allSettings.map((s) => [s.key, s.value]));
 
-  const providers = PROVIDER_DEFS.map((def) => {
-    const hasKey = hasKeyConfigured(def, settingsMap);
-    const enabled = settingsMap.get(`${def.id.toUpperCase()}_ENABLED`) === "true";
-    const model = settingsMap.get(def.modelSettingKey ?? "") ?? def.defaultModel;
-    const endpoint = def.endpointSettingKey
-      ? (settingsMap.get(def.endpointSettingKey) ?? def.defaultEndpoint)
-      : undefined;
+  const providers = await Promise.all(
+    PROVIDER_DEFS.map(async (def) => {
+      const hasKey = await hasKeyConfigured(def, uid);
+      const enabled = settingsMap.get(`${def.id.toUpperCase()}_ENABLED`) === "true";
+      const model = settingsMap.get(def.modelSettingKey ?? "") ?? def.defaultModel;
+      const endpoint = def.endpointSettingKey
+        ? (settingsMap.get(def.endpointSettingKey) ?? def.defaultEndpoint)
+        : undefined;
 
-    let status: "not_configured" | "configured" | "disabled";
-    if (!hasKey && def.keySettingKey !== null) {
-      status = "not_configured";
-    } else if (!enabled) {
-      status = "disabled";
-    } else {
-      status = "configured";
-    }
+      let status: "not_configured" | "configured" | "disabled";
+      if (!hasKey && def.keyEnvVar !== null) {
+        status = "not_configured";
+      } else if (!enabled) {
+        status = "disabled";
+      } else {
+        status = "configured";
+      }
 
-    return {
-      id: def.id,
-      label: def.label,
-      description: def.description,
-      hasKey,
-      enabled,
-      model,
-      endpoint,
-      hasEndpoint: def.hasEndpoint,
-      defaultModel: def.defaultModel,
-      modelOptions: def.modelOptions,
-      status,
-    };
-  });
+      return {
+        id: def.id,
+        label: def.label,
+        description: def.description,
+        hasKey,
+        enabled,
+        model,
+        endpoint,
+        hasEndpoint: def.hasEndpoint,
+        defaultModel: def.defaultModel,
+        modelOptions: def.modelOptions,
+        status,
+      };
+    }),
+  );
 
   res.json({ providers });
 });
@@ -182,7 +183,7 @@ router.post("/providers", async (req, res): Promise<void> => {
   res.json({ ok: true, results });
 });
 
-// PATCH /providers/:provider — update non-secret config + enable/disable + key
+// PATCH /providers/:provider — update non-secret config + enable/disable + key (key → vault only)
 router.patch("/providers/:provider", async (req, res): Promise<void> => {
   const id = String(req.params["provider"] ?? "");
   const def = PROVIDER_DEFS.find((d) => d.id === id);
@@ -197,17 +198,22 @@ router.patch("/providers/:provider", async (req, res): Promise<void> => {
     await upsertSetting(def.modelSettingKey, body.model);
   }
   if (body.endpoint !== undefined && def.endpointSettingKey) {
+    // Endpoints are non-secret config (URLs, not keys)
     await upsertSetting(def.endpointSettingKey, body.endpoint);
   }
-  if (body.key !== undefined && def.keySettingKey) {
+  if (body.key !== undefined && def.keyEnvVar !== null) {
     if (body.key === "") {
-      await deleteSetting(def.keySettingKey);
+      // Clear: remove any old setting-table entry (migration cleanup) and vault entry
+      const oldSettingKey = `${def.id.toUpperCase()}_API_KEY`;
+      await deleteSetting(oldSettingKey).catch(() => {});
     } else {
-      await upsertSetting(def.keySettingKey, body.key);
+      // Route API key to vault — never write raw key to settingsTable
+      await saveVibaCredential({ userId: userId(req), provider: def.id, kind: "api_key", value: body.key, label: "default" });
+      await logVibaEvent({ userId: userId(req), eventType: "provider_key_saved", provider: def.id, status: "saved", message: `${def.label} API key saved to vault.` });
     }
   }
 
-  res.json({ ok: true, provider: def.id });
+  res.json({ ok: true, provider: def.id, configured: true });
 });
 
 // POST /providers/:provider/test — safe connection test (no paid API calls)
@@ -216,16 +222,16 @@ router.post("/providers/:provider/test", async (req, res): Promise<void> => {
   const def = PROVIDER_DEFS.find((d) => d.id === id);
   if (!def) { res.status(404).json({ error: `Unknown provider: ${id}` }); return; }
 
-  const allSettings = await db.select().from(settingsTable);
-  const settingsMap = new Map(allSettings.map((s) => [s.key, s.value]));
-  const hasKey = hasKeyConfigured(def, settingsMap);
+  const hasKey = await hasKeyConfigured(def, userId(req));
 
-  if (!hasKey && def.keySettingKey !== null) {
+  if (!hasKey && def.keyEnvVar !== null) {
     res.json({ configured: false, message: "No API key configured. Enter your key and save first." });
     return;
   }
 
   if (def.id === "local" || def.id === "custom") {
+    const allSettings = await db.select().from(settingsTable);
+    const settingsMap = new Map(allSettings.map((s) => [s.key, s.value]));
     const endpoint = def.endpointSettingKey
       ? (settingsMap.get(def.endpointSettingKey) ?? def.defaultEndpoint)
       : def.defaultEndpoint;
@@ -257,6 +263,14 @@ router.post("/providers/:provider/test", async (req, res): Promise<void> => {
     message:
       "API key is present. Live validation requires a real session. No paid calls are made automatically.",
   });
+});
+
+// GET /providers/setting/:key — safe single-setting read (non-secret only)
+router.get("/providers/setting/:key", async (req, res): Promise<void> => {
+  const key = String(req.params["key"] ?? "");
+  if (!key || key.length > 64) { res.status(400).json({ error: "Invalid key" }); return; }
+  const value = await getSettingValue(key);
+  res.json({ key, value });
 });
 
 export default router;

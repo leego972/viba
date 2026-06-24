@@ -485,4 +485,27 @@ router.put("/config", requireConfirmation, async (req, res): Promise<void> => {
   res.json({ ok: true, updated: entries.length });
 });
 
+// ─── GET /api/admin/credentials ──────────────────────────────────────────────
+// Aggregate credential status for all users — metadata only, never raw values.
+router.get("/credentials", async (_req, res): Promise<void> => {
+  const { pool } = await import("@workspace/db");
+  const { rows } = await pool.query<{
+    user_id: number; provider: string; kind: string; label: string;
+    status: string; last_used_at: string | null; updated_at: string | null; expired: boolean;
+  }>(
+    `SELECT user_id, provider, kind, label, status,
+            last_used_at, updated_at,
+            (expires_at IS NOT NULL AND expires_at < NOW()) AS expired
+       FROM viba_credentials
+      ORDER BY user_id ASC, provider ASC, kind ASC
+      LIMIT 1000`,
+  );
+  res.json({
+    credentials: rows,
+    count: rows.length,
+    rawValueReturned: false,
+    note: "encrypted_value, iv, auth_tag are never included in admin responses.",
+  });
+});
+
 export default router;

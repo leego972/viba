@@ -26,6 +26,9 @@ import doctorRouter from "./doctor";
 import marketCompletionRouter from "./marketCompletion";
 import assistedBrowserRouter from "./assistedBrowser";
 import railwayConnectorRouter from "./railwayConnector";
+import customAiCredentialsRouter from "./customAiCredentials";
+import businessSecurityRouter from "./businessSecurity";
+import agentCommsConsoleRouter from "./agentCommsConsole";
 
 const router: IRouter = Router();
 
@@ -57,5 +60,8 @@ router.use(doctorRouter);
 router.use(marketCompletionRouter);
 router.use(assistedBrowserRouter);
 router.use(railwayConnectorRouter);
+router.use(customAiCredentialsRouter);
+router.use(businessSecurityRouter);
+router.use(agentCommsConsoleRouter);
 
 export default router;
