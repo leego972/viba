@@ -1,14 +1,23 @@
 import { Link, useLocation } from "wouter";
-import { Settings, FlaskConical, CreditCard, Zap, LayoutDashboard, Radio, Plus, Stethoscope } from "lucide-react";
-import { CreditBalancePill } from "@/components/CreditBalancePill";
+import { Button } from "@/components/ui/button";
+import { Settings, FlaskConical, CreditCard, Zap, LayoutDashboard, Radio, Plus, Cpu, Rocket } from "lucide-react";
 
-const NAV_LINKS = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, match: (l: string) => l.startsWith("/dashboard") || l.startsWith("/sessions") },
-  { href: "/doctor",    label: "Doctor",    icon: Stethoscope,     match: (l: string) => l.startsWith("/doctor") },
-  { href: "/workbench", label: "Workbench",  icon: FlaskConical,    match: (l: string) => l.startsWith("/workbench") },
-  { href: "/bridge",    label: "Bridge",    icon: Radio,            match: (l: string) => l.startsWith("/bridge") },
-  { href: "/billing",   label: "Billing",   icon: CreditCard,       match: (l: string) => l.startsWith("/billing") || l.startsWith("/pricing") },
-  { href: "/settings",  label: "Settings",  icon: Settings,         match: (l: string) => l === "/settings" },
+interface NavLink {
+  href: string;
+  label: string;
+  icon: React.ElementType;
+  match: (l: string) => boolean;
+  desktopOnly?: boolean;
+}
+
+const NAV_LINKS: NavLink[] = [
+  { href: "/dashboard",        label: "Dashboard",    icon: LayoutDashboard, match: (l) => l.startsWith("/dashboard") || l.startsWith("/sessions") },
+  { href: "/workbench",        label: "Workbench",    icon: FlaskConical,    match: (l) => l.startsWith("/workbench") },
+  { href: "/providers",        label: "AI Providers", icon: Cpu,             match: (l) => l.startsWith("/providers") || l.startsWith("/doctor") },
+  { href: "/bridge",           label: "Bridge",       icon: Radio,           match: (l) => l.startsWith("/bridge") },
+  { href: "/billing",          label: "Billing",      icon: CreditCard,      match: (l) => l.startsWith("/billing") || l.startsWith("/pricing") },
+  { href: "/settings",         label: "Settings",     icon: Settings,        match: (l) => l === "/settings" },
+  { href: "/market-readiness", label: "Launch",       icon: Rocket,          match: (l) => l.startsWith("/market-readiness"), desktopOnly: true },
 ];
 
 export function Navbar() {
@@ -59,9 +68,9 @@ export function Navbar() {
           })}
         </nav>
 
-        {/* Mobile nav */}
+        {/* Mobile nav — show only first 5 links (no desktopOnly) */}
         <nav className="flex md:hidden items-center gap-1 flex-1">
-          {NAV_LINKS.map(({ href, icon: Icon, match }) => {
+          {NAV_LINKS.filter((l) => !l.desktopOnly).slice(0, 5).map(({ href, icon: Icon, match }) => {
             const active = match(location);
             return (
               <Link key={href} href={href}>
@@ -78,9 +87,6 @@ export function Navbar() {
             );
           })}
         </nav>
-
-        <CreditBalancePill className="hidden lg:inline-flex" />
-        <CreditBalancePill compact className="hidden sm:inline-flex lg:hidden" />
 
         {/* New Session CTA */}
         <Link href="/sessions/new" className="shrink-0">

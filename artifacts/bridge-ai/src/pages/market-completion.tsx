@@ -1,171 +1,375 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useParams } from "wouter";
+export { default as DemoPage } from "./demo";
+export { default as DemoDoctorReport } from "./demo-doctor-report";
+export { default as DemoProofReport } from "./demo-proof-report";
+
+import { useState, useEffect } from "react";
+import { useRoute, useLocation, Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckCircle2, GitBranch, Network, PlayCircle, RefreshCcw, Rocket, ShieldCheck, Wrench, XCircle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  Zap, Clock, ArrowLeft, ExternalLink, RefreshCw, AlertTriangle, Info,
+  CheckCircle2, GitBranch, Shield, FileText, ChevronLeft,
+} from "lucide-react";
 
-type ApiState<T> = { loading: boolean; data: T | null; error: string | null };
-
-type ProviderRow = {
-  id: string;
-  name: string;
-  model: string;
-  endpoint: string;
-  enabled: boolean;
-  hasKey: boolean;
-  keySource: string;
-  supportsEndpoint: boolean;
+const ROUTE_META: Record<string, { label: string; description: string; eta: string }> = {
+  "/connectors":            { label: "Connectors",             description: "Connect Slack, GitHub, Notion, Jira, and more directly into agent sessions.",                    eta: "Q3 2026" },
+  "/self-audit":            { label: "Self-Audit",             description: "Full automated audit of your VIBA instance — schema, settings, API health, security posture.",   eta: "Q3 2026" },
+  "/crews":                 { label: "Crews",                  description: "Pre-built agent crews: code review, market research, competitive analysis, and more.",            eta: "Q3 2026" },
+  "/production-smoke-test": { label: "Production Smoke Test",  description: "One-click smoke test: checks all providers, DB, email, and webhooks against your live env.",     eta: "Q3 2026" },
+  "/mobile-readiness":      { label: "Mobile Readiness",       description: "Analyse responsive breakpoints, PWA manifest, touch targets, and performance budgets.",          eta: "Q4 2026" },
+  "/team":                  { label: "Team",                   description: "Invite team members, assign roles, manage shared API quotas across your organisation.",           eta: "Q4 2026" },
+  "/usage":                 { label: "Usage",                  description: "Detailed provider analytics: token counts, costs per session, model distribution, trends.",       eta: "Q3 2026" },
+  "/recovery":              { label: "Recovery",               description: "Restore sessions, roll back failed deployments, and recover from agent errors.",                  eta: "Q4 2026" },
+  "/doctor/trends":         { label: "Doctor Trends",          description: "Long-term health score trends across all your scanned repositories.",                            eta: "Q3 2026" },
+  "/clients":               { label: "Clients",                description: "Multi-tenant client management — separate quota and audit trails per client.",                    eta: "Q4 2026" },
+  "/security-evidence":     { label: "Security Evidence",      description: "Generate a security posture report: OWASP coverage, secret scan, dependency audit, CSP.",        eta: "Q3 2026" },
+  "/reports/compare":       { label: "Report Comparison",      description: "Side-by-side comparison of two scan reports to track health improvements over time.",             eta: "Q3 2026" },
+  "/market-readiness":      { label: "Market Readiness",       description: "Real-time market readiness dashboard — feature completion, provider health, launch checklist.",  eta: "Live"    },
 };
 
-const pageMeta: Record<string, { title: string; subtitle: string; badges?: string[] }> = {
-  "/providers": { title: "Provider / model centre", subtitle: "Configure models without enabling live paid execution by default.", badges: ["approval gated", "fail closed", "no key values shown"] },
-  "/connectors": { title: "Tool connector registry", subtitle: "See which external tools are connected and what each one is allowed to do.", badges: ["capability map", "no secrets"] },
-  "/self-audit": { title: "VIBA self-audit", subtitle: "Run VIBA's own pre-market self-check and produce a launch recommendation.", badges: ["dogfood", "no deploy"] },
-  "/production-smoke-test": { title: "Production smoke test", subtitle: "Run the final deployment readiness checks after env vars and Railway deploy.", badges: ["safe", "read-only"] },
-  "/mobile-readiness": { title: "Mobile readiness", subtitle: "Browser-local checklist for iPhone, Android, and touch layout parity.", badges: ["local only"] },
-  "/team": { title: "Team and permissions", subtitle: "Role model for owner, admin, builder, billing, viewer, and client access.", badges: ["roles", "invite gated"] },
-  "/usage": { title: "Usage analytics", subtitle: "Credits, receipts, budget hits, and session usage summary.", badges: ["cost control"] },
-  "/recovery": { title: "Failure recovery centre", subtitle: "Find paused sessions, blocked tasks, and budget-cap interruptions.", badges: ["next action"] },
-  "/doctor/trends": { title: "Doctor trends", subtitle: "Track health scores and repeated finding areas across scans.", badges: ["history"] },
-  "/clients": { title: "Client / agency mode", subtitle: "Create clients and prepare client-safe report workspaces.", badges: ["agency"] },
-  "/security-evidence": { title: "Security evidence pack", subtitle: "Generate buyer-facing evidence from VIBA's safety controls.", badges: ["trust"] },
-  "/reports/compare": { title: "Report comparison", subtitle: "Compare Doctor reports and show score movement.", badges: ["before/after"] },
-  "/market-readiness": { title: "Market readiness", subtitle: "Owner command centre for launch readiness across env, demo, reports, smoke test, and self-audit.", badges: ["launch"] },
-  "/crews": { title: "Specialist crew builder", subtitle: "Choose a prebuilt AI crew and start a supervised session.", badges: ["crew templates"] },
-};
-
-const demoTimeline = [
-  "Planner splits the website repair into deployment, UX, and proof-report tasks.",
-  "Doctor checks repo structure, env gaps, health endpoint, and CI gates.",
-  "Railway Agent flags a missing runtime variable and healthcheck risk.",
-  "Repair Agent creates a proposal instead of silently mutating production.",
-  "Owner approves safe branch/PR work, then CI verifies the fix.",
-  "Proof report is exported for the client as evidence of the work done.",
-];
-
-const mobileChecks = ["iPhone Safari layout", "Android layout", "Dashboard", "Sessions", "Doctor", "Reports", "Providers", "Connectors", "Demo", "Touch targets", "Sticky footer/header", "No horizontal overflow"];
-
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`/api${path}`, { headers: { "Content-Type": "application/json" }, ...init });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || data.message || `HTTP ${response.status}`);
-  return data as T;
-}
-
-function StatusBadge({ ok, label }: { ok: boolean; label: string }) {
-  return <Badge variant="outline" className="gap-1">{ok ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}{label}</Badge>;
-}
-
-function PageFrame({ children, publicPage = false }: { children: React.ReactNode; publicPage?: boolean }) {
-  if (publicPage) return <div className="min-h-screen bg-background px-4 py-8 text-foreground"><div className="mx-auto max-w-6xl">{children}</div></div>;
-  return <AppLayout><div className="mx-auto flex w-full max-w-6xl flex-col gap-6">{children}</div></AppLayout>;
-}
-
-function Header({ title, subtitle, badges = [] }: { title: string; subtitle: string; badges?: string[] }) {
-  return <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><h1 className="text-3xl font-semibold tracking-tight">{title}</h1><p className="mt-2 max-w-3xl text-sm text-muted-foreground">{subtitle}</p></div><div className="flex flex-wrap gap-2">{badges.map((badge) => <Badge key={badge} variant="outline">{badge}</Badge>)}</div></div>;
-}
-
-function Grid({ children }: { children: React.ReactNode }) {
-  return <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{children}</div>;
-}
-
-function InfoCard({ title, detail, icon }: { title: string; detail: string; icon?: React.ReactNode }) {
-  return <Card className="border-border/70 shadow-sm"><CardHeader><CardTitle className="flex items-center gap-2 text-base">{icon}{title}</CardTitle></CardHeader><CardContent><p className="text-sm text-muted-foreground">{detail}</p></CardContent></Card>;
-}
-
-export function DemoPage() {
-  return <PageFrame publicPage><Header title="VIBA demo" subtitle="Sample data showing how VIBA diagnoses, coordinates, repairs, and proves work before you connect a real project." badges={["sample data", "no paid providers", "no signup required"]} /><div className="mt-8 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]"><Card><CardHeader><CardTitle>What VIBA does</CardTitle></CardHeader><CardContent className="space-y-3 text-sm text-muted-foreground"><p>VIBA acts as an AI project controller: it decomposes work, assigns specialist agents, tracks approvals, controls credit spend, diagnoses repo/deployment health, and produces proof reports.</p><div className="flex flex-wrap gap-2"><Link href="/demo/doctor-report"><Button>Sample Doctor report</Button></Link><Link href="/demo/proof-report"><Button variant="outline">Sample proof report</Button></Link><Link href="/signup"><Button variant="ghost">Create account</Button></Link></div></CardContent></Card><Card><CardHeader><CardTitle>Sample collaboration timeline</CardTitle></CardHeader><CardContent className="space-y-3">{demoTimeline.map((item, index) => <div key={item} className="rounded-lg border p-3 text-sm"><span className="mr-2 text-muted-foreground">{index + 1}.</span>{item}</div>)}</CardContent></Card></div></PageFrame>;
-}
-
-export function DemoDoctorReport() {
-  const findings = ["Missing PUBLIC_ORIGIN in production", "Health endpoint returned warning", "Proof trail incomplete before VIBA", "Safe repair PR available for docs/config notes"];
-  return <PageFrame publicPage><Header title="Sample Doctor report" subtitle="Static report for demo-company/landing-site. This is demo data, not a real security guarantee." badges={["sample", "doctor"]} /><Grid>{findings.map((finding) => <InfoCard key={finding} title={finding} detail="VIBA classifies severity, source, owner action, repairability, and whether manual config is required." icon={<ShieldCheck className="h-4 w-4" />} />)}</Grid><div className="mt-6"><Link href="/demo"><Button variant="outline">Back to demo</Button></Link></div></PageFrame>;
-}
-
-export function DemoProofReport() {
-  return <PageFrame publicPage><Header title="Sample proof report" subtitle="Client-safe evidence view showing completed tasks, approvals, receipts, and final risks." badges={["sample", "client-safe"]} /><Grid><InfoCard title="Tasks recorded" detail="8 task records, 7 complete, 1 manual follow-up." /><InfoCard title="Approvals" detail="Owner approved repair proposal before any branch work." /><InfoCard title="Receipts" detail="Credit reservations are shown without exposing provider secrets." /><InfoCard title="Export options" detail="JSON, Markdown, print, and share links are available in authenticated reports." /></Grid><div className="mt-6"><Link href="/demo"><Button variant="outline">Back to demo</Button></Link></div></PageFrame>;
-}
+// ── CompletionPage (default export) ────────────────────────────────────────────
 
 export default function CompletionPage() {
   const [location] = useLocation();
-  const meta = pageMeta[location] ?? { title: "VIBA completion", subtitle: "Market-ready command surface.", badges: [] };
-  if (location === "/providers") return <ProvidersPage />;
-  if (location === "/self-audit") return <SelfAuditPage />;
-  if (location === "/connectors") return <ConnectorsPage />;
-  if (location === "/crews") return <CrewsPage />;
-  if (location === "/usage") return <UsagePage />;
-  if (location === "/mobile-readiness") return <MobileReadinessPage />;
-  return <GenericApiPage meta={meta} location={location} />;
+  const meta = ROUTE_META[location] ?? { label: "Coming Soon", description: "This feature is under active development.", eta: "TBD" };
+  const isLive = meta.eta === "Live";
+
+  return (
+    <AppLayout>
+      <div className="max-w-2xl mx-auto px-4 py-16 space-y-10">
+        <Link href="/dashboard">
+          <button className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <ArrowLeft className="h-3.5 w-3.5" /> Dashboard
+          </button>
+        </Link>
+
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+              {isLive ? <Zap className="h-5 w-5 text-primary" /> : <Clock className="h-5 w-5 text-primary" />}
+            </div>
+            <div>
+              <h1 className="text-2xl font-semibold">{meta.label}</h1>
+              <Badge className={`text-xs mt-0.5 ${isLive ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25" : "bg-primary/10 text-primary border-primary/25"}`}>
+                {isLive ? "Live" : `ETA ${meta.eta}`}
+              </Badge>
+            </div>
+          </div>
+          <p className="text-muted-foreground leading-relaxed">{meta.description}</p>
+        </div>
+
+        {isLive ? (
+          <MarketReadinessWidget />
+        ) : (
+          <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-6 space-y-4">
+            <h2 className="text-sm font-medium text-foreground/70">Available now</h2>
+            {[
+              { href: "/providers", label: "AI Providers",   desc: "Configure provider keys and models." },
+              { href: "/doctor",    label: "Project Doctor", desc: "Scan repos, generate repair PRs." },
+              { href: "/dashboard", label: "Sessions",       desc: "Multi-agent collaboration sessions." },
+            ].map(({ href, label, desc }) => (
+              <Link key={href} href={href}>
+                <div className="group flex items-center gap-3 rounded-lg border border-white/[0.07] bg-white/[0.02] hover:border-primary/25 hover:bg-primary/5 px-4 py-3 cursor-pointer transition-all">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">{label}</p>
+                    <p className="text-xs text-muted-foreground">{desc}</p>
+                  </div>
+                  <ExternalLink className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+    </AppLayout>
+  );
 }
 
-function useApi<T>(path: string | null): ApiState<T> {
-  const [state, setState] = useState<ApiState<T>>({ loading: Boolean(path), data: null, error: null });
-  useEffect(() => { if (!path) return; setState({ loading: true, data: null, error: null }); api<T>(path).then((data) => setState({ loading: false, data, error: null })).catch((error) => setState({ loading: false, data: null, error: error.message })); }, [path]);
-  return state;
+// ── MarketReadinessWidget ───────────────────────────────────────────────────────
+
+interface ReadinessFeature { id: string; label: string; status: "ready" | "needs_config" | "pending" }
+interface ReadinessData {
+  score: number;
+  features: ReadinessFeature[];
+  stats: { totalSessions: number; activeSessions: number; errorsToday: number; configuredProviders: number };
+  generatedAt: string;
 }
 
-function ProvidersPage() {
-  const state = useApi<{ providers: ProviderRow[] }>("/providers");
-  return <PageFrame><Header title="Provider / model centre" subtitle="Configure models while keeping live provider execution off by default." badges={["approval required", "fail closed"]} />{state.error && <p className="text-sm text-destructive">{state.error}</p>}<Grid>{(state.data?.providers ?? []).map((provider) => <Card key={provider.id}><CardHeader><CardTitle className="flex items-center justify-between text-base"><span>{provider.name}</span><StatusBadge ok={provider.hasKey || provider.id === "local"} label={provider.hasKey ? "configured" : "not configured"} /></CardTitle></CardHeader><CardContent className="space-y-3 text-sm"><p className="text-muted-foreground">Model: {provider.model}</p>{provider.supportsEndpoint && <p className="text-muted-foreground">Endpoint: {provider.endpoint || "not set"}</p>}<p className="text-muted-foreground">Live execution: off by default. Session approval and budget cap required.</p><Button size="sm" variant="outline" onClick={() => api(`/providers/${provider.id}/test`, { method: "POST", body: JSON.stringify({ endpoint: provider.endpoint }) }).then(() => alert("Provider check completed")).catch((error) => alert(error.message))}>Test configuration</Button></CardContent></Card>)}</Grid></PageFrame>;
+function MarketReadinessWidget() {
+  const [data, setData] = useState<ReadinessData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/market-readiness", { credentials: "include" })
+      .then((r) => r.json() as Promise<ReadinessData & { error?: string }>)
+      .then((d) => { if (d.error) throw new Error(d.error); setData(d); })
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="flex justify-center py-8"><RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
+  if (error || !data) return <div className="text-sm text-red-400 flex items-center gap-2"><AlertTriangle className="h-4 w-4" />{error ?? "No data"}</div>;
+
+  const scoreColor = data.score >= 80 ? "text-emerald-400" : data.score >= 50 ? "text-amber-400" : "text-red-400";
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-6 py-5 flex items-center gap-8">
+        <div>
+          <p className="text-xs text-muted-foreground mb-1">Readiness Score</p>
+          <p className={`text-4xl font-bold ${scoreColor}`}>{data.score}<span className="text-sm font-normal text-muted-foreground">/100</span></p>
+        </div>
+        <div className="grid grid-cols-2 gap-4 flex-1">
+          <div><p className="text-xs text-muted-foreground">Sessions</p><p className="font-semibold">{data.stats.totalSessions}</p></div>
+          <div><p className="text-xs text-muted-foreground">Active</p><p className="font-semibold">{data.stats.activeSessions}</p></div>
+          <div><p className="text-xs text-muted-foreground">Providers</p><p className="font-semibold">{data.stats.configuredProviders}</p></div>
+          <div><p className="text-xs text-muted-foreground">Errors today</p><p className={`font-semibold ${data.stats.errorsToday > 0 ? "text-amber-400" : "text-emerald-400"}`}>{data.stats.errorsToday}</p></div>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium">Launch Checklist</h3>
+        {data.features.map((f) => (
+          <div key={f.id} className="flex items-center gap-3 rounded-lg border border-white/[0.06] bg-white/[0.02] px-4 py-2.5">
+            {f.status === "ready"        ? <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+           : f.status === "needs_config" ? <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
+           :                               <Info className="h-4 w-4 text-zinc-500 shrink-0" />}
+            <span className="text-sm">{f.label}</span>
+            <Badge className={`ml-auto text-[11px] ${
+              f.status === "ready"        ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
+            : f.status === "needs_config" ? "bg-amber-500/10 text-amber-400 border-amber-500/25"
+            :                               "bg-zinc-500/10 text-zinc-400 border-zinc-500/25"}`}>
+              {f.status === "ready" ? "Ready" : f.status === "needs_config" ? "Needs config" : "Pending"}
+            </Badge>
+          </div>
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground">Generated {new Date(data.generatedAt).toLocaleTimeString()}</p>
+    </div>
+  );
 }
 
-function ConnectorsPage() {
-  const state = useApi<{ connectors: Array<{ id: string; name: string; connected: boolean; capabilities: string[] }> }>("/connectors/status");
-  return <PageFrame><Header title="Tool connector registry" subtitle="Connected tools and their allowed capabilities." badges={["no secret values"]} /><Grid>{(state.data?.connectors ?? []).map((connector) => <Card key={connector.id}><CardHeader><CardTitle className="flex items-center justify-between text-base"><span>{connector.name}</span><StatusBadge ok={connector.connected} label={connector.connected ? "connected" : "missing"} /></CardTitle></CardHeader><CardContent><div className="flex flex-wrap gap-2">{connector.capabilities.map((cap) => <Badge key={cap} variant="outline">{cap}</Badge>)}</div></CardContent></Card>)}</Grid></PageFrame>;
-}
+// ── SessionTimelinePage ─────────────────────────────────────────────────────────
 
-function SelfAuditPage() {
-  const [result, setResult] = useState<any>(null);
-  const [busy, setBusy] = useState(false);
-  return <PageFrame><Header title="VIBA self-audit" subtitle="Run a local-safe self-audit without deployment or paid providers." badges={["dogfood", "safe"]} /><Card><CardContent className="space-y-4 py-5"><Button disabled={busy} onClick={() => { setBusy(true); api("/self-audit/run", { method: "POST", body: JSON.stringify({}) }).then(setResult).finally(() => setBusy(false)); }}><RefreshCcw className="mr-2 h-4 w-4" />Run VIBA Self-Audit</Button>{result && <pre className="max-h-[420px] overflow-auto rounded-lg bg-muted p-4 text-xs">{JSON.stringify(result, null, 2)}</pre>}</CardContent></Card></PageFrame>;
-}
-
-function CrewsPage() {
-  const state = useApi<{ crews: Array<{ id: string; name: string; estimatedCredits: number; agents: string[]; requiredConnectors: string[] }> }>("/crews");
-  return <PageFrame><Header title="Specialist crew builder" subtitle="Prebuilt specialist crews for common VIBA jobs." badges={["templates"]} /><Grid>{(state.data?.crews ?? []).map((crew) => <Card key={crew.id}><CardHeader><CardTitle className="text-base">{crew.name}</CardTitle></CardHeader><CardContent className="space-y-3"><p className="text-sm text-muted-foreground">Estimated credits: {crew.estimatedCredits}</p><div className="flex flex-wrap gap-2">{crew.agents.map((agent) => <Badge key={agent} variant="outline">{agent}</Badge>)}</div><Button size="sm" onClick={() => api(`/crews/${crew.id}/start-session`, { method: "POST", body: JSON.stringify({}) }).then((data: any) => alert(`Session created: ${data.sessionId}`)).catch((error) => alert(error.message))}>Create session</Button></CardContent></Card>)}</Grid></PageFrame>;
-}
-
-function UsagePage() {
-  const state = useApi<any>("/usage/summary");
-  return <PageFrame><Header title="Usage analytics" subtitle="Credit receipts, budget hits, and export controls." badges={["cost control"]} /><Grid><InfoCard title="Credit receipts" detail={`${state.data?.receipts?.count ?? 0} receipts recorded.`} /><InfoCard title="Credits reserved" detail={`${state.data?.receipts?.credits ?? 0} credits reserved.`} /><InfoCard title="Budget cap hits" detail={`${state.data?.budgetCapHits ?? 0} budget cap events.`} /></Grid><a href="/api/usage/export.csv"><Button className="mt-4" variant="outline">Export CSV</Button></a></PageFrame>;
-}
-
-function MobileReadinessPage() {
-  const [checks, setChecks] = useState<Record<string, boolean>>(() => JSON.parse(localStorage.getItem("viba_mobile_readiness") || "{}"));
-  useEffect(() => localStorage.setItem("viba_mobile_readiness", JSON.stringify(checks)), [checks]);
-  return <PageFrame><Header title="Mobile readiness" subtitle="Local mobile parity checklist." badges={["browser local"]} /><Grid>{mobileChecks.map((item) => <button key={item} className="rounded-xl border p-4 text-left" onClick={() => setChecks((current) => ({ ...current, [item]: !current[item] }))}>{checks[item] ? <CheckCircle2 className="mb-2 h-5 w-5 text-emerald-400" /> : <XCircle className="mb-2 h-5 w-5 text-muted-foreground" />}<span className="text-sm font-medium">{item}</span></button>)}</Grid></PageFrame>;
-}
-
-function GenericApiPage({ meta, location }: { meta: { title: string; subtitle: string; badges?: string[] }; location: string }) {
-  const apiPath = useMemo(() => {
-    if (location === "/production-smoke-test") return "/smoke-test/latest";
-    if (location === "/team") return "/team";
-    if (location === "/recovery") return "/recovery";
-    if (location === "/doctor/trends") return "/doctor/trends";
-    if (location === "/clients") return "/clients";
-    if (location === "/security-evidence") return "/security-evidence";
-    if (location === "/market-readiness") return "/market-readiness";
-    return null;
-  }, [location]);
-  const state = useApi<any>(apiPath);
-  return <PageFrame><Header title={meta.title} subtitle={meta.subtitle} badges={meta.badges} /><Card><CardContent className="space-y-4 py-5">{location === "/production-smoke-test" && <Button onClick={() => api("/smoke-test/run", { method: "POST", body: JSON.stringify({}) }).then((data) => alert(JSON.stringify(data, null, 2))).catch((error) => alert(error.message))}><PlayCircle className="mr-2 h-4 w-4" />Run smoke test</Button>}{location === "/reports/compare" && <p className="text-sm text-muted-foreground">Use /api/reports/compare?left=REPORT_ID&right=REPORT_ID&type=doctor to compare reports.</p>}{state.loading && <p className="text-sm text-muted-foreground">Loading…</p>}{state.error && <p className="text-sm text-destructive">{state.error}</p>}{state.data && <pre className="max-h-[520px] overflow-auto rounded-lg bg-muted p-4 text-xs">{JSON.stringify(state.data, null, 2)}</pre>}</CardContent></Card></PageFrame>;
-}
+interface Msg { id: number; role: string; content: string; provider: string | null; simulated: boolean; createdAt: string }
 
 export function SessionTimelinePage() {
-  const { id } = useParams<{ id: string }>();
-  const state = useApi<{ events: Array<{ source: string; kind: string; title: string; detail: string; at: string }> }>(id ? `/sessions/${id}/timeline` : null);
-  return <PageFrame><Header title="Session replay / audit timeline" subtitle="Chronological view of messages, tasks, approvals, credit receipts, handoffs, and audit events." badges={["replay"]} /><div className="space-y-3">{(state.data?.events ?? []).map((event, index) => <Card key={`${event.at}-${index}`}><CardContent className="py-4"><div className="flex flex-wrap items-center gap-2"><Badge variant="outline">{event.source}</Badge><Badge variant="outline">{event.kind}</Badge><span className="text-xs text-muted-foreground">{new Date(event.at).toLocaleString()}</span></div><h3 className="mt-2 text-sm font-medium">{event.title}</h3><p className="mt-1 text-sm text-muted-foreground">{event.detail}</p></CardContent></Card>)}</div></PageFrame>;
+  const [, params] = useRoute<{ id: string }>("/sessions/:id/timeline");
+  const sessionId = params?.id ?? "";
+  const [messages, setMessages] = useState<Msg[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    fetch(`/api/sessions/${sessionId}/messages`, { credentials: "include" })
+      .then((r) => r.json() as Promise<{ messages?: Msg[]; error?: string }>)
+      .then((d) => { if (d.error) throw new Error(d.error); setMessages(d.messages ?? []); })
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [sessionId]);
+
+  return (
+    <AppLayout>
+      <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+        <Link href={`/sessions/${sessionId}`}>
+          <button className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <ChevronLeft className="h-4 w-4" /> Back to Session
+          </button>
+        </Link>
+        <div className="flex items-center gap-3">
+          <div className="h-9 w-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+            <Clock className="h-4.5 w-4.5 text-primary" />
+          </div>
+          <h1 className="text-xl font-semibold">Session Timeline</h1>
+          <Badge variant="outline" className="text-xs">#{sessionId}</Badge>
+        </div>
+
+        {loading && <div className="flex justify-center py-10"><RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" /></div>}
+        {error   && <div className="text-sm text-red-400 flex items-center gap-2"><AlertTriangle className="h-4 w-4" />{error}</div>}
+        {!loading && !error && messages.length === 0 && <p className="text-center py-10 text-sm text-muted-foreground">No messages yet.</p>}
+
+        {!loading && !error && messages.length > 0 && (
+          <div className="relative space-y-0">
+            <div className="absolute left-[19px] top-0 bottom-0 w-px bg-white/[0.06]" />
+            {messages.map((msg, i) => (
+              <div key={msg.id} className="relative flex gap-4 pb-5 last:pb-0">
+                <div className="relative z-10 h-10 w-10 rounded-full border border-white/[0.1] bg-background flex items-center justify-center shrink-0">
+                  <Zap className="h-3.5 w-3.5 text-primary" />
+                </div>
+                <div className="flex-1 rounded-lg border border-white/[0.07] bg-white/[0.02] px-4 py-3 space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-medium capitalize">{msg.role}</span>
+                    {msg.provider && <Badge variant="outline" className="text-[11px]">{msg.provider}</Badge>}
+                    {msg.simulated && <Badge className="text-[11px] bg-amber-500/10 text-amber-400 border-amber-500/25">Simulated</Badge>}
+                    <span className="text-xs text-muted-foreground ml-auto">#{i + 1}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap line-clamp-4">{msg.content}</p>
+                  <p className="text-[10px] text-muted-foreground/50">{new Date(msg.createdAt).toLocaleString()}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </AppLayout>
+  );
 }
+
+// ── CollaborationMapPage ────────────────────────────────────────────────────────
+
+interface AgentRow { id: number; name: string; role: string | null; provider: string; status: string }
 
 export function CollaborationMapPage() {
-  const { id } = useParams<{ id: string }>();
-  return <PageFrame><Header title="AI collaboration visual map" subtitle="Agent/task map built on the session timeline endpoint." badges={["map", `session ${id}`]} /><Grid><InfoCard title="Agents" detail="Shows participating specialist agents from the timeline." icon={<Network className="h-4 w-4" />} /><InfoCard title="Tasks" detail="Shows task nodes, states, blockers, and approvals." icon={<GitBranch className="h-4 w-4" />} /><InfoCard title="Repair path" detail="Shows proposed branch/PR flow when Doctor repair is approved." icon={<Wrench className="h-4 w-4" />} /></Grid><Link href={`/sessions/${id}/timeline`}><Button className="mt-4" variant="outline">Open full timeline</Button></Link></PageFrame>;
+  const [, params] = useRoute<{ id: string }>("/sessions/:id/map");
+  const sessionId = params?.id ?? "";
+  const [agents, setAgents] = useState<AgentRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    fetch(`/api/sessions/${sessionId}/agents`, { credentials: "include" })
+      .then((r) => r.json() as Promise<{ agents?: AgentRow[]; error?: string }>)
+      .then((d) => { if (d.error) throw new Error(d.error); setAgents(d.agents ?? []); })
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [sessionId]);
+
+  const positions = agents.map((_, i) => {
+    const angle = (i / Math.max(agents.length, 1)) * 2 * Math.PI - Math.PI / 2;
+    return { x: 200 + 120 * Math.cos(angle), y: 180 + 120 * Math.sin(angle) };
+  });
+
+  return (
+    <AppLayout>
+      <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+        <Link href={`/sessions/${sessionId}`}>
+          <button className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <ChevronLeft className="h-4 w-4" /> Back to Session
+          </button>
+        </Link>
+        <div className="flex items-center gap-3">
+          <div className="h-9 w-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+            <GitBranch className="h-4.5 w-4.5 text-primary" />
+          </div>
+          <h1 className="text-xl font-semibold">Collaboration Map</h1>
+          <Badge variant="outline" className="text-xs">#{sessionId}</Badge>
+        </div>
+
+        {loading && <div className="flex justify-center py-10"><RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" /></div>}
+        {error   && <div className="text-sm text-red-400 flex items-center gap-2"><AlertTriangle className="h-4 w-4" />{error}</div>}
+        {!loading && !error && agents.length === 0 && <p className="text-center py-10 text-sm text-muted-foreground">No agents in this session.</p>}
+
+        {!loading && !error && agents.length > 0 && (
+          <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-4">
+            <svg viewBox="0 0 400 360" className="w-full max-h-80">
+              <circle cx="200" cy="180" r="28" fill="hsl(239 84% 62% / 0.15)" stroke="hsl(239 84% 62% / 0.5)" strokeWidth="1.5" />
+              <text x="200" y="178" textAnchor="middle" fill="hsl(239 84% 62%)" fontSize="9" fontWeight="600">VIBA</text>
+              <text x="200" y="191" textAnchor="middle" fill="hsl(239 84% 62% / 0.7)" fontSize="7.5">Orchestrator</text>
+              {positions.map((pos, i) => (
+                <line key={i} x1="200" y1="180" x2={pos.x} y2={pos.y} stroke="hsl(239 84% 62% / 0.2)" strokeWidth="1" strokeDasharray="4 3" />
+              ))}
+              {agents.map((agent, i) => {
+                const pos = positions[i]!;
+                return (
+                  <g key={agent.id}>
+                    <circle cx={pos.x} cy={pos.y} r="22" fill="hsl(255 255 255 / 0.03)" stroke="hsl(255 255 255 / 0.12)" strokeWidth="1" />
+                    <text x={pos.x} y={pos.y - 2} textAnchor="middle" fill="hsl(0 0% 90%)" fontSize="8.5" fontWeight="500">{agent.name.slice(0, 10)}</text>
+                    <text x={pos.x} y={pos.y + 10} textAnchor="middle" fill="hsl(0 0% 55%)" fontSize="7">{agent.role ?? agent.provider}</text>
+                  </g>
+                );
+              })}
+            </svg>
+            <div className="mt-3 flex flex-wrap gap-3">
+              {agents.map((a) => (
+                <span key={a.id} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <span className="h-2 w-2 rounded-full bg-primary/50 inline-block" />
+                  {a.name} <span className="text-muted-foreground/50">({a.provider})</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </AppLayout>
+  );
 }
 
+// ── ShareReportPage (public) ────────────────────────────────────────────────────
+
+interface SharedRpt { id: string; reportType: string; payload: unknown; createdAt: string; expiresAt: string | null }
+
 export function ShareReportPage() {
-  const { shareId } = useParams<{ shareId: string }>();
-  const state = useApi<any>(shareId ? `/share/reports/${shareId}` : null);
-  return <PageFrame publicPage><Header title="Client-safe VIBA report" subtitle="Read-only shared report view. Internal details are redacted when requested." badges={["read-only", "client-safe"]} />{state.error && <p className="text-sm text-destructive">{state.error}</p>}{state.data && <pre className="max-h-[520px] overflow-auto rounded-lg bg-muted p-4 text-xs">{JSON.stringify(state.data, null, 2)}</pre>}</PageFrame>;
+  const [, params] = useRoute<{ shareId: string }>("/share/reports/:shareId");
+  const shareId = params?.shareId ?? "";
+  const [report, setReport] = useState<SharedRpt | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<{ code: string; message: string } | null>(null);
+
+  useEffect(() => {
+    if (!shareId) return;
+    fetch(`/api/share/reports/${shareId}`)
+      .then((r) => r.json() as Promise<SharedRpt & { error?: string; message?: string }>)
+      .then((d) => {
+        if (d.error) { setError({ code: d.error, message: d.message ?? d.error }); return; }
+        setReport(d);
+      })
+      .catch((e: Error) => setError({ code: "error", message: e.message }))
+      .finally(() => setLoading(false));
+  }, [shareId]);
+
+  return (
+    <div className="min-h-screen bg-background text-foreground">
+      <header className="sticky top-0 z-50 w-full border-b border-white/[0.06] bg-background/90 backdrop-blur-xl">
+        <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
+        <div className="container flex h-[60px] max-w-screen-2xl items-center justify-between">
+          <Link href="/demo"><span className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"><ChevronLeft className="h-4 w-4" />VIBA</span></Link>
+          <Badge variant="outline" className="text-xs">Shared Report</Badge>
+        </div>
+      </header>
+
+      <div className="max-w-3xl mx-auto px-4 py-10 space-y-6">
+        {loading && <div className="flex justify-center py-16"><RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" /></div>}
+
+        {error && (
+          <div className="text-center py-16 space-y-3">
+            <div className="h-12 w-12 rounded-full bg-red-500/10 border border-red-500/25 flex items-center justify-center mx-auto">
+              <Shield className="h-5 w-5 text-red-400" />
+            </div>
+            <h1 className="text-lg font-semibold">{error.code === "report_expired" ? "Report Expired" : "Report Not Found"}</h1>
+            <p className="text-sm text-muted-foreground">{error.message}</p>
+            <Link href="/demo"><Button variant="outline" size="sm" className="mt-4">View Demo</Button></Link>
+          </div>
+        )}
+
+        {report && !loading && !error && (
+          <div className="space-y-6">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+                <FileText className="h-4.5 w-4.5 text-primary" />
+              </div>
+              <div>
+                <h1 className="text-xl font-semibold capitalize">{report.reportType} Report</h1>
+                <p className="text-xs text-muted-foreground">
+                  Shared {new Date(report.createdAt).toLocaleDateString()}
+                  {report.expiresAt && ` · Expires ${new Date(report.expiresAt).toLocaleDateString()}`}
+                </p>
+              </div>
+            </div>
+            <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-5">
+              <pre className="text-xs text-muted-foreground overflow-auto whitespace-pre-wrap max-h-96">
+                {JSON.stringify(report.payload, null, 2)}
+              </pre>
+            </div>
+            <p className="text-xs text-center text-muted-foreground">
+              Generated by <Link href="/demo"><span className="text-primary/80 hover:text-primary cursor-pointer">VIBA</span></Link>
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }

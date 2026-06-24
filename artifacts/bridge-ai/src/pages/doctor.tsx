@@ -1,282 +1,235 @@
 import { useState } from "react";
-import { Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { AlertTriangle, CheckCircle2, GitBranch, History, Loader2, ShieldCheck, Stethoscope, Wrench } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { DoctorProposalPreview } from "@/components/DoctorProposalPreview";
+import { Stethoscope, Search, AlertTriangle, RefreshCw, History, Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
-type Severity = "critical" | "high" | "medium" | "low" | "info";
-type Evidence = "green" | "yellow" | "red";
-
-type Finding = {
-  severity: Severity;
-  evidence: Evidence;
+interface DoctorFinding {
+  id: string;
+  severity: "critical" | "high" | "medium" | "low" | "info";
   area: string;
   title: string;
-  detail: string;
   recommendation: string;
-  source?: string;
-};
+  evidence: string | null;
+  prReady: boolean;
+  findingType: string;
+}
 
-type DoctorReport = {
-  repoFullName: string;
+interface DoctorReport {
+  id: string;
+  owner: string;
+  repo: string;
   branch: string;
-  publicUrl: string | null;
-  generatedAt: string;
   healthScore: number;
-  topBlockers: Finding[];
-  findings: Finding[];
-  nextAction: string;
-  creditQuote: {
-    deterministicScanCredits: number;
-    liveAgentEscalationCredits: string;
-    repairCredits: string;
-  };
-  gates: {
-    mutatesGitHub: boolean;
-    mutatesRailway: boolean;
-    usesPaidProviders: boolean;
-    approvalRequiredForRepair: boolean;
-  };
-};
-
-const FLOW_STEPS = [
-  { label: "Scan", detail: "cheap checks" },
-  { label: "Diagnose", detail: "rank blockers" },
-  { label: "Quote", detail: "show cost" },
-  { label: "Approve", detail: "owner gate" },
-  { label: "Repair", detail: "PR-first" },
-  { label: "Verify", detail: "proof report" },
-];
-
-function severityClass(severity: Severity): string {
-  if (severity === "critical" || severity === "high") return "border-red-500/30 bg-red-500/10 text-red-300";
-  if (severity === "medium") return "border-amber-500/30 bg-amber-500/10 text-amber-300";
-  if (severity === "low") return "border-blue-500/30 bg-blue-500/10 text-blue-300";
-  return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
+  findings: DoctorFinding[];
+  scannedAt: string;
 }
 
-function evidenceIcon(evidence: Evidence) {
-  if (evidence === "green") return <CheckCircle2 className="h-4 w-4 text-emerald-400" />;
-  if (evidence === "yellow") return <AlertTriangle className="h-4 w-4 text-amber-400" />;
-  return <AlertTriangle className="h-4 w-4 text-red-400" />;
+interface ReportSummary {
+  id: string;
+  owner: string;
+  repo: string;
+  branch: string;
+  healthScore: number;
+  findingCount: number;
+  scannedAt: string;
 }
 
-function intelligenceStepState(index: number, report: DoctorReport | null): "done" | "active" | "locked" {
-  if (!report) return index === 0 ? "active" : "locked";
-  if (index <= 2) return "done";
-  if (index === 3) return "active";
-  return "locked";
+function healthColor(score: number) {
+  if (score >= 80) return "text-emerald-400";
+  if (score >= 50) return "text-amber-400";
+  return "text-red-400";
 }
 
-export default function Doctor() {
-  const [repoFullName, setRepoFullName] = useState("leego972/bridge-ai");
-  const [branch, setBranch] = useState("mobile-capacitor-redesign");
-  const [publicUrl, setPublicUrl] = useState("https://viba.guru");
-  const [report, setReport] = useState<DoctorReport | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+export default function DoctorPage() {
+  const [owner, setOwner] = useState("");
+  const [repo, setRepo] = useState("");
+  const [branch, setBranch] = useState("main");
+  const [scanning, setScanning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [currentReport, setCurrentReport] = useState<DoctorReport | null>(null);
+  const [history, setHistory] = useState<ReportSummary[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
-  async function runDoctor() {
-    setLoading(true);
-    setError("");
+  async function scan() {
+    if (!owner.trim() || !repo.trim()) return;
+    setScanning(true);
+    setError(null);
+    setCurrentReport(null);
     try {
-      const response = await fetch("/api/doctor/github-railway/run", {
+      const res = await fetch("/api/doctor/scan", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ repoFullName, branch, publicUrl: publicUrl || null }),
+        body: JSON.stringify({ owner: owner.trim(), repo: repo.trim(), branch: branch.trim() || "main" }),
       });
-      const data = await response.json() as { ok?: boolean; message?: string; report?: DoctorReport };
-      if (!response.ok || !data.report) {
-        setError(data.message ?? "Doctor scan failed.");
-        return;
+      const data = await res.json() as DoctorReport & { error?: string; message?: string };
+      if (!res.ok) {
+        setError(data.message ?? data.error ?? `HTTP ${res.status}`);
+      } else {
+        setCurrentReport(data);
       }
-      setReport(data.report);
-    } catch {
-      setError("Network error while running Doctor.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Scan failed");
     } finally {
-      setLoading(false);
+      setScanning(false);
     }
+  }
+
+  async function loadHistory() {
+    setLoadingHistory(true);
+    try {
+      const res = await fetch("/api/doctor/reports", { credentials: "include" });
+      const data = await res.json() as { reports: ReportSummary[] };
+      setHistory(data.reports ?? []);
+      setShowHistory(true);
+    } catch {
+      setHistory([]);
+    } finally {
+      setLoadingHistory(false);
+    }
+  }
+
+  async function loadReport(id: string) {
+    const res = await fetch(`/api/doctor/reports/${id}`, { credentials: "include" });
+    if (!res.ok) return;
+    const data = await res.json() as DoctorReport;
+    setCurrentReport(data);
+    setShowHistory(false);
   }
 
   return (
     <AppLayout>
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Stethoscope className="h-4 w-4" />
-              GitHub / Railway Doctor
+      <div className="max-w-3xl mx-auto px-4 py-8 space-y-8">
+        {/* Header */}
+        <div className="space-y-1">
+          <div className="flex items-center gap-2.5">
+            <div className="h-9 w-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+              <Stethoscope className="h-4.5 w-4.5 text-primary" />
             </div>
-            <h1 className="text-3xl font-semibold tracking-tight">Project Doctor</h1>
-            <p className="max-w-3xl text-sm text-muted-foreground">
-              Run a cheap deterministic diagnosis before spending credits on deeper agent analysis or repair. Doctor v1 does not mutate GitHub, change Railway, or call paid AI providers.
-            </p>
+            <h1 className="text-2xl font-semibold tracking-tight">Project Doctor</h1>
           </div>
-          <Link href="/doctor/history">
-            <Button variant="outline" className="gap-2">
-              <History className="h-4 w-4" />
-              History
-            </Button>
-          </Link>
+          <p className="text-sm text-muted-foreground pl-12">
+            Scan any GitHub repository for health issues, missing configuration, and documentation gaps.
+            No paid AI calls — all analysis is static and free.
+          </p>
         </div>
 
-        <Card className="border-border/70 shadow-sm">
-          <CardContent className="py-4">
-            <div className="grid gap-3 md:grid-cols-6">
-              {FLOW_STEPS.map((step, index) => {
-                const state = intelligenceStepState(index, report);
-                return (
-                  <div
-                    key={step.label}
-                    className={`rounded-xl border px-3 py-3 transition ${
-                      state === "done"
-                        ? "border-emerald-500/30 bg-emerald-500/10"
-                        : state === "active"
-                          ? "border-primary/40 bg-primary/10"
-                          : "border-border/60 bg-muted/20 opacity-70"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
-                        state === "done"
-                          ? "bg-emerald-500/20 text-emerald-300"
-                          : state === "active"
-                            ? "bg-primary/20 text-primary"
-                            : "bg-muted text-muted-foreground"
-                      }`}>
-                        {state === "done" ? "✓" : index + 1}
-                      </span>
-                      <span className="text-sm font-medium">{step.label}</span>
-                    </div>
-                    <p className="mt-1 text-xs text-muted-foreground">{step.detail}</p>
-                  </div>
-                );
-              })}
+        {/* Scan form */}
+        <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-6 space-y-5">
+          <h2 className="text-sm font-medium">Scan a repository</h2>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Owner / Organisation</Label>
+              <Input
+                placeholder="e.g. leego972"
+                value={owner}
+                onChange={(e) => setOwner(e.target.value)}
+                className="h-9 text-sm bg-background/50"
+                onKeyDown={(e) => e.key === "Enter" && scan()}
+              />
             </div>
-          </CardContent>
-        </Card>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Repository</Label>
+              <Input
+                placeholder="e.g. bridge-ai"
+                value={repo}
+                onChange={(e) => setRepo(e.target.value)}
+                className="h-9 text-sm bg-background/50"
+                onKeyDown={(e) => e.key === "Enter" && scan()}
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Branch</Label>
+            <Input
+              placeholder="main"
+              value={branch}
+              onChange={(e) => setBranch(e.target.value)}
+              className="h-9 text-sm bg-background/50 w-48"
+              onKeyDown={(e) => e.key === "Enter" && scan()}
+            />
+          </div>
 
-        <Card className="border-border/70 shadow-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <GitBranch className="h-4 w-4" />
-              Diagnose project
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-[1.2fr_0.8fr_1fr_auto] md:items-end">
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-muted-foreground">Repository</label>
-              <Input value={repoFullName} onChange={(e) => setRepoFullName(e.target.value)} placeholder="owner/repo" />
+          {error && (
+            <div className="flex items-start gap-2 rounded-lg border border-red-500/25 bg-red-500/8 px-3 py-2 text-xs text-red-300">
+              <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+              {error}
             </div>
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-muted-foreground">Branch</label>
-              <Input value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="main" />
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-muted-foreground">Public URL</label>
-              <Input value={publicUrl} onChange={(e) => setPublicUrl(e.target.value)} placeholder="https://viba.guru" />
-            </div>
-            <Button onClick={runDoctor} disabled={loading || !repoFullName || !branch} className="gap-2">
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Stethoscope className="h-4 w-4" />}
-              Run Doctor
+          )}
+
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={scan}
+              disabled={scanning || !owner.trim() || !repo.trim()}
+              className="gap-2"
+            >
+              {scanning ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+              {scanning ? "Scanning…" : "Run scan"}
             </Button>
-          </CardContent>
-        </Card>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={loadHistory}
+              disabled={loadingHistory}
+              className="gap-2 h-9 text-xs"
+            >
+              {loadingHistory ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <History className="h-3.5 w-3.5" />}
+              Scan history
+            </Button>
+          </div>
+        </div>
 
-        {error && (
-          <Card className="border-red-500/30 bg-red-500/5">
-            <CardContent className="py-4 text-sm text-red-300">{error}</CardContent>
-          </Card>
+        {/* History panel */}
+        {showHistory && history.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium">Previous scans (this session)</h3>
+              <button className="text-xs text-muted-foreground hover:text-foreground" onClick={() => setShowHistory(false)}>
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            {history.map((r) => (
+              <button
+                key={r.id}
+                className="w-full text-left rounded-lg border border-white/[0.07] bg-white/[0.02] px-4 py-3 hover:bg-white/[0.05] transition-colors"
+                onClick={() => loadReport(r.id)}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">{r.owner}/{r.repo} <span className="text-muted-foreground font-normal text-xs">({r.branch})</span></p>
+                    <p className="text-xs text-muted-foreground">{r.findingCount} findings · {new Date(r.scannedAt).toLocaleTimeString()}</p>
+                  </div>
+                  <span className={`text-lg font-bold ${healthColor(r.healthScore)}`}>{r.healthScore}</span>
+                </div>
+              </button>
+            ))}
+          </div>
         )}
 
-        {report && (
-          <div className="grid gap-5">
-            <Card className="border-border/70 shadow-sm">
-              <CardContent className="grid gap-4 py-5 md:grid-cols-[160px_1fr] md:items-center">
-                <div className="rounded-2xl border bg-muted/30 p-5 text-center">
-                  <div className="text-4xl font-semibold">{report.healthScore}</div>
-                  <div className="text-xs text-muted-foreground">health score</div>
-                </div>
-                <div className="space-y-3">
-                  <div className="flex flex-wrap gap-2">
-                    <Badge variant="outline" className="gap-1">
-                      <ShieldCheck className="h-3 w-3" />
-                      No paid AI calls
-                    </Badge>
-                    <Badge variant="outline">No GitHub mutation</Badge>
-                    <Badge variant="outline">No Railway mutation</Badge>
-                    <Badge variant="outline">0 scan credits</Badge>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">Recommended next action</p>
-                    <p className="text-sm text-muted-foreground">{report.nextAction}</p>
-                  </div>
-                  <div className="grid gap-2 rounded-xl border bg-muted/20 p-3 text-sm md:grid-cols-3">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Current stage</p>
-                      <p className="font-medium">Approval gate</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Deeper analysis</p>
-                      <p className="font-medium">Quote required</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Repair mode</p>
-                      <p className="font-medium">PR-first only</p>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+        {showHistory && history.length === 0 && (
+          <p className="text-center text-sm text-muted-foreground py-6">No scans in this session yet.</p>
+        )}
 
-            <Card className="border-border/70 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-base">Top blockers</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {report.topBlockers.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No major blockers found.</p>
-                ) : report.topBlockers.map((finding, index) => (
-                  <div key={`${finding.area}-${index}`} className="rounded-xl border p-4">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {evidenceIcon(finding.evidence)}
-                      <Badge variant="outline" className={severityClass(finding.severity)}>{finding.severity}</Badge>
-                      <span className="text-sm font-medium">{finding.title}</span>
-                    </div>
-                    <p className="mt-2 text-sm text-muted-foreground">{finding.detail}</p>
-                    <p className="mt-2 text-sm">{finding.recommendation}</p>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            <Card className="border-border/70 shadow-sm">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Wrench className="h-4 w-4" />
-                  Evidence details
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {report.findings.map((finding, index) => (
-                  <details key={`${finding.area}-${index}`} className="rounded-lg border px-4 py-3">
-                    <summary className="cursor-pointer text-sm font-medium">
-                      {finding.title}
-                      <span className="ml-2 text-xs text-muted-foreground">{finding.area}</span>
-                    </summary>
-                    <div className="mt-3 space-y-2 text-sm text-muted-foreground">
-                      <p>{finding.detail}</p>
-                      <p className="text-foreground">{finding.recommendation}</p>
-                      {finding.source && <p className="text-xs">Source: {finding.source}</p>}
-                    </div>
-                  </details>
-                ))}
-              </CardContent>
-            </Card>
+        {/* Report */}
+        {currentReport && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-medium">
+                Scan results —{" "}
+                <span className="font-normal text-muted-foreground">
+                  {currentReport.owner}/{currentReport.repo}
+                </span>
+              </h2>
+              <Badge variant="outline" className="text-xs">
+                {new Date(currentReport.scannedAt).toLocaleString()}
+              </Badge>
+            </div>
+            <DoctorProposalPreview report={currentReport} />
           </div>
         )}
       </div>
