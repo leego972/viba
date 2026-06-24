@@ -85,15 +85,16 @@ describe("processPendingQuestions", () => {
     });
   });
 
-  it("delivers a question only when it belongs to the recipient's current task (same-task scoping)", async () => {
-    // Delivery is task-scoped: DB is queried with eq(messagesTable.taskId, currentTaskId).
-    // Agent A asks Agent B a question during task 10; Agent B is executing task 10.
-    // The DB returns the matching question because taskId matches currentTaskId.
+  it("delivers a question to the recipient even when they are executing a later task (cross-task delivery)", async () => {
+    // INTENTIONAL: delivery is session+recipient scoped, NOT task-scoped.
+    // Agent A asks Agent B on task 10; Agent B runs on task 11.
+    // The question must still be delivered — tasks execute sequentially and
+    // filtering by currentTaskId would silently drop all cross-task questions.
     const { db } = await import("@workspace/db");
     const questionRow = makeQuestionRow(); // taskId: 10, toAgentId: 2
 
     (db.select as ReturnType<typeof vi.fn>)
-      // DB returns the task-10 question — delivery IS filtered by currentTaskId in the WHERE clause
+      // DB returns the task-10 question: delivery is not filtered by currentTaskId
       .mockReturnValueOnce({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({
@@ -109,14 +110,68 @@ describe("processPendingQuestions", () => {
       });
 
     const { processPendingQuestions } = await import("./agentComms");
-    // Recipient is on task 10 — question from task 10 is delivered
-    const result = await processPendingQuestions(1, 2, 10);
+    // Recipient is on task 11 — question from task 10 must still be delivered
+    const result = await processPendingQuestions(1, 2, 11);
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({
       fromAgent: "Claude",
       question: "Which module handles auth?",
       messageId: 5,
     });
+  });
+
+  it("full lifecycle: question asked on task N is delivered and marked resolved after answer on task N+1", async () => {
+    // E2E lifecycle: Agent A (task 10) asks Agent B → Agent B (task 11) receives it
+    // → Agent B answers → question is now resolved (answeredQuestionIds excludes it from pending)
+    const { db } = await import("@workspace/db");
+    const questionRow = makeQuestionRow(); // taskId: 10, toAgentId: 2, id: 5
+    const answerRow = {
+      id: 20,
+      sessionId: 1,
+      messageType: "answer",
+      metadata: { questionMessageId: 5 },
+      createdAt: new Date().toISOString(),
+    };
+
+    // Step 1: Before answer — question is pending for Agent B on task 11
+    (db.select as ReturnType<typeof vi.fn>)
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            orderBy: vi.fn().mockResolvedValue([questionRow]),
+          }),
+        }),
+      })
+      // No answers yet
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([]),
+        }),
+      });
+
+    const { processPendingQuestions } = await import("./agentComms");
+    const pendingBefore = await processPendingQuestions(1, 2, 11);
+    expect(pendingBefore).toHaveLength(1);
+    expect(pendingBefore[0]).toMatchObject({ fromAgent: "Claude", messageId: 5 });
+
+    // Step 2: After answer — question is resolved, pending list is empty
+    (db.select as ReturnType<typeof vi.fn>)
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            orderBy: vi.fn().mockResolvedValue([questionRow]),
+          }),
+        }),
+      })
+      // Answer now present with questionMessageId: 5
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([answerRow]),
+        }),
+      });
+
+    const pendingAfter = await processPendingQuestions(1, 2, 11);
+    expect(pendingAfter).toHaveLength(0); // resolved — not pending any more
   });
 
   it("filters out questions that are already answered", async () => {
