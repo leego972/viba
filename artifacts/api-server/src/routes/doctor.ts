@@ -12,7 +12,7 @@ const router: IRouter = Router();
 type FindingSeverity = "critical" | "high" | "medium" | "low" | "info";
 type FindingType = "docs" | "config" | "workflow" | "env_var" | "credential" | "health" | "dependency";
 
-interface DoctorFinding {
+export interface DoctorFinding {
   id: string;
   severity: FindingSeverity;
   area: string;
@@ -23,7 +23,7 @@ interface DoctorFinding {
   findingType: FindingType;
 }
 
-interface DoctorReport {
+export interface DoctorReport {
   id: string;
   owner: string;
   repo: string;
@@ -35,9 +35,10 @@ interface DoctorReport {
 
 // ──────────────────────────────────────────────────
 // In-memory store (ephemeral — scans are per-session)
+// Exported so /reports/compare can load reports by ID.
 // ──────────────────────────────────────────────────
 
-const reportStore = new Map<string, DoctorReport>();
+export const reportStore = new Map<string, DoctorReport>();
 
 // ──────────────────────────────────────────────────
 // GitHub helpers
