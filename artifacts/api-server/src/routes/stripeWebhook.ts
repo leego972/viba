@@ -9,14 +9,17 @@ import {
 import { sendAccessTokenEmail } from "../lib/stripe/email";
 import { logger } from "../lib/logger";
 import {
-  isWebhookProcessed,
-  markWebhookProcessed,
   getUserByStripeCustomer,
   linkSubscription,
   updateSubscriptionStatus,
   grantCredits,
   VIBA_CREDIT_ECONOMICS,
 } from "../lib/billing";
+import {
+  reserveStripeWebhookEvent,
+  markStripeWebhookEventSucceeded,
+  markStripeWebhookEventFailed,
+} from "../lib/billingFinancialSafety";
 import {
   sendPaymentFailedEmail,
   sendSubscriptionCanceledEmail,
@@ -46,20 +49,27 @@ async function subscriptionCredits(subscriptionId: string): Promise<number> {
 }
 
 async function resetPaidCredits(userId: number, periodEnd: Date | null, credits: number): Promise<void> {
-  await pool.query(
-    `UPDATE users SET
-       credits_remaining = $1,
-       credits_period_end = $2,
-       subscription_status = 'active',
-       updated_at = NOW()
-     WHERE id = $3`,
-    [credits, periodEnd, userId],
-  );
-  await pool.query(
-    `INSERT INTO credit_transactions (user_id, amount, balance_after, reason)
-     VALUES ($1, $2, $3, $4)`,
-    [userId, credits, credits, "paid_allowance_reset"],
-  );
+  await pool.query("BEGIN");
+  try {
+    await pool.query(
+      `UPDATE users SET
+         credits_remaining = $1,
+         credits_period_end = $2,
+         subscription_status = 'active',
+         updated_at = NOW()
+       WHERE id = $3`,
+      [credits, periodEnd, userId],
+    );
+    await pool.query(
+      `INSERT INTO credit_transactions (user_id, amount, balance_after, reason)
+       VALUES ($1, $2, $3, $4)`,
+      [userId, credits, credits, "paid_allowance_reset"],
+    );
+    await pool.query("COMMIT");
+  } catch (err) {
+    await pool.query("ROLLBACK");
+    throw err;
+  }
 }
 
 export const webhookHandler: RequestHandler = async (req, res): Promise<void> => {
@@ -89,10 +99,23 @@ export const webhookHandler: RequestHandler = async (req, res): Promise<void> =>
     return;
   }
 
-  if (isWebhookProcessed(event.id)) {
-    logger.info({ eventId: event.id }, "Webhook already processed — skipping");
-    res.json({ received: true, duplicate: true });
+  let reservation: Awaited<ReturnType<typeof reserveStripeWebhookEvent>>;
+  try {
+    reservation = await reserveStripeWebhookEvent(event.id, event.type);
+  } catch (err) {
+    logger.error({ err, eventId: event.id, eventType: event.type }, "Webhook idempotency reservation failed");
+    res.status(500).json({ error: "Webhook idempotency guard failed" });
     return;
+  }
+
+  if (reservation === "duplicate_succeeded" || reservation === "duplicate_processing") {
+    logger.info({ eventId: event.id, reservation }, "Webhook already reserved/processed — skipping duplicate");
+    res.json({ received: true, duplicate: true, status: reservation });
+    return;
+  }
+
+  if (reservation === "duplicate_failed") {
+    logger.warn({ eventId: event.id, eventType: event.type }, "Retrying previously failed webhook event");
   }
 
   try {
@@ -239,9 +262,12 @@ export const webhookHandler: RequestHandler = async (req, res): Promise<void> =>
         logger.debug({ type: event.type }, "Unhandled Stripe webhook event");
     }
 
-    markWebhookProcessed(event.id);
+    await markStripeWebhookEventSucceeded(event.id);
     res.json({ received: true });
   } catch (err) {
+    await markStripeWebhookEventFailed(event.id, err).catch((markErr) => {
+      logger.error({ markErr, eventId: event.id }, "Failed to mark webhook failure");
+    });
     logger.error({ err, eventType: event.type }, "Webhook handler error");
     res.status(500).json({ error: "Webhook processing failed" });
   }
