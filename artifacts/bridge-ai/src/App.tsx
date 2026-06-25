@@ -22,6 +22,11 @@ import ResetPassword from "@/pages/reset-password";
 import VerifyEmail from "@/pages/verify-email";
 import Billing from "@/pages/billing";
 import ProvidersPage from "@/pages/providers";
+import VaultPage from "@/pages/vault";
+import AgentConsolePage from "@/pages/agent-console";
+import ToolConsolePage from "@/pages/tool-console";
+import QAReleaseGatePage from "@/pages/qa-release-gate";
+import ProjectImportPage from "@/pages/project-import";
 import DoctorPage from "@/pages/doctor";
 import AssistedBrowserPage from "@/pages/assisted-browser";
 import CompletionPage, {
@@ -86,6 +91,9 @@ function GatedRouter() {
         <Route path="/workbench" component={Workbench} />
         <Route path="/bridge" component={Bridge} />
         <Route path="/providers" component={ProvidersPage} />
+        <Route path="/credentials" component={VaultPage} />
+        <Route path="/agent-console" component={AgentConsolePage} />
+        <Route path="/tool-console" component={ToolConsolePage} />
         <Route path="/doctor" component={DoctorPage} />
         <Route path="/connectors" component={CompletionPage} />
         <Route path="/self-audit" component={CompletionPage} />
@@ -101,6 +109,8 @@ function GatedRouter() {
         <Route path="/reports/compare" component={CompletionPage} />
         <Route path="/market-readiness" component={CompletionPage} />
         <Route path="/assisted-browser" component={AssistedBrowserPage} />
+        <Route path="/qa-release-gate" component={QAReleaseGatePage} />
+        <Route path="/project-import" component={ProjectImportPage} />
         <Route component={NotFound} />
       </Switch>
     </AuthGuard>
