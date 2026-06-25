@@ -27,6 +27,7 @@ const NAV_LINKS: NavLink[] = [
   { href: "/production-ops",   label: "Production Ops",  icon: Activity,     match: (l) => l.startsWith("/production-ops"),  desktopOnly: true },
   { href: "/security-center",  label: "Security Center", icon: ShieldAlert,  match: (l) => l.startsWith("/security-center"), desktopOnly: true },
   { href: "/domain-setup",     label: "Domain Setup",    icon: Globe,        match: (l) => l.startsWith("/domain-setup"),     desktopOnly: true },
+  { href: "/launch-readiness", label: "Launch Readiness", icon: Rocket,       match: (l) => l.startsWith("/launch-readiness"),  desktopOnly: true },
 ];
 
 export function Navbar() {

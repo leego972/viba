@@ -32,6 +32,8 @@ import SecurityCenterPage from "@/pages/security-center";
 import DomainSetupPage from "@/pages/domain-setup";
 import DoctorPage from "@/pages/doctor";
 import AssistedBrowserPage from "@/pages/assisted-browser";
+import OnboardingPage from "@/pages/onboarding";
+import LaunchReadinessPage from "@/pages/launch-readiness";
 import CompletionPage, {
   CollaborationMapPage,
   DemoDoctorReport,
@@ -117,6 +119,8 @@ function GatedRouter() {
         <Route path="/production-ops" component={ProductionOpsPage} />
         <Route path="/security-center" component={SecurityCenterPage} />
         <Route path="/domain-setup" component={DomainSetupPage} />
+        <Route path="/onboarding" component={OnboardingPage} />
+        <Route path="/launch-readiness" component={LaunchReadinessPage} />
         <Route component={NotFound} />
       </Switch>
     </AuthGuard>
