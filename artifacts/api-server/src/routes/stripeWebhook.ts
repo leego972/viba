@@ -49,9 +49,10 @@ async function subscriptionCredits(subscriptionId: string): Promise<number> {
 }
 
 async function resetPaidCredits(userId: number, periodEnd: Date | null, credits: number): Promise<void> {
-  await pool.query("BEGIN");
+  const client = await pool.connect();
   try {
-    await pool.query(
+    await client.query("BEGIN");
+    await client.query(
       `UPDATE users SET
          credits_remaining = $1,
          credits_period_end = $2,
@@ -60,15 +61,19 @@ async function resetPaidCredits(userId: number, periodEnd: Date | null, credits:
        WHERE id = $3`,
       [credits, periodEnd, userId],
     );
-    await pool.query(
+    await client.query(
       `INSERT INTO credit_transactions (user_id, amount, balance_after, reason)
        VALUES ($1, $2, $3, $4)`,
       [userId, credits, credits, "paid_allowance_reset"],
     );
-    await pool.query("COMMIT");
+    await client.query("COMMIT");
   } catch (err) {
-    await pool.query("ROLLBACK");
+    await client.query("ROLLBACK").catch((rollbackErr) => {
+      logger.error({ rollbackErr }, "Billing: paid credit reset rollback failed");
+    });
     throw err;
+  } finally {
+    client.release();
   }
 }
 
