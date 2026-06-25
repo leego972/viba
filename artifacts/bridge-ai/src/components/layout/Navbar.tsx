@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Settings, FlaskConical, CreditCard, Zap, LayoutDashboard, Radio, Plus, Cpu, Rocket, Bot } from "lucide-react";
+import { Settings, FlaskConical, CreditCard, Zap, LayoutDashboard, Radio, Plus, Cpu, Rocket, Bot, ShieldCheck, Terminal, Wrench, ClipboardCheck } from "lucide-react";
 
 interface NavLink {
   href: string;
@@ -14,11 +14,15 @@ const NAV_LINKS: NavLink[] = [
   { href: "/dashboard",        label: "Dashboard",    icon: LayoutDashboard, match: (l) => l.startsWith("/dashboard") || l.startsWith("/sessions") },
   { href: "/workbench",        label: "Workbench",    icon: FlaskConical,    match: (l) => l.startsWith("/workbench") },
   { href: "/providers",        label: "AI Providers", icon: Cpu,             match: (l) => l.startsWith("/providers") || l.startsWith("/doctor") },
+  { href: "/agent-console",    label: "Agent Console",icon: Terminal,        match: (l) => l.startsWith("/agent-console") },
+  { href: "/tool-console",     label: "Tools",        icon: Wrench,          match: (l) => l.startsWith("/tool-console"), desktopOnly: true },
+  { href: "/credentials",      label: "Vault",        icon: ShieldCheck,     match: (l) => l.startsWith("/credentials"), desktopOnly: true },
   { href: "/bridge",           label: "Bridge",       icon: Radio,           match: (l) => l.startsWith("/bridge") },
   { href: "/billing",          label: "Billing",      icon: CreditCard,      match: (l) => l.startsWith("/billing") || l.startsWith("/pricing") },
   { href: "/settings",         label: "Settings",     icon: Settings,        match: (l) => l === "/settings" },
   { href: "/market-readiness", label: "Launch",       icon: Rocket,          match: (l) => l.startsWith("/market-readiness"), desktopOnly: true },
   { href: "/assisted-browser", label: "Browser",      icon: Bot,             match: (l) => l.startsWith("/assisted-browser"), desktopOnly: true },
+  { href: "/qa-release-gate", label: "QA Gate",      icon: ClipboardCheck,  match: (l) => l.startsWith("/qa-release-gate"), desktopOnly: true },
 ];
 
 export function Navbar() {
