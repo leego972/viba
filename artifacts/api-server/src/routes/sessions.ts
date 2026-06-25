@@ -177,7 +177,7 @@ async function withAgentModes<T extends { id: number }>(session: T) {
       })),
     }));
 
-    res.json(serialize({ sessions: result, total: totalRows[0]?.total ?? 0, limit, offset }));
+    res.json(serialize(result));
   });
 
 // POST /sessions
