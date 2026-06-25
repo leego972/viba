@@ -26,6 +26,17 @@ import doctorRouter from "./doctor";
 import marketCompletionRouter from "./marketCompletion";
 import assistedBrowserRouter from "./assistedBrowser";
 import railwayConnectorRouter from "./railwayConnector";
+import customAiCredentialsRouter from "./customAiCredentials";
+import businessSecurityRouter from "./businessSecurity";
+import agentCommsConsoleRouter from "./agentCommsConsole";
+import taskIntakeRouter from "./taskIntake";
+import toolBrokerRouter from "./toolBroker";
+import agentRuntimeRouter from "./agentRuntime";
+import qaReleaseGateRouter from "./qaReleaseGate";
+import projectImportRouter from "./projectImport";
+import productionOpsRouter from "./productionOps";
+import deploymentProvidersRouter from "./deploymentProviders";
+import securityRouter from "./security";
 
 const router: IRouter = Router();
 
@@ -57,5 +68,16 @@ router.use(doctorRouter);
 router.use(marketCompletionRouter);
 router.use(assistedBrowserRouter);
 router.use(railwayConnectorRouter);
+router.use(customAiCredentialsRouter);
+router.use(businessSecurityRouter);
+router.use(agentCommsConsoleRouter);
+router.use(taskIntakeRouter);
+router.use(toolBrokerRouter);
+router.use(agentRuntimeRouter);
+router.use(qaReleaseGateRouter);
+router.use(projectImportRouter);
+router.use(productionOpsRouter);
+router.use(deploymentProvidersRouter);
+router.use(securityRouter);
 
 export default router;
