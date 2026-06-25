@@ -38,6 +38,11 @@ import productionOpsRouter from "./productionOps";
 import deploymentProvidersRouter from "./deploymentProviders";
 import securityRouter from "./security";
 import domainSetupRouter from "./domainSetup";
+import setupRunnerRouter from "./setupRunner";
+import agentEvaluationRouter from "./agentEvaluation";
+import costControlRouter from "./costControl";
+import betaChaosRouter from "./betaChaos";
+import launchReadinessRouter from "./launchReadiness";
 
 const router: IRouter = Router();
 
@@ -81,5 +86,10 @@ router.use(productionOpsRouter);
 router.use(deploymentProvidersRouter);
 router.use(securityRouter);
 router.use(domainSetupRouter);
+router.use(setupRunnerRouter);
+router.use(agentEvaluationRouter);
+router.use(costControlRouter);
+router.use(betaChaosRouter);
+router.use(launchReadinessRouter);
 
 export default router;
