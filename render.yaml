@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     region: oregon
-    buildCommand: corepack enable && corepack prepare pnpm@11.9.0 --activate && pnpm install --frozen-lockfile && pnpm run build:render
+    buildCommand: npm install -g pnpm@10.24.0 && pnpm install --frozen-lockfile && pnpm run build:render
     startCommand: node --enable-source-maps artifacts/api-server/dist/index.mjs
     healthCheckPath: /api/healthz
     autoDeployTrigger: commit
@@ -14,7 +14,7 @@ services:
       - key: NODE_VERSION
         value: 22.13.0
       - key: PNPM_VERSION
-        value: 11.9.0
+        value: 10.24.0
       - key: PUBLIC_ORIGIN
         value: https://viba.onrender.com
       - key: VIBA_PUBLIC_URL
