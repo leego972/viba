@@ -3,13 +3,13 @@
   "version": "0.0.0",
   "license": "MIT",
   "private": true,
-  "packageManager": "pnpm@10.24.0",
+  "packageManager": "pnpm@11.9.0",
   "engines": {
-    "node": ">=22.12.0 <23",
-    "pnpm": ">=10.0.0"
+    "node": ">=22.13.0 <23",
+    "pnpm": ">=11.9.0 <12"
   },
   "scripts": {
-    "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead. On Render set Build Command to: corepack enable && corepack prepare pnpm@10.24.0 --activate && pnpm install --frozen-lockfile && pnpm run build\" >&2; exit 1 ;; esac'",
+    "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead. On Render set Build Command to: corepack enable && corepack prepare pnpm@11.9.0 --activate && pnpm install --frozen-lockfile && pnpm run build\" >&2; exit 1 ;; esac'",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "build:render": "pnpm run build",
     "start": "node --enable-source-maps artifacts/api-server/dist/index.mjs",
