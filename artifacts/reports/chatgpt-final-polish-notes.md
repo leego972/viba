@@ -2,16 +2,19 @@
 
 Branch: `viba-final-polish-chatgpt`
 
-This branch adds one final repo-side hardening item that could be safely completed from ChatGPT without runtime access:
+PR #18 was reopened to fix CI. The runtime billing changes were reverted back to the current `main` baseline because GitHub Actions failed at typecheck and the exact compiler error was not exposed through the available truncated log view.
 
-- Adds persistent Stripe webhook event reservation/status tracking in `artifacts/api-server/src/lib/billingFinancialSafety.ts`.
-- Updates `artifacts/api-server/src/routes/stripeWebhook.ts` to use persistent webhook idempotency rather than only the old in-memory guard.
-- Updates paid credit renewal reset to use a dedicated PostgreSQL client transaction so the user credit update and ledger insertion commit/rollback together.
+Current PR #18 purpose:
 
-CI cleanup:
+- Keep documentation of the attempted final polish.
+- Do not alter the live Stripe webhook path.
+- Do not risk the already verified `main` build.
 
-- Removed the optional unmounted financial-safety status route to keep the final polish focused on the live Stripe webhook path only.
-- The core hardening remains wired through `stripeWebhook.ts`.
+Current runtime status:
+
+- `artifacts/api-server/src/routes/stripeWebhook.ts` is restored to the `main` baseline.
+- `artifacts/api-server/src/lib/billingFinancialSafety.ts` is neutralized and unused.
+- No production billing behavior should change from this PR.
 
 Required GitHub/Replit checks:
 
