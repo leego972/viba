@@ -9,13 +9,14 @@
     "pnpm": ">=11.9.0 <12"
   },
   "scripts": {
-    "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead. On Render set Build Command to: corepack enable && corepack prepare pnpm@11.9.0 --activate && pnpm install --frozen-lockfile && pnpm run build\" >&2; exit 1 ;; esac'",
-    "build": "pnpm run typecheck && pnpm -r --if-present run build",
-    "build:render": "pnpm run build",
+    "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead. On Render set Build Command to: corepack enable && corepack prepare pnpm@11.9.0 --activate && pnpm install --frozen-lockfile && pnpm run build:render\" >&2; exit 1 ;; esac'",
+    "build": "pnpm run build:render",
+    "build:render": "pnpm --filter @workspace/bridge-ai run build && pnpm --filter @workspace/api-server run build && node scripts/verify-render-output.mjs",
     "start": "node --enable-source-maps artifacts/api-server/dist/index.mjs",
     "start:render": "node --enable-source-maps artifacts/api-server/dist/index.mjs",
     "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
+    "typecheck:full": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
+    "typecheck": "pnpm run typecheck:full"
   },
   "devDependencies": {
     "prettier": "^3.8.1",
