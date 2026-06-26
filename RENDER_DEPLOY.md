@@ -1,0 +1,73 @@
+# VIBA Render deployment runbook
+
+## Correct Render service settings
+
+Use these exact commands on the Render web service:
+
+```bash
+corepack enable && corepack prepare pnpm@11.9.0 --activate && pnpm install --frozen-lockfile && pnpm run build
+```
+
+```bash
+node --enable-source-maps artifacts/api-server/dist/index.mjs
+```
+
+Health check path:
+
+```txt
+/api/healthz
+```
+
+## Required environment variables
+
+Render sets `PORT` automatically. Add the following manually in Render.
+
+```txt
+NODE_ENV=production
+NODE_VERSION=22.13.0
+PNPM_VERSION=11.9.0
+DATABASE_URL=<Render PostgreSQL external/internal connection string>
+SESSION_SECRET=<long random secret if not using render.yaml generateValue>
+PUBLIC_ORIGIN=https://viba.onrender.com
+VIBA_PUBLIC_URL=https://viba.onrender.com
+CORS_ALLOWED_ORIGINS=https://viba.onrender.com,https://viba.guru,https://www.viba.guru
+GITHUB_REPOSITORY=leego972/viba
+VIBA_SELF_REPO=leego972/viba
+VIBA_SELF_BRANCH=main
+VIBA_WEEKLY_MAINTENANCE_ENABLED=false
+VIBA_MAINTENANCE_EMAILS_ENABLED=false
+VIBA_MAINTENANCE_EMAIL_THROTTLE_MINUTES=360
+```
+
+Optional admin bootstrap:
+
+```txt
+ADMIN_BOOTSTRAP_EMAIL=<owner email>
+ADMIN_BOOTSTRAP_PASSWORD=<strong temporary password>
+VIBA_ADMIN_EMAIL=<owner email>
+VIBA_ADMIN_EMAILS=<owner email>
+```
+
+Optional provider keys:
+
+```txt
+GITHUB_TOKEN=<fine-grained repo token>
+OPENAI_API_KEY=<key>
+ANTHROPIC_API_KEY=<key>
+GEMINI_API_KEY=<key>
+GROQ_API_KEY=<key>
+```
+
+## Common failure this patch addresses
+
+If Render runs `npm install`, the repo intentionally fails with `Use pnpm instead`. This repo is a pnpm workspace and must be installed through pnpm/corepack.
+
+The root package now pins the package manager, the Node version is pinned, and `render.yaml` contains a full Blueprint configuration.
+
+## After deployment
+
+1. Open `/api/healthz` and confirm it returns `{ "status": "ok" }`.
+2. Open `/` and confirm the frontend loads.
+3. Register or log in.
+4. Confirm admin access only after admin variables are set.
+5. Keep weekly maintenance disabled until the first clean production deploy is verified.
