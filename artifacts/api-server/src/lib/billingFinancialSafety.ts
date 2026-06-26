@@ -1,5 +1,4 @@
 import { pool } from "@workspace/db";
-import { logger } from "./logger";
 
 export type WebhookReservationStatus =
   | "reserved"
@@ -7,36 +6,31 @@ export type WebhookReservationStatus =
   | "duplicate_succeeded"
   | "duplicate_failed";
 
-let ensured = false;
-let ensurePromise: Promise<void> | null = null;
+let tableReady = false;
 
 async function ensureStripeWebhookEventsTable(): Promise<void> {
-  if (ensured) return;
-  if (!ensurePromise) {
-    ensurePromise = (async () => {
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS stripe_webhook_events (
-          event_id TEXT PRIMARY KEY,
-          event_type TEXT NOT NULL,
-          status TEXT NOT NULL DEFAULT 'processing',
-          first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          processed_at TIMESTAMPTZ,
-          error TEXT,
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-      `);
-      await pool.query(`
-        CREATE INDEX IF NOT EXISTS idx_stripe_webhook_events_status_updated
-        ON stripe_webhook_events (status, updated_at DESC)
-      `);
-      ensured = true;
-    })().catch((err) => {
-      ensurePromise = null;
-      logger.error({ err }, "Billing safety: failed to ensure stripe_webhook_events table");
-      throw err;
-    });
+  if (tableReady) {
+    return;
   }
-  await ensurePromise;
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS stripe_webhook_events (
+      event_id TEXT PRIMARY KEY,
+      event_type TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'processing',
+      first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      processed_at TIMESTAMPTZ,
+      error TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_stripe_webhook_events_status_updated
+    ON stripe_webhook_events (status, updated_at DESC)
+  `);
+
+  tableReady = true;
 }
 
 export async function reserveStripeWebhookEvent(
@@ -45,7 +39,7 @@ export async function reserveStripeWebhookEvent(
 ): Promise<WebhookReservationStatus> {
   await ensureStripeWebhookEventsTable();
 
-  const inserted = await pool.query<{ status: string }>(
+  const inserted = await pool.query(
     `INSERT INTO stripe_webhook_events (event_id, event_type, status)
      VALUES ($1, $2, 'processing')
      ON CONFLICT (event_id) DO NOTHING
@@ -57,14 +51,20 @@ export async function reserveStripeWebhookEvent(
     return "reserved";
   }
 
-  const existing = await pool.query<{ status: string }>(
+  const existing = await pool.query(
     `SELECT status FROM stripe_webhook_events WHERE event_id = $1`,
     [eventId],
   );
-  const status = existing.rows[0]?.status;
+  const row = existing.rows[0] as { status?: string } | undefined;
 
-  if (status === "succeeded") return "duplicate_succeeded";
-  if (status === "failed") return "duplicate_failed";
+  if (row?.status === "succeeded") {
+    return "duplicate_succeeded";
+  }
+
+  if (row?.status === "failed") {
+    return "duplicate_failed";
+  }
+
   return "duplicate_processing";
 }
 
@@ -87,26 +87,4 @@ export async function markStripeWebhookEventFailed(eventId: string, error: unkno
      WHERE event_id = $1`,
     [eventId, message.slice(0, 1000)],
   );
-}
-
-export async function getStripeWebhookFinancialSafetyStatus(): Promise<{
-  persistentIdempotency: boolean;
-  tableReady: boolean;
-  recentFailures: number;
-  rawValuesReturned: false;
-}> {
-  await ensureStripeWebhookEventsTable();
-  const failures = await pool.query<{ count: string }>(
-    `SELECT COUNT(*)::text AS count
-       FROM stripe_webhook_events
-      WHERE status = 'failed'
-        AND updated_at >= NOW() - INTERVAL '7 days'`,
-  );
-
-  return {
-    persistentIdempotency: true,
-    tableReady: true,
-    recentFailures: Number(failures.rows[0]?.count ?? 0),
-    rawValuesReturned: false,
-  };
 }
