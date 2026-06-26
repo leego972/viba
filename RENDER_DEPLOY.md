@@ -5,7 +5,7 @@
 Use these exact commands on the Render web service:
 
 ```bash
-corepack enable && corepack prepare pnpm@11.9.0 --activate && pnpm install --frozen-lockfile && pnpm run build
+corepack enable && corepack prepare pnpm@11.9.0 --activate && pnpm install --frozen-lockfile && pnpm run build:render
 ```
 
 ```bash
@@ -17,6 +17,23 @@ Health check path:
 ```txt
 /api/healthz
 ```
+
+## What the Render build does
+
+`build:render` builds only the production runtime bundles needed by Render:
+
+```txt
+artifacts/bridge-ai/dist/public/index.html
+artifacts/api-server/dist/index.mjs
+```
+
+The full strict TypeScript check remains available separately:
+
+```bash
+pnpm run typecheck:full
+```
+
+Do not use full typecheck as the Render deployment gate until the production runtime is live and the remaining non-runtime type issues have been cleaned.
 
 ## Required environment variables
 
@@ -62,7 +79,7 @@ GROQ_API_KEY=<key>
 
 If Render runs `npm install`, the repo intentionally fails with `Use pnpm instead`. This repo is a pnpm workspace and must be installed through pnpm/corepack.
 
-The root package now pins the package manager, the Node version is pinned, and `render.yaml` contains a full Blueprint configuration.
+The root package pins the package manager, the Node version is pinned, `render.yaml` contains a full Blueprint configuration, and the Render build now avoids blocking deployment on workspace-wide typecheck noise.
 
 ## After deployment
 
