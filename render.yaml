@@ -1,0 +1,57 @@
+services:
+  - type: web
+    name: viba
+    env: node
+    plan: starter
+    region: oregon
+    buildCommand: corepack enable && corepack prepare pnpm@11.9.0 --activate && pnpm install --frozen-lockfile && pnpm run build
+    startCommand: node --enable-source-maps artifacts/api-server/dist/index.mjs
+    healthCheckPath: /api/healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 22.13.0
+      - key: PNPM_VERSION
+        value: 11.9.0
+      - key: PUBLIC_ORIGIN
+        value: https://viba.onrender.com
+      - key: VIBA_PUBLIC_URL
+        value: https://viba.onrender.com
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://viba.onrender.com,https://viba.guru,https://www.viba.guru
+      - key: GITHUB_REPOSITORY
+        value: leego972/viba
+      - key: VIBA_SELF_REPO
+        value: leego972/viba
+      - key: VIBA_SELF_BRANCH
+        value: main
+      - key: VIBA_WEEKLY_MAINTENANCE_ENABLED
+        value: "false"
+      - key: VIBA_MAINTENANCE_EMAILS_ENABLED
+        value: "false"
+      - key: VIBA_MAINTENANCE_EMAIL_THROTTLE_MINUTES
+        value: "360"
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: ADMIN_BOOTSTRAP_EMAIL
+        sync: false
+      - key: ADMIN_BOOTSTRAP_PASSWORD
+        sync: false
+      - key: VIBA_ADMIN_EMAIL
+        sync: false
+      - key: VIBA_ADMIN_EMAILS
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
