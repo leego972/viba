@@ -3,10 +3,8 @@ packages:
   - lib/*
   - scripts
 
-allowBuilds:
-  esbuild: set this to true or false
-
 autoInstallPeers: false
+strictPeerDependencies: false
 
 catalog:
   '@replit/vite-plugin-cartographer': ^0.5.1
