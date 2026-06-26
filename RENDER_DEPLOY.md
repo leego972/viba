@@ -5,7 +5,7 @@
 Use these exact commands on the Render web service:
 
 ```bash
-corepack enable && corepack prepare pnpm@11.9.0 --activate && pnpm install --frozen-lockfile && pnpm run build:render
+npm install -g pnpm@10.24.0 && pnpm install --frozen-lockfile && pnpm run build:render
 ```
 
 ```bash
@@ -42,7 +42,7 @@ Render sets `PORT` automatically. Add the following manually in Render.
 ```txt
 NODE_ENV=production
 NODE_VERSION=22.13.0
-PNPM_VERSION=11.9.0
+PNPM_VERSION=10.24.0
 DATABASE_URL=<Render PostgreSQL external/internal connection string>
 SESSION_SECRET=<long random secret if not using render.yaml generateValue>
 PUBLIC_ORIGIN=https://viba.onrender.com
@@ -77,7 +77,9 @@ GROQ_API_KEY=<key>
 
 ## Common failure this patch addresses
 
-If Render runs `npm install`, the repo intentionally fails with `Use pnpm instead`. This repo is a pnpm workspace and must be installed through pnpm/corepack.
+If Render uses Corepack and the log shows `verifySignature`, Corepack is failing before pnpm runs. The deploy command now bypasses Corepack and installs pnpm through npm.
+
+If Render runs plain `npm install`, the repo intentionally fails with `Use pnpm instead`. This repo is a pnpm workspace.
 
 The root package pins the package manager, the Node version is pinned, `render.yaml` contains a full Blueprint configuration, and the Render build now avoids blocking deployment on workspace-wide typecheck noise.
 
