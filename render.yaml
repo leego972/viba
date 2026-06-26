@@ -1,19 +1,20 @@
 services:
-  - type: web
-    name: viba
-    runtime: node
-    plan: free
-    region: oregon
-    buildCommand: bash render-build.sh
-    startCommand: npm start
-    healthCheckPath: /api/healthz
-    autoDeployTrigger: commit
-    envVars:
-      - key: COREPACK_INTEGRITY_KEYS
-        value: "0"
-      - key: NODE_ENV
-        value: production
-      - key: NODE_VERSION
-        value: 22.13.0
-      - key: PNPM_VERSION
-        value: 10.24.0
+    - type: web
+      name: viba
+      runtime: node
+      plan: free
+      region: oregon
+      buildCommand: bash render-build.sh
+      startCommand: npm start
+      healthCheckPath: /api/healthz
+      autoDeployTrigger: commit
+      envVars:
+        - key: COREPACK_INTEGRITY_KEYS
+          value: "0"
+        - key: NODE_ENV
+          value: production
+        - key: NODE_VERSION
+          value: 22.22.1
+        - key: PNPM_VERSION
+          value: 10.24.0
+  
