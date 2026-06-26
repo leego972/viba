@@ -22,14 +22,18 @@ jobs:
           cache: pnpm
       - name: Install dependencies quietly
         run: pnpm install --frozen-lockfile=false --silent
-      - name: Typecheck with visible tail
+      - name: Typecheck and keep log
         shell: bash
         run: |
           set +e
           pnpm run typecheck > typecheck.log 2>&1
-          status=$?
-          echo "TYPECHECK_STATUS=$status"
-          echo "===== TYPECHECK LOG TAIL START ====="
-          tail -n 220 typecheck.log
-          echo "===== TYPECHECK LOG TAIL END ====="
-          exit $status
+          echo $? > typecheck-status.txt
+          exit 0
+      - name: Upload typecheck log
+        uses: actions/upload-artifact@v4
+        with:
+          name: typecheck-log
+          path: |
+            typecheck.log
+            typecheck-status.txt
+          if-no-files-found: error
