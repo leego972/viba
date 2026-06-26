@@ -4,44 +4,7 @@ services:
     runtime: node
     plan: free
     region: oregon
-    buildCommand: npm install -g pnpm@10.24.0 && pnpm install --no-frozen-lockfile && pnpm run build:render
-    startCommand: npm run start:render
+    buildCommand: bash render-build.sh
+    startCommand: npm start
     healthCheckPath: /api/healthz
     autoDeployTrigger: commit
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: NODE_VERSION
-        value: 22.13.0
-      - key: PNPM_VERSION
-        value: 10.24.0
-      - key: PUBLIC_ORIGIN
-        value: https://viba.onrender.com
-      - key: VIBA_PUBLIC_URL
-        value: https://viba.onrender.com
-      - key: CORS_ALLOWED_ORIGINS
-        value: https://viba.onrender.com,https://viba.guru,https://www.viba.guru
-      - key: GITHUB_REPOSITORY
-        value: leego972/viba
-      - key: VIBA_SELF_REPO
-        value: leego972/viba
-      - key: VIBA_SELF_BRANCH
-        value: main
-      - key: VIBA_WEEKLY_MAINTENANCE_ENABLED
-        value: "false"
-      - key: VIBA_MAINTENANCE_EMAILS_ENABLED
-        value: "false"
-      - key: VIBA_MAINTENANCE_EMAIL_THROTTLE_MINUTES
-        value: "360"
-      - key: SESSION_SECRET
-        generateValue: true
-      - key: DATABASE_URL
-        sync: false
-      - key: ADMIN_BOOTSTRAP_EMAIL
-        sync: false
-      - key: ADMIN_BOOTSTRAP_PASSWORD
-        sync: false
-      - key: VIBA_ADMIN_EMAIL
-        sync: false
-      - key: VIBA_ADMIN_EMAILS
-        sync: false
