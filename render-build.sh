@@ -1,34 +1,35 @@
 #!/usr/bin/env bash
   set -euo pipefail
 
-  # Disable corepack interception — Node 22 enables corepack by default,
-  # which intercepts the 'pnpm' command and causes the keyid integrity error.
-  export COREPACK_ENABLE_AUTO=0
-  export COREPACK_INTEGRITY_KEYS=0
-
   export NODE_ENV=production
   export NPM_CONFIG_PRODUCTION=false
+  export COREPACK_INTEGRITY_KEYS=0
 
-  echo "[render-build] Node: $(node -v) | npm: $(npm -v)"
+  echo "[build] node=$(node -v) npm=$(npm -v)"
 
-  # Install pnpm 10.24.0 directly via npm (corepack is disabled above)
+  # Step 1: Disable corepack shims so 'pnpm' is never intercepted by corepack.
+  # The packageManager field in package.json triggers corepack auto-interception
+  # on Node 22; this disables that before we do anything else.
+  corepack disable 2>/dev/null || true
+  echo "[build] corepack shims disabled"
+
+  # Step 2: Install pnpm 10.24.0 via npm (not corepack)
   npm install -g pnpm@10.24.0
+  NPM_BIN="$(npm config get prefix)/bin"
+  export PATH="${NPM_BIN}:${PATH}"
+  echo "[build] pnpm=$(pnpm -v)"
 
-  # Put npm's global bin first on PATH so the freshly installed pnpm is used,
-  # not any corepack shim or .tool-versions version
-  export PATH="$(npm config get prefix)/bin:${PATH}"
-
-  echo "[render-build] pnpm: $(pnpm -v)"
-
-  # Install all workspace dependencies
+  # Step 3: Install all workspace dependencies
   pnpm install --no-frozen-lockfile --prod=false
+  echo "[build] install done"
 
-  # Build frontend + API server
+  # Step 4: Build frontend + API
   pnpm --filter @workspace/bridge-ai run build
+  echo "[build] bridge-ai built"
   pnpm --filter @workspace/api-server run build
+  echo "[build] api-server built"
 
-  # Verify required outputs exist
+  # Step 5: Verify required outputs
   node scripts/verify-render-output.mjs
-
-  echo "[render-build] Build complete."
+  echo "[build] all outputs verified"
   
