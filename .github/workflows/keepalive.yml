@@ -7,8 +7,10 @@ name: Keep Alive
     ping:
       runs-on: ubuntu-latest
       steps:
-        - name: Ping viba
+        - name: Ping viba (direct)
           run: |
-            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" https://www.viba.guru/api/healthz || echo "000")
-            echo "Health check status: $STATUS"
+            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" --max-time 30 https://viba.onrender.com/api/healthz || echo "000")
+            echo "Health: $STATUS"
+            [ "$STATUS" = "200" ] && echo "OK" || echo "Service may be cold-starting"
+            exit 0
   
