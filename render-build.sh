@@ -5,7 +5,10 @@
   echo "[build] node=$(node -v) pnpm=$(pnpm -v)"
   pnpm install --no-frozen-lockfile --prod=false
   echo "[build] install done"
+  pnpm --filter @workspace/bridge-ai run build
+  echo "[build] bridge-ai done"
   pnpm --filter @workspace/api-server run build
   echo "[build] api-server done"
-  ls -la artifacts/api-server/dist/index.mjs && echo "[build] verified"
+  node scripts/verify-render-output.mjs
+  echo "[build] verified"
   
