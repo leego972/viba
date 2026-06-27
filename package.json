@@ -9,7 +9,6 @@
     "pnpm": ">=10.24.0 <11"
   },
   "scripts": {
-    "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead. On Render set Build Command to: npm install -g pnpm@10.24.0 && pnpm install --no-frozen-lockfile && pnpm run build:render\" >&2; exit 1 ;; esac'",
     "build": "pnpm run build:render",
     "build:render": "pnpm --filter @workspace/bridge-ai run build && pnpm --filter @workspace/api-server run build && node scripts/verify-render-output.mjs",
     "start": "node --enable-source-maps artifacts/api-server/dist/index.mjs",
