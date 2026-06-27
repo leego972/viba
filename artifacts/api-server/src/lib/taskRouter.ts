@@ -31,25 +31,8 @@ const ROLE_TASK_AFFINITY: Record<string, string[]> = {
   qa:                   ["final_qa", "code_review"],
 };
 
-const LOW_COST_PROVIDER_BONUS: Record<string, number> = {
-  groq: 4,
-  ollama: 3,
-  perplexity: 1,
-};
-
-const EXPENSIVE_PROVIDER_PENALTY: Record<string, number> = {
-  openai: 0,
-  anthropic: 0,
-};
-
-interface RoutableTask {
-  id?: number;
-  type: string;
-  toolRequirements?: string[] | null;
-}
-
 function scoreAgents(
-  task: RoutableTask,
+  task: Task,
   agents: Agent[],
 ): Array<{ agent: Agent; score: number }> {
   const config = TASK_TYPE_CONFIG[task.type] ?? { capabilities: [] };
@@ -59,40 +42,43 @@ function scoreAgents(
     let score = 0;
     const agentCaps = agent.capabilities ?? [];
     const agentRole = (agent.role ?? "").toLowerCase();
-    const provider = agent.provider.toLowerCase();
 
+    // Capability match (+2 per hit)
     for (const cap of requiredCapabilities) {
       if (agentCaps.includes(cap)) score += 2;
     }
 
+    // Role affinity (+3 if this role owns this task type)
     const roleAffinity = ROLE_TASK_AFFINITY[agentRole] ?? [];
     if (roleAffinity.includes(task.type)) score += 3;
 
+    // Tool-capable agents get +5 on tool-required task types
     if (config.requiresTools && agent.canUseTools) score += 5;
 
+    // Tool-capable agents also get bonus when task has explicit toolRequirements
     const taskToolReqs = task.toolRequirements ?? [];
     if (taskToolReqs.length > 0 && agent.canUseTools) score += 4;
-
-    if (!config.requiresTools && taskToolReqs.length === 0) {
-      score += LOW_COST_PROVIDER_BONUS[provider] ?? 0;
-      score -= EXPENSIVE_PROVIDER_PENALTY[provider] ?? 0;
-    }
-
-    if (provider === "groq" && ["planning", "research", "code_review", "build"].includes(task.type)) {
-      score += 2;
-    }
 
     return { agent, score };
   });
 }
 
-export function routeTask(task: RoutableTask, agents: Agent[]): Agent | null {
+/**
+ * Route a task to the best-fit agent.
+ *
+ * For tool-required task types (build, deployment_approval) or tasks with
+ * explicit toolRequirements, the router strongly prefers tool-capable agents
+ * (Replit, Manus). If no tool-capable agent exists, it falls back to the
+ * full pool — the agentLoop will then initiate a tool handoff if needed.
+ */
+export function routeTask(task: Task, agents: Agent[]): Agent | null {
   if (!agents.length) return null;
 
   const config = TASK_TYPE_CONFIG[task.type] ?? { capabilities: [] };
   const taskToolReqs = task.toolRequirements ?? [];
   const needsTools = config.requiresTools === true || taskToolReqs.length > 0;
 
+  // If task requires tools, try to restrict to tool-capable agents first
   if (needsTools) {
     const toolCapableAgents = agents.filter((a) => a.canUseTools);
     if (toolCapableAgents.length > 0) {
@@ -100,15 +86,16 @@ export function routeTask(task: RoutableTask, agents: Agent[]): Agent | null {
       scored.sort((a, b) => b.score - a.score);
       return scored[0]?.agent ?? toolCapableAgents[0] ?? null;
     }
+    // No tool-capable agents available — fall through to full pool
+    // (agentLoop will detect canUseTools=false + blockedReason → handoff)
   }
 
   const scored = scoreAgents(task, agents);
   scored.sort((a, b) => b.score - a.score);
 
+  // If no one has a capability match, assign by round-robin on task id
   const topScore = scored[0]?.score ?? 0;
   if (topScore === 0) {
-    const groqAgent = agents.find((a) => a.provider.toLowerCase() === "groq");
-    if (groqAgent) return groqAgent;
     const idx = (task.id ?? 0) % agents.length;
     return agents[idx] ?? agents[0] ?? null;
   }
@@ -161,14 +148,12 @@ export function autoAssignRoles(agentProviders: string[]): Record<string, string
   ];
 
   const providerRoleHints: Record<string, string> = {
-    groq:       "builder",
     openai:     "strategist",
     anthropic:  "reviewer",
     manus:      "researcher",
     replit:     "builder",
     google:     "reviewer",
     perplexity: "researcher",
-    ollama:     "builder",
   };
 
   const assignments: Record<string, string> = {};

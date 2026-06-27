@@ -5,11 +5,6 @@ import { eq, sql, desc } from "drizzle-orm";
 import { detectSpikeProviders, type ProviderCount } from "../lib/spikeDetect";
 import { sendSpikeNotifications, sendTestWebhookNotification, getLastNotification } from "../lib/spikeNotify";
 import { sendTestEmail } from "../lib/emailNotify";
-import doctorRouter from "./projectDoctor";
-import sessionBudgetRouter from "./sessionBudget";
-import sessionProofReportRouter from "./sessionProofReport";
-import doctorRepairProposalRouter from "./doctorRepairProposal";
-import marketCompletionRouter from "./marketCompletion";
 
 // 5 req/min — this route fires outbound HTTP and SMTP; keep tight
   const testNotificationLimiter = createRateLimiter({
@@ -19,11 +14,6 @@ import marketCompletionRouter from "./marketCompletion";
   });
 
   const router: IRouter = Router();
-router.use(doctorRouter);
-router.use(sessionBudgetRouter);
-router.use(sessionProofReportRouter);
-router.use(doctorRepairProposalRouter);
-router.use(marketCompletionRouter);
 
 const DEFAULT_ALERT_THRESHOLD = 5;
 const ALERT_WINDOW_HOURS = 1;
