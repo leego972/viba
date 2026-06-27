@@ -1,55 +1,65 @@
 #!/usr/bin/env bash
-  set -uo pipefail
   export NODE_ENV=production
   export NPM_CONFIG_PRODUCTION=false
   LOG=/tmp/render-build.log
-  echo "[build] node=$(node -v) pnpm=$(pnpm -v)" | tee -a "$LOG"
+  rm -f "$LOG"
+  touch "$LOG"
+
+  ts() { date '+%H:%M:%S'; }
+  log() { echo "[$(ts)] $*" | tee -a "$LOG"; }
+
+  log "node=$(node -v) pnpm=$(pnpm -v)"
 
   run_step() {
     local name="$1"; shift
-    echo "[build] === START: $name ===" | tee -a "$LOG"
+    log "=== START: $name ==="
     local start=$SECONDS
     if "$@" >> "$LOG" 2>&1; then
-      echo "[build] OK: $name ($((SECONDS-start))s)" | tee -a "$LOG"
+      log "OK: $name ($(( SECONDS - start ))s)"
       return 0
     else
       local rc=$?
-      echo "[build] FAIL: $name (rc=$rc, $((SECONDS-start))s)" | tee -a "$LOG"
+      log "FAIL: $name rc=$rc ($(( SECONDS - start ))s)"
       return $rc
     fi
   }
 
-  run_step "pnpm-install" pnpm install --no-frozen-lockfile --prod=false
-  run_step "bridge-ai-build" pnpm --filter @workspace/bridge-ai run build
-  run_step "api-server-build" pnpm --filter @workspace/api-server run build
+  INSTALL_OK=0; run_step "pnpm-install" pnpm install --no-frozen-lockfile --prod=false && INSTALL_OK=1
+  BRIDGE_OK=0;  run_step "bridge-ai-build" pnpm --filter @workspace/bridge-ai run build && BRIDGE_OK=1
+  API_OK=0;     run_step "api-server-build" pnpm --filter @workspace/api-server run build && API_OK=1
 
-  BUILD_OK=1
-  if ! node scripts/verify-render-output.mjs >> "$LOG" 2>&1; then
-    echo "[build] FAIL: verify-render-output" | tee -a "$LOG"
-    BUILD_OK=0
+  VERIFY_OK=0
+  if node scripts/verify-render-output.mjs >> "$LOG" 2>&1; then
+    log "OK: verify-render-output"
+    VERIFY_OK=1
   else
-    echo "[build] OK: verify-render-output" | tee -a "$LOG"
+    log "FAIL: verify-render-output"
   fi
 
-  if [ "$BUILD_OK" = "0" ]; then
-    echo "[build] Writing diagnostic server due to failure" | tee -a "$LOG"
+  log "Summary: install=$INSTALL_OK bridge=$BRIDGE_OK api=$API_OK verify=$VERIFY_OK"
+
+  if [ "$VERIFY_OK" = "0" ]; then
+    log "Writing diagnostic server"
     mkdir -p artifacts/api-server/dist artifacts/bridge-ai/dist/public
-    echo '<!doctype html><html><body><pre id="l"></pre><script>fetch("/api/buildlog").then(r=>r.text()).then(t=>document.getElementById("l").textContent=t)</script></body></html>' > artifacts/bridge-ai/dist/public/index.html
+    echo '<!doctype html><html><body><h2>Build Diagnostic</h2><p>Visit <a href="/api/buildlog">/api/buildlog</a></p></body></html>' \
+      > artifacts/bridge-ai/dist/public/index.html
+    # Embed log content directly into the server so no fs import is needed at runtime
     node -e "
       const fs = require('fs');
-      const js = `
-  import http from 'node:http';
-  const log = fs.readFileSync('/tmp/render-build.log', 'utf8');
-  http.createServer((req, res) => {
-    res.setHeader('Content-Type', 'text/plain');
-    if (req.url === '/api/healthz') { res.writeHead(200); res.end('ok'); return; }
-    if (req.url === '/api/buildlog') { res.writeHead(200); res.end(log); return; }
-    res.writeHead(200); res.end('BUILD DIAGNOSTIC — visit /api/buildlog for build log');
-  }).listen(process.env.PORT || 3000, () => console.log('diagnostic on', process.env.PORT || 3000));
-  `;
-      fs.writeFileSync('artifacts/api-server/dist/index.mjs', js);
-      console.log('diagnostic server written');
+      const rawLog = fs.readFileSync('/tmp/render-build.log', 'utf8');
+      const embedded = JSON.stringify(rawLog);
+      const srv = [
+        'import http from \'node:http\';',
+        'const LOG = ' + embedded + ';',
+        'http.createServer((req, res) => {',
+        '  res.setHeader(\'Content-Type\', \'text/plain\');',
+        '  if (req.url === \'/api/healthz\') { res.writeHead(200); res.end(\'ok\'); return; }',
+        '  res.writeHead(200); res.end(LOG);',
+        '}).listen(process.env.PORT || 3000, () => console.log(\'diagnostic on\', process.env.PORT || 3000));'
+      ].join('\n');
+      fs.writeFileSync('artifacts/api-server/dist/index.mjs', srv);
+      console.log('diagnostic server written, log size=' + rawLog.length);
     "
   fi
-  echo "[build] all done"
+  log "Build script complete"
   
