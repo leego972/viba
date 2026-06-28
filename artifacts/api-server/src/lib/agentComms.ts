@@ -7,29 +7,30 @@ import { logger } from "./logger";
 const MAX_OUTBOUND_QUESTIONS_PER_STEP = 3;
 
 /**
- * Fetch unanswered question messages directed at the given agent, across all tasks
- * in the session.
+ * Fetch unanswered question messages directed at the given agent for the current task.
  *
- * Delivery is scoped by sessionId + toAgentId (NOT by taskId).
- * Rationale: tasks are executed by one assigned agent each — Agent B typically runs
- * a different taskId than the task where Agent A stored the question. Filtering
- * delivery by taskId would make cross-agent questions permanently undeliverable.
+ * Delivery is strictly task-scoped: only questions stored under currentTaskId are
+ * surfaced to the recipient. This enforces task isolation — agents only receive
+ * messages that belong to the task they are currently executing.
  *
- * Storage vs. delivery distinction:
+ * Design rationale:
+ *  - A task is the unit of collaboration. Two agents can be co-assigned to the
+ *    same task, at which point they share a communication channel via taskId.
+ *  - Questions stored under a different taskId belong to a different conversational
+ *    context and must NOT bleed into the current task's execution.
+ *  - Answers are also stored under the question's original taskId (see persistAnswers),
+ *    ensuring every Q/A pair is fully contained within one task thread.
+ *
+ * Storage distinction:
  *  - Questions are stored with the sender's taskId for UI thread grouping
- *    (see persistOutboundQuestions — task-scoped at write time).
- *  - Answers are stored under the question's original taskId so the Q&A pair
- *    stays in the same thread (see persistAnswers).
- *  - Delivery is session + recipient scoped so questions are always reachable
- *    by the recipient regardless of which task they are currently executing.
- *
- * The `currentTaskId` parameter is retained for call-site compatibility and
- * future use (e.g. priority hints), but it is NOT used to filter delivery.
+ *    (see persistOutboundQuestions — always task-scoped at write time).
+ *  - Delivery is constrained to that same taskId so the recipient only sees
+ *    questions relevant to the task they are currently executing.
  */
 export async function processPendingQuestions(
   sessionId: number,
   agentId: number,
-  _currentTaskId: number,
+  currentTaskId: number,
 ): Promise<Array<{ fromAgent: string; question: string; messageId: number }>> {
   const questions = await db
     .select()
@@ -39,9 +40,7 @@ export async function processPendingQuestions(
         eq(messagesTable.sessionId, sessionId),
         eq(messagesTable.messageType, "question"),
         eq(messagesTable.toAgentId, agentId),
-        // NOTE: taskId is intentionally NOT filtered here.
-        // Questions must be deliverable across task boundaries.
-        // See docstring above for full rationale.
+        eq(messagesTable.taskId, currentTaskId),
       ),
     )
     .orderBy(asc(messagesTable.id));
@@ -85,8 +84,7 @@ export async function processPendingQuestions(
  * Save question messages for outbound questions emitted by an agent.
  * Resolves toAgentName → toAgentId using the session's agent list.
  * Capped at MAX_OUTBOUND_QUESTIONS_PER_STEP to prevent runaway chatter.
- * All questions are task-scoped at write time (stored with the sender's taskId)
- * for UI thread grouping, but delivery is session-scoped (see processPendingQuestions).
+ * All questions are strictly task-scoped — stored with the sender's taskId.
  */
 export async function persistOutboundQuestions(
   sessionId: number,
@@ -147,10 +145,10 @@ export async function persistOutboundQuestions(
  *
  * Each answer is stored under the *question's original taskId*, not the
  * responder's current taskId. This keeps the Q/A pair in the same task thread
- * for display purposes, even when the responder is on a different task.
+ * for display purposes.
  *
  * Answer lookup is constrained to the specific referenced question IDs
- * (not the full session) to enforce same-question linkage and avoid stale matches.
+ * (not the full session) to enforce same-task linkage and avoid stale matches.
  */
 export async function persistAnswers(
   sessionId: number,
