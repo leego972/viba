@@ -346,6 +346,39 @@ async function runStartupMigrations(): Promise<void> {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_viba_client_reports_client_id ON viba_client_reports(client_id)`);
 
+  // ── users: deleted_at column for soft-delete on account deletion ───────────
+  await pool.query(`
+    DO $$ BEGIN
+      ALTER TABLE users ADD COLUMN deleted_at TIMESTAMPTZ;
+    EXCEPTION WHEN duplicate_column THEN NULL;
+    END $$
+  `);
+
+  // ── account_deletion_requests — tracks archived + scheduled hard-delete ────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS account_deletion_requests (
+      id                  SERIAL      PRIMARY KEY,
+      user_id             INTEGER     NOT NULL,
+      requested_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      archive_repo        TEXT,
+      archive_path        TEXT,
+      archive_commit_sha  TEXT,
+      delete_after        TIMESTAMPTZ NOT NULL,
+      deleted_at          TIMESTAMPTZ,
+      status              TEXT        NOT NULL DEFAULT 'archived',
+      updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_account_deletion_requests_user_id
+    ON account_deletion_requests(user_id)
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_account_deletion_requests_delete_after
+    ON account_deletion_requests(delete_after)
+    WHERE deleted_at IS NULL
+  `);
+
   logger.info("Startup migrations complete");
 }
 
@@ -411,6 +444,14 @@ loadCircuitStateFromDb()
   .then(() => provisionStripeProducts())
   .then(() => {
     listenWithRetry(1);
+
+    // Run retention cleaner immediately on start, then every 24h
+    // Purges accounts past their 6-month post-deletion retention window
+    const { runRetentionCleaner } = require("./lib/archiveService") as typeof import("./lib/archiveService");
+    runRetentionCleaner().catch((err: unknown) => logger.error({ err }, "Initial retention cleaner run failed"));
+    setInterval(() => {
+      runRetentionCleaner().catch((err: unknown) => logger.error({ err }, "Periodic retention cleaner failed"));
+    }, 24 * 60 * 60 * 1000);
 
     // Periodic cleanup of expired/used password_reset_tokens (every 6 hours)
     const TOKEN_CLEANUP_MS = 6 * 60 * 60 * 1000;
