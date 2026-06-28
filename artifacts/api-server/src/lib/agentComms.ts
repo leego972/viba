@@ -9,23 +9,18 @@ const MAX_OUTBOUND_QUESTIONS_PER_STEP = 3;
 /**
  * Fetch unanswered question messages directed at the given agent for the current task.
  *
- * Delivery is strictly task-scoped: only questions stored under currentTaskId are
- * surfaced to the recipient. This enforces task isolation — agents only receive
- * messages that belong to the task they are currently executing.
+ * Delivery is strictly task-scoped: only questions stored under `currentTaskId` are
+ * surfaced. This preserves task-context isolation — agents do not receive questions
+ * that belong to unrelated tasks.
  *
- * Storage vs. delivery distinction:
- *  - Questions are stored with the sender's taskId for UI thread grouping
- *    (see persistOutboundQuestions — always task-scoped at write time).
- *  - Answers are stored under the question's original taskId so the Q&A pair
- *    stays in the same thread (see persistAnswers).
- *  - Delivery is session + recipient + task scoped so each task has an isolated
- *    communication channel and stale cross-task messages cannot leak through.
+ * For cross-agent communication across tasks, callers should store the question
+ * under the recipient agent's active task ID at send-time (see persistOutboundQuestions).
  */
 export async function processPendingQuestions(
   sessionId: number,
   agentId: number,
   currentTaskId: number,
-): Promise<Array<{ fromAgent: string; question: string; messageId: number }>> {
+): Promise<Array<{ fromAgent: string; question: string; messageId: number; sourceTaskId: number | null }>> {
   const questions = await db
     .select()
     .from(messagesTable)
@@ -71,6 +66,7 @@ export async function processPendingQuestions(
     fromAgent: q.agentName ?? "Unknown agent",
     question: q.content,
     messageId: q.id,
+    sourceTaskId: q.taskId ?? null,  // preserved for UI thread grouping at render time
   }));
 }
 
