@@ -88,7 +88,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   let user: UserRow;
   try {
     const { rows } = await pool.query<UserRow>(
-      "SELECT * FROM users WHERE email = $1",
+      "SELECT * FROM users WHERE email = $1 AND deleted_at IS NULL",
       [email],
     );
     const found = rows[0];
