@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { pool } from "@workspace/db";
 import { logVibaEvent, resolveVibaCredential } from "../lib/vibaVault";
 import { verifyRepoInSandbox } from "../lib/selfRepairSandbox";
+import { configuredSelfRepo, configuredSelfBranch } from "../lib/selfRepoGuard";
 
 const router: IRouter = Router();
 
@@ -20,13 +21,13 @@ function userId(req: ReqWithSession): number | null {
 function repoFromBody(body: unknown): string {
   const repo = typeof (body as { repoFullName?: unknown })?.repoFullName === "string"
     ? String((body as { repoFullName: string }).repoFullName).trim()
-    : process.env.VIBA_SELF_REPO || process.env.GITHUB_REPOSITORY || "leego972/bridge-ai";
+    : configuredSelfRepo();
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) throw new Error("repoFullName must be owner/name");
   return repo;
 }
 
 function branchFromBody(body: unknown): string {
-  const branch = typeof (body as { branch?: unknown })?.branch === "string" ? String((body as { branch: string }).branch).trim() : "main";
+  const branch = typeof (body as { branch?: unknown })?.branch === "string" ? String((body as { branch: string }).branch).trim() : configuredSelfBranch();
   if (!/^[A-Za-z0-9._\/-]+$/.test(branch)) throw new Error("invalid branch");
   return branch;
 }
