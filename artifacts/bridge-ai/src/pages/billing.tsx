@@ -3,12 +3,7 @@ import { useLocation } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AlertTriangle, CheckCircle2, Clock, XCircle, Zap, RefreshCw, ExternalLink, TrendingDown, TrendingUp, History, ToggleLeft, ToggleRight } from "lucide-react";
 
-const AUTO_TOPUP_KEY = "viba_auto_topup";
 interface AutoTopupConfig { enabled: boolean; threshold: number; packKey: string; }
-function loadAutoTopup(): AutoTopupConfig {
-  try { return JSON.parse(localStorage.getItem(AUTO_TOPUP_KEY) ?? "{}"); } catch { return { enabled: false, threshold: 100, packKey: "" }; }
-}
-function saveAutoTopup(cfg: AutoTopupConfig) { localStorage.setItem(AUTO_TOPUP_KEY, JSON.stringify(cfg)); }
 
 interface BillingStatus {
   subscriptionStatus: string;
@@ -16,6 +11,7 @@ interface BillingStatus {
   creditsPeriodEnd: string | null;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
+  planKey: string;
 }
 
 interface CreditPack {
@@ -66,7 +62,9 @@ export default function Billing() {
   const [refreshing, setRefreshing] = useState(false);
   const [transactions, setTransactions] = useState<CreditTransaction[]>([]);
   const [txnLoading, setTxnLoading] = useState(false);
-  const [autoTopup, setAutoTopup] = useState<AutoTopupConfig>(() => loadAutoTopup());
+  const [autoTopup, setAutoTopup] = useState<AutoTopupConfig>({ enabled: false, threshold: 100, packKey: "" });
+  const [autoTopupSaving, setAutoTopupSaving] = useState(false);
+  const [annualLoading, setAnnualLoading] = useState(false);
 
   // Check if we just bought credits (Stripe redirected back with ?credits_added=N)
   const params = new URLSearchParams(window.location.search);
@@ -89,15 +87,17 @@ export default function Billing() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const [statusRes, plansRes] = await Promise.all([
+      const [statusRes, plansRes, topupRes] = await Promise.all([
         fetch("/api/billing/status", { credentials: "include" }),
         fetch("/api/billing/plans"),
+        fetch("/api/billing/auto-topup", { credentials: "include" }),
       ]);
       if (statusRes.ok) setStatus(await statusRes.json() as BillingStatus);
       if (plansRes.ok) {
         const d = await plansRes.json() as { creditPacks: CreditPack[] };
         setPacks(d.creditPacks);
       }
+      if (topupRes.ok) setAutoTopup(await topupRes.json() as AutoTopupConfig);
     } catch {
       // ignore
     } finally {
@@ -147,6 +147,42 @@ export default function Billing() {
     }
   }
 
+  async function saveAutoTopupToServer(cfg: AutoTopupConfig, rollbackTo: AutoTopupConfig) {
+    setAutoTopupSaving(true);
+    try {
+      const res = await fetch("/api/billing/auto-topup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(cfg),
+      });
+      if (!res.ok) setAutoTopup(rollbackTo);
+    } catch {
+      setAutoTopup(rollbackTo);
+    } finally {
+      setAutoTopupSaving(false);
+    }
+  }
+
+  async function handleSubscribeAnnual() {
+    setAnnualLoading(true);
+    try {
+      const res = await fetch("/api/billing/checkout/annual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+      const d = await res.json() as { url?: string; error?: string };
+      if (res.status === 409) { setLocation("/billing"); return; }
+      if (d.url) window.location.href = d.url;
+      else alert(d.error ?? "Could not start annual checkout — please try again");
+    } catch {
+      alert("Network error — please try again");
+    } finally {
+      setAnnualLoading(false);
+    }
+  }
+
   async function handleRefresh() {
     setRefreshing(true);
     await fetchStatus();
@@ -157,7 +193,9 @@ export default function Billing() {
   const isPastDue = status?.subscriptionStatus === "past_due";
   const isActive = status?.subscriptionStatus === "active" || status?.subscriptionStatus === "trialing";
   const periodEnd = status?.creditsPeriodEnd ? new Date(status.creditsPeriodEnd) : null;
-  const creditPct = status ? Math.min(100, (status.creditsRemaining / 1000) * 100) : 0;
+  const isAnnual = status?.planKey === "viba_annual";
+  const totalCredits = isAnnual ? 23400 : 1000;
+  const creditPct = status ? Math.min(100, (status.creditsRemaining / totalCredits) * 100) : 0;
 
   return (
     <AppLayout>
@@ -193,23 +231,46 @@ export default function Billing() {
             ))}
           </div>
         ) : !hasSubscription ? (
-          /* No active subscription */
-          <div className="rounded-xl border border-border bg-muted/20 p-8 text-center space-y-4">
-            <div className="w-14 h-14 rounded-full bg-muted/40 flex items-center justify-center mx-auto">
-              <Zap className="w-7 h-7 text-muted-foreground" />
+          /* No active subscription — show monthly and annual plan cards */
+          <div className="rounded-xl border border-border bg-muted/20 p-6 space-y-5">
+            <div className="text-center space-y-1">
+              <h2 className="text-lg font-semibold">Choose your plan</h2>
+              <p className="text-muted-foreground text-sm">7-day free trial — no charge until day 8.</p>
             </div>
-            <div>
-              <h2 className="text-lg font-semibold">No active subscription</h2>
-              <p className="text-muted-foreground text-sm mt-1">
-                Subscribe to unlock VIBA's collaborative AI orchestration — 7-day free trial, no charge until day 8.
-              </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Monthly */}
+              <div className="rounded-xl border border-border bg-card p-5 space-y-3">
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-1">Monthly</p>
+                  <p className="text-2xl font-bold">$50<span className="text-sm font-normal text-muted-foreground">/mo</span></p>
+                  <p className="text-xs text-muted-foreground mt-1">1,000 credits per month</p>
+                </div>
+                <button
+                  onClick={() => setLocation("/pricing")}
+                  className="w-full py-2 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-sm font-medium transition-colors"
+                >
+                  Start Monthly Trial
+                </button>
+              </div>
+              {/* Annual */}
+              <div className="relative rounded-xl border border-primary/40 bg-primary/5 p-5 space-y-3">
+                <span className="absolute -top-2.5 left-4 bg-amber-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full">
+                  BEST VALUE
+                </span>
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-1">Annual</p>
+                  <p className="text-2xl font-bold">$600<span className="text-sm font-normal text-muted-foreground">/yr</span></p>
+                  <p className="text-xs text-emerald-400 font-medium mt-1">23,400 credits — 95% more than monthly</p>
+                </div>
+                <button
+                  onClick={handleSubscribeAnnual}
+                  disabled={annualLoading}
+                  className="w-full py-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-semibold transition-colors disabled:opacity-60"
+                >
+                  {annualLoading ? "Redirecting…" : "Start Annual Trial"}
+                </button>
+              </div>
             </div>
-            <button
-              onClick={() => setLocation("/pricing")}
-              className="inline-flex items-center gap-2 bg-primary text-primary-foreground rounded-lg px-6 py-2.5 text-sm font-semibold hover:bg-primary/90 transition-colors"
-            >
-              Start Free Trial
-            </button>
           </div>
         ) : (
           <>
@@ -261,7 +322,9 @@ export default function Billing() {
                 </p>
               )}
               <p className="text-xs text-muted-foreground">
-                VIBA Member — $50/month · 1,000 credits per billing period
+                {isAnnual
+                  ? "VIBA Member — Annual · $600/year · 23,400 credits per year"
+                  : "VIBA Member — Monthly · $50/month · 1,000 credits per month"}
               </p>
             </div>
 
@@ -272,7 +335,7 @@ export default function Billing() {
                 <span className="text-4xl font-bold tabular-nums">
                   {(status!.creditsRemaining).toLocaleString()}
                 </span>
-                <span className="text-muted-foreground text-sm mb-1">/ 1,000 this period</span>
+                <span className="text-muted-foreground text-sm mb-1">/ {totalCredits.toLocaleString()} this period</span>
               </div>
               {/* Progress bar */}
               <div className="h-2 bg-muted rounded-full overflow-hidden">
@@ -314,9 +377,10 @@ export default function Billing() {
                   <p className="text-xs text-muted-foreground mt-0.5">Never have a session paused mid-run due to empty credits.</p>
                 </div>
                 <button
-                  onClick={() => { const next = { ...autoTopup, enabled: !autoTopup.enabled }; setAutoTopup(next); saveAutoTopup(next); }}
+                  onClick={() => { const prev = autoTopup; const next = { ...autoTopup, enabled: !autoTopup.enabled }; setAutoTopup(next); void saveAutoTopupToServer(next, prev); }}
                   className="shrink-0 ml-4"
                   title={autoTopup.enabled ? "Disable auto top-up" : "Enable auto top-up"}
+                  disabled={autoTopupSaving}
                 >
                   {autoTopup.enabled
                     ? <ToggleRight className="w-8 h-8 text-primary" />
@@ -330,7 +394,7 @@ export default function Billing() {
                     <select
                       className="w-full rounded-lg border border-border bg-background text-sm px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary"
                       value={autoTopup.threshold}
-                      onChange={e => { const next = { ...autoTopup, threshold: Number(e.target.value) }; setAutoTopup(next); saveAutoTopup(next); }}
+                      onChange={e => { const prev = autoTopup; const next = { ...autoTopup, threshold: Number(e.target.value) }; setAutoTopup(next); void saveAutoTopupToServer(next, prev); }}
                     >
                       {[50, 100, 150, 200, 250].map(n => (
                         <option key={n} value={n}>Below {n} credits</option>
@@ -342,17 +406,17 @@ export default function Billing() {
                     <select
                       className="w-full rounded-lg border border-border bg-background text-sm px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary"
                       value={autoTopup.packKey}
-                      onChange={e => { const next = { ...autoTopup, packKey: e.target.value }; setAutoTopup(next); saveAutoTopup(next); }}
+                      onChange={e => { const prev = autoTopup; const next = { ...autoTopup, packKey: e.target.value }; setAutoTopup(next); void saveAutoTopupToServer(next, prev); }}
                     >
                       <option value="">Select pack…</option>
                       {packs.map(p => <option key={p.key} value={p.key}>{p.label} — {p.description}</option>)}
                     </select>
                   </div>
                   <div className="col-span-2">
-                    <div className="flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2">
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-                      <p className="text-xs text-amber-300">
-                        Auto top-up preference saved locally. Automated charging requires server-side billing support — coming soon.
+                    <div className="flex items-start gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                      <p className="text-xs text-emerald-300">
+                        {autoTopupSaving ? "Saving…" : `When your balance drops below ${autoTopup.threshold} credits, your saved card is charged automatically and credits are added instantly.`}
                       </p>
                     </div>
                   </div>
@@ -429,6 +493,9 @@ export default function Billing() {
                     : txn.reason === "monthly_renewal" ? "Monthly credit refresh"
                     : txn.reason === "credit_pack" ? "Credit pack purchase"
                     : txn.reason === "trial_grant" ? "Trial credits"
+                    : txn.reason.startsWith("auto_topup") || txn.reason.startsWith("new subscription") && txn.reason.includes("viba_annual") ? "Annual plan — initial credits"
+                    : txn.reason.startsWith("new subscription") ? "New subscription — credits granted"
+                    : txn.reason.startsWith("Auto top-up") || txn.reason.toLowerCase().includes("auto top-up") ? "Auto top-up"
                     : txn.reason;
                   return (
                     <div key={txn.id} className="flex items-center justify-between px-4 py-3 text-sm">
