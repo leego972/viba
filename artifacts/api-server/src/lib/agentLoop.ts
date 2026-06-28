@@ -148,8 +148,9 @@ export async function runNextAgentStep(sessionId: number, userId = 0): Promise<{
 
   const [memory] = await db.select().from(memoryTable).where(eq(memoryTable.sessionId, sessionId));
 
-  // Fetch pending questions directed at this agent — session + recipient scoped,
-  // NOT filtered by taskId so cross-task questions are delivered (see agentComms.ts)
+  // Fetch pending questions directed at this agent for the current task.
+  // persistOutboundQuestions stores questions under the recipient's active task ID,
+  // so strict task-scoped filtering here still delivers cross-agent questions.
   const pendingQuestions = await processPendingQuestions(sessionId, assignedAgent.id, nextTask.id);
 
   // ── Complexity-based credit billing ─────────────────────────────────────────
