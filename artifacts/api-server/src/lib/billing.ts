@@ -281,6 +281,7 @@ export async function linkSubscription(
   subscriptionId: string,
   status: string,
   periodEnd: Date | null,
+  planKey = "viba_monthly",
 ): Promise<void> {
   await pool.query(
     `UPDATE users SET
@@ -288,11 +289,12 @@ export async function linkSubscription(
        stripe_subscription_id = $2,
        subscription_status    = $3,
        credits_period_end     = $4,
+       plan_key               = $6,
        updated_at             = NOW()
      WHERE id = $5`,
-    [customerId, subscriptionId, status, periodEnd, userId],
+    [customerId, subscriptionId, status, periodEnd, userId, planKey],
   );
-  logger.info({ userId, customerId, subscriptionId, status }, "Billing: subscription linked");
+  logger.info({ userId, customerId, subscriptionId, status, planKey }, "Billing: subscription linked");
 }
 
 export async function refreshMonthlyCredits(
@@ -360,10 +362,12 @@ export async function getBillingStatus(userId: number): Promise<{
   creditsPeriodEnd: string | null;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
+  planKey: string;
 }> {
   const result = await pool.query(
     `SELECT subscription_status, credits_remaining, credits_period_end,
-            stripe_customer_id, stripe_subscription_id
+            stripe_customer_id, stripe_subscription_id,
+            COALESCE(plan_key, 'viba_monthly') AS plan_key
      FROM users WHERE id = $1`,
     [userId],
   );
@@ -374,6 +378,7 @@ export async function getBillingStatus(userId: number): Promise<{
         credits_period_end: Date | null;
         stripe_customer_id: string | null;
         stripe_subscription_id: string | null;
+        plan_key: string;
       }
     | undefined;
 
@@ -383,7 +388,143 @@ export async function getBillingStatus(userId: number): Promise<{
     creditsPeriodEnd: row?.credits_period_end?.toISOString() ?? null,
     stripeCustomerId: row?.stripe_customer_id ?? null,
     stripeSubscriptionId: row?.stripe_subscription_id ?? null,
+    planKey: row?.plan_key ?? "viba_monthly",
   };
+}
+
+// ─── Auto top-up config ────────────────────────────────────────────────────────
+
+export interface AutoTopupConfig {
+  enabled: boolean;
+  threshold: number;   // credits below which a top-up is triggered
+  packKey: string;     // which credit pack to buy
+}
+
+export async function getAutoTopupConfig(userId: number): Promise<AutoTopupConfig> {
+  const result = await pool.query(
+    `SELECT auto_topup_enabled, auto_topup_threshold, auto_topup_pack_key FROM users WHERE id = $1`,
+    [userId],
+  );
+  const row = result.rows[0] as {
+    auto_topup_enabled: boolean;
+    auto_topup_threshold: number;
+    auto_topup_pack_key: string | null;
+  } | undefined;
+  return {
+    enabled: row?.auto_topup_enabled ?? false,
+    threshold: row?.auto_topup_threshold ?? 100,
+    packKey: row?.auto_topup_pack_key ?? "",
+  };
+}
+
+export async function setAutoTopupConfig(userId: number, config: AutoTopupConfig): Promise<void> {
+  await pool.query(
+    `UPDATE users SET auto_topup_enabled = $1, auto_topup_threshold = $2, auto_topup_pack_key = $3, updated_at = NOW() WHERE id = $4`,
+    [config.enabled, config.threshold, config.packKey || null, userId],
+  );
+}
+
+/**
+ * Called after every credit deduction. If the user's balance has dropped below
+ * their auto top-up threshold and they have a saved payment method, this fires
+ * a Stripe PaymentIntent off-session to charge and top up automatically.
+ *
+ * Fire-and-forget safe: errors are logged but never propagate to the caller.
+ */
+export async function triggerAutoTopupIfNeeded(userId: number, balanceAfter: number): Promise<void> {
+  if (!isStripeConfigured()) return;
+
+  try {
+    const config = await getAutoTopupConfig(userId);
+    if (!config.enabled || !config.packKey) return;
+    if (balanceAfter > config.threshold) return;
+
+    const pack = CREDIT_PACKS.find((p) => p.key === config.packKey);
+    if (!pack) {
+      logger.warn({ userId, packKey: config.packKey }, "Auto top-up: unknown pack key — skipping");
+      return;
+    }
+
+    const priceId = getBillingPriceId(pack.key);
+    if (!priceId) {
+      logger.warn({ userId, packKey: pack.key }, "Auto top-up: price not provisioned — skipping");
+      return;
+    }
+
+    // Get the customer's saved payment method from their active subscription
+    const billing = await getBillingStatus(userId);
+    if (!billing.stripeCustomerId) {
+      logger.warn({ userId }, "Auto top-up: no Stripe customer — skipping");
+      return;
+    }
+
+    const stripe = getStripe();
+
+    // Retrieve the customer's default payment method via their subscription
+    let paymentMethodId: string | null = null;
+    if (billing.stripeSubscriptionId) {
+      const sub = await stripe.subscriptions.retrieve(billing.stripeSubscriptionId);
+      const pmFromSub = sub.default_payment_method;
+      if (typeof pmFromSub === "string") paymentMethodId = pmFromSub;
+      else if (pmFromSub && typeof pmFromSub === "object") paymentMethodId = pmFromSub.id;
+    }
+
+    // Fallback 1: customer's default payment method (set by customer_update in checkout)
+    if (!paymentMethodId) {
+      const customer = await stripe.customers.retrieve(billing.stripeCustomerId);
+      if (!customer.deleted) {
+        const pm = customer.invoice_settings?.default_payment_method;
+        if (typeof pm === "string") paymentMethodId = pm;
+        else if (pm && typeof pm === "object") paymentMethodId = pm.id;
+      }
+    }
+
+    // Fallback 2: list the customer's attached payment methods and take the first card
+    if (!paymentMethodId) {
+      const pms = await stripe.paymentMethods.list({
+        customer: billing.stripeCustomerId,
+        type: "card",
+        limit: 1,
+      });
+      paymentMethodId = pms.data[0]?.id ?? null;
+    }
+
+    if (!paymentMethodId) {
+      logger.warn({ userId }, "Auto top-up: no payment method found on customer — skipping");
+      return;
+    }
+
+    // Create and confirm a PaymentIntent off-session
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: pack.unitAmount,
+      currency: "usd",
+      customer: billing.stripeCustomerId,
+      payment_method: paymentMethodId,
+      confirm: true,
+      off_session: true,
+      metadata: {
+        system: "viba_billing",
+        type: "auto_topup",
+        userId: String(userId),
+        credits: String(pack.credits),
+        packKey: pack.key,
+        triggeredAtBalance: String(balanceAfter),
+      },
+      description: `VIBA auto top-up: ${pack.description}`,
+    });
+
+    // Always rely on the payment_intent.succeeded webhook to grant credits.
+    // Granting here AND in the webhook would cause a double-grant.
+    // The webhook fires within seconds even when the PI succeeds immediately.
+    logger.info(
+      { userId, packKey: pack.key, credits: pack.credits, paymentIntentId: paymentIntent.id, status: paymentIntent.status },
+      "Auto top-up: PaymentIntent created — credits will be granted via webhook",
+    );
+  } catch (err: unknown) {
+    // Insufficient funds, card declined, etc — log but never throw
+    const code = (err as { code?: string }).code;
+    logger.warn({ err, userId, code }, "Auto top-up: charge failed (card declined or 3DS required)");
+  }
 }
 
 // ─── Webhook idempotency (in-memory; survives typical deploys) ────────────────
