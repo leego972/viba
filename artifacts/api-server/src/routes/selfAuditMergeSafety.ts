@@ -20,7 +20,7 @@ function userId(req: ReqWithSession): number | null {
 function repoFromBody(body: unknown): string {
   const repo = typeof (body as { repoFullName?: unknown })?.repoFullName === "string"
     ? String((body as { repoFullName: string }).repoFullName).trim()
-    : process.env.VIBA_SELF_REPO || process.env.GITHUB_REPOSITORY || "leego972/bridge-ai";
+    : process.env.VIBA_SELF_REPO || process.env.GITHUB_REPOSITORY || "leego972/viba";
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) throw new Error("repoFullName must be owner/name");
   return repo;
 }
