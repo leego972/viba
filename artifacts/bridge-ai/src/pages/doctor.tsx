@@ -136,7 +136,7 @@ export default function DoctorPage() {
             <div className="space-y-1.5">
               <Label className="text-xs">Repository</Label>
               <Input
-                placeholder="e.g. bridge-ai"
+                placeholder="e.g. viba"
                 value={repo}
                 onChange={(e) => setRepo(e.target.value)}
                 className="h-9 text-sm bg-background/50"
