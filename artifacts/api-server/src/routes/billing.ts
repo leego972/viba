@@ -6,6 +6,8 @@ import {
   getBillingPriceId,
   getBillingStatus,
   getCreditTransactions,
+  getAutoTopupConfig,
+  setAutoTopupConfig,
   VIBA_PLAN,
   CREDIT_PACKS,
 } from "../lib/billing";
@@ -89,7 +91,7 @@ router.post("/billing/checkout", async (req, res): Promise<void> => {
       },
       payment_method_collection: "always",
       client_reference_id: String(userId),
-      metadata: { system: "viba_billing", type: "subscription", userId: String(userId) },
+      metadata: { system: "viba_billing", type: "subscription", userId: String(userId), planKey: VIBA_PLAN.key },
       success_url: `${base}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${base}/pricing`,
     });
@@ -136,6 +138,10 @@ router.post("/billing/credits/checkout", async (req, res): Promise<void> => {
       payment_method_types: ["card"],
       ...(current.stripeCustomerId ? { customer: current.stripeCustomerId } : {}),
       line_items: [{ price: priceId, quantity: 1 }],
+      // Save the PM for future off-session use (auto top-up).
+      // The checkout.session.completed webhook also sets the customer's
+      // invoice_settings.default_payment_method so triggerAutoTopupIfNeeded can find it.
+      payment_intent_data: { setup_future_usage: "off_session" },
       client_reference_id: String(userId),
       metadata: {
         system: "viba_billing",
@@ -185,6 +191,39 @@ router.post("/billing/portal", async (req, res): Promise<void> => {
     req.log.error({ err }, "billing portal error");
     res.status(500).json({ error: "Failed to create portal session" });
   }
+});
+
+// GET /api/billing/auto-topup — load saved auto top-up config (requires session)
+router.get("/billing/auto-topup", async (req, res): Promise<void> => {
+  const userId = req.session?.userId as number | undefined;
+  if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
+  const config = await getAutoTopupConfig(userId);
+  res.json(config);
+});
+
+// POST /api/billing/auto-topup — save auto top-up config (requires session)
+const AutoTopupBody = z.object({
+  enabled: z.boolean(),
+  threshold: z.number().int().min(0).max(5000),
+  packKey: z.string(),
+});
+
+router.post("/billing/auto-topup", async (req, res): Promise<void> => {
+  const userId = req.session?.userId as number | undefined;
+  if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
+
+  const parsed = AutoTopupBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid body", detail: parsed.error.issues }); return; }
+
+  const { enabled, threshold, packKey } = parsed.data;
+
+  // Validate the packKey if provided
+  if (packKey && !CREDIT_PACKS.find((p) => p.key === packKey)) {
+    res.status(400).json({ error: "Unknown packKey" }); return;
+  }
+
+  await setAutoTopupConfig(userId, { enabled, threshold, packKey });
+  res.json({ ok: true });
 });
 
 // GET /api/billing/transactions — credit usage history for the current user
