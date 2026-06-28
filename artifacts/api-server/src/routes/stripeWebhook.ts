@@ -17,6 +17,7 @@ import {
   grantCredits,
   VIBA_PLAN,
 } from "../lib/billing";
+import { pool } from "@workspace/db";
 import {
   sendPaymentFailedEmail,
   sendSubscriptionCanceledEmail,
@@ -172,6 +173,29 @@ export const webhookHandler: RequestHandler = async (req, res): Promise<void> =>
           const periodEnd = tsToDate((invoice as import("stripe").Stripe.Invoice & { period_end?: number }).period_end);
           await refreshMonthlyCredits(user.id, periodEnd);
           logger.info({ userId: user.id }, "Billing: monthly credits refreshed on renewal");
+
+          // Resume any sessions that were paused specifically due to credit exhaustion.
+          // Sessions paused for other reasons (human approval rejection, budget cap, manual)
+          // are identified by the system message metadata left by pauseSessionForActionCredits.
+          const { rows: resumed } = await pool.query(
+            `UPDATE sessions SET status = 'active', updated_at = NOW()
+             WHERE user_id = $1 AND status = 'paused'
+               AND id IN (
+                 SELECT DISTINCT session_id FROM messages
+                 WHERE (metadata->>'reason') IN (
+                   'insufficient_action_credits',
+                   'session_budget_cap_reached'
+                 )
+               )
+             RETURNING id`,
+            [user.id],
+          );
+          if (resumed.length > 0) {
+            logger.info(
+              { userId: user.id, resumedSessions: resumed.map((r: { id: number }) => r.id) },
+              "Billing: credit-paused sessions auto-resumed after payment",
+            );
+          }
         }
 
         // Legacy
