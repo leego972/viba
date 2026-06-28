@@ -86,6 +86,7 @@ export default function SignUpPage() {
               src="/viba-logo.png"
               alt="VIBA"
               className="relative h-20 w-auto object-contain drop-shadow-2xl"
+              style={{ filter: 'drop-shadow(1px 0 0 rgba(0,0,0,0.75)) drop-shadow(-1px 0 0 rgba(0,0,0,0.75)) drop-shadow(0 1px 0 rgba(0,0,0,0.75)) drop-shadow(0 -1px 0 rgba(0,0,0,0.75))' }}
             />
           </div>
           <p className="text-sm text-gray-400">Collaborative Multi-Agent Orchestration</p>
