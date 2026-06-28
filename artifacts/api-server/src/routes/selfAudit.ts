@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { pool } from "@workspace/db";
 import { logVibaEvent, resolveVibaCredential } from "../lib/vibaVault";
+import { configuredSelfRepo } from "../lib/selfRepoGuard";
 
 const router: IRouter = Router();
 
@@ -12,7 +13,7 @@ type GitHubTreeItem = { path?: string; type?: string; size?: number; sha?: strin
 type GitHubRef = { object: { sha: string } };
 type SelfAuditResult = { repoFullName: string; branch: string; scannedAt: string; fileCount: number; issues: AuditIssue[]; summary: Record<Severity, number> };
 
-const DEFAULT_SELF_REPO = process.env.VIBA_SELF_REPO || process.env.GITHUB_REPOSITORY || "leego972/bridge-ai";
+const DEFAULT_SELF_REPO = configuredSelfRepo();
 const SAFE_CHANGE_PREFIXES = ["docs/", "artifacts/api-server/src/", "artifacts/bridge-ai/src/", "lib/api-zod/src/", "lib/api-client-react/src/", "lib/db/src/", ".github/workflows/"];
 const FORBIDDEN_CHANGE_PATTERNS = [/\.env/i, /secret/i, /private/i, /node_modules\//, /pnpm-lock\.yaml$/, /package-lock\.json$/, /yarn\.lock$/];
 
@@ -361,6 +362,43 @@ router.get("/self-audit/checkpoints", async (req, res): Promise<void> => {
   await ensureTables();
   const { rows } = await pool.query(`SELECT id, repo_full_name, branch, head_sha, reason, status, metadata, created_at FROM viba_self_checkpoints WHERE user_id = $1 OR user_id IS NULL ORDER BY created_at DESC LIMIT 100`, [uid]);
   res.json({ checkpoints: rows });
+});
+
+// ── Spec-compliant aliases ────────────────────────────────────────────────────
+
+// GET /self-audit — list recent self-audit records for the authenticated user
+router.get("/self-audit", async (req, res): Promise<void> => {
+  const uid = userId(req);
+  try {
+    await ensureTables();
+    const { rows } = await pool.query(
+      `SELECT id, repo_full_name, branch, status, created_at FROM viba_self_audits WHERE user_id = $1 OR user_id IS NULL ORDER BY created_at DESC LIMIT 50`,
+      [uid],
+    );
+    res.json({ ok: true, audits: rows });
+  } catch (error) {
+    res.status(500).json({ ok: false, message: error instanceof Error ? error.message : "Failed to list self-audits." });
+  }
+});
+
+// POST /self-audit/run — alias for /self-audit/start (spec-required route name)
+router.post("/self-audit/run", async (req, res): Promise<void> => {
+  const uid = userId(req);
+  try {
+    await ensureTables();
+    const repo = repoFromBody(req.body ?? {});
+    const branch = branchFromBody(req.body ?? {});
+    const token = await githubToken(uid);
+    const result = await runAudit({ token, repo, branch });
+    const { rows } = await pool.query<{ id: number }>(
+      `INSERT INTO viba_self_audits (user_id, repo_full_name, branch, status, result) VALUES ($1, $2, $3, 'completed', $4) RETURNING id`,
+      [uid, repo, branch, JSON.stringify(result)],
+    );
+    await logVibaEvent({ userId: uid, eventType: "self_audit_completed", provider: "github", subject: repo, status: "completed", message: `Self audit completed for ${repo}.`, metadata: { auditId: rows[0]?.id, summary: result.summary } });
+    res.status(201).json({ ok: true, auditId: rows[0]?.id, result });
+  } catch (error) {
+    res.status(400).json({ ok: false, message: error instanceof Error ? error.message : "Self audit failed." });
+  }
 });
 
 export default router;
