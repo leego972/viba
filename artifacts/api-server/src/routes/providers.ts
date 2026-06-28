@@ -131,7 +131,12 @@ router.get("/providers", async (req, res): Promise<void> => {
   const providers = await Promise.all(
     PROVIDER_DEFS.map(async (def) => {
       const hasKey = await hasKeyConfigured(def, uid);
-      const enabled = settingsMap.get(`${def.id.toUpperCase()}_ENABLED`) === "true";
+      const enabledSetting = settingsMap.get(`${def.id.toUpperCase()}_ENABLED`);
+      // If the key is available (env or vault) and no explicit disabled setting exists,
+      // default to enabled so Groq (and other env-keyed providers) are ready out of the box.
+      const enabled = enabledSetting !== undefined
+        ? enabledSetting === "true"
+        : hasKey;
       const model = settingsMap.get(def.modelSettingKey ?? "") ?? def.defaultModel;
       const endpoint = def.endpointSettingKey
         ? (settingsMap.get(def.endpointSettingKey) ?? def.defaultEndpoint)
