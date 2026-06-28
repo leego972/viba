@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import Dashboard from "@/pages/dashboard";
@@ -33,6 +34,7 @@ import DomainSetupPage from "@/pages/domain-setup";
 import DoctorPage from "@/pages/doctor";
 import AssistedBrowserPage from "@/pages/assisted-browser";
 import OnboardingPage from "@/pages/onboarding";
+import ConnectionsPage from "@/pages/connections";
 import LaunchReadinessPage from "@/pages/launch-readiness";
 import CompletionPage, {
   CollaborationMapPage,
@@ -71,9 +73,13 @@ function AuthGuard({ children }: { children: ReactNode }) {
     }
   }, [isLoading, isAuthenticated, setLocation]);
 
+  // Archibald Titan AI embedded bypass — skip auth entirely
   if (isBypassValid()) return <>{children}</>;
+
   if (isLoading) return <Spinner />;
+
   if (!isAuthenticated) return <Spinner />;
+
   return <>{children}</>;
 }
 
@@ -115,6 +121,7 @@ function GatedRouter() {
         <Route path="/security-center" component={SecurityCenterPage} />
         <Route path="/domain-setup" component={DomainSetupPage} />
         <Route path="/onboarding" component={OnboardingPage} />
+        <Route path="/connections" component={ConnectionsPage} />
         <Route path="/launch-readiness" component={LaunchReadinessPage} />
         <Route component={NotFound} />
       </Switch>
@@ -122,6 +129,7 @@ function GatedRouter() {
   );
 }
 
+// Handles ?bypass= param at app startup (Archibald Titan AI embed)
 function BypassHandler() {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -139,6 +147,7 @@ function BypassHandler() {
           setBypassValid();
           const cleanUrl = window.location.pathname + window.location.hash;
           window.history.replaceState(null, "", cleanUrl);
+          // Force re-render so AuthGuard picks up the new bypass state
           queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
         }
       })
@@ -152,13 +161,14 @@ function App() {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
   return (
+    <ThemeProvider>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={basePath}>
           <BypassHandler />
           <ErrorBoundary>
             <Switch>
-              <Route path="/" component={Home} />
+              {/* Public routes */}
               <Route path="/login" component={LoginPage} />
               <Route path="/signup" component={SignUpPage} />
               <Route path="/forgot-password" component={ForgotPassword} />
@@ -166,11 +176,16 @@ function App() {
               <Route path="/verify-email" component={VerifyEmail} />
               <Route path="/pricing" component={Pricing} />
               <Route path="/checkout/success" component={CheckoutSuccess} />
+              {/* Public demo & share — no auth required */}
               <Route path="/demo/doctor-report" component={DemoDoctorReport} />
               <Route path="/demo/proof-report" component={DemoProofReport} />
               <Route path="/demo" component={DemoPage} />
               <Route path="/share/reports/:shareId" component={ShareReportPage} />
+              {/* Admin — self-gated by ADMIN_TOKEN, no session required */}
               <Route path="/admin" component={Admin} />
+              {/* Home — public landing page */}
+              <Route path="/" component={Home} />
+              {/* All other routes — gated by AuthGuard */}
               <Route component={GatedRouter} />
             </Switch>
           </ErrorBoundary>
@@ -178,6 +193,7 @@ function App() {
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>
+    </ThemeProvider>
   );
 }
 
