@@ -1,7 +1,7 @@
 import type { Agent, Task } from "@workspace/db";
 import { db, auditLogsTable, messagesTable, sessionsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { deductCredits, isStripeConfigured } from "./billing";
+import { deductCredits, getCredits, isStripeConfigured, triggerAutoTopupIfNeeded } from "./billing";
 
 const TASK_BASE_CREDITS: Record<string, number> = {
   audit: 220,
@@ -183,6 +183,15 @@ export async function reserveCreditsForAction(input: {
     await pauseSessionForActionCredits({ sessionId: input.sessionId, userId: input.userId, taskId: input.task.id, requiredCredits: credits });
     return { ok: false, credits };
   }
+
+  // After a successful deduction, fire auto top-up if balance dropped below threshold.
+  // Fire-and-forget — errors are swallowed inside triggerAutoTopupIfNeeded.
+  void (async () => {
+    try {
+      const balanceAfter = await getCredits(input.userId);
+      await triggerAutoTopupIfNeeded(input.userId, balanceAfter);
+    } catch { /* swallow — top-up failure must never break a session run */ }
+  })();
 
   const creditsReservedAfter = currentReserved + credits;
   await db.update(sessionsTable).set({ creditsReserved: creditsReservedAfter }).where(eq(sessionsTable.id, input.sessionId));
