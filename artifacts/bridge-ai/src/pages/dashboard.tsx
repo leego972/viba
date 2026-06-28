@@ -36,7 +36,7 @@ import {
   Wifi, WifiOff, AlertTriangle, TrendingDown, Search, Trash2,
   ShieldCheck, ShieldAlert, ShieldOff, RefreshCw, DatabaseZap,
   Bell, Mail, Webhook, Settings2, HelpCircle, User, ExternalLink,
-  Brain, ChevronRight, GitBranch, Github, Lock,
+  Brain, ChevronRight, GitBranch, Github, Lock, CheckCircle2,
 } from "lucide-react";
 import { format, subDays } from "date-fns";
 import {
@@ -294,16 +294,23 @@ export default function Dashboard() {
   const queryClient = useQueryClient();
 
   const { show: showOnboarding, dismiss: dismissOnboarding } = useOnboarding();
-  const [hasConfiguredProvider, setHasConfiguredProvider] = useState<boolean | null>(null);
+  const [providerStatus, setProviderStatus] = useState<{
+    groqReady: boolean;
+    hasOtherProviders: boolean;
+  } | null>(null);
 
   const checkProviders = useCallback(async () => {
     try {
       const res = await fetch(`${BASE}/api/providers`, { credentials: "include" });
       if (!res.ok) return;
-      const data = await res.json() as { providers: { status: string }[] };
-      setHasConfiguredProvider(data.providers.some(p => p.status === "configured"));
+      const data = await res.json() as { providers: { id: string; status: string }[] };
+      const configured = data.providers.filter(p => p.status === "configured");
+      setProviderStatus({
+        groqReady: configured.some(p => p.id === "groq"),
+        hasOtherProviders: configured.some(p => p.id !== "groq"),
+      });
     } catch {
-      setHasConfiguredProvider(false);
+      setProviderStatus({ groqReady: false, hasOtherProviders: false });
     }
   }, []);
 
@@ -1128,23 +1135,51 @@ export default function Dashboard() {
           </div>
         ) : !sessions || sessions.length === 0 ? (
           <div className="space-y-4 animate-in fade-in-50">
-            {/* No-provider callout */}
-            {hasConfiguredProvider === false && (
-              <div className="rounded-2xl border border-amber-500/25 bg-amber-500/6 p-6">
+            {/* Groq ready — only Groq, no BYOK yet → soft upgrade nudge */}
+            {providerStatus?.groqReady && !providerStatus.hasOtherProviders && (
+              <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                  <div className="h-12 w-12 rounded-xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center shrink-0">
-                    <Zap className="h-6 w-6 text-amber-400" />
+                  <div className="h-11 w-11 rounded-xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center shrink-0">
+                    <Zap className="h-5 w-5 text-emerald-400" />
                   </div>
                   <div className="flex-1">
-                    <h3 className="text-base font-semibold text-amber-200">Connect an AI provider to get started</h3>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-base font-semibold">Groq is connected and ready</h3>
+                      <Badge className="gap-1 bg-emerald-500/15 text-emerald-400 border-emerald-500/30 text-xs">
+                        <CheckCircle2 className="h-3 w-3" /> Active
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                      Add another AI provider (OpenAI, Claude, Gemini) to enable multi-model collaboration and assign different roles to different models.
+                    </p>
+                  </div>
+                  <Link href="/connections">
+                    <Button variant="outline" size="sm" className="gap-1.5 shrink-0">
+                      <Plus className="h-3.5 w-3.5" />
+                      Add another AI
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            )}
+
+            {/* No providers at all — should be rare since Groq is auto-enabled */}
+            {providerStatus !== null && !providerStatus.groqReady && !providerStatus.hasOtherProviders && (
+              <div className="rounded-2xl border border-amber-500/25 bg-amber-500/6 p-5">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                  <div className="h-11 w-11 rounded-xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center shrink-0">
+                    <AlertTriangle className="h-5 w-5 text-amber-400" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-base font-semibold text-amber-200">Enable an AI provider to continue</h3>
                     <p className="text-sm text-amber-200/70 mt-0.5">
-                      Groq is already included free — or add your own OpenAI, Claude, or Gemini key for more power.
+                      Groq is included free — go to Connections and enable it, or add your own API key.
                     </p>
                   </div>
                   <Link href="/connections">
                     <Button size="sm" className="gap-1.5 shrink-0">
                       <Plus className="h-3.5 w-3.5" />
-                      Connect AI
+                      Go to Connections
                     </Button>
                   </Link>
                 </div>
