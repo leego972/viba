@@ -1,6 +1,6 @@
-import { db, messagesTable, agentsTable } from "@workspace/db";
+import { db, messagesTable, agentsTable, tasksTable } from "@workspace/db";
 import type { Agent, Message } from "@workspace/db";
-import { eq, and, asc, inArray } from "drizzle-orm";
+import { eq, and, asc, inArray, or, desc } from "drizzle-orm";
 import type { AgentTaskResult } from "./adapters/interface";
 import { logger } from "./logger";
 
@@ -101,6 +101,22 @@ export async function persistOutboundQuestions(
       continue;
     }
 
+    // Tag question under the recipient's active task ID so that strict task-scoped
+    // delivery in processPendingQuestions finds it when the recipient executes.
+    // Falls back to the sender's taskId when the recipient has no active/planned task.
+    const recipientTasks = await db
+      .select({ id: tasksTable.id })
+      .from(tasksTable)
+      .where(
+        and(
+          eq(tasksTable.sessionId, sessionId),
+          eq(tasksTable.assignedAgentId, recipient.id),
+          or(eq(tasksTable.status, "in_progress"), eq(tasksTable.status, "planned")),
+        ),
+      )
+      .orderBy(desc(tasksTable.id));
+    const questionTaskId = recipientTasks[0]?.id ?? taskId;
+
     const [msg] = await db
       .insert(messagesTable)
       .values({
@@ -109,12 +125,12 @@ export async function persistOutboundQuestions(
         role: "assistant",
         provider: fromAgent.provider,
         content: q.question,
-        taskId,
+        taskId: questionTaskId,
         agentName: fromAgent.name,
         agentRole: fromAgent.role,
         messageType: "question",
         toAgentId: recipient.id,
-        metadata: { taskId },
+        metadata: { senderTaskId: taskId, questionTaskId },
       })
       .returning();
 
