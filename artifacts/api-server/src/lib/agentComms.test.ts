@@ -251,10 +251,11 @@ describe("persistOutboundQuestions", () => {
     expect(result).toHaveLength(3);
   });
 
-  it("stores the sender's taskId on each question message", async () => {
+  it("falls back to sender's taskId when recipient has no active task", async () => {
     const { db } = await import("@workspace/db");
     let capturedValues: Record<string, unknown> | null = null;
     const savedMsg = { id: 20, content: "q", sessionId: 1, messageType: "question", createdAt: new Date().toISOString() };
+    // Default db.select mock returns [] — no active task found for recipient
     (db.insert as ReturnType<typeof vi.fn>).mockReturnValue({
       values: vi.fn().mockImplementation((vals) => {
         capturedValues = vals;
@@ -267,7 +268,40 @@ describe("persistOutboundQuestions", () => {
     const agents = [from, mockAgent(2, "Claude")];
 
     await persistOutboundQuestions(1, from as never, [{ toAgentName: "Claude", question: "Q?" }], 42, agents as never);
-    expect(capturedValues).toMatchObject({ taskId: 42, metadata: { taskId: 42 } });
+    expect(capturedValues).toMatchObject({ taskId: 42, metadata: { senderTaskId: 42, questionTaskId: 42 } });
+  });
+
+  it("stores question under recipient's active task ID for cross-task delivery", async () => {
+    // When Agent B has task 55 in-progress, a question from Agent A (task 42) is stored
+    // under taskId=55. processPendingQuestions(sessionId, B, 55) then finds it via strict filter.
+    const { db } = await import("@workspace/db");
+    let capturedValues: Record<string, unknown> | null = null;
+    const savedMsg = { id: 20, content: "q", sessionId: 1, messageType: "question", createdAt: new Date().toISOString() };
+
+    // First db.select call: tasksTable lookup — recipient has task 55
+    (db.select as ReturnType<typeof vi.fn>)
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            orderBy: vi.fn().mockResolvedValue([{ id: 55 }]),
+          }),
+        }),
+      });
+
+    (db.insert as ReturnType<typeof vi.fn>).mockReturnValue({
+      values: vi.fn().mockImplementation((vals) => {
+        capturedValues = vals;
+        return { returning: vi.fn().mockResolvedValue([savedMsg]) };
+      }),
+    });
+
+    const { persistOutboundQuestions } = await import("./agentComms");
+    const from = mockAgent(1, "ChatGPT");
+    const agents = [from, mockAgent(2, "Claude")];
+
+    await persistOutboundQuestions(1, from as never, [{ toAgentName: "Claude", question: "Q?" }], 42, agents as never);
+    // Question tagged under recipient's task (55), not sender's (42)
+    expect(capturedValues).toMatchObject({ taskId: 55, metadata: { senderTaskId: 42, questionTaskId: 55 } });
   });
 });
 
