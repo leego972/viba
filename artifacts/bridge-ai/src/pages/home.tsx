@@ -47,12 +47,12 @@ export default function Home() {
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
                   <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
                 </span>
-                v1.0 — Multi-AI Orchestration Platform
+                v1.0 — Controlled AI Collaboration
               </div>
 
               <div className="space-y-6 max-w-4xl">
                 <h1 className="font-extrabold text-foreground" style={{ fontSize: "clamp(2.5rem,7vw,4.5rem)", lineHeight: 1.1, letterSpacing: "-0.03em" }}>
-                  Plug in your AIs.{" "}
+                  AI collaboration,{" "}
                   <br className="hidden sm:block" />
                   <span style={{
                     background: "linear-gradient(135deg, hsl(239,84%,78%) 0%, hsl(262,72%,72%) 50%, hsl(239,84%,75%) 100%)",
@@ -60,11 +60,11 @@ export default function Home() {
                     WebkitTextFillColor: "transparent",
                     backgroundClip: "text",
                   }}>
-                    Let them work together.
+                    under your control.
                   </span>
                 </h1>
                 <p className="mx-auto max-w-[680px] text-muted-foreground text-lg md:text-xl leading-relaxed font-light tracking-[-0.01em]">
-                  Connect ChatGPT, Claude, Gemini, Perplexity, Manus, and Replit in one session. Give each model a role — Strategist, Builder, Researcher — and watch them collaborate autonomously.
+                  VIBA coordinates specialist AI agents in one controlled workspace. Agents divide tasks, review outputs, and route work to the right model — while you stay in control through approvals, budget caps, audit trails, and proof reports.
                 </p>
               </div>
 
@@ -74,7 +74,7 @@ export default function Home() {
                     className="relative flex items-center gap-2 h-12 px-8 rounded-xl text-base font-semibold text-white overflow-hidden transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] border border-primary/40 shadow-[0_0_28px_rgba(99,102,241,0.30)] hover:shadow-[0_0_40px_rgba(99,102,241,0.45)]"
                     style={{ background: "linear-gradient(135deg, hsl(239,84%,60%) 0%, hsl(262,72%,56%) 100%)" }}
                   >
-                    Start Orchestrating <ArrowRight className="h-4 w-4" />
+                    Start a Project <ArrowRight className="h-4 w-4" />
                   </button>
                 </Link>
                 <Link href="/settings">
@@ -111,7 +111,7 @@ export default function Home() {
             <div className="mx-auto flex max-w-2xl flex-col items-center gap-3 text-center mb-12">
               <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl">How it works</h2>
               <p className="text-muted-foreground md:text-lg">
-                Orchestrate multiple agents with specific roles to solve complex problems faster and cheaper.
+                Run a structured collaboration across multiple AI models. Each agent plays a defined role. You keep control.
               </p>
             </div>
 
@@ -128,14 +128,14 @@ export default function Home() {
                   icon: LineChart,
                   step: "2",
                   title: "Assign Roles",
-                  desc: "Give each model a role: Strategist, Builder, Reviewer, QA. Let them play to their strengths.",
+                  desc: "Give each model a defined role: Strategist, Builder, Reviewer, QA. Structured roles produce structured output.",
                   color: "from-violet-500/30 to-purple-500/20",
                 },
                 {
                   icon: Zap,
                   step: "3",
                   title: "Execute",
-                  desc: "Watch them collaborate in real-time, generate tasks, review each other's work, and deliver the output.",
+                  desc: "Agents collaborate in a structured loop — dividing tasks, reviewing outputs, asking each other focused questions, and surfacing decisions for your approval.",
                   color: "from-blue-500/30 to-indigo-500/20",
                 },
               ].map(({ icon: Icon, step, title, desc, color }) => (
@@ -166,9 +166,9 @@ export default function Home() {
               <div className="inline-block rounded-full bg-primary/10 border border-primary/20 px-3 py-1 text-xs font-semibold text-primary">
                 See it in action
               </div>
-              <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl">Agents collaborate in real-time</h2>
+              <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl">Agents collaborate in a structured, controlled session</h2>
               <p className="text-muted-foreground md:text-lg">
-                Watch Claude, ChatGPT, and Gemini divide work, review each other, and surface decisions — all in one session.
+                Agents divide work, review each other's output, and surface approval gates — all traceable, all auditable, all in one session.
               </p>
             </div>
             <div className="mx-auto max-w-3xl rounded-2xl border border-border/60 bg-card/60 overflow-hidden shadow-2xl shadow-primary/5">
@@ -317,30 +317,30 @@ export default function Home() {
             <div className="grid gap-10 sm:px-10 md:gap-16 lg:grid-cols-2 items-center">
               <div className="space-y-5">
                 <div className="inline-block rounded-full bg-primary/10 border border-primary/20 px-3 py-1 text-xs font-semibold text-primary">
-                  Security First
+                  Built for Serious Work
                 </div>
                 <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl lg:text-5xl">
-                  Supervised execution.
+                  Controlled collaboration.
                 </h2>
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Shield className="h-5 w-5 text-primary shrink-0" />
-                  <p className="font-medium">You control the autonomy level.</p>
+                  <p className="font-medium">Every step is accountable.</p>
                 </div>
                 <p className="text-muted-foreground md:text-lg leading-relaxed">
-                  Run sessions in Manual, Supervised, or Autonomous mode. Critical actions always require your explicit approval before agents can proceed — preventing runaway costs and unintended side effects.
+                  Run sessions in Supervised or Autonomous mode. Approval gates, budget caps, and audit trails keep every agent action accountable — so you can use AI collaboration on real project work, not just experiments.
                 </p>
               </div>
 
               <div className="flex flex-col gap-4">
                 {[
                   {
-                    title: "Cost Efficiency",
-                    body: "Why use a reasoning model for everything? Use Claude Sonnet for strategy and GPT-4o-mini for repetitive tasks. Smart orchestration saves money.",
+                    title: "Budget Control",
+                    body: "Set a credit cap per session. VIBA pauses and reports before any agent action exceeds your budget — no surprise costs, no runaway loops.",
                     accent: false,
                   },
                   {
-                    title: "Server-Side Security",
-                    body: "API keys are stored securely in the database and never exposed to the browser. All provider calls go through VIBA's API layer — full cost visibility, zero client-side leaks.",
+                    title: "Audit Trails & Proof Reports",
+                    body: "Every agent decision, tool call, and approval gate is logged. Proof reports give you a verifiable record of what was built, reviewed, and approved — essential for commercial project work.",
                     accent: true,
                   },
                 ].map(({ title, body, accent }) => (
@@ -368,7 +368,7 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <img src="/viba-logo.png" alt="VIBA" className="h-8 w-auto opacity-70" style={{ filter: 'drop-shadow(1px 0 0 rgba(0,0,0,0.75)) drop-shadow(-1px 0 0 rgba(0,0,0,0.75)) drop-shadow(0 1px 0 rgba(0,0,0,0.75)) drop-shadow(0 -1px 0 rgba(0,0,0,0.75))' }} />
             <p className="text-sm text-muted-foreground">
-              VIBA · Collaborative Multi-Agent Orchestration
+              VIBA · Controlled AI Collaboration
             </p>
           </div>
           <div className="flex items-center gap-4 text-xs text-muted-foreground/60">
