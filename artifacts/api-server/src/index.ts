@@ -285,6 +285,14 @@ async function runStartupMigrations(): Promise<void> {
   // ── users: low_credits_notified_at column ─────────────────────────────────
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS low_credits_notified_at TIMESTAMPTZ`);
 
+  // ── users: auto top-up columns ────────────────────────────────────────────
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS auto_topup_enabled BOOLEAN NOT NULL DEFAULT false`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS auto_topup_threshold INTEGER NOT NULL DEFAULT 100`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS auto_topup_pack_key TEXT`);
+
+  // ── users: plan_key (monthly vs annual) ───────────────────────────────────
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_key TEXT NOT NULL DEFAULT 'viba_monthly'`);
+
   // ── user_sessions table for connect-pg-simple ─────────────────────────────
   // connect-pg-simple's createTableIfMissing reads table.sql from its own
   // package directory, which is unavailable in the esbuild bundle. Pre-create
