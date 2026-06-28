@@ -39,14 +39,13 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import {
-  Play, FastForward, Square, Send, CheckCircle2, Clock, Bot, Coins,
+  Play, FastForward, Square, Send, CheckCircle2, Clock, Bot,
   Crosshair, LineChart, Zap, FlaskConical, RotateCcw, X,
   RefreshCw, History, ShieldCheck, TrendingDown, AlertTriangle,
   Download, Brain, Copy, GitBranch, ExternalLink, Server, Pencil, Wrench,
-  CopyPlus, BarChart3, MessageSquare, ListChecks, Search, FileText, ClipboardCheck,
+  CopyPlus, BarChart3, MessageSquare, ListChecks, Search, Mic, MicOff,
 } from "lucide-react";
 import { useSessionStream } from "@/hooks/useSessionStream";
-import { IntelligentBuildFlow } from "@/components/IntelligentBuildFlow";
 import { MarkdownContent } from "@/components/MarkdownContent";
 import { ToolOutputCards, type ToolOutput } from "@/components/ToolOutputCards";
 import {
@@ -121,8 +120,12 @@ export default function SessionWorkspace() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const scrollRef = useRef<HTMLDivElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null);
+  const baseTextRef = useRef("");
 
   const [userInstruction, setUserInstruction] = useState("");
+  const [isListening, setIsListening] = useState(false);
   const [msgSearch, setMsgSearch] = useState("");
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
@@ -132,13 +135,6 @@ export default function SessionWorkspace() {
   const [showEditCtxModal, setShowEditCtxModal] = useState(false);
   const [editRepoUrl, setEditRepoUrl] = useState("");
   const [editRepoBranch, setEditRepoBranch] = useState("");
-
-    // Budget cap state
-    const [budgetCap, setBudgetCap] = useState<number | null>(null);
-    const [budgetReserved, setBudgetReserved] = useState<number>(0);
-    const [budgetLoading, setBudgetLoading] = useState(false);
-    const [showBudgetEdit, setShowBudgetEdit] = useState(false);
-    const [budgetInput, setBudgetInput] = useState("");
   const [editWorkspaceEnv, setEditWorkspaceEnv] = useState("");
 
   // Inline reply state for user-directed questions
@@ -414,36 +410,7 @@ export default function SessionWorkspace() {
     }
   };
 
-  // Load session budget cap on mount
-    useEffect(() => {
-      if (!sessionId) return;
-      void fetch(`/api/sessions/${sessionId}/budget`, { credentials: "include" })
-        .then(r => r.ok ? r.json() as Promise<{ budgetCapCredits: number | null; creditsReserved: number }> : null)
-        .then(d => { if (!d) return; setBudgetCap(d.budgetCapCredits); setBudgetReserved(d.creditsReserved); })
-        .catch(() => {});
-    }, [sessionId]);
-
-    const handleSaveBudget = async () => {
-      setBudgetLoading(true);
-      try {
-        const cap = budgetInput.trim() === "" ? null : Number(budgetInput);
-        if (budgetInput.trim() !== "" && !Number.isFinite(cap)) return;
-        const res = await fetch(`/api/sessions/${sessionId}/budget`, {
-          method: "PATCH", credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ budgetCapCredits: cap }),
-        });
-        if (res.ok) {
-          const d = await res.json() as { budgetCapCredits: number | null; creditsReserved: number };
-          setBudgetCap(d.budgetCapCredits);
-          setBudgetReserved(d.creditsReserved);
-          setShowBudgetEdit(false);
-          toast({ title: cap === null ? "Budget cap cleared" : `Budget set to ${cap} credits` });
-        }
-      } finally { setBudgetLoading(false); }
-    };
-
-    const handleRunNext = async () => {
+  const handleRunNext = async () => {
     // On first run, conduct safety vote before executing anything
     if (messages.length === 0 && !voteResult) {
       const ok = await handleSafetyVote();
@@ -473,6 +440,44 @@ export default function SessionWorkspace() {
       onError: (err: unknown) => toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to stop", variant: "destructive" })
     });
   };
+
+  const toggleSpeech = useCallback(() => {
+    if (!isSessionActive) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SR = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
+    if (!SR) {
+      toast({ title: "Not supported", description: "Speech input requires Chrome, Edge, or Safari 14.5+.", variant: "destructive" });
+      return;
+    }
+    if (isListening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const recognition: any = new SR();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+    baseTextRef.current = userInstruction;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onresult = (event: any) => {
+      let interim = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const t = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          baseTextRef.current = (baseTextRef.current + (baseTextRef.current ? " " : "") + t).trim();
+        } else {
+          interim += t;
+        }
+      }
+      setUserInstruction((baseTextRef.current + (interim ? " " + interim : "")).trim());
+    };
+    recognition.onerror = () => setIsListening(false);
+    recognition.onend = () => setIsListening(false);
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsListening(true);
+  }, [isListening, isSessionActive, userInstruction, toast]);
 
   const handleSend = () => {
     if (!userInstruction.trim()) return;
@@ -831,16 +836,7 @@ export default function SessionWorkspace() {
           </div>
         )}
 
-        {/* Collaboration flow — shows current workflow stage */}
-          <IntelligentBuildFlow
-            status={session.status}
-            hasTasks={tasks.length > 0}
-            hasApprovals={approvals.some(a => a.status === "approved")}
-            hasReceipts={tasks.some(t => t.status === "completed")}
-            hasFinalOutput={!!session.finalOutput}
-          />
-
-          {/* 3 Column Layout */}
+        {/* 3 Column Layout */}
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 min-h-0 overflow-auto lg:overflow-hidden">
 
           {/* Left: Info, Memory & Agents (3 cols) */}
@@ -856,82 +852,7 @@ export default function SessionWorkspace() {
               </CardContent>
             </Card>
 
-            {/* Budget cap — compact collapsible card */}
-              <details className="group/budget shrink-0">
-                <summary className="cursor-pointer select-none list-none flex items-center gap-2 rounded-lg border bg-card px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors">
-                  <Coins className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <span className="flex-1">Budget cap</span>
-                  <span className="text-[11px] text-muted-foreground">{budgetCap !== null ? `${budgetCap} cr` : "None"}</span>
-                  <span className="text-[10px] text-muted-foreground transition-transform group-open/budget:rotate-180 inline-block">▼</span>
-                </summary>
-                <div className="mt-1 rounded-lg border bg-card p-4 space-y-3">
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">VIBA pauses before exceeding this cap. Leave blank for no limit.</p>
-                  {budgetCap !== null && (
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Cap</p>
-                        <p className="text-sm font-medium">{budgetCap} cr</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Remaining</p>
-                        <p className="text-sm font-medium">{Math.max(0, budgetCap - budgetReserved)} cr</p>
-                      </div>
-                    </div>
-                  )}
-                  {showBudgetEdit ? (
-                    <div className="flex gap-2">
-                      <Input type="number" min="0" placeholder="Credits (blank = no cap)" value={budgetInput} onChange={e => setBudgetInput(e.target.value)} className="h-8 text-sm" />
-                      <Button size="sm" onClick={handleSaveBudget} disabled={budgetLoading} className="shrink-0 h-8 px-3">{budgetLoading ? "…" : "Save"}</Button>
-                      <Button size="sm" variant="ghost" onClick={() => setShowBudgetEdit(false)} className="shrink-0 h-8 px-2"><X className="h-3.5 w-3.5" /></Button>
-                    </div>
-                  ) : (
-                    <button type="button"
-                      onClick={() => { setBudgetInput(budgetCap !== null ? String(budgetCap) : ""); setShowBudgetEdit(true); }}
-                      className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      <Pencil className="h-3 w-3" /> {budgetCap !== null ? "Edit cap" : "Set cap"}
-                    </button>
-                  )}
-                </div>
-              </details>
-
-              {/* Proof Report quick link */}
-              <Link href={`/sessions/${sessionId}/proof-report`}>
-                <button
-                  type="button"
-                  className="shrink-0 flex items-center gap-2 rounded-lg border bg-card px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors w-full"
-                >
-                  <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <span className="flex-1 text-left">Proof Report</span>
-                  <ExternalLink className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                </button>
-              </Link>
-
-              {/* Next Action quick link */}
-              <Link href={`/sessions/${sessionId}/next-action`}>
-                <button
-                  type="button"
-                  className="shrink-0 flex items-center gap-2 rounded-lg border bg-card px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors w-full"
-                >
-                  <ListChecks className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <span className="flex-1 text-left">Next Action</span>
-                  <ExternalLink className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                </button>
-              </Link>
-
-              {/* Approvals quick link */}
-              <Link href={`/sessions/${sessionId}/approvals`}>
-                <button
-                  type="button"
-                  className="shrink-0 flex items-center gap-2 rounded-lg border bg-card px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors w-full"
-                >
-                  <ClipboardCheck className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <span className="flex-1 text-left">Approvals</span>
-                  <ExternalLink className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                </button>
-              </Link>
-
-              {/* Workspace Context — repo, branch, environment */}
+            {/* Workspace Context — repo, branch, environment */}
             {(session.repoUrl || session.repoBranch || session.workspaceEnv) ? (
               <details className="group/wctx shrink-0">
                 <summary className="cursor-pointer select-none list-none flex items-center gap-2 rounded-lg border bg-card px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors">
@@ -1427,19 +1348,47 @@ export default function SessionWorkspace() {
                 </div>
               )}
               <div className="flex gap-2">
-                <Textarea
-                  placeholder={isSessionActive ? "Send an instruction or provide feedback to the agents..." : "Session is not active"}
-                  className="min-h-[60px] resize-none"
-                  value={userInstruction}
-                  onChange={(e) => setUserInstruction(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSend();
-                    }
-                  }}
-                  disabled={!isSessionActive}
-                />
+                <div className="relative flex-1">
+                  <Textarea
+                    placeholder={isSessionActive ? "Send an instruction or provide feedback to the agents..." : "Session is not active"}
+                    className={`min-h-[60px] resize-none pr-10 transition-colors ${isListening ? "border-red-500/60 bg-red-500/5 ring-1 ring-red-500/30" : ""}`}
+                    value={userInstruction}
+                    onChange={(e) => setUserInstruction(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSend();
+                      }
+                    }}
+                    disabled={!isSessionActive}
+                  />
+                  {/* Mic button — floats inside textarea bottom-right */}
+                  <button
+                    type="button"
+                    onClick={toggleSpeech}
+                    disabled={!isSessionActive}
+                    title={isListening ? "Stop listening" : "Speak to type"}
+                    className={`absolute bottom-2 right-2 p-1.5 rounded-md transition-all ${
+                      !isSessionActive
+                        ? "opacity-30 cursor-not-allowed"
+                        : isListening
+                        ? "bg-red-500 text-white shadow-[0_0_8px_rgba(239,68,68,0.6)] hover:bg-red-600"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    }`}
+                  >
+                    {isListening ? (
+                      <MicOff className="h-3.5 w-3.5" />
+                    ) : (
+                      <Mic className="h-3.5 w-3.5" />
+                    )}
+                    {isListening && (
+                      <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+                      </span>
+                    )}
+                  </button>
+                </div>
                 <Button className="h-auto w-12 shrink-0" onClick={handleSend} disabled={!isSessionActive || !userInstruction.trim() || sendMsg.isPending}>
                   {sendMsg.isPending
                     ? <RefreshCw className="h-4 w-4 animate-spin" />
