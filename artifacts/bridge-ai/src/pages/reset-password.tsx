@@ -15,7 +15,7 @@ export default function ResetPasswordPage() {
 
   if (!token) {
     return (
-      <div className="min-h-screen bg-[#0a0e1a] flex items-center justify-center p-4">
+      <div className="min-h-[100dvh] bg-[#0a0e1a] flex items-center justify-center p-4">
         <div className="text-center space-y-3">
           <AlertTriangle className="h-10 w-10 text-amber-400 mx-auto" />
           <p className="text-sm text-muted-foreground">Invalid or missing reset token.</p>
@@ -49,7 +49,7 @@ export default function ResetPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0e1a] flex items-center justify-center p-4">
+    <div className="min-h-[100dvh] bg-[#0a0e1a] flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-gradient-to-br from-blue-950/60 via-[#0a0e1a] to-indigo-950/40 pointer-events-none" />
       <div className="relative z-10 w-full max-w-sm">
         <div className="flex flex-col items-center mb-8 gap-3">
