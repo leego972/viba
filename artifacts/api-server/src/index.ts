@@ -245,8 +245,16 @@ async function runStartupMigrations(): Promise<void> {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_token ON password_reset_tokens(token)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_audit_logs_session_id ON audit_logs(session_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id)`);
+  // ── users: backfill subscription_status NULL → 'none' and set column default ─
+  // The column was created via Drizzle push (nullable, no default) before the
+  // startup migration added the NOT NULL DEFAULT constraint.  IF NOT EXISTS
+  // skips the ALTER when the column already exists, so the default was never
+  // applied.  Backfill existing NULLs and lock in the default for future rows.
+  await pool.query(`UPDATE users SET subscription_status = 'none' WHERE subscription_status IS NULL`);
+  await pool.query(`ALTER TABLE users ALTER COLUMN subscription_status SET DEFAULT 'none'`);
+
   // Performance indexes for core lookup paths
-  // Note: sessions table has no user_id column — agents/tasks are indexed by session_id
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_agents_session_id ON agents(session_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_session_id ON tasks(session_id)`);
   // users.email — every login/register lookup hits this column; must be indexed
