@@ -158,7 +158,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
 
     const hash = await bcrypt.hash(password, 12);
     const { rows } = await pool.query<UserRow>(
-      "INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING *",
+      "INSERT INTO users (email, password_hash, name, subscription_status, credits_remaining) VALUES ($1, $2, $3, 'none', 0) RETURNING *",
       [email, hash, name],
     );
     user = rows[0]!;
