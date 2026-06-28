@@ -305,7 +305,7 @@ Product context:\n${VIBA_CONTEXT}`,
 
 // ─── In-memory submission log (max 200 entries, cleared on restart) ───────────
 
-type SubmissionStatus = "draft" | "posted" | "scheduled";
+type SubmissionStatus = "draft" | "posted" | "scheduled" | "failed";
 
 type Submission = {
   id: string;
@@ -316,7 +316,168 @@ type Submission = {
   status: SubmissionStatus;
   note: string;
   createdAt: string;
+  postedUrl?: string;
+  submitError?: string;
 };
+
+// ─── Auto-submit result type ──────────────────────────────────────────────────
+
+type SubmitResult =
+  | { ok: true; url?: string }
+  | { ok: false; reason: string; manualUrl?: string; credential?: string };
+
+// ─── Dev.to submitter ─────────────────────────────────────────────────────────
+
+async function submitDevTo(content: string): Promise<SubmitResult> {
+  const apiKey = process.env["DEV_TO_API_KEY"];
+  if (!apiKey) return { ok: false, reason: "missing_credential", credential: "DEV_TO_API_KEY", manualUrl: "https://dev.to/new" };
+
+  // Parse title — first markdown heading, bold line, or first line
+  const titleMatch = content.match(/^#+\s+(.+)$/m) ?? content.match(/^\*\*(.+?)\*\*/) ?? content.match(/^(.+)$/m);
+  const rawTitle = (titleMatch?.[1] ?? "VIBA — Multi-Agent AI Orchestration Platform").replace(/[*_#`]/g, "").trim();
+  const title = rawTitle.slice(0, 100);
+
+  // Strip the title line from body to avoid duplication
+  const body = content.replace(/^#+\s+.+\n?/, "").trim();
+
+  const res = await fetch("https://dev.to/api/articles", {
+    method: "POST",
+    headers: { "api-key": apiKey, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      article: {
+        title,
+        body_markdown: body,
+        tags: ["ai", "webdev", "llm", "opensource"],
+        published: true,
+      },
+    }),
+    signal: AbortSignal.timeout(30_000),
+  });
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => String(res.status));
+    return { ok: false, reason: `Dev.to API error ${res.status}: ${err.slice(0, 200)}`, manualUrl: "https://dev.to/new" };
+  }
+
+  const data = await res.json() as { url?: string };
+  return { ok: true, url: data.url };
+}
+
+// ─── Discord webhook submitter ────────────────────────────────────────────────
+
+async function submitDiscord(content: string): Promise<SubmitResult> {
+  const webhookUrl = process.env["DISCORD_WEBHOOK_URL"];
+  if (!webhookUrl) return { ok: false, reason: "missing_credential", credential: "DISCORD_WEBHOOK_URL", manualUrl: "https://discord.com" };
+
+  // Discord messages max 2000 chars — split if needed
+  const chunk = content.slice(0, 2000);
+
+  const res = await fetch(webhookUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content: chunk, username: "VIBA Growth Bot" }),
+    signal: AbortSignal.timeout(15_000),
+  });
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => String(res.status));
+    return { ok: false, reason: `Discord webhook error ${res.status}: ${err.slice(0, 200)}`, manualUrl: "https://discord.com" };
+  }
+  return { ok: true };
+}
+
+// ─── Reddit submitter (script-app password grant) ────────────────────────────
+
+const REDDIT_SUBREDDITS: Record<string, string> = {
+  reddit_ml:          "MachineLearning",
+  reddit_artificial:  "artificial",
+  reddit_sideproject: "SideProject",
+  reddit_localllama:  "LocalLLaMA",
+};
+
+async function submitReddit(channelId: string, content: string): Promise<SubmitResult> {
+  const clientId     = process.env["REDDIT_CLIENT_ID"];
+  const clientSecret = process.env["REDDIT_CLIENT_SECRET"];
+  const username     = process.env["REDDIT_USERNAME"];
+  const password     = process.env["REDDIT_PASSWORD"];
+
+  const subreddit = REDDIT_SUBREDDITS[channelId];
+  if (!subreddit) return { ok: false, reason: `No subreddit mapping for ${channelId}` };
+
+  if (!clientId || !clientSecret || !username || !password) {
+    return {
+      ok: false,
+      reason: "missing_credential",
+      credential: "REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET, REDDIT_USERNAME, REDDIT_PASSWORD",
+      manualUrl: `https://reddit.com/r/${subreddit}/submit`,
+    };
+  }
+
+  // Obtain access token (password grant — requires "script" app type on reddit.com/prefs/apps)
+  const tokenRes = await fetch("https://www.reddit.com/api/v1/access_token", {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+      "User-Agent": "VIBA-Growth-Bot/1.0 by /u/vibabot",
+    },
+    body: new URLSearchParams({ grant_type: "password", username, password }),
+    signal: AbortSignal.timeout(15_000),
+  });
+
+  if (!tokenRes.ok) {
+    return { ok: false, reason: `Reddit auth failed: ${tokenRes.status}`, manualUrl: `https://reddit.com/r/${subreddit}/submit` };
+  }
+
+  const tokenData = await tokenRes.json() as { access_token?: string; error?: string };
+  if (!tokenData.access_token) {
+    return { ok: false, reason: `Reddit auth error: ${tokenData.error ?? "no token"}`, manualUrl: `https://reddit.com/r/${subreddit}/submit` };
+  }
+
+  // Parse title (first heading or first non-empty line) and body
+  const lines = content.split("\n").filter(Boolean);
+  const rawTitle = (lines[0] ?? "VIBA — Multi-Agent AI Orchestration").replace(/^#+\s*/, "").replace(/^\[.*?\]\s*/, "").replace(/\*\*/g, "").trim();
+  const title = rawTitle.slice(0, 300);
+  const body = lines.slice(1).join("\n").trim();
+
+  const submitRes = await fetch("https://oauth.reddit.com/api/submit", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${tokenData.access_token}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+      "User-Agent": "VIBA-Growth-Bot/1.0 by /u/vibabot",
+    },
+    body: new URLSearchParams({ sr: subreddit, kind: "self", title, text: body, nsfw: "false", spoiler: "false", resubmit: "true" }),
+    signal: AbortSignal.timeout(20_000),
+  });
+
+  const submitData = await submitRes.json() as { json?: { errors?: unknown[]; data?: { url?: string } } };
+  const errors = submitData?.json?.errors ?? [];
+  if (errors.length > 0) {
+    return { ok: false, reason: `Reddit submit error: ${JSON.stringify(errors).slice(0, 200)}`, manualUrl: `https://reddit.com/r/${subreddit}/submit` };
+  }
+
+  const url = submitData?.json?.data?.url;
+  return { ok: true, url };
+}
+
+// ─── Channel dispatch table ───────────────────────────────────────────────────
+
+async function dispatchSubmit(entry: Submission): Promise<SubmitResult> {
+  const { channelId, content } = entry;
+  const channel = CHANNELS.find(c => c.id === channelId);
+
+  if (channelId === "devto")                            return submitDevTo(content);
+  if (channelId === "discord_communities")              return submitDiscord(content);
+  if (Object.keys(REDDIT_SUBREDDITS).includes(channelId)) return submitReddit(channelId, content);
+
+  // All other channels require manual posting — return URL + content ready to paste
+  return {
+    ok: false,
+    reason: "manual_required",
+    manualUrl: channel?.url ?? "https://viba.guru",
+  };
+}
 
 const submissionLog: Submission[] = [];
 
@@ -570,6 +731,178 @@ router.post("/blast", async (req, res): Promise<void> => {
   const failed = results.filter(r => !r.ok).length;
 
   res.json({ ok: true, succeeded, failed, total: results.length, results });
+});
+
+// ─── GET /api/admin/growth/credentials ───────────────────────────────────────
+// Shows which auto-submit credentials are configured so the admin panel
+// can indicate which channels can post automatically vs manually.
+
+router.get("/credentials", (_req, res): void => {
+  res.json({
+    devto:   { configured: !!process.env["DEV_TO_API_KEY"],       credential: "DEV_TO_API_KEY",       channel: "Dev.to" },
+    discord: { configured: !!process.env["DISCORD_WEBHOOK_URL"],  credential: "DISCORD_WEBHOOK_URL",  channel: "Discord" },
+    reddit:  {
+      configured: !!(process.env["REDDIT_CLIENT_ID"] && process.env["REDDIT_CLIENT_SECRET"] && process.env["REDDIT_USERNAME"] && process.env["REDDIT_PASSWORD"]),
+      credential: "REDDIT_CLIENT_ID + REDDIT_CLIENT_SECRET + REDDIT_USERNAME + REDDIT_PASSWORD",
+      channel: "Reddit (r/MachineLearning, r/artificial, r/SideProject, r/LocalLLaMA)",
+    },
+    manual_channels: [
+      { id: "product_hunt",   name: "Product Hunt",  url: "https://www.producthunt.com/posts/new",  reason: "OAuth required" },
+      { id: "hacker_news",    name: "Hacker News",   url: "https://news.ycombinator.com/submit",   reason: "No API" },
+      { id: "twitter_x",      name: "Twitter / X",   url: "https://x.com",                         reason: "OAuth required (paid tier)" },
+      { id: "linkedin",       name: "LinkedIn",      url: "https://linkedin.com/post/new",          reason: "OAuth required" },
+      { id: "medium",         name: "Medium",        url: "https://medium.com/new-story",           reason: "No public API" },
+      { id: "indiehackers",   name: "IndieHackers",  url: "https://www.indiehackers.com/post",      reason: "No API" },
+      { id: "tldr_ai",        name: "TLDR AI",       url: "https://tldr.tech/ai/submit",            reason: "Email/form only" },
+      { id: "bens_bites",     name: "Ben's Bites",   url: "https://bensbites.beehiiv.com/forms",    reason: "Email/form only" },
+      { id: "futurepedia",    name: "Futurepedia",   url: "https://www.futurepedia.io/submit-tool", reason: "Web form only" },
+      { id: "taaft",          name: "TAAFT",         url: "https://theresanaiforthat.com/tool/submit/", reason: "Web form only" },
+      { id: "github_awesome", name: "GitHub Awesome Lists", url: "https://github.com/search?q=awesome+llm", reason: "Manual PR to target repo" },
+    ],
+  });
+});
+
+// ─── POST /api/admin/growth/auto-submit/:id ───────────────────────────────────
+// Attempts to auto-post a saved submission draft to its channel.
+// Updates submission status to "posted" on success or "failed" on error.
+// For manual-only channels, returns { ok: false, manual: true, content, url }.
+
+router.post("/auto-submit/:id", async (req, res): Promise<void> => {
+  const id = String(req.params["id"] ?? "");
+  const entry = submissionLog.find(s => s.id === id);
+  if (!entry) {
+    res.status(404).json({ error: "submission_not_found", message: `No draft with id '${id}'` });
+    return;
+  }
+
+  try {
+    const result = await dispatchSubmit(entry);
+
+    if (result.ok) {
+      entry.status = "posted";
+      entry.postedUrl = result.url;
+      entry.note = `Auto-posted ${new Date().toISOString()}${result.url ? ` → ${result.url}` : ""}`;
+      res.json({ ok: true, channelId: entry.channelId, channelName: entry.channelName, url: result.url });
+    } else {
+      const isManual = result.reason === "manual_required";
+      const isMissingCred = result.reason === "missing_credential";
+
+      if (isManual || isMissingCred) {
+        // Not an error — just requires human action
+        res.json({
+          ok: false,
+          manual: true,
+          channelId: entry.channelId,
+          channelName: entry.channelName,
+          reason: result.reason,
+          credential: (result as { credential?: string }).credential,
+          manualUrl: result.manualUrl,
+          content: entry.content,
+          instructions: isManual
+            ? `Open ${result.manualUrl} and paste the generated content.`
+            : `Set ${(result as { credential?: string }).credential ?? "required"} in environment variables to enable auto-posting.`,
+        });
+      } else {
+        entry.status = "failed";
+        entry.submitError = result.reason;
+        res.status(502).json({ ok: false, channelId: entry.channelId, error: result.reason, manualUrl: result.manualUrl });
+      }
+    }
+  } catch (err) {
+    entry.status = "failed";
+    entry.submitError = String(err);
+    res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
+// ─── POST /api/admin/growth/generate-and-submit ───────────────────────────────
+// Generate content for a channel with Groq, save as draft, then immediately
+// attempt to auto-submit. Single endpoint for one-click publish flows.
+// Body: { channelId: string }
+
+router.post("/generate-and-submit", async (req, res): Promise<void> => {
+  const { channelId } = req.body as { channelId?: string };
+  if (!channelId) { res.status(400).json({ error: "channelId required" }); return; }
+
+  const template = TEMPLATES[channelId];
+  if (!template) { res.status(400).json({ error: `No generation template for '${channelId}'` }); return; }
+
+  const groqKey = process.env.GROQ_API_KEY;
+  if (!groqKey) { res.status(503).json({ error: "GROQ_API_KEY not set" }); return; }
+
+  const channel = CHANNELS.find(c => c.id === channelId);
+
+  // Step 1 — generate content
+  let content: string;
+  try {
+    const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${groqKey}` },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: [{ role: "system", content: template.system }, { role: "user", content: template.userPrompt }],
+        temperature: 0.72,
+        max_tokens: 2048,
+      }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!groqRes.ok) {
+      const errText = await groqRes.text();
+      res.status(502).json({ error: `Groq error ${groqRes.status}: ${errText.slice(0, 300)}` });
+      return;
+    }
+    const data = await groqRes.json() as { choices?: { message?: { content?: string } }[] };
+    content = data.choices?.[0]?.message?.content ?? "";
+  } catch (err) {
+    res.status(500).json({ error: `Content generation failed: ${String(err)}` });
+    return;
+  }
+
+  // Step 2 — save as draft
+  const entry: Submission = {
+    id: makeId(),
+    channelId,
+    channelName: channel?.name ?? channelId,
+    contentType: "post",
+    content,
+    status: "draft",
+    note: `generate-and-submit ${new Date().toISOString()}`,
+    createdAt: new Date().toISOString(),
+  };
+  submissionLog.push(entry);
+  if (submissionLog.length > 200) submissionLog.splice(0, submissionLog.length - 200);
+
+  // Step 3 — attempt auto-submit
+  try {
+    const result = await dispatchSubmit(entry);
+    if (result.ok) {
+      entry.status = "posted";
+      entry.postedUrl = result.url;
+      entry.note = `Auto-posted ${new Date().toISOString()}${result.url ? ` → ${result.url}` : ""}`;
+      res.json({ ok: true, posted: true, channelId, channelName: entry.channelName, url: result.url, content });
+    } else {
+      const isManual = result.reason === "manual_required" || result.reason === "missing_credential";
+      res.json({
+        ok: true,
+        posted: false,
+        manual: isManual,
+        channelId,
+        channelName: entry.channelName,
+        submissionId: entry.id,
+        reason: result.reason,
+        credential: (result as { credential?: string }).credential,
+        manualUrl: result.manualUrl,
+        content,
+        instructions: result.reason === "missing_credential"
+          ? `Add ${(result as { credential?: string }).credential ?? "required env var"} to auto-post this channel.`
+          : `Open ${result.manualUrl ?? channel?.url} and paste the content.`,
+      });
+    }
+  } catch (err) {
+    entry.status = "failed";
+    entry.submitError = String(err);
+    res.status(500).json({ ok: false, error: String(err), content, submissionId: entry.id });
+  }
 });
 
 export default router;
