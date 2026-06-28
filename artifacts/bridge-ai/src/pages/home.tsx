@@ -1,21 +1,29 @@
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Zap, Shield, Blocks, ArrowRight, LineChart, Rocket, Globe, RefreshCw, KeyRound, FileText } from "lucide-react";
+import { Zap, Shield, Blocks, ArrowRight, FileText, KeyRound, Stethoscope } from "lucide-react";
 
 export default function Home() {
   return (
-    <div className="flex flex-col min-h-screen bg-background">
+    <div className="flex flex-col min-h-screen" style={{ background: "#fff", color: "#111" }}>
       {/* ─── Minimal top bar ─── */}
-      <header className="px-6 h-14 flex items-center border-b border-border/40 bg-background/80 backdrop-blur sticky top-0 z-50">
+      <header className="px-6 h-14 flex items-center sticky top-0 z-50"
+        style={{ background: "rgba(255,255,255,0.9)", backdropFilter: "blur(12px)", borderBottom: "1px solid #e5e7eb" }}>
         <Link href="/" className="flex items-center justify-center">
-          <img src="/viba-logo.png" alt="VIBA" className="h-11 w-auto object-contain" style={{ filter: 'drop-shadow(1px 0 0 rgba(0,0,0,0.75)) drop-shadow(-1px 0 0 rgba(0,0,0,0.75)) drop-shadow(0 1px 0 rgba(0,0,0,0.75)) drop-shadow(0 -1px 0 rgba(0,0,0,0.75))' }} />
+          <img
+            src="/viba-logo.png"
+            alt="VIBA"
+            className="h-16 w-auto object-contain"
+            style={{
+              filter: "drop-shadow(0 0 0 1px rgba(0,0,0,0.08)) drop-shadow(0 1px 3px rgba(0,0,0,0.15))",
+            }}
+          />
         </Link>
         <nav className="ml-auto flex gap-3">
           <Link href="/settings">
-            <Button variant="ghost" size="sm" className="text-foreground/60 hover:text-foreground">Settings</Button>
+            <Button variant="ghost" size="sm" style={{ color: "#6b7280" }}>Settings</Button>
           </Link>
           <Link href="/dashboard">
-            <Button variant="outline" size="sm">Dashboard</Button>
+            <Button variant="outline" size="sm" style={{ borderColor: "#d1d5db", color: "#111" }}>Dashboard</Button>
           </Link>
         </nav>
       </header>
@@ -23,95 +31,96 @@ export default function Home() {
       <main className="flex-1">
         {/* ─── Hero ─── */}
         <section className="w-full py-24 md:py-36 lg:py-48 relative overflow-hidden">
-          {/* Indigo atmosphere blobs */}
-          <div className="absolute inset-0 bg-gradient-to-b from-primary/[0.07] via-transparent to-transparent pointer-events-none" />
-          <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-[900px] h-[500px] rounded-full bg-primary/[0.09] blur-[100px] pointer-events-none" />
-          <div className="absolute top-1/4 -left-32 w-64 h-64 rounded-full bg-violet-500/[0.08] blur-3xl pointer-events-none" />
-          <div className="absolute top-1/3 -right-24 w-48 h-48 rounded-full bg-indigo-500/[0.07] blur-3xl pointer-events-none" />
-          {/* Subtle dot grid */}
-          <div
-            className="absolute inset-0 opacity-[0.022] pointer-events-none"
-            style={{
-              backgroundImage: `radial-gradient(circle, hsl(var(--foreground)) 1px, transparent 1px)`,
-              backgroundSize: "36px 36px",
-            }}
-          />
-          {/* Thin indigo line across top of section */}
-          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
+          {/* Subtle background blobs — light-themed */}
+          <div className="absolute inset-0 pointer-events-none"
+            style={{ background: "linear-gradient(180deg, rgba(99,102,241,0.04) 0%, transparent 60%)" }} />
+          <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-[900px] h-[500px] rounded-full pointer-events-none"
+            style={{ background: "radial-gradient(ellipse, rgba(99,102,241,0.07) 0%, transparent 70%)" }} />
 
           <div className="container px-4 md:px-6 relative z-10">
-            <div className="flex flex-col items-center space-y-9 text-center animate-fade-in-up">
-              {/* Live badge */}
-              <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/[0.12] px-4 py-1.5 text-xs font-semibold text-primary shadow-[0_0_16px_rgba(99,102,241,0.20)]">
+            <div className="flex flex-col items-center space-y-9 text-center">
+              {/* Badge */}
+              <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold"
+                style={{ border: "1px solid rgba(99,102,241,0.35)", background: "rgba(99,102,241,0.08)", color: "#4f46e5" }}>
                 <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60"
+                    style={{ background: "#6366f1" }} />
+                  <span className="relative inline-flex h-2 w-2 rounded-full" style={{ background: "#6366f1" }} />
                 </span>
-                v1.0 — Controlled AI Collaboration
+                Controlled AI Collaboration Platform
               </div>
 
+              {/* Headline */}
               <div className="space-y-6 max-w-4xl">
-                <h1 className="font-extrabold text-foreground" style={{ fontSize: "clamp(2.5rem,7vw,4.5rem)", lineHeight: 1.1, letterSpacing: "-0.03em" }}>
-                  AI collaboration,{" "}
+                <h1 className="font-extrabold" style={{ fontSize: "clamp(2.5rem,7vw,4.5rem)", lineHeight: 1.1, letterSpacing: "-0.03em", color: "#111" }}>
+                  AI collaboration{" "}
                   <br className="hidden sm:block" />
                   <span style={{
-                    background: "linear-gradient(135deg, hsl(239,84%,78%) 0%, hsl(262,72%,72%) 50%, hsl(239,84%,75%) 100%)",
+                    background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #4f46e5 100%)",
                     WebkitBackgroundClip: "text",
                     WebkitTextFillColor: "transparent",
                     backgroundClip: "text",
                   }}>
-                    under your control.
+                    for serious project work.
                   </span>
                 </h1>
-                <p className="mx-auto max-w-[680px] text-muted-foreground text-lg md:text-xl leading-relaxed font-light tracking-[-0.01em]">
-                  VIBA coordinates specialist AI agents in one controlled workspace. Agents divide tasks, review outputs, and route work to the right model — while you stay in control through approvals, budget caps, audit trails, and proof reports.
+                <p className="mx-auto max-w-[680px] text-lg md:text-xl leading-relaxed font-light tracking-[-0.01em]"
+                  style={{ color: "#6b7280" }}>
+                  VIBA coordinates specialist AI agents to diagnose, plan, build, review, and improve projects — with approvals, budget control, audit trails, and proof reports built in.
                 </p>
               </div>
 
+              {/* CTAs */}
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5">
                 <Link href="/dashboard">
                   <button
-                    className="relative flex items-center gap-2 h-12 px-8 rounded-xl text-base font-semibold text-white overflow-hidden transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] border border-primary/40 shadow-[0_0_28px_rgba(99,102,241,0.30)] hover:shadow-[0_0_40px_rgba(99,102,241,0.45)]"
-                    style={{ background: "linear-gradient(135deg, hsl(239,84%,60%) 0%, hsl(262,72%,56%) 100%)" }}
+                    className="relative flex items-center gap-2 h-12 px-8 rounded-xl text-base font-semibold text-white overflow-hidden transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                    style={{ background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)", boxShadow: "0 0 24px rgba(99,102,241,0.3), 0 2px 8px rgba(0,0,0,0.12)" }}
                   >
-                    Start a Project <ArrowRight className="h-4 w-4" />
+                    Start Controlled Workflow <ArrowRight className="h-4 w-4" />
                   </button>
                 </Link>
-                <Link href="/settings">
-                  <button className="flex items-center gap-2 h-12 px-8 rounded-xl text-base font-medium border border-border/60 bg-white/[0.04] hover:bg-white/[0.07] hover:border-border transition-all duration-200 text-foreground/80 hover:text-foreground">
-                    Configure Keys
+                <Link href="/doctor">
+                  <button
+                    className="flex items-center gap-2 h-12 px-8 rounded-xl text-base font-medium transition-all duration-200"
+                    style={{ border: "1px solid #d1d5db", background: "#f9fafb", color: "#374151" }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "#f3f4f6"; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "#f9fafb"; }}
+                  >
+                    <Stethoscope className="h-4 w-4" />
+                    Run Project Doctor
                   </button>
                 </Link>
               </div>
 
               {/* Provider logos row */}
               <div className="flex items-center gap-2 pt-4 flex-wrap justify-center">
-                <span className="text-xs text-muted-foreground/50 mr-2">Works with</span>
+                <span className="text-xs mr-2" style={{ color: "#9ca3af" }}>Works with</span>
                 {["ChatGPT", "Claude", "Gemini", "Perplexity", "Manus", "Replit"].map(name => (
-                  <span key={name} className="text-xs font-medium text-foreground/40 border border-border/30 rounded-full px-3 py-1 bg-white/[0.02]">
+                  <span key={name} className="text-xs font-medium rounded-full px-3 py-1"
+                    style={{ color: "#6b7280", border: "1px solid #e5e7eb", background: "#f9fafb" }}>
                     {name}
                   </span>
                 ))}
-                <span className="text-xs font-semibold text-rose-300 border border-rose-500/40 rounded-full px-3 py-1 bg-rose-500/10 flex items-center gap-1.5">
-                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-rose-400 animate-pulse" />
+                <span className="text-xs font-semibold rounded-full px-3 py-1 flex items-center gap-1.5"
+                  style={{ color: "#dc2626", border: "1px solid rgba(220,38,38,0.35)", background: "rgba(220,38,38,0.07)" }}>
+                  <span className="inline-block h-1.5 w-1.5 rounded-full animate-pulse" style={{ background: "#ef4444" }} />
                   Groq — Free
-                </span>
-                <span className="text-xs font-semibold text-violet-300 border border-violet-500/40 rounded-full px-3 py-1 bg-violet-500/10 flex items-center gap-1.5">
-                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse" />
-                  Railway
                 </span>
               </div>
             </div>
           </div>
         </section>
 
-        {/* ─── How it works ─── */}
-        <section className="w-full py-16 md:py-24 border-t border-border/50 bg-muted/20">
+        {/* ─── Core value proposition ─── */}
+        <section className="w-full py-16 md:py-24" style={{ borderTop: "1px solid #e5e7eb", background: "#f9fafb" }}>
           <div className="container px-4 md:px-6">
             <div className="mx-auto flex max-w-2xl flex-col items-center gap-3 text-center mb-12">
-              <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl">How it works</h2>
-              <p className="text-muted-foreground md:text-lg">
-                Run a structured collaboration across multiple AI models. Each agent plays a defined role. You keep control.
+              <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl" style={{ color: "#111" }}>
+                Collaboration is the engine. Control is the product.
+              </h2>
+              <p className="md:text-lg" style={{ color: "#6b7280" }}>
+                VIBA gives each AI agent a defined role, a budget limit, and an audit trail. The result is AI work you can review, hand over, and stand behind.
               </p>
             </div>
 
@@ -119,39 +128,37 @@ export default function Home() {
               {[
                 {
                   icon: Blocks,
-                  step: "1",
-                  title: "Plug In",
-                  desc: "Bring your own API keys. We support OpenAI, Anthropic, Google, Perplexity, Manus, and Replit.",
-                  color: "from-indigo-500/30 to-violet-500/20",
+                  title: "Collaborate",
+                  desc: "Specialist agents divide work, ask focused questions, and route tasks to the right model or tool.",
+                  accent: "#4f46e5",
                 },
                 {
-                  icon: LineChart,
-                  step: "2",
-                  title: "Assign Roles",
-                  desc: "Give each model a defined role: Strategist, Builder, Reviewer, QA. Structured roles produce structured output.",
-                  color: "from-violet-500/30 to-purple-500/20",
+                  icon: Shield,
+                  title: "Control",
+                  desc: "Approvals, budget caps, and workflow gates keep the owner in charge of cost and scope.",
+                  accent: "#7c3aed",
                 },
                 {
-                  icon: Zap,
-                  step: "3",
-                  title: "Execute",
-                  desc: "Agents collaborate in a structured loop — dividing tasks, reviewing outputs, asking each other focused questions, and surfacing decisions for your approval.",
-                  color: "from-blue-500/30 to-indigo-500/20",
+                  icon: FileText,
+                  title: "Prove",
+                  desc: "Reports, receipts, findings, and audit trails make serious AI work easier to review and hand over.",
+                  accent: "#2563eb",
                 },
-              ].map(({ icon: Icon, step, title, desc, color }) => (
+              ].map(({ icon: Icon, title, desc, accent }) => (
                 <div
-                  key={step}
-                  className="group relative flex flex-col items-center gap-4 rounded-2xl border border-border/50 bg-card/80 p-8 text-center hover:border-primary/25 hover:bg-card transition-all duration-250 overflow-hidden hover:shadow-xl hover:shadow-primary/[0.08]"
+                  key={title}
+                  className="group relative flex flex-col items-center gap-4 rounded-2xl p-8 text-center transition-all duration-250"
+                  style={{ border: "1px solid #e5e7eb", background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}
                 >
-                  {/* Indigo gradient top accent */}
-                  <div className={`absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r ${color} opacity-70 group-hover:opacity-100 transition-opacity`} />
-                  <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/20 group-hover:bg-primary/15 group-hover:ring-primary/30 transition-all">
-                    <Icon className="h-6 w-6 text-primary" />
+                  <div className="absolute top-0 left-0 right-0 h-[2px] rounded-t-2xl"
+                    style={{ background: `linear-gradient(90deg, transparent, ${accent}55, transparent)` }} />
+                  <div className="flex h-14 w-14 items-center justify-center rounded-xl"
+                    style={{ background: `${accent}14`, border: `1px solid ${accent}30` }}>
+                    <Icon className="h-6 w-6" style={{ color: accent }} />
                   </div>
                   <div className="space-y-2">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-primary/60">Step {step}</p>
-                    <h3 className="text-lg font-bold tracking-tight">{title}</h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed">{desc}</p>
+                    <h3 className="text-lg font-bold tracking-tight" style={{ color: "#111" }}>{title}</h3>
+                    <p className="text-sm leading-relaxed" style={{ color: "#6b7280" }}>{desc}</p>
                   </div>
                 </div>
               ))}
@@ -159,135 +166,143 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ─── Live demo preview ─── */}
-        <section className="w-full py-16 md:py-20 border-t border-border/50">
+        {/* ─── How it works ─── */}
+        <section className="w-full py-16 md:py-20" style={{ borderTop: "1px solid #e5e7eb", background: "#fff" }}>
           <div className="container px-4 md:px-6">
             <div className="mx-auto flex max-w-2xl flex-col items-center gap-3 text-center mb-10">
-              <div className="inline-block rounded-full bg-primary/10 border border-primary/20 px-3 py-1 text-xs font-semibold text-primary">
-                See it in action
+              <div className="inline-block rounded-full px-3 py-1 text-xs font-semibold"
+                style={{ background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.2)", color: "#4f46e5" }}>
+                How it works
               </div>
-              <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl">Agents collaborate in a structured, controlled session</h2>
-              <p className="text-muted-foreground md:text-lg">
-                Agents divide work, review each other's output, and surface approval gates — all traceable, all auditable, all in one session.
+              <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl" style={{ color: "#111" }}>
+                From goal to proof report in one session
+              </h2>
+              <p className="md:text-lg" style={{ color: "#6b7280" }}>
+                Set a goal, assign agents with specialist roles, run a controlled workflow, and receive a full audit trail with findings, approvals, and next actions.
               </p>
             </div>
-            <div className="mx-auto max-w-3xl rounded-2xl border border-border/60 bg-card/60 overflow-hidden shadow-2xl shadow-primary/5">
-              {/* Mock workspace header */}
-              <div className="flex items-center gap-3 border-b border-border/60 bg-muted/20 px-4 py-3">
+            <div className="mx-auto max-w-3xl rounded-2xl overflow-hidden"
+              style={{ border: "1px solid #e5e7eb", boxShadow: "0 4px 24px rgba(0,0,0,0.07)" }}>
+              {/* Terminal header */}
+              <div className="flex items-center gap-3 px-4 py-3"
+                style={{ borderBottom: "1px solid #e5e7eb", background: "#f9fafb" }}>
                 <div className="flex gap-1.5">
-                  <div className="h-3 w-3 rounded-full bg-red-500/60" />
-                  <div className="h-3 w-3 rounded-full bg-amber-500/60" />
-                  <div className="h-3 w-3 rounded-full bg-emerald-500/60" />
+                  <div className="h-3 w-3 rounded-full" style={{ background: "#ef4444" }} />
+                  <div className="h-3 w-3 rounded-full" style={{ background: "#f59e0b" }} />
+                  <div className="h-3 w-3 rounded-full" style={{ background: "#22c55e" }} />
                 </div>
-                <span className="text-xs text-muted-foreground font-medium">VIBA — Build a secure REST API</span>
-                <span className="ml-auto text-[10px] text-emerald-400 font-medium flex items-center gap-1">
-                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live
+                <span className="text-xs font-medium" style={{ color: "#6b7280" }}>VIBA — Build a secure REST API</span>
+                <span className="ml-auto text-[10px] font-medium flex items-center gap-1" style={{ color: "#22c55e" }}>
+                  <span className="inline-block h-1.5 w-1.5 rounded-full animate-pulse" style={{ background: "#22c55e" }} /> Live
                 </span>
               </div>
-              {/* Mock messages */}
-              <div className="p-5 space-y-4 text-sm">
+              <div className="p-5 space-y-4 text-sm" style={{ background: "#fff" }}>
                 {[
-                  { agent: "ChatGPT", role: "Strategist", model: "gpt-4.1", color: "bg-emerald-500/10 border-emerald-500/25 text-emerald-200", time: "09:01:12",
+                  { agent: "ChatGPT", role: "Strategist", model: "gpt-4.1", borderColor: "#d1fae5", bg: "#f0fdf4", textColor: "#065f46", time: "09:01:12",
                     text: "I'll break this into three phases: schema design, auth middleware, and endpoint implementation. Assigning schema to Claude, auth to Gemini, endpoints to myself." },
-                  { agent: "Claude", role: "Architect", model: "claude-3-5-sonnet", color: "bg-violet-500/10 border-violet-500/25 text-violet-200", time: "09:01:34",
+                  { agent: "Claude", role: "Architect", model: "claude-3-5-sonnet", borderColor: "#e9d5ff", bg: "#faf5ff", textColor: "#581c87", time: "09:01:34",
                     text: "Schema draft: users(id, email, password_hash, created_at), sessions(id, user_id, token, expires_at). I recommend bcrypt cost factor 12 for password hashing." },
-                  { agent: "Gemini", role: "Security Reviewer", model: "gemini-2.0-flash", color: "bg-blue-500/10 border-blue-500/25 text-blue-200", time: "09:02:05",
+                  { agent: "Gemini", role: "Security Reviewer", model: "gemini-2.0-flash", borderColor: "#bfdbfe", bg: "#eff6ff", textColor: "#1e3a8a", time: "09:02:05",
                     text: "Auth middleware spec: JWT RS256, 15-min access token, 7-day refresh. Rate-limit login to 10 req/min per IP. Flag any endpoint touching credentials for my review." },
-                  { agent: "ChatGPT", role: "Strategist", model: "gpt-4.1", color: "bg-emerald-500/10 border-emerald-500/25 text-emerald-200", time: "09:02:41",
-                    text: "All three specs align. Moving to implementation phase. Claude, please implement the schema migrations. Gemini, build the auth middleware. I'll wire the endpoints." },
-                ].map(({ agent, role, model, color, time, text }) => (
-                  <div key={time} className={`rounded-xl border p-4 ${color}`}>
+                  { agent: "ChatGPT", role: "Strategist", model: "gpt-4.1", borderColor: "#d1fae5", bg: "#f0fdf4", textColor: "#065f46", time: "09:02:41",
+                    text: "All three specs align. Moving to implementation phase. Awaiting owner approval before write operations." },
+                ].map(({ agent, role, model, borderColor, bg, textColor, time, text }) => (
+                  <div key={time} className="rounded-xl p-4" style={{ border: `1px solid ${borderColor}`, background: bg }}>
                     <div className="flex items-center gap-2 mb-2">
-                      <span className="font-semibold text-xs">{agent}</span>
-                      <span className="text-[10px] opacity-60">·</span>
-                      <span className="text-[10px] opacity-70">{role}</span>
-                      <span className="text-[10px] opacity-60">·</span>
-                      <span className="text-[10px] font-mono opacity-60">{model}</span>
-                      <span className="ml-auto text-[10px] font-mono opacity-50">{time}</span>
+                      <span className="font-semibold text-xs" style={{ color: textColor }}>{agent}</span>
+                      <span className="text-[10px] opacity-50">·</span>
+                      <span className="text-[10px]" style={{ color: textColor, opacity: 0.7 }}>{role}</span>
+                      <span className="text-[10px] opacity-50">·</span>
+                      <span className="text-[10px] font-mono" style={{ color: textColor, opacity: 0.6 }}>{model}</span>
+                      <span className="ml-auto text-[10px] font-mono" style={{ color: textColor, opacity: 0.5 }}>{time}</span>
                     </div>
-                    <p className="text-sm leading-relaxed opacity-90">{text}</p>
+                    <p className="text-sm leading-relaxed" style={{ color: textColor, opacity: 0.9 }}>{text}</p>
                   </div>
                 ))}
-                <div className="flex items-center gap-2 px-2">
-                  <div className="flex gap-0.5">
-                    <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: "0ms" }} />
-                    <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: "150ms" }} />
-                    <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: "300ms" }} />
-                  </div>
-                  <span className="text-xs text-muted-foreground">Claude is implementing schema migrations…</span>
+                {/* Approval gate banner */}
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                  style={{ border: "1px solid #fcd34d", background: "#fffbeb" }}>
+                  <Shield className="h-4 w-4 shrink-0" style={{ color: "#d97706" }} />
+                  <span className="text-xs font-medium" style={{ color: "#92400e" }}>
+                    Approval gate — owner action required before implementation proceeds
+                  </span>
                 </div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* ─── Groq free tier + key requirements ─── */}
-        <section className="w-full py-16 md:py-20 border-t border-border/50 bg-gradient-to-b from-rose-950/10 to-transparent">
+        {/* ─── Groq free tier ─── */}
+        <section className="w-full py-16 md:py-20" style={{ borderTop: "1px solid #e5e7eb", background: "#fef2f2" }}>
           <div className="container px-4 md:px-6">
             <div className="mx-auto max-w-4xl">
-              {/* Header */}
               <div className="flex flex-col items-center gap-3 text-center mb-10">
-                <div className="inline-flex items-center gap-2 rounded-full border border-rose-500/30 bg-rose-500/10 px-4 py-1.5 text-xs font-semibold text-rose-300">
+                <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold"
+                  style={{ border: "1px solid rgba(220,38,38,0.3)", background: "rgba(220,38,38,0.08)", color: "#b91c1c" }}>
                   <span className="relative flex h-2 w-2">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-60" />
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-rose-400" />
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60" style={{ background: "#ef4444" }} />
+                    <span className="relative inline-flex h-2 w-2 rounded-full" style={{ background: "#ef4444" }} />
                   </span>
                   Groq — Pre-configured &amp; Free for All Users
                 </div>
-                <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl">
+                <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl" style={{ color: "#111" }}>
                   Start immediately. No API key needed.
                 </h2>
-                <p className="text-muted-foreground md:text-lg max-w-2xl">
-                  VIBA comes with <span className="text-foreground font-medium">Groq pre-configured</span> — powered by Llama&nbsp;3.3&nbsp;70B, one of the most capable open models available. Use it to plan, build, and review right away.
+                <p className="md:text-lg max-w-2xl" style={{ color: "#6b7280" }}>
+                  VIBA comes with <span style={{ color: "#111", fontWeight: 500 }}>Groq pre-configured</span> — powered by Llama&nbsp;3.3&nbsp;70B. Use it to diagnose, plan, and review right away, with full approval and audit trail support.
                 </p>
               </div>
 
-              {/* Two-column: free vs bring your own */}
               <div className="grid md:grid-cols-2 gap-5">
-                {/* Free / Groq card */}
-                <div className="rounded-2xl border border-rose-500/25 bg-rose-500/[0.06] p-7 flex flex-col gap-4">
+                {/* Groq card */}
+                <div className="rounded-2xl p-7 flex flex-col gap-4"
+                  style={{ border: "1px solid rgba(220,38,38,0.25)", background: "#fff" }}>
                   <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-500/15 ring-1 ring-rose-500/25">
-                      <Zap className="h-5 w-5 text-rose-400" />
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl"
+                      style={{ background: "rgba(220,38,38,0.1)", border: "1px solid rgba(220,38,38,0.2)" }}>
+                      <Zap className="h-5 w-5" style={{ color: "#dc2626" }} />
                     </div>
                     <div>
-                      <p className="font-semibold text-sm text-foreground">Groq — Free &amp; Ready</p>
-                      <p className="text-xs text-muted-foreground">No setup required</p>
+                      <p className="font-semibold text-sm" style={{ color: "#111" }}>Groq — Free &amp; Ready</p>
+                      <p className="text-xs" style={{ color: "#9ca3af" }}>No setup required</p>
                     </div>
                   </div>
-                  <ul className="space-y-2.5 text-sm text-muted-foreground">
+                  <ul className="space-y-2.5 text-sm" style={{ color: "#6b7280" }}>
                     {[
                       "Llama 3.3 70B — full function calling",
-                      "Railway MCP tools — deploy, rollback, manage env vars",
-                      "Planning, code review, implementation",
+                      "Project Doctor — diagnose any GitHub repo",
+                      "Approval gates & audit trails included",
                       "Zero cost — free Groq tier, no credit card",
                     ].map(item => (
                       <li key={item} className="flex items-start gap-2">
-                        <span className="mt-0.5 h-4 w-4 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center text-[10px] shrink-0">✓</span>
+                        <span className="mt-0.5 h-4 w-4 rounded-full flex items-center justify-center text-[10px] shrink-0"
+                          style={{ background: "rgba(220,38,38,0.12)", color: "#dc2626" }}>✓</span>
                         {item}
                       </li>
                     ))}
                   </ul>
-                  <div className="mt-auto pt-2 text-xs text-rose-400/70 font-medium">
+                  <div className="mt-auto pt-2 text-xs font-medium" style={{ color: "#dc262688" }}>
                     Powered by Groq · Llama 3.3 70B · Included for all VIBA users
                   </div>
                 </div>
 
-                {/* Bring your own keys card */}
-                <div className="rounded-2xl border border-border/50 bg-card p-7 flex flex-col gap-4">
+                {/* BYOK card */}
+                <div className="rounded-2xl p-7 flex flex-col gap-4"
+                  style={{ border: "1px solid #e5e7eb", background: "#fff" }}>
                   <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/20">
-                      <KeyRound className="h-5 w-5 text-primary" />
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl"
+                      style={{ background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.2)" }}>
+                      <KeyRound className="h-5 w-5" style={{ color: "#6366f1" }} />
                     </div>
                     <div>
-                      <p className="font-semibold text-sm text-foreground">Collaborative Multi-Agent Work</p>
-                      <p className="text-xs text-muted-foreground">Bring your own keys</p>
+                      <p className="font-semibold text-sm" style={{ color: "#111" }}>Multi-Provider Collaboration</p>
+                      <p className="text-xs" style={{ color: "#9ca3af" }}>Bring your own keys</p>
                     </div>
                   </div>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    To run <span className="text-foreground font-medium">multiple different AI models collaborating together</span> — e.g. Claude as Architect, ChatGPT as Strategist, Gemini as Researcher — each provider needs its own API key in your settings.
+                  <p className="text-sm leading-relaxed" style={{ color: "#6b7280" }}>
+                    To run <span style={{ color: "#111", fontWeight: 500 }}>multiple specialist agents collaborating together</span> — Claude as Architect, ChatGPT as Strategist, Gemini as Reviewer — each provider needs its own API key in settings.
                   </p>
-                  <ul className="space-y-2 text-sm text-muted-foreground">
+                  <ul className="space-y-2 text-sm" style={{ color: "#6b7280" }}>
                     {[
                       { name: "OpenAI", key: "OPENAI_API_KEY" },
                       { name: "Anthropic", key: "ANTHROPIC_API_KEY" },
@@ -296,12 +311,16 @@ export default function Home() {
                     ].map(({ name, key }) => (
                       <li key={key} className="flex items-center justify-between gap-2">
                         <span>{name}</span>
-                        <code className="text-[10px] font-mono text-muted-foreground/60 bg-muted/50 px-2 py-0.5 rounded">{key}</code>
+                        <code className="text-[10px] font-mono rounded px-2 py-0.5"
+                          style={{ background: "#f3f4f6", color: "#9ca3af" }}>{key}</code>
                       </li>
                     ))}
                   </ul>
                   <Link href="/settings" className="mt-auto">
-                    <button className="w-full flex items-center justify-center gap-2 h-9 rounded-lg text-sm font-medium border border-border/60 bg-white/[0.04] hover:bg-white/[0.07] transition-all">
+                    <button
+                      className="w-full flex items-center justify-center gap-2 h-9 rounded-lg text-sm font-medium transition-all"
+                      style={{ border: "1px solid #d1d5db", background: "#f9fafb", color: "#374151" }}
+                    >
                       Add API Keys <ArrowRight className="h-3.5 w-3.5" />
                     </button>
                   </Link>
@@ -310,77 +329,30 @@ export default function Home() {
             </div>
           </div>
         </section>
-
-        {/* ─── Feature highlight ─── */}
-        <section className="w-full py-16 md:py-24">
-          <div className="container px-4 md:px-6">
-            <div className="grid gap-10 sm:px-10 md:gap-16 lg:grid-cols-2 items-center">
-              <div className="space-y-5">
-                <div className="inline-block rounded-full bg-primary/10 border border-primary/20 px-3 py-1 text-xs font-semibold text-primary">
-                  Built for Serious Work
-                </div>
-                <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl lg:text-5xl">
-                  Controlled collaboration.
-                </h2>
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Shield className="h-5 w-5 text-primary shrink-0" />
-                  <p className="font-medium">Every step is accountable.</p>
-                </div>
-                <p className="text-muted-foreground md:text-lg leading-relaxed">
-                  Run sessions in Supervised or Autonomous mode. Approval gates, budget caps, and audit trails keep every agent action accountable — so you can use AI collaboration on real project work, not just experiments.
-                </p>
-              </div>
-
-              <div className="flex flex-col gap-4">
-                {[
-                  {
-                    title: "Budget Control",
-                    body: "Set a credit cap per session. VIBA pauses and reports before any agent action exceeds your budget — no surprise costs, no runaway loops.",
-                    accent: false,
-                  },
-                  {
-                    title: "Audit Trails & Proof Reports",
-                    body: "Every agent decision, tool call, and approval gate is logged. Proof reports give you a verifiable record of what was built, reviewed, and approved — essential for commercial project work.",
-                    accent: true,
-                  },
-                ].map(({ title, body, accent }) => (
-                  <div
-                    key={title}
-                    className={`rounded-xl border p-6 transition-colors ${
-                      accent
-                        ? "border-primary/25 bg-primary/5 hover:bg-primary/8"
-                        : "border-border/60 bg-card hover:bg-card/80"
-                    }`}
-                  >
-                    <h3 className="font-semibold text-base mb-2">{title}</h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed">{body}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
       </main>
 
       {/* ─── Footer ─── */}
-      <footer className="w-full border-t border-border/40 bg-muted/10">
+      <footer className="w-full" style={{ borderTop: "1px solid #e5e7eb", background: "#f9fafb" }}>
         <div className="container flex flex-col sm:flex-row items-center justify-between gap-3 py-6 md:h-16">
           <div className="flex items-center gap-2">
-            <img src="/viba-logo.png" alt="VIBA" className="h-8 w-auto opacity-70" style={{ filter: 'drop-shadow(1px 0 0 rgba(0,0,0,0.75)) drop-shadow(-1px 0 0 rgba(0,0,0,0.75)) drop-shadow(0 1px 0 rgba(0,0,0,0.75)) drop-shadow(0 -1px 0 rgba(0,0,0,0.75))' }} />
-            <p className="text-sm text-muted-foreground">
-              VIBA · Controlled AI Collaboration
+            <img src="/viba-logo.png" alt="VIBA" className="h-8 w-auto"
+              style={{ opacity: 0.6, filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.1))" }} />
+            <p className="text-sm" style={{ color: "#9ca3af" }}>
+              VIBA · Controlled AI Collaboration Platform
             </p>
           </div>
-          <div className="flex items-center gap-4 text-xs text-muted-foreground/60">
-            <Link href="/pricing" className="hover:text-muted-foreground transition-colors">Pricing</Link>
-            <Link href="/settings" className="hover:text-muted-foreground transition-colors">Settings</Link>
-            <Link href="/dashboard" className="hover:text-muted-foreground transition-colors">Dashboard</Link>
-            <span className="text-border/60">|</span>
+          <div className="flex items-center gap-4 text-xs" style={{ color: "#9ca3af" }}>
+            <Link href="/pricing" className="hover:text-gray-600 transition-colors">Pricing</Link>
+            <Link href="/doctor" className="hover:text-gray-600 transition-colors">Project Doctor</Link>
+            <Link href="/settings" className="hover:text-gray-600 transition-colors">Settings</Link>
+            <Link href="/dashboard" className="hover:text-gray-600 transition-colors">Dashboard</Link>
+            <span style={{ color: "#d1d5db" }}>|</span>
             <a
               href="https://leego.dev"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 opacity-50 hover:opacity-80 transition-opacity"
+              className="flex items-center gap-1.5 transition-opacity hover:opacity-80"
+              style={{ opacity: 0.5 }}
               title="Made by Leego"
             >
               <span>by</span>

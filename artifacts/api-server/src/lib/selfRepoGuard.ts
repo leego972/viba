@@ -1,5 +1,5 @@
 export function configuredSelfRepo(): string {
-  return process.env["VIBA_SELF_REPO"] || process.env["GITHUB_REPOSITORY"] || "leego972/bridge-ai";
+  return process.env["VIBA_SELF_REPO"] || process.env["GITHUB_REPOSITORY"] || "leego972/viba";
 }
 
 export function normalizeRepoFullName(repo: string): string {

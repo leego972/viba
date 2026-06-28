@@ -13,13 +13,19 @@ const MAX_OUTBOUND_QUESTIONS_PER_STEP = 3;
  * surfaced to the recipient. This enforces task isolation — agents only receive
  * messages that belong to the task they are currently executing.
  *
- * Storage vs. delivery distinction:
+ * Design rationale:
+ *  - A task is the unit of collaboration. Two agents can be co-assigned to the
+ *    same task, at which point they share a communication channel via taskId.
+ *  - Questions stored under a different taskId belong to a different conversational
+ *    context and must NOT bleed into the current task's execution.
+ *  - Answers are also stored under the question's original taskId (see persistAnswers),
+ *    ensuring every Q/A pair is fully contained within one task thread.
+ *
+ * Storage distinction:
  *  - Questions are stored with the sender's taskId for UI thread grouping
  *    (see persistOutboundQuestions — always task-scoped at write time).
- *  - Answers are stored under the question's original taskId so the Q&A pair
- *    stays in the same thread (see persistAnswers).
- *  - Delivery is session + recipient + task scoped so each task has an isolated
- *    communication channel and stale cross-task messages cannot leak through.
+ *  - Delivery is constrained to that same taskId so the recipient only sees
+ *    questions relevant to the task they are currently executing.
  */
 export async function processPendingQuestions(
   sessionId: number,

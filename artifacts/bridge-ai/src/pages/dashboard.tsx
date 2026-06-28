@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import {
@@ -42,6 +42,59 @@ import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
 import { useToast } from "@/hooks/use-toast";
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+interface OpsSummaryData {
+  ok?: boolean;
+  targets?: { healthy: number; failing: number; paused: number; unknown: number };
+  openIncidents?: { critical: number; high: number; medium: number; low: number; total: number };
+  lastCheckAt?: string | null;
+}
+
+function ProductionOpsMini() {
+  const [data, setData] = useState<OpsSummaryData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    fetch(`${BASE}/api/production-ops/summary`)
+      .then((r) => r.json())
+      .then((d: OpsSummaryData) => { if (active) setData(d); })
+      .catch(() => {})
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  if (loading) return <p className="text-[11px] text-muted-foreground">Loading…</p>;
+  if (!data?.ok) return <p className="text-[11px] text-muted-foreground">No targets yet</p>;
+
+  const criticalCount = data.openIncidents?.critical ?? 0;
+  const failing = data.targets?.failing ?? 0;
+  const healthy = data.targets?.healthy ?? 0;
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex justify-between text-[11px]">
+        <span className="text-muted-foreground">Healthy targets</span>
+        <span className="font-medium text-emerald-400">{healthy}</span>
+      </div>
+      <div className="flex justify-between text-[11px]">
+        <span className="text-muted-foreground">Failing targets</span>
+        <span className={`font-medium ${failing > 0 ? "text-red-400" : "text-foreground/50"}`}>{failing}</span>
+      </div>
+      <div className="flex justify-between text-[11px]">
+        <span className="text-muted-foreground">Open incidents</span>
+        <span className={`font-medium ${(data.openIncidents?.total ?? 0) > 0 ? "text-orange-400" : "text-foreground/50"}`}>{data.openIncidents?.total ?? 0}</span>
+      </div>
+      {criticalCount > 0 && (
+        <div className="rounded bg-red-500/10 border border-red-500/20 px-2 py-1 text-[10px] text-red-400 font-medium">
+          {criticalCount} critical incident{criticalCount > 1 ? "s" : ""} — release blocked
+        </div>
+      )}
+    </div>
+  );
+}
 
 function shortRepoName(url: string): string {
   try {
@@ -401,28 +454,63 @@ export default function Dashboard() {
           </Link>
         </div>
 
-        {/* ── Quick links ── */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <Link href="/sessions/new">
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5">
-              <Plus className="h-3 w-3" /> New Session
-            </Button>
-          </Link>
-          <Link href="/workbench">
-            <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground">
-              <Brain className="h-3 w-3" /> Workbench
-            </Button>
-          </Link>
-          <Link href="/settings">
-            <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground">
-              <Settings2 className="h-3 w-3" /> Settings
-            </Button>
-          </Link>
-          <a href="https://viba.guru" target="_blank" rel="noopener noreferrer">
-            <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground">
-              <HelpCircle className="h-3 w-3" /> Help
-            </Button>
-          </a>
+        {/* ── Primary Actions ── */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {[
+            {
+              href: "/sessions/new",
+              icon: Plus,
+              label: "New Session",
+              sub: "Start a controlled workflow",
+              primary: true,
+            },
+            {
+              href: "/doctor",
+              icon: Activity,
+              label: "Project Doctor",
+              sub: "Diagnose a GitHub repo",
+              primary: false,
+            },
+            {
+              href: "/workbench",
+              icon: Brain,
+              label: "Workbench",
+              sub: "Build & run tools",
+              primary: false,
+            },
+            {
+              href: "/settings",
+              icon: Settings2,
+              label: "Provider Keys",
+              sub: "Configure API keys",
+              primary: false,
+            },
+            {
+              href: "/billing",
+              icon: DollarSign,
+              label: "Billing",
+              sub: "Credits & subscription",
+              primary: false,
+            },
+          ].map(({ href, icon: Icon, label, sub, primary }) => (
+            <Link key={href} href={href}>
+              <div className={`group flex flex-col items-start gap-1.5 rounded-xl border p-4 cursor-pointer transition-all duration-150 hover:shadow-md ${
+                primary
+                  ? "border-primary/40 bg-primary/[0.07] hover:bg-primary/[0.12] hover:border-primary/60"
+                  : "border-border/50 bg-card hover:bg-muted/40 hover:border-border"
+              }`}>
+                <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+                  primary ? "bg-primary/15" : "bg-muted"
+                }`}>
+                  <Icon className={`h-4 w-4 ${primary ? "text-primary" : "text-muted-foreground"}`} />
+                </div>
+                <div>
+                  <p className={`text-sm font-semibold leading-tight ${primary ? "text-primary" : "text-foreground"}`}>{label}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">{sub}</p>
+                </div>
+              </div>
+            </Link>
+          ))}
         </div>
 
         {/* ── GitHub Repos ── */}
@@ -993,6 +1081,22 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
             )}
+
+            {/* Production Ops status card */}
+            <Card className="border-white/[0.07] bg-white/[0.02]">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-sm text-foreground/70">
+                  <Activity className="h-4 w-4 text-primary/70" />
+                  Production Ops
+                  <Link href="/production-ops" className="ml-auto">
+                    <ChevronRight className="h-3.5 w-3.5 text-foreground/30 hover:text-foreground/70 transition-colors" />
+                  </Link>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0 space-y-2">
+                <ProductionOpsMini />
+              </CardContent>
+            </Card>
 
           </div>
         </div>

@@ -59,7 +59,7 @@ describe("processPendingQuestions", () => {
     const questionRow = makeQuestionRow();
 
     (db.select as ReturnType<typeof vi.fn>)
-      // First call: fetch questions (session + recipient + unanswered) — uses orderBy
+      // First call: fetch questions (session + recipient + task) — uses orderBy
       .mockReturnValueOnce({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({
@@ -67,7 +67,7 @@ describe("processPendingQuestions", () => {
           }),
         }),
       })
-      // Second call: fetch answers — no orderBy, resolves from where()
+      // Second call: fetch answers — resolves from where()
       .mockReturnValueOnce({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockResolvedValue([]),
@@ -87,31 +87,29 @@ describe("processPendingQuestions", () => {
 
   it("does NOT deliver a question from a different task (strict task isolation)", async () => {
     // Strict task-scoping: delivery is filtered by currentTaskId.
-    // Agent A asks Agent B on task 10; Agent B runs on task 11.
+    // Agent A asks Agent B on task 10; Agent B is executing task 11.
     // The question must NOT be delivered — task 10 questions are isolated to task 10.
-    // The DB query already filters by taskId = currentTaskId, so the mock returns [].
+    // The DB query filters by taskId = currentTaskId, so the mock returns [] for task 11.
     const { db } = await import("@workspace/db");
 
     (db.select as ReturnType<typeof vi.fn>)
-      // DB returns no rows: task-10 question is not visible when currentTaskId=11
       .mockReturnValueOnce({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({
-            orderBy: vi.fn().mockResolvedValue([]),
+            orderBy: vi.fn().mockResolvedValue([]), // DB returns [] — task 10 question not visible on task 11
           }),
         }),
       });
 
     const { processPendingQuestions } = await import("./agentComms");
-    // Recipient is on task 11 — question from task 10 must NOT be delivered
+    // Agent B is on task 11 — question from task 10 must NOT be delivered
     const result = await processPendingQuestions(1, 2, 11);
     expect(result).toHaveLength(0);
   });
 
-  it("full lifecycle: question asked on task N is delivered and marked resolved after answer on same task", async () => {
-    // E2E lifecycle: Agent A (task 10) asks Agent B on task 10 → Agent B (also task 10)
-    // receives it → Agent B answers → question is resolved (not pending any more).
-    // Delivery is strictly task-scoped: both agents share the same taskId for this exchange.
+  it("full lifecycle: question asked on task N is delivered and resolved after answer on same task", async () => {
+    // E2E lifecycle: Agent A (task 10) asks Agent B on the same task 10 →
+    // Agent B (also task 10) receives it → Agent B answers → question is resolved.
     const { db } = await import("@workspace/db");
     const questionRow = makeQuestionRow(); // taskId: 10, toAgentId: 2, id: 5
     const answerRow = {
@@ -190,6 +188,27 @@ describe("processPendingQuestions", () => {
 
     const { processPendingQuestions } = await import("./agentComms");
     const result = await processPendingQuestions(1, 2, 10);
+    expect(result).toHaveLength(0);
+  });
+
+  it("regression: questions from a different task are never injected into the current task", async () => {
+    // Agent A stores a question on task 10. Agent B is executing task 20.
+    // The DB WHERE clause (taskId = currentTaskId) ensures task 10 questions
+    // are NEVER delivered during task 20 execution — no context bleed.
+    const { db } = await import("@workspace/db");
+
+    // DB returns empty because the taskId filter excludes the task-10 question
+    (db.select as ReturnType<typeof vi.fn>)
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            orderBy: vi.fn().mockResolvedValue([]),
+          }),
+        }),
+      });
+
+    const { processPendingQuestions } = await import("./agentComms");
+    const result = await processPendingQuestions(1, 2, 20 /* task 20, question is on task 10 */);
     expect(result).toHaveLength(0);
   });
 });
