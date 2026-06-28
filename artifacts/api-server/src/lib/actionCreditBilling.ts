@@ -3,7 +3,36 @@ import { db, auditLogsTable, messagesTable, sessionsTable } from "@workspace/db"
 import { eq } from "drizzle-orm";
 import { deductCredits, getCredits, isStripeConfigured, triggerAutoTopupIfNeeded } from "./billing";
 
+// ─── Credit model ─────────────────────────────────────────────────────────────
+// VIBA credits are charged for TOOL-USE / WORK tasks only — the "work" layer
+// that VIBA orchestrates (build, code, debug, deploy, audit, browser, etc.).
+// Pure conversation tasks (planning, research) are free regardless of provider.
+// Each provider's API cost (OpenAI, Claude, Gemini) is the user's own concern —
+// VIBA only charges for the orchestration & tool-execution layer on top.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Free task types — no VIBA credits charged.
+ * These are pure conversational exchanges with no work output:
+ * questions, explanations, small talk, clarifications, comments.
+ *
+ * Everything that produces an output (research, planning a deliverable,
+ * creative writing, image generation, code, builds, audits …) costs credits
+ * regardless of which AI provider runs it.
+ */
+const CHAT_ONLY_TASK_TYPES = new Set([
+  "chat",
+  "question",
+  "explanation",
+  "clarification",
+  "comment",
+  "small_talk",
+  "smalltalk",
+]);
+
+/** Credit cost per task type — all "work" tasks including AI-assisted creation. */
 const TASK_BASE_CREDITS: Record<string, number> = {
+  // ── Deep work ──────────────────────────────────────────────────────────────
   audit: 220,
   security_audit: 260,
   review: 120,
@@ -15,8 +44,11 @@ const TASK_BASE_CREDITS: Record<string, number> = {
   coding: 120,
   tool_handoff: 80,
   final_qa: 70,
-  planning: 30,
+  // ── AI-assisted creation ───────────────────────────────────────────────────
   research: 45,
+  creative_writing: 60,
+  image_generation: 80,
+  planning: 30,
 };
 
 function textComplexityCredits(task: Task): number {
@@ -162,6 +194,14 @@ export async function reserveCreditsForAction(input: {
   pendingQuestionCount?: number;
 }): Promise<{ ok: true; credits: number } | { ok: false; credits: number }> {
   if (!isStripeConfigured()) return { ok: true, credits: 0 };
+
+  // Pure back-and-forth chat is free — VIBA credits are for work only.
+  // Everything else (research, creative writing, image generation, planning,
+  // tool use, builds, audits …) costs credits regardless of which provider runs it.
+  const taskType = String(input.task.type ?? "").toLowerCase();
+  if (CHAT_ONLY_TASK_TYPES.has(taskType) && !input.agent.canUseTools) {
+    return { ok: true, credits: 0 };
+  }
   const credits = estimateActionCredits({ task: input.task, agent: input.agent, pendingQuestionCount: input.pendingQuestionCount });
   const [session] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, input.sessionId));
   const currentReserved = session?.creditsReserved ?? 0;
