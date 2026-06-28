@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Key, ShieldCheck, Zap, RotateCcw, BarChart2, Cpu, Bell, X, CheckCircle2, MinusCircle, Trash2, MailWarning, AlertTriangle, Server, Github, GitBranch } from "lucide-react";
+import { DangerZone } from "@/components/DangerZone";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -1023,6 +1024,9 @@ export default function Settings() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Danger Zone ──────────────────────────────────────────────────── */}
+      <DangerZone />
 
       {/* Clear key confirmation dialog */}
       <AlertDialog open={!!clearConfirmKey} onOpenChange={(open) => { if (!open) setClearConfirmKey(null); }}>
