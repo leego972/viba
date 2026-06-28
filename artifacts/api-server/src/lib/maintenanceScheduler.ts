@@ -1,6 +1,7 @@
 import { pool } from "@workspace/db";
 import { logger } from "./logger";
 import { notifyAdmin } from "./maintenanceNotify";
+import { configuredSelfRepo, configuredSelfBranch } from "./selfRepoGuard";
 
 const MELBOURNE_TZ = "Australia/Melbourne";
 const ADMIN_EMAIL = process.env["VIBA_ADMIN_EMAIL"] || process.env["ADMIN_BOOTSTRAP_EMAIL"] || "leego972@gmail.com";
@@ -110,8 +111,8 @@ async function callSelfRepair(repo: string, branch: string): Promise<{ ok: boole
 export async function runWeeklyMaintenanceNow(reason = "manual_or_scheduled"): Promise<{ ok: boolean; runKey: string; message: string }> {
   if (running) return { ok: false, runKey: melbourneRunKey(), message: "Weekly maintenance is already running." };
   running = true;
-  const repo = process.env["VIBA_SELF_REPO"] || process.env["GITHUB_REPOSITORY"] || "leego972/bridge-ai";
-  const branch = process.env["VIBA_SELF_BRANCH"] || "main";
+  const repo = configuredSelfRepo();
+  const branch = configuredSelfBranch();
   const runKey = reason === "scheduled" ? melbourneRunKey() : `${melbourneRunKey()}-${Date.now()}`;
 
   try {
@@ -145,6 +146,79 @@ export async function runWeeklyMaintenanceNow(reason = "manual_or_scheduled"): P
     return { ok: true, runKey, message: "Maintenance completed; update ready to merge." };
   } finally {
     running = false;
+  }
+}
+
+// ─── Spec-required exports (T03) ─────────────────────────────────────────────
+
+export interface MaintenanceConfig {
+  weeklyEnabled: boolean;
+  emailsEnabled: boolean;
+  emailThrottleMinutes: number;
+  adminEmail: string;
+  publicUrl: string;
+}
+
+/** Return the current maintenance configuration derived from env vars. */
+export function getMaintenanceConfig(): MaintenanceConfig {
+  return {
+    weeklyEnabled: process.env["VIBA_WEEKLY_MAINTENANCE_ENABLED"] === "true",
+    emailsEnabled: process.env["VIBA_MAINTENANCE_EMAILS_ENABLED"] === "true",
+    emailThrottleMinutes: Number(process.env["VIBA_MAINTENANCE_EMAIL_THROTTLE_MINUTES"] ?? 60),
+    adminEmail: process.env["VIBA_ADMIN_EMAIL"] || process.env["ADMIN_BOOTSTRAP_EMAIL"] || "",
+    publicUrl: process.env["VIBA_PUBLIC_URL"] || "https://viba.guru",
+  };
+}
+
+/** Return whether maintenance should run right now (Sunday 22:xx Melbourne time). */
+export function shouldRunMaintenance(now: Date = new Date()): boolean {
+  const config = getMaintenanceConfig();
+  if (!config.weeklyEnabled) return false;
+  const parts = new Intl.DateTimeFormat("en-AU", {
+    timeZone: "Australia/Melbourne",
+    weekday: "short",
+    hour: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+  const weekday = parts.find(p => p.type === "weekday")?.value ?? "";
+  const hour = Number(parts.find(p => p.type === "hour")?.value ?? -1);
+  return weekday === "Sun" && hour === 22;
+}
+
+export interface MaintenanceRunInput {
+  trigger?: "manual" | "scheduled" | "api";
+  dryRun?: boolean;
+}
+
+export interface MaintenanceRunResult {
+  status: "completed" | "disabled" | "skipped" | "error";
+  message: string;
+  ranAt: string;
+  config: MaintenanceConfig;
+}
+
+/**
+ * Run a single maintenance cycle synchronously from an external caller.
+ * Returns a structured result — does not start background loops.
+ */
+export async function runMaintenanceOnce(input: MaintenanceRunInput = {}): Promise<MaintenanceRunResult> {
+  const config = getMaintenanceConfig();
+  const ranAt = new Date().toISOString();
+
+  if (!config.weeklyEnabled) {
+    return { status: "disabled", message: "Weekly maintenance is disabled (VIBA_WEEKLY_MAINTENANCE_ENABLED != true)", ranAt, config };
+  }
+
+  if (input.dryRun) {
+    return { status: "skipped", message: "Dry run — no maintenance actions taken", ranAt, config };
+  }
+
+  try {
+    await runWeeklyMaintenanceNow(input.trigger ?? "api");
+    return { status: "completed", message: "Maintenance cycle completed", ranAt, config };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { status: "error", message, ranAt, config };
   }
 }
 
