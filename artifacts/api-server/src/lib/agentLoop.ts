@@ -8,6 +8,7 @@ import type { AgentTaskResult } from "./adapters/interface";
 import { runAdapterWithRetry } from "./adapterRetry";
 import { handleToolHandoff } from "./toolHandoff";
 import { processPendingQuestions, persistOutboundQuestions, persistAnswers } from "./agentComms";
+import { reserveCreditsForAction } from "./actionCreditBilling";
 
 const APPROVAL_TASK_TYPES = new Set(["final_qa"]);
 const MAX_TURNS = 12;
@@ -47,7 +48,7 @@ async function updateMemory(sessionId: number, newMessages: Message[], agentName
   }
 }
 
-export async function runNextAgentStep(sessionId: number): Promise<{
+export async function runNextAgentStep(sessionId: number, userId = 0): Promise<{
   newMessages: Message[];
   updatedTasks: Task[];
   approvalRequired: boolean;
@@ -150,6 +151,23 @@ export async function runNextAgentStep(sessionId: number): Promise<{
   // Fetch pending questions directed at this agent — session + recipient scoped,
   // NOT filtered by taskId so cross-task questions are delivered (see agentComms.ts)
   const pendingQuestions = await processPendingQuestions(sessionId, assignedAgent.id, nextTask.id);
+
+  // ── Complexity-based credit billing ─────────────────────────────────────────
+  // Deducts credits proportional to task type, description length, and whether
+  // the assigned agent supports tool calls. No-op when Stripe is not configured.
+  if (userId > 0) {
+    const creditResult = await reserveCreditsForAction({
+      userId,
+      sessionId,
+      task: nextTask,
+      agent: assignedAgent,
+      pendingQuestionCount: pendingQuestions.length,
+    });
+    if (!creditResult.ok) {
+      // Session is already paused + a system message inserted by reserveCreditsForAction
+      return { newMessages: [], updatedTasks: [], approvalRequired: false, approval: null };
+    }
+  }
 
   // Emit a "running" audit event on every poll cycle so the session feed shows live progress
   const onPollCycle = (info: { attempt: number; maxAttempts: number; status: string; elapsedMs: number }) => {
@@ -400,7 +418,7 @@ export async function runNextAgentStep(sessionId: number): Promise<{
   };
 }
 
-export async function runFullWorkflow(sessionId: number): Promise<{
+export async function runFullWorkflow(sessionId: number, userId = 0): Promise<{
   newMessages: Message[];
   updatedTasks: Task[];
   approvalRequired: boolean;
@@ -414,7 +432,7 @@ export async function runFullWorkflow(sessionId: number): Promise<{
   let approval: typeof approvalsTable.$inferSelect | null = null;
 
   for (let i = 0; i < MAX_TURNS; i++) {
-    const result = await runNextAgentStep(sessionId);
+    const result = await runNextAgentStep(sessionId, userId);
     allNewMessages.push(...result.newMessages);
     allUpdatedTasks.push(...result.updatedTasks);
     stepsRun++;

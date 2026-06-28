@@ -15,8 +15,8 @@ import { accessTokenMiddleware } from "./middlewares/accessToken";
 import { webhookHandler } from "./routes/stripeWebhook";
 import adminRouter from "./routes/admin";
 import { pool } from "@workspace/db";
-import { getBillingStatus, deductCredits, isStripeConfigured } from "./lib/billing";
-import { sendCreditsExhaustedReminder, sendLowCreditsWarningIfNeeded } from "./lib/billingEmail";
+import { getBillingStatus, isStripeConfigured } from "./lib/billing";
+import { sendLowCreditsWarningIfNeeded } from "./lib/billingEmail";
 import { buildAdapter, buildMockAdapter } from "./lib/agentFactory";
 import type { Agent } from "@workspace/db";
 
@@ -212,21 +212,8 @@ app.use(
         return;
       }
 
-      // Atomically deduct 1 credit — returns false when balance is already 0
-      const sessionIdForBilling = parseInt(String(req.params.id ?? ""), 10) || undefined;
-      const deducted = await deductCredits(userId, 1, sessionIdForBilling);
-      if (!deducted) {
-        // Fire-and-forget email reminder (throttled to once per 24 h)
-        sendCreditsExhaustedReminder(userId).catch(() => {});
-        res.status(402).json({
-          error: "out_of_credits",
-          message: "You've used all your credits for this period. Top up to continue.",
-          topUpUrl: "/billing",
-        });
-        return;
-      }
-
-      // Fire-and-forget low-credit warning (throttled to once per 7 days)
+      // Credit deduction is handled per-task inside agentLoop via complexity billing.
+      // Fire-and-forget low-credit warning (throttled to once per 7 days).
       sendLowCreditsWarningIfNeeded(userId).catch(() => {});
 
       next();

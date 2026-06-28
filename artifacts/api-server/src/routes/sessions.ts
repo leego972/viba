@@ -371,7 +371,7 @@ router.post("/sessions/:id/run-next", async (req, res): Promise<void> => {
     return;
   }
 
-  const result = await runNextAgentStep(params.data.id);
+  const result = await runNextAgentStep(params.data.id, req.session?.userId ?? 0);
   const [updatedSession] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, params.data.id));
   const stepAgents = await db.select().from(agentsTable).where(eq(agentsTable.sessionId, params.data.id));
   const stepAgentNameMap = new Map(stepAgents.map((a) => [a.id, a.name]));
@@ -400,7 +400,7 @@ router.post("/sessions/:id/run-full", async (req, res): Promise<void> => {
     return;
   }
 
-  const result = await runFullWorkflow(params.data.id);
+  const result = await runFullWorkflow(params.data.id, req.session?.userId ?? 0);
   const [updatedSession] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, params.data.id));
   const fullAgents = await db.select().from(agentsTable).where(eq(agentsTable.sessionId, params.data.id));
   const fullAgentNameMap = new Map(fullAgents.map((a) => [a.id, a.name]));

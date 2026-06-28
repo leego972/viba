@@ -106,7 +106,7 @@ async function runLoop(run: BackgroundRun): Promise<void> {
       const canRun = await canRunNextAction(run);
       if (!canRun) break;
 
-      const result = await runNextAgentStep(run.sessionId);
+      const result = await runNextAgentStep(run.sessionId, run.userId);
       run.stepsRun += 1;
 
       if (result.approvalRequired) {
