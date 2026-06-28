@@ -1,10 +1,4 @@
-databases:
-    - name: viba-db
-      plan: free
-      region: oregon
-      version: "16"
-
-  services:
+services:
     - type: web
       name: viba
       runtime: node
@@ -23,8 +17,4 @@ databases:
           value: 22.22.1
         - key: PNPM_VERSION
           value: 10.24.0
-        - key: DATABASE_URL
-          fromDatabase:
-            name: viba-db
-            property: connectionString
   
