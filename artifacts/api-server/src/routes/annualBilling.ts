@@ -68,6 +68,7 @@ router.post("/billing/checkout/annual", async (req, res): Promise<void> => {
     const priceId = await annualPriceId();
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
+      payment_method_types: ["card"],
       ...(current.stripeCustomerId ? { customer: current.stripeCustomerId } : {}),
       line_items: [{ price: priceId, quantity: 1 }],
       subscription_data: {
