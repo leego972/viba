@@ -11,7 +11,7 @@ type FileChange = { path: string; content: string; message?: string };
 type CandidateFile = { path: string; content: string | null };
 type RepairProposal = { summary?: string; changes?: FileChange[]; notes?: string[] };
 
-const DEFAULT_SELF_REPO = process.env.VIBA_SELF_REPO || process.env.GITHUB_REPOSITORY || "leego972/viba";
+const DEFAULT_SELF_REPO = process.env.VIBA_SELF_REPO || process.env.GITHUB_REPOSITORY || "leego972/bridge-ai";
 const SAFE_CHANGE_PREFIXES = ["docs/", "artifacts/api-server/src/", "artifacts/bridge-ai/src/", "lib/api-zod/src/", "lib/api-client-react/src/", "lib/db/src/", ".github/workflows/"];
 const FORBIDDEN_CHANGE_PATTERNS = [/\.env/i, /secret/i, /private/i, /node_modules\//, /pnpm-lock\.yaml$/, /package-lock\.json$/, /yarn\.lock$/];
 const DEFAULT_MAX_ITERATIONS = Math.min(Math.max(Number(process.env.VIBA_SELF_REPAIR_MAX_ITERATIONS ?? 3), 1), 8);
