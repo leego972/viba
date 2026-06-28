@@ -78,18 +78,51 @@ export const webhookHandler: RequestHandler = async (req, res): Promise<void> =>
           if (meta["type"] === "subscription") {
             const subscriptionId = session.subscription as string;
             const stripe = getStripeClient();
-            const sub = await stripe.subscriptions.retrieve(subscriptionId);
+            const sub = await stripe.subscriptions.retrieve(subscriptionId, {
+              expand: ["default_payment_method"],
+            });
             const periodEnd = tsToDate(sub.current_period_end);
-            await linkSubscription(userId, customerId, subscriptionId, sub.status, periodEnd);
-            // Grant the first month's credits immediately
-            await grantCredits(userId, VIBA_PLAN.monthlyCredits, "new subscription — initial credit grant");
+            // planKey comes from checkout session metadata (set by billing and annualBilling routes)
+            const planKey = (meta["planKey"] as string | undefined) ?? VIBA_PLAN.key;
+            await linkSubscription(userId, customerId, subscriptionId, sub.status, periodEnd, planKey);
+            // Grant initial credits — annual plan gets its full yearly allotment up front
+            const initialCredits = planKey === "viba_annual" ? 23400 : VIBA_PLAN.monthlyCredits;
+            await grantCredits(userId, initialCredits, `new subscription — initial credit grant (${planKey})`);
             logger.info({ userId, subscriptionId, status: sub.status }, "Billing: subscription linked");
+
+            // Sync the subscription's default_payment_method to the customer's
+            // invoice_settings so triggerAutoTopupIfNeeded can find it for off-session charges.
+            const pmFromSub = sub.default_payment_method;
+            const pmId = typeof pmFromSub === "string" ? pmFromSub : pmFromSub?.id ?? null;
+            if (pmId) {
+              await stripe.customers.update(customerId, {
+                invoice_settings: { default_payment_method: pmId },
+              });
+              logger.info({ userId, customerId, pmId }, "Billing: customer default PM synced");
+            }
 
           } else if (meta["type"] === "credit_pack") {
             const credits = Number(meta["credits"]);
             if (credits > 0) {
               await grantCredits(userId, credits, `credit pack purchase: ${meta["packKey"] ?? "unknown"}`);
               logger.info({ userId, credits }, "Billing: credit pack granted");
+            }
+            // Sync the payment method used in this one-time purchase as the customer's
+            // default so auto top-up off-session charges can find it (setup_future_usage=off_session
+            // attaches it, but invoice_settings must be set explicitly).
+            const stripe = getStripeClient();
+            const paymentIntentId = session.payment_intent as string | null;
+            if (paymentIntentId) {
+              const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+              const pmId = typeof pi.payment_method === "string"
+                ? pi.payment_method
+                : pi.payment_method?.id ?? null;
+              if (pmId) {
+                await stripe.customers.update(customerId, {
+                  invoice_settings: { default_payment_method: pmId },
+                });
+                logger.info({ userId, customerId, pmId }, "Billing: customer default PM synced from credit pack");
+              }
             }
           }
 
@@ -196,6 +229,38 @@ export const webhookHandler: RequestHandler = async (req, res): Promise<void> =>
 
         await updateSubscriberBySubscriptionId(subId, { status: "past_due" });
         logger.warn({ subscriptionId: subId }, "Invoice payment failed — marked past_due, user notified");
+        break;
+      }
+
+      // ── payment_intent.succeeded — auto top-up charge completed ─────────────
+      // Fires when an off-session PaymentIntent from triggerAutoTopupIfNeeded succeeds.
+      // (Immediate-success path already grants credits in billing.ts; this handles
+      //  any delayed-capture or async-confirmation cases.)
+      case "payment_intent.succeeded": {
+        const pi = event.data.object as import("stripe").Stripe.PaymentIntent;
+        const meta = pi.metadata ?? {};
+        if (meta["system"] === "viba_billing" && meta["type"] === "auto_topup") {
+          const userId = Number(meta["userId"]);
+          const credits = Number(meta["credits"]);
+          const packKey = meta["packKey"] ?? "unknown";
+          if (userId && credits > 0) {
+            // Guard: only grant if we haven't already done so (immediate path may have)
+            // We rely on the webhook idempotency guard (markWebhookProcessed) above.
+            await grantCredits(userId, credits, `auto top-up (webhook): ${packKey}`);
+            logger.info({ userId, credits, packKey, piId: pi.id }, "Auto top-up: credits granted via webhook");
+          }
+        }
+        break;
+      }
+
+      // ── payment_intent.payment_failed — auto top-up declined ─────────────────
+      case "payment_intent.payment_failed": {
+        const pi = event.data.object as import("stripe").Stripe.PaymentIntent;
+        const meta = pi.metadata ?? {};
+        if (meta["system"] === "viba_billing" && meta["type"] === "auto_topup") {
+          const userId = Number(meta["userId"]);
+          logger.warn({ userId, piId: pi.id, lastError: pi.last_payment_error?.message }, "Auto top-up: payment failed");
+        }
         break;
       }
 
