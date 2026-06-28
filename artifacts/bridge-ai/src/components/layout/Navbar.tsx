@@ -46,7 +46,8 @@ export function Navbar() {
             <img
               src="/viba-logo.png"
               alt="VIBA"
-              className="relative h-8 w-auto object-contain"
+              className="relative h-10 w-auto object-contain"
+              style={{ filter: 'drop-shadow(1px 0 0 rgba(0,0,0,0.75)) drop-shadow(-1px 0 0 rgba(0,0,0,0.75)) drop-shadow(0 1px 0 rgba(0,0,0,0.75)) drop-shadow(0 -1px 0 rgba(0,0,0,0.75))' }}
             />
           </div>
         </Link>
