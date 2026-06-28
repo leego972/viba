@@ -238,11 +238,21 @@ async function scanRepo(owner: string, repo: string, branch: string, token: stri
 // ──────────────────────────────────────────────────
 
 // POST /doctor/scan
-// SAFETY: This route is strictly READ-ONLY — it only calls ghGet (GET requests to GitHub API).
-// It never writes to, deletes, or mutates any repository data.
-// The repair PR route (POST /doctor/reports/:id/prepare-repair-pr) is the ONLY write path,
-// and it requires explicit { confirm: true } in the request body before any GitHub mutation occurs.
-// Do NOT add write operations to this handler without adding a confirmation gate and approval log entry.
+// ─── SAFETY CONTRACT ─────────────────────────────────────────────────────────
+// Project Doctor diagnostic mode must be read-only. It may inspect repository
+// metadata, configuration, health, and required files, but must not mutate
+// GitHub, deploy, change billing, or call paid providers unless a separate
+// explicit approval flow is implemented.
+//
+// Safety gates enforced by this handler:
+//   • no mutation in diagnostic mode — only ghGet (HTTP GET) calls are made
+//   • no deploy in diagnostic mode — no railway/render/vercel calls in scanRepo
+//   • no paid provider call without approval — token resolved from env/DB only
+//   • repair requires separate approval — POST /doctor/reports/:id/prepare-repair-pr
+//     is the ONLY write path and requires explicit { confirm: true } in the body
+//
+// Do NOT add write operations here without a confirmation gate and approval log entry.
+// ─────────────────────────────────────────────────────────────────────────────
 router.post("/doctor/scan", async (req, res): Promise<void> => {
   const body = req.body as { owner?: string; repo?: string; branch?: string };
   const { owner, repo, branch = "main" } = body;
