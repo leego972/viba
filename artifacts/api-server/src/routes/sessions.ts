@@ -1,6 +1,6 @@
 import { z } from "zod/v4";
 import { Router, type IRouter } from "express";
-import { eq, asc, desc, inArray, sql, and } from "drizzle-orm";
+import { eq, asc, desc, inArray, sql, and, isNull, or } from "drizzle-orm";
 import {
   db,
   sessionsTable,
@@ -149,10 +149,22 @@ async function withAgentModes<T extends { id: number }>(session: T) {
     const limit = Math.min(Number.isNaN(rawLimit) ? 100 : Math.max(1, rawLimit), 500);
     const offset = Number.isNaN(rawOffset) ? 0 : Math.max(0, rawOffset);
 
+    // User-scope filter: authenticated users see only their own sessions (and
+    // legacy anonymous sessions with user_id IS NULL for backward compatibility).
+    // Archibald bypass mode has no userId so it sees everything — that is intentional.
+    const userId = req.session?.userId;
+    const bypass = req.session?.bypass;
+    const userFilter = (!bypass && userId)
+      ? or(eq(sessionsTable.userId, userId), isNull(sessionsTable.userId))
+      : undefined;
+
     const [[sessions, totalRows]] = await Promise.all([
       Promise.all([
-        db.select().from(sessionsTable).orderBy(asc(sessionsTable.id)).limit(limit).offset(offset),
-        db.select({ total: sql`count(*)::int` }).from(sessionsTable),
+        db.select().from(sessionsTable)
+          .where(userFilter)
+          .orderBy(asc(sessionsTable.id)).limit(limit).offset(offset),
+        db.select({ total: sql`count(*)::int` }).from(sessionsTable)
+          .where(userFilter),
       ]),
     ]);
 
@@ -197,9 +209,13 @@ router.post("/sessions", async (req, res): Promise<void> => {
   const noneMock = agents.every((a) => !a.isMock);
   const mode: "live" | "simulation" | "mixed" = allMock ? "simulation" : noneMock ? "live" : "mixed";
 
+  // Link this session to the authenticated user so they can retrieve their own
+  // sessions later. Bypass (Archibald embed) has no userId — store null.
+  const sessionUserId = req.session?.userId ?? null;
+
   const [session] = await db
     .insert(sessionsTable)
-    .values({ goal, autonomyMode, status: "active", mode, repoUrl: repoUrl ?? null, repoBranch: repoBranch ?? null, workspaceEnv: workspaceEnv ?? null })
+    .values({ goal, autonomyMode, status: "active", mode, repoUrl: repoUrl ?? null, repoBranch: repoBranch ?? null, workspaceEnv: workspaceEnv ?? null, userId: sessionUserId })
     .returning();
 
   if (!session) {
