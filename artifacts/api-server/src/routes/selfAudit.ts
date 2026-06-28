@@ -12,7 +12,7 @@ type GitHubTreeItem = { path?: string; type?: string; size?: number; sha?: strin
 type GitHubRef = { object: { sha: string } };
 type SelfAuditResult = { repoFullName: string; branch: string; scannedAt: string; fileCount: number; issues: AuditIssue[]; summary: Record<Severity, number> };
 
-const DEFAULT_SELF_REPO = process.env.VIBA_SELF_REPO || process.env.GITHUB_REPOSITORY || "leego972/bridge-ai";
+const DEFAULT_SELF_REPO = process.env.VIBA_SELF_REPO || process.env.GITHUB_REPOSITORY || "leego972/viba";
 const SAFE_CHANGE_PREFIXES = ["docs/", "artifacts/api-server/src/", "artifacts/bridge-ai/src/", "lib/api-zod/src/", "lib/api-client-react/src/", "lib/db/src/", ".github/workflows/"];
 const FORBIDDEN_CHANGE_PATTERNS = [/\.env/i, /secret/i, /private/i, /node_modules\//, /pnpm-lock\.yaml$/, /package-lock\.json$/, /yarn\.lock$/];
 
