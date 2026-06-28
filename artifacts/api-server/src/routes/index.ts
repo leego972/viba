@@ -44,6 +44,9 @@ import costControlRouter from "./costControl";
 import betaChaosRouter from "./betaChaos";
 import launchReadinessRouter from "./launchReadiness";
 import proofReportRouter from "./proofReport";
+import valueRouterRouter from "./valueRouter";
+import betaTesterRouter from "./betaTester";
+import accountRouter from "./account";
 
 const router: IRouter = Router();
 
@@ -93,5 +96,8 @@ router.use(costControlRouter);
 router.use(betaChaosRouter);
 router.use(launchReadinessRouter);
 router.use(proofReportRouter);
+router.use(valueRouterRouter);
+router.use(betaTesterRouter);
+router.use(accountRouter);
 
 export default router;
