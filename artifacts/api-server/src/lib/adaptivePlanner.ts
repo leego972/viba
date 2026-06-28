@@ -74,8 +74,8 @@ const FAMILY_SIGNALS: FamilySignal[] = [
   },
   {
     family: "research_report",
-    keywords: [/research/i, /report\s+on/i, /summarize/i, /analyse/i, /analyze/i, /compare/i, /evaluate/i, /find\s+out/i, /what\s+(is|are)/i],
-    weight: 6,
+    keywords: [/research/i, /report\s+on/i, /summarize/i, /summarise/i, /analyse/i, /analyze/i, /compare/i, /evaluate/i, /find\s+out/i, /what\s+(is|are)/i],
+    weight: 8,
   },
   {
     family: "business_planning",
@@ -285,7 +285,7 @@ export function classifyRequest(goal: string): WorkflowFamily {
 }
 
 function deriveComplexity(tasks: PlannedTask[]): AdaptivePlan["complexity"] {
-  if (tasks.length <= 3) return "simple";
+  if (tasks.length <= 4) return "simple";
   if (tasks.length <= 5) return "moderate";
   return "complex";
 }
