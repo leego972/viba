@@ -11,7 +11,7 @@ function PublicHeader() {
       <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
       <div className="container flex h-[60px] max-w-screen-2xl items-center justify-between gap-4">
         <Link href="/" className="flex items-center gap-2 group">
-          <img src="/viba-logo.png" alt="VIBA" className="h-8 w-auto object-contain" />
+          <img src="/viba-logo.png" alt="VIBA" className="h-10 w-auto object-contain" style={{ filter: 'drop-shadow(1px 0 0 rgba(0,0,0,0.75)) drop-shadow(-1px 0 0 rgba(0,0,0,0.75)) drop-shadow(0 1px 0 rgba(0,0,0,0.75)) drop-shadow(0 -1px 0 rgba(0,0,0,0.75))' }} />
         </Link>
         <nav className="flex items-center gap-3">
           <Link href="/demo/doctor-report">
