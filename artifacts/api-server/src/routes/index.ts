@@ -45,6 +45,7 @@ import betaChaosRouter from "./betaChaos";
 import launchReadinessRouter from "./launchReadiness";
 import proofReportRouter from "./proofReport";
 import betaTesterRouter from "./betaTester";
+import accountRouter from "./account";
 
 const router: IRouter = Router();
 
@@ -95,5 +96,6 @@ router.use(betaChaosRouter);
 router.use(launchReadinessRouter);
 router.use(proofReportRouter);
 router.use(betaTesterRouter);
+router.use(accountRouter);
 
 export default router;
