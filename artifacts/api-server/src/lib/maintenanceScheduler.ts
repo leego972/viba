@@ -110,7 +110,7 @@ async function callSelfRepair(repo: string, branch: string): Promise<{ ok: boole
 export async function runWeeklyMaintenanceNow(reason = "manual_or_scheduled"): Promise<{ ok: boolean; runKey: string; message: string }> {
   if (running) return { ok: false, runKey: melbourneRunKey(), message: "Weekly maintenance is already running." };
   running = true;
-  const repo = process.env["VIBA_SELF_REPO"] || process.env["GITHUB_REPOSITORY"] || "leego972/viba";
+  const repo = process.env["VIBA_SELF_REPO"] || process.env["GITHUB_REPOSITORY"] || "leego972/bridge-ai";
   const branch = process.env["VIBA_SELF_BRANCH"] || "main";
   const runKey = reason === "scheduled" ? melbourneRunKey() : `${melbourneRunKey()}-${Date.now()}`;
 
