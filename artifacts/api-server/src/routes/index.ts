@@ -43,6 +43,7 @@ import agentEvaluationRouter from "./agentEvaluation";
 import costControlRouter from "./costControl";
 import betaChaosRouter from "./betaChaos";
 import launchReadinessRouter from "./launchReadiness";
+import proofReportRouter from "./proofReport";
 
 const router: IRouter = Router();
 
@@ -91,5 +92,6 @@ router.use(agentEvaluationRouter);
 router.use(costControlRouter);
 router.use(betaChaosRouter);
 router.use(launchReadinessRouter);
+router.use(proofReportRouter);
 
 export default router;
