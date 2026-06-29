@@ -10,8 +10,8 @@ export default function Home() {
         style={{ background: "rgba(255,255,255,0.9)", backdropFilter: "blur(12px)", borderBottom: "1px solid #e5e7eb" }}>
         <Link href="/" className="flex items-center justify-center">
           <img
-            src="/viba-logo.png"
-            alt="VIBA"
+            src="/virelle-logo.png"
+            alt="Virelle Studios"
             className="h-12 w-auto object-contain"
           />
         </Link>
@@ -367,7 +367,7 @@ export default function Home() {
       <footer className="w-full" style={{ borderTop: "1px solid #e5e7eb", background: "#f9fafb" }}>
         <div className="container flex flex-col sm:flex-row items-center justify-between gap-3 py-6 md:h-16">
           <div className="flex items-center gap-2">
-            <img src="/viba-logo.png" alt="VIBA" className="h-10 w-auto object-contain" />
+            <img src="/virelle-logo.png" alt="Virelle Studios" className="h-10 w-auto object-contain" />
             <p className="text-sm" style={{ color: "#9ca3af" }}>
               VIBA is designed for owners who need technical issues resolved with evidence, not guesswork.
             </p>
