@@ -46,8 +46,8 @@ export function Navbar() {
           <div className="relative">
             <div className="absolute inset-0 rounded-lg bg-primary/20 blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             <img
-              src="/virelle-logo.png"
-              alt="Virelle Studios"
+              src="/viba-logo.png"
+              alt="VIBA"
               className="relative h-14 w-auto object-contain"
             />
           </div>
