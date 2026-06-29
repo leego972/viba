@@ -880,6 +880,184 @@ router.post("/auto-submit/:id", async (req, res): Promise<void> => {
   }
 });
 
+// ─── AUTOPILOT ────────────────────────────────────────────────────────────────
+// Background scheduler: generates content for every templated channel via Groq,
+// then auto-submits to all configured channels (Dev.to, Discord, Reddit).
+// Manual channels get their content saved as ready-to-paste drafts.
+
+type AutopilotRunResult = {
+  channelId: string;
+  channelName: string;
+  generated: boolean;
+  posted: boolean;
+  manual: boolean;
+  url?: string;
+  error?: string;
+};
+
+type AutopilotState = {
+  enabled: boolean;
+  intervalHours: number;
+  lastRunAt: string | null;
+  nextRunAt: string | null;
+  running: boolean;
+  lastRunResults: AutopilotRunResult[];
+  lastRunSummary: { generated: number; posted: number; manual: number; failed: number } | null;
+};
+
+const autopilot: AutopilotState = {
+  enabled: false,
+  intervalHours: 24,
+  lastRunAt: null,
+  nextRunAt: null,
+  running: false,
+  lastRunResults: [],
+  lastRunSummary: null,
+};
+
+let autopilotTimer: ReturnType<typeof setTimeout> | null = null;
+
+async function runAutopilotCycle(): Promise<void> {
+  if (autopilot.running) return;
+  autopilot.running = true;
+  autopilot.lastRunAt = new Date().toISOString();
+  autopilot.lastRunResults = [];
+
+  const groqKey = process.env.GROQ_API_KEY;
+  const delayMs = 10_000;
+  const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+  const templateIds = Object.keys(TEMPLATES);
+
+  for (let i = 0; i < templateIds.length; i++) {
+    const channelId = templateIds[i]!;
+    const template = TEMPLATES[channelId]!;
+    const channel = CHANNELS.find(c => c.id === channelId);
+    const channelName = channel?.name ?? channelId;
+    const result: AutopilotRunResult = { channelId, channelName, generated: false, posted: false, manual: false };
+
+    if (!groqKey) {
+      result.error = "GROQ_API_KEY not set";
+      autopilot.lastRunResults.push(result);
+      continue;
+    }
+
+    if (i > 0) await sleep(delayMs);
+
+    // 1. Generate content
+    let content = "";
+    try {
+      const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${groqKey}` },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          messages: [{ role: "system", content: template.system }, { role: "user", content: template.userPrompt }],
+          temperature: 0.72,
+          max_tokens: 2048,
+        }),
+        signal: AbortSignal.timeout(45_000),
+      });
+      if (!groqRes.ok) {
+        result.error = `Groq ${groqRes.status}`;
+        autopilot.lastRunResults.push(result);
+        continue;
+      }
+      const data = await groqRes.json() as { choices?: { message?: { content?: string } }[] };
+      content = data.choices?.[0]?.message?.content ?? "";
+      result.generated = true;
+    } catch (err) {
+      result.error = `Generate failed: ${String(err)}`;
+      autopilot.lastRunResults.push(result);
+      continue;
+    }
+
+    // 2. Save as draft
+    const entry: Submission = {
+      id: makeId(),
+      channelId,
+      channelName,
+      contentType: "post",
+      content,
+      status: "draft",
+      note: `Autopilot run ${autopilot.lastRunAt}`,
+      createdAt: new Date().toISOString(),
+    };
+    submissionLog.push(entry);
+    if (submissionLog.length > 200) submissionLog.splice(0, submissionLog.length - 200);
+
+    // 3. Attempt auto-submit
+    try {
+      const submitResult = await dispatchSubmit(entry);
+      if (submitResult.ok) {
+        entry.status = "posted";
+        entry.postedUrl = submitResult.url;
+        entry.note = `Autopilot posted ${new Date().toISOString()}${submitResult.url ? ` → ${submitResult.url}` : ""}`;
+        result.posted = true;
+        result.url = submitResult.url;
+      } else {
+        result.manual = submitResult.reason === "manual_required" || submitResult.reason === "missing_credential";
+        if (!result.manual) result.error = submitResult.reason;
+      }
+    } catch (err) {
+      result.error = `Submit failed: ${String(err)}`;
+    }
+
+    autopilot.lastRunResults.push(result);
+  }
+
+  autopilot.running = false;
+  autopilot.lastRunSummary = {
+    generated: autopilot.lastRunResults.filter(r => r.generated).length,
+    posted:    autopilot.lastRunResults.filter(r => r.posted).length,
+    manual:    autopilot.lastRunResults.filter(r => r.manual && !r.error).length,
+    failed:    autopilot.lastRunResults.filter(r => !!r.error).length,
+  };
+
+  // Schedule next run if still enabled
+  if (autopilot.enabled) scheduleAutopilot();
+}
+
+function scheduleAutopilot(): void {
+  if (autopilotTimer) { clearTimeout(autopilotTimer); autopilotTimer = null; }
+  if (!autopilot.enabled) { autopilot.nextRunAt = null; return; }
+
+  const nextMs = autopilot.intervalHours * 60 * 60 * 1000;
+  autopilot.nextRunAt = new Date(Date.now() + nextMs).toISOString();
+  autopilotTimer = setTimeout(() => { void runAutopilotCycle(); }, nextMs);
+}
+
+// ─── GET /api/admin/growth/autopilot ─────────────────────────────────────────
+
+router.get("/autopilot", (_req, res): void => {
+  res.json(autopilot);
+});
+
+// ─── POST /api/admin/growth/autopilot ────────────────────────────────────────
+// Body: { enabled: boolean, intervalHours?: number }
+
+router.post("/autopilot", (req, res): void => {
+  const body = req.body as { enabled?: unknown; intervalHours?: unknown };
+  if (typeof body.enabled === "boolean") autopilot.enabled = body.enabled;
+  if (typeof body.intervalHours === "number" && body.intervalHours >= 1) {
+    autopilot.intervalHours = Math.min(body.intervalHours, 168); // max 1 week
+  }
+  scheduleAutopilot();
+  res.json({ ok: true, autopilot });
+});
+
+// ─── POST /api/admin/growth/autopilot/run-now ─────────────────────────────────
+// Trigger one autopilot cycle immediately (does not affect the schedule).
+
+router.post("/autopilot/run-now", async (req, res): Promise<void> => {
+  if (autopilot.running) {
+    res.status(409).json({ error: "Autopilot cycle already running" });
+    return;
+  }
+  // Respond immediately then run in background
+  res.json({ ok: true, message: "Autopilot cycle started — results will appear in /autopilot status" });
+  void runAutopilotCycle();
+});
+
 // ─── POST /api/admin/growth/generate-and-submit ───────────────────────────────
 // Generate content for a channel with Groq, save as draft, then immediately
 // attempt to auto-submit. Single endpoint for one-click publish flows.
