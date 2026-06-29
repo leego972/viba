@@ -326,10 +326,21 @@ type SubmitResult =
   | { ok: true; url?: string }
   | { ok: false; reason: string; manualUrl?: string; credential?: string };
 
+// ─── Runtime credential store (in-memory, survives per-process) ───────────────
+// Values set here take precedence over process.env.
+// Keys: devto_api_key, discord_webhook_url, reddit_client_id,
+//       reddit_client_secret, reddit_username, reddit_password
+
+const channelConfigs: Record<string, string> = {};
+
+function getCred(envKey: string, storeKey: string): string | undefined {
+  return channelConfigs[storeKey] || process.env[envKey] || undefined;
+}
+
 // ─── Dev.to submitter ─────────────────────────────────────────────────────────
 
 async function submitDevTo(content: string): Promise<SubmitResult> {
-  const apiKey = process.env["DEV_TO_API_KEY"];
+  const apiKey = getCred("DEV_TO_API_KEY", "devto_api_key");
   if (!apiKey) return { ok: false, reason: "missing_credential", credential: "DEV_TO_API_KEY", manualUrl: "https://dev.to/new" };
 
   // Parse title — first markdown heading, bold line, or first line
@@ -366,7 +377,7 @@ async function submitDevTo(content: string): Promise<SubmitResult> {
 // ─── Discord webhook submitter ────────────────────────────────────────────────
 
 async function submitDiscord(content: string): Promise<SubmitResult> {
-  const webhookUrl = process.env["DISCORD_WEBHOOK_URL"];
+  const webhookUrl = getCred("DISCORD_WEBHOOK_URL", "discord_webhook_url");
   if (!webhookUrl) return { ok: false, reason: "missing_credential", credential: "DISCORD_WEBHOOK_URL", manualUrl: "https://discord.com" };
 
   // Discord messages max 2000 chars — split if needed
@@ -396,10 +407,10 @@ const REDDIT_SUBREDDITS: Record<string, string> = {
 };
 
 async function submitReddit(channelId: string, content: string): Promise<SubmitResult> {
-  const clientId     = process.env["REDDIT_CLIENT_ID"];
-  const clientSecret = process.env["REDDIT_CLIENT_SECRET"];
-  const username     = process.env["REDDIT_USERNAME"];
-  const password     = process.env["REDDIT_PASSWORD"];
+  const clientId     = getCred("REDDIT_CLIENT_ID",     "reddit_client_id");
+  const clientSecret = getCred("REDDIT_CLIENT_SECRET", "reddit_client_secret");
+  const username     = getCred("REDDIT_USERNAME",      "reddit_username");
+  const password     = getCred("REDDIT_PASSWORD",      "reddit_password");
 
   const subreddit = REDDIT_SUBREDDITS[channelId];
   if (!subreddit) return { ok: false, reason: `No subreddit mapping for ${channelId}` };
@@ -739,10 +750,10 @@ router.post("/blast", async (req, res): Promise<void> => {
 
 router.get("/credentials", (_req, res): void => {
   res.json({
-    devto:   { configured: !!process.env["DEV_TO_API_KEY"],       credential: "DEV_TO_API_KEY",       channel: "Dev.to" },
-    discord: { configured: !!process.env["DISCORD_WEBHOOK_URL"],  credential: "DISCORD_WEBHOOK_URL",  channel: "Discord" },
+    devto:   { configured: !!(getCred("DEV_TO_API_KEY", "devto_api_key")),      credential: "DEV_TO_API_KEY",       channel: "Dev.to" },
+    discord: { configured: !!(getCred("DISCORD_WEBHOOK_URL", "discord_webhook_url")), credential: "DISCORD_WEBHOOK_URL",  channel: "Discord" },
     reddit:  {
-      configured: !!(process.env["REDDIT_CLIENT_ID"] && process.env["REDDIT_CLIENT_SECRET"] && process.env["REDDIT_USERNAME"] && process.env["REDDIT_PASSWORD"]),
+      configured: !!(getCred("REDDIT_CLIENT_ID","reddit_client_id") && getCred("REDDIT_CLIENT_SECRET","reddit_client_secret") && getCred("REDDIT_USERNAME","reddit_username") && getCred("REDDIT_PASSWORD","reddit_password")),
       credential: "REDDIT_CLIENT_ID + REDDIT_CLIENT_SECRET + REDDIT_USERNAME + REDDIT_PASSWORD",
       channel: "Reddit (r/MachineLearning, r/artificial, r/SideProject, r/LocalLLaMA)",
     },
@@ -759,6 +770,60 @@ router.get("/credentials", (_req, res): void => {
       { id: "taaft",          name: "TAAFT",         url: "https://theresanaiforthat.com/tool/submit/", reason: "Web form only" },
       { id: "github_awesome", name: "GitHub Awesome Lists", url: "https://github.com/search?q=awesome+llm", reason: "Manual PR to target repo" },
     ],
+  });
+});
+
+// ─── GET /api/admin/growth/channel-config ────────────────────────────────────
+// Returns which credential keys are set (values masked). Used by admin UI to
+// show "configured" badges and pre-populate form fields (empty string = not set).
+
+router.get("/channel-config", (_req, res): void => {
+  const mask = (key: string) => channelConfigs[key] ? "••••••••" : "";
+  res.json({
+    devto_api_key:        mask("devto_api_key"),
+    discord_webhook_url:  mask("discord_webhook_url"),
+    reddit_client_id:     mask("reddit_client_id"),
+    reddit_client_secret: mask("reddit_client_secret"),
+    reddit_username:      channelConfigs["reddit_username"] ?? "",   // username is not secret
+    reddit_password:      mask("reddit_password"),
+    configured: {
+      devto:   !!(getCred("DEV_TO_API_KEY", "devto_api_key")),
+      discord: !!(getCred("DISCORD_WEBHOOK_URL", "discord_webhook_url")),
+      reddit:  !!(getCred("REDDIT_CLIENT_ID","reddit_client_id") && getCred("REDDIT_CLIENT_SECRET","reddit_client_secret") && getCred("REDDIT_USERNAME","reddit_username") && getCred("REDDIT_PASSWORD","reddit_password")),
+    },
+  });
+});
+
+// ─── POST /api/admin/growth/channel-config ────────────────────────────────────
+// Saves runtime credentials for auto-submit channels. Values are stored in the
+// in-memory channelConfigs map — they take effect immediately and survive
+// until the process restarts. Set an env var of the same name for persistence.
+// Body: { devto_api_key?, discord_webhook_url?, reddit_client_id?,
+//          reddit_client_secret?, reddit_username?, reddit_password? }
+
+router.post("/channel-config", (req, res): void => {
+  const allowed = ["devto_api_key","discord_webhook_url","reddit_client_id","reddit_client_secret","reddit_username","reddit_password"];
+  const body = req.body as Record<string, unknown>;
+  let saved = 0;
+  for (const key of allowed) {
+    const val = body[key];
+    if (typeof val === "string") {
+      if (val.trim() === "") {
+        delete channelConfigs[key];
+      } else {
+        channelConfigs[key] = val.trim();
+        saved++;
+      }
+    }
+  }
+  res.json({
+    ok: true,
+    saved,
+    configured: {
+      devto:   !!(getCred("DEV_TO_API_KEY", "devto_api_key")),
+      discord: !!(getCred("DISCORD_WEBHOOK_URL", "discord_webhook_url")),
+      reddit:  !!(getCred("REDDIT_CLIENT_ID","reddit_client_id") && getCred("REDDIT_CLIENT_SECRET","reddit_client_secret") && getCred("REDDIT_USERNAME","reddit_username") && getCred("REDDIT_PASSWORD","reddit_password")),
+    },
   });
 });
 
