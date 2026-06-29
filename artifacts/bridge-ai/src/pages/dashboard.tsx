@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link } from "wouter";
+import { OnboardingModal, useOnboarding } from "@/components/OnboardingModal";
 import { AppLayout } from "@/components/layout/AppLayout";
 import {
   useListSessions,
@@ -35,7 +36,7 @@ import {
   Wifi, WifiOff, AlertTriangle, TrendingDown, Search, Trash2,
   ShieldCheck, ShieldAlert, ShieldOff, RefreshCw, DatabaseZap,
   Bell, Mail, Webhook, Settings2, HelpCircle, User, ExternalLink,
-  Brain, ChevronRight, GitBranch, Github, Lock,
+  Brain, ChevronRight, GitBranch, Github, Lock, CheckCircle2, FileText,
 } from "lucide-react";
 import { format, subDays } from "date-fns";
 import {
@@ -292,6 +293,29 @@ export default function Dashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  const { show: showOnboarding, dismiss: dismissOnboarding } = useOnboarding();
+  const [providerStatus, setProviderStatus] = useState<{
+    groqReady: boolean;
+    hasOtherProviders: boolean;
+  } | null>(null);
+
+  const checkProviders = useCallback(async () => {
+    try {
+      const res = await fetch(`${BASE}/api/providers`, { credentials: "include" });
+      if (!res.ok) return;
+      const data = await res.json() as { providers: { id: string; status: string }[] };
+      const configured = data.providers.filter(p => p.status === "configured");
+      setProviderStatus({
+        groqReady: configured.some(p => p.id === "groq"),
+        hasOtherProviders: configured.some(p => p.id !== "groq"),
+      });
+    } catch {
+      setProviderStatus({ groqReady: false, hasOtherProviders: false });
+    }
+  }, []);
+
+  useEffect(() => { void checkProviders(); }, [checkProviders]);
+
   const [search, setSearch] = useState("");
   const [repoSearch, setRepoSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -391,6 +415,9 @@ export default function Dashboard() {
 
   return (
     <AppLayout>
+      {showOnboarding && (
+        <OnboardingModal onClose={dismissOnboarding} />
+      )}
       <div className="flex flex-col space-y-6">
 
         {/* ── Header ── */}
@@ -455,13 +482,13 @@ export default function Dashboard() {
         </div>
 
         {/* ── Primary Actions ── */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {[
             {
               href: "/sessions/new",
               icon: Plus,
-              label: "New Session",
-              sub: "Start a controlled workflow",
+              label: "New session",
+              sub: "Set a goal, assign agents, run",
               primary: true,
             },
             {
@@ -472,24 +499,17 @@ export default function Dashboard() {
               primary: false,
             },
             {
-              href: "/workbench",
-              icon: Brain,
-              label: "Workbench",
-              sub: "Build & run tools",
+              href: "/launch-readiness",
+              icon: ShieldCheck,
+              label: "Launch readiness",
+              sub: "Verify before you ship",
               primary: false,
             },
             {
-              href: "/settings",
-              icon: Settings2,
-              label: "Provider Keys",
-              sub: "Configure API keys",
-              primary: false,
-            },
-            {
-              href: "/billing",
-              icon: DollarSign,
-              label: "Billing",
-              sub: "Credits & subscription",
+              href: "/proof-report",
+              icon: FileText,
+              label: "Proof report",
+              sub: "Evidence report for last session",
               primary: false,
             },
           ].map(({ href, icon: Icon, label, sub, primary }) => (
@@ -1121,18 +1141,98 @@ export default function Dashboard() {
             <p className="text-destructive font-medium">Failed to load sessions. Is the server running?</p>
           </div>
         ) : !sessions || sessions.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center animate-in fade-in-50">
-            <div className="mx-auto flex max-w-[420px] flex-col items-center justify-center text-center">
-              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted">
-                <Activity className="h-10 w-10 text-muted-foreground" />
+          <div className="space-y-4 animate-in fade-in-50">
+            {/* Groq ready — only Groq, no BYOK yet → soft upgrade nudge */}
+            {providerStatus?.groqReady && !providerStatus.hasOtherProviders && (
+              <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                  <div className="h-11 w-11 rounded-xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center shrink-0">
+                    <Zap className="h-5 w-5 text-emerald-400" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-base font-semibold">Groq is connected and ready</h3>
+                      <Badge className="gap-1 bg-emerald-500/15 text-emerald-400 border-emerald-500/30 text-xs">
+                        <CheckCircle2 className="h-3 w-3" /> Active
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                      Add another AI provider (OpenAI, Claude, Gemini) to enable multi-model collaboration and assign different roles to different models.
+                    </p>
+                  </div>
+                  <Link href="/connections">
+                    <Button variant="outline" size="sm" className="gap-1.5 shrink-0">
+                      <Plus className="h-3.5 w-3.5" />
+                      Add another AI
+                    </Button>
+                  </Link>
+                </div>
               </div>
-              <h2 className="mt-6 text-xl font-semibold">No sessions yet</h2>
-              <p className="mb-8 mt-2 text-center text-sm font-normal leading-6 text-muted-foreground">
-                Start by creating a new session and assigning agents to collaborate on your goal.
-              </p>
-              <Link href="/sessions/new">
-                <Button>Start a Session</Button>
-              </Link>
+            )}
+
+            {/* No providers at all — should be rare since Groq is auto-enabled */}
+            {providerStatus !== null && !providerStatus.groqReady && !providerStatus.hasOtherProviders && (
+              <div className="rounded-2xl border border-amber-500/25 bg-amber-500/6 p-5">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                  <div className="h-11 w-11 rounded-xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center shrink-0">
+                    <AlertTriangle className="h-5 w-5 text-amber-400" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-base font-semibold text-amber-200">Enable an AI provider to continue</h3>
+                    <p className="text-sm text-amber-200/70 mt-0.5">
+                      Groq is included free — go to Connections and enable it, or add your own API key.
+                    </p>
+                  </div>
+                  <Link href="/connections">
+                    <Button size="sm" className="gap-1.5 shrink-0">
+                      <Plus className="h-3.5 w-3.5" />
+                      Go to Connections
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            )}
+
+            {/* 3-step quick-start */}
+            <div className="rounded-2xl border border-dashed border-white/[0.1] bg-white/[0.01] p-8">
+              <div className="mx-auto max-w-lg text-center space-y-6">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 border border-primary/20 mx-auto">
+                  <Activity className="h-8 w-8 text-primary" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold">Start your first session</h2>
+                  <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+                    Assign AI agents their roles, set a goal, and VIBA will coordinate them through your task — with human-in-the-loop approval for any risky action.
+                  </p>
+                </div>
+                <div className="grid grid-cols-3 gap-3 text-left">
+                  {[
+                    { n: "1", label: "Set a goal", desc: "Describe what you want to accomplish" },
+                    { n: "2", label: "Assign agents", desc: "Pick AI providers and their roles" },
+                    { n: "3", label: "Review & approve", desc: "VIBA runs and asks before acting" },
+                  ].map(({ n, label, desc }) => (
+                    <div key={n} className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-3">
+                      <div className="h-6 w-6 rounded-full bg-primary/15 border border-primary/25 flex items-center justify-center text-xs font-bold text-primary mb-2">{n}</div>
+                      <p className="text-xs font-semibold">{label}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{desc}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center justify-center gap-3">
+                  <Link href="/sessions/new">
+                    <Button size="lg" className="gap-2">
+                      <Plus className="h-4 w-4" />
+                      Start a Session
+                    </Button>
+                  </Link>
+                  <Link href="/connections">
+                    <Button variant="outline" size="lg" className="gap-2">
+                      <Lock className="h-4 w-4" />
+                      Connect AI
+                    </Button>
+                  </Link>
+                </div>
+              </div>
             </div>
           </div>
         ) : (
