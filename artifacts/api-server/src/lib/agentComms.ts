@@ -1,29 +1,33 @@
 import { db, messagesTable, agentsTable, tasksTable } from "@workspace/db";
 import type { Agent, Message } from "@workspace/db";
-import { eq, and, asc, inArray, or, desc } from "drizzle-orm";
+import { eq, and, asc, inArray, or, isNull, desc } from "drizzle-orm";
 import type { AgentTaskResult } from "./adapters/interface";
 import { logger } from "./logger";
 
 const MAX_OUTBOUND_QUESTIONS_PER_STEP = 3;
 
 /**
- * Fetch unanswered question messages directed at the given agent for the current
- * session — decoupled from taskId so questions are always delivered regardless of
- * which task the recipient is currently executing.
+ * Fetch unanswered question messages directed at the given agent for the current task.
  *
- * taskId-scoping of stored messages is preserved for UI thread grouping only.
- * Answers are identified by `metadata.questionMessageId` referencing the exact
- * question record, so cross-task delivery does not create ambiguity.
+ * Delivery uses task-scoped + floating-inbox semantics:
+ *
+ *   1. Questions stored under `currentTaskId` — strict task-scoped delivery.
+ *      These were sent while the recipient had an active/planned task.
+ *
+ *   2. Questions stored with `taskId = null` — floating inbox.
+ *      These were sent when the recipient had no assigned task at send-time.
+ *      They are delivered the first time the recipient executes ANY task and
+ *      effectively consumed once answered.
+ *
+ * Questions belonging to OTHER tasks are strictly excluded to preserve isolation.
+ * Agents do not receive or answer questions from unrelated task threads.
  */
 export async function processPendingQuestions(
   sessionId: number,
   agentId: number,
-  _currentTaskId: number, // kept for API compatibility; no longer used for filtering
+  currentTaskId: number,
 ): Promise<Array<{ fromAgent: string; question: string; messageId: number; sourceTaskId: number | null }>> {
-  // Fetch all unanswered questions in this session directed at this agent.
-  // We do NOT filter by taskId — a question sent while the recipient had no
-  // assigned task was stored under the sender's taskId (fallback), so strict
-  // taskId filtering would silently drop it.
+  // task-scoped (exact taskId match) + floating (null taskId) — no other tasks
   const questions = await db
     .select()
     .from(messagesTable)
@@ -32,14 +36,17 @@ export async function processPendingQuestions(
         eq(messagesTable.sessionId, sessionId),
         eq(messagesTable.messageType, "question"),
         eq(messagesTable.toAgentId, agentId),
+        or(
+          eq(messagesTable.taskId, currentTaskId),
+          isNull(messagesTable.taskId),
+        ),
       ),
     )
     .orderBy(asc(messagesTable.id));
 
   if (questions.length === 0) return [];
 
-  // Filter out already-answered questions: look for answer messages that reference
-  // these exact question IDs via metadata.questionMessageId.
+  // Filter already-answered: look up answers that reference these exact question IDs.
   const questionIds = questions.map((q) => q.id);
   const answers = await db
     .select()
@@ -68,7 +75,7 @@ export async function processPendingQuestions(
     fromAgent: q.agentName ?? "Unknown agent",
     question: q.content,
     messageId: q.id,
-    sourceTaskId: q.taskId ?? null, // preserved for UI thread grouping only
+    sourceTaskId: q.taskId ?? null, // preserved for UI thread grouping
   }));
 }
 
@@ -77,9 +84,12 @@ export async function processPendingQuestions(
  * Resolves toAgentName → toAgentId using the session's agent list.
  * Capped at MAX_OUTBOUND_QUESTIONS_PER_STEP to prevent runaway chatter.
  *
- * Questions are stored under the recipient's current task if one exists,
- * otherwise under the sender's taskId. In both cases processPendingQuestions
- * now delivers by toAgentId+sessionId (not taskId) so delivery is guaranteed.
+ * Task-scoping strategy:
+ * - Recipient has an active/planned task → store under that taskId.
+ *   processPendingQuestions delivers it exactly when that task runs.
+ * - Recipient has no task yet → store with taskId = null (floating inbox).
+ *   processPendingQuestions delivers it the first time the recipient executes
+ *   any task. No cross-task leakage; guaranteed eventual delivery.
  */
 export async function persistOutboundQuestions(
   sessionId: number,
@@ -106,9 +116,8 @@ export async function persistOutboundQuestions(
       continue;
     }
 
-    // Prefer storing under the recipient's active task for UI thread grouping.
-    // Falls back to sender taskId — delivery is not affected since
-    // processPendingQuestions now queries by toAgentId, not taskId.
+    // Find the recipient's current active/planned task.
+    // If none, store with taskId = null (floating inbox — delivered next task run).
     const recipientTasks = await db
       .select({ id: tasksTable.id })
       .from(tasksTable)
@@ -120,7 +129,8 @@ export async function persistOutboundQuestions(
         ),
       )
       .orderBy(desc(tasksTable.id));
-    const questionTaskId = recipientTasks[0]?.id ?? taskId;
+
+    const questionTaskId: number | null = recipientTasks[0]?.id ?? null;
 
     const [msg] = await db
       .insert(messagesTable)
@@ -142,8 +152,10 @@ export async function persistOutboundQuestions(
     if (msg) {
       saved.push(msg);
       logger.info(
-        { sessionId, fromAgentId: fromAgent.id, toAgentId: recipient.id, taskId },
-        "Inter-agent question saved",
+        { sessionId, fromAgentId: fromAgent.id, toAgentId: recipient.id, questionTaskId },
+        questionTaskId
+          ? "Inter-agent question saved (task-scoped)"
+          : "Inter-agent question saved (floating — no recipient task yet)",
       );
     }
   }
@@ -154,12 +166,12 @@ export async function persistOutboundQuestions(
 /**
  * Persist an agent's answers to pending questions.
  *
- * Each answer is stored under the *question's original taskId*, not the
- * responder's current taskId. This keeps the Q/A pair in the same task thread
+ * Each answer is stored under the *question's original taskId* (not the
+ * responder's current taskId) to keep the Q/A pair in the same task thread
  * for display purposes.
  *
  * Answer lookup is constrained to the specific referenced question IDs
- * (not the full session) to enforce same-task linkage and avoid stale matches.
+ * to enforce linkage and avoid stale matches across sessions.
  */
 export async function persistAnswers(
   sessionId: number,
@@ -171,7 +183,6 @@ export async function persistAnswers(
 
   const questionIds = answers.map((a) => a.messageId);
 
-  // Fetch only the specific referenced question messages — not all session questions.
   const questionRows = await db
     .select({ id: messagesTable.id, taskId: messagesTable.taskId })
     .from(messagesTable)
@@ -217,7 +228,7 @@ export async function persistAnswers(
     if (!questionTaskMap.has(id)) {
       logger.warn(
         { questionMessageId: id, sessionId },
-        "persistAnswers: question message not found — skipping (may be from a different session or already deleted)",
+        "persistAnswers: question message not found — skipping",
       );
     }
   }
