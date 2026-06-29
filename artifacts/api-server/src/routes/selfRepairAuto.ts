@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { pool } from "@workspace/db";
 import { logVibaEvent, resolveVibaCredential } from "../lib/vibaVault";
 import { verifyRepoInSandbox, type SandboxVerificationResult } from "../lib/selfRepairSandbox";
+import { configuredSelfRepo, configuredSelfBranch } from "../lib/selfRepoGuard";
 
 const router: IRouter = Router();
 
@@ -11,8 +12,10 @@ type FileChange = { path: string; content: string; message?: string };
 type CandidateFile = { path: string; content: string | null };
 type RepairProposal = { summary?: string; changes?: FileChange[]; notes?: string[] };
 
-const DEFAULT_SELF_REPO = process.env.VIBA_SELF_REPO || process.env.GITHUB_REPOSITORY || "leego972/bridge-ai";
-const SAFE_CHANGE_PREFIXES = ["docs/", "artifacts/api-server/src/", "artifacts/bridge-ai/src/", "lib/api-zod/src/", "lib/api-client-react/src/", "lib/db/src/", ".github/workflows/"];
+const DEFAULT_SELF_REPO = configuredSelfRepo();
+// .github/workflows/ is intentionally excluded — the configured GitHub token lacks the
+// `workflow` scope; writes to workflow files always return 404. Manage CI via GitHub UI.
+const SAFE_CHANGE_PREFIXES = ["docs/", "artifacts/api-server/src/", "artifacts/bridge-ai/src/", "lib/api-zod/src/", "lib/api-client-react/src/", "lib/db/src/"];
 const FORBIDDEN_CHANGE_PATTERNS = [/\.env/i, /secret/i, /private/i, /node_modules\//, /pnpm-lock\.yaml$/, /package-lock\.json$/, /yarn\.lock$/];
 const DEFAULT_MAX_ITERATIONS = Math.min(Math.max(Number(process.env.VIBA_SELF_REPAIR_MAX_ITERATIONS ?? 3), 1), 8);
 
