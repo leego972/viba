@@ -14,7 +14,9 @@ type GitHubRef = { object: { sha: string } };
 type SelfAuditResult = { repoFullName: string; branch: string; scannedAt: string; fileCount: number; issues: AuditIssue[]; summary: Record<Severity, number> };
 
 const DEFAULT_SELF_REPO = configuredSelfRepo();
-const SAFE_CHANGE_PREFIXES = ["docs/", "artifacts/api-server/src/", "artifacts/bridge-ai/src/", "lib/api-zod/src/", "lib/api-client-react/src/", "lib/db/src/", ".github/workflows/"];
+// .github/workflows/ is intentionally excluded — the configured GitHub token lacks the
+// `workflow` scope; writes to workflow files always return 404. Manage CI via GitHub UI.
+const SAFE_CHANGE_PREFIXES = ["docs/", "artifacts/api-server/src/", "artifacts/bridge-ai/src/", "lib/api-zod/src/", "lib/api-client-react/src/", "lib/db/src/"];
 const FORBIDDEN_CHANGE_PATTERNS = [/\.env/i, /secret/i, /private/i, /node_modules\//, /pnpm-lock\.yaml$/, /package-lock\.json$/, /yarn\.lock$/];
 
 function userId(req: ReqWithSession): number | null {
