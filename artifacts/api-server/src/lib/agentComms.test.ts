@@ -17,6 +17,7 @@ vi.mock("@workspace/db", () => ({
   },
   messagesTable: {},
   agentsTable: {},
+  tasksTable: {},
 }));
 
 const mockAgent = (id: number, name: string, provider = "openai") => ({
@@ -82,27 +83,27 @@ describe("processPendingQuestions", () => {
       fromAgent: "Claude",
       question: "Which module handles auth?",
       messageId: 5,
+      sourceTaskId: 10,  // preserved from the question's stored taskId
     });
   });
 
-  it("does NOT deliver a question from a different task (strict task isolation)", async () => {
-    // Strict task-scoping: delivery is filtered by currentTaskId.
-    // Agent A asks Agent B on task 10; Agent B is executing task 11.
-    // The question must NOT be delivered — task 10 questions are isolated to task 10.
-    // The DB query filters by taskId = currentTaskId, so the mock returns [] for task 11.
+  it("does NOT deliver a question from a different task (strict task-scoped delivery)", async () => {
+    // Strict task scoping: Agent A asks Agent B on task 10.
+    // Agent B is executing task 11. The DB filters by taskId=11, so the question
+    // stored on task 10 is NOT returned.
     const { db } = await import("@workspace/db");
 
     (db.select as ReturnType<typeof vi.fn>)
+      // DB filters by taskId=11; task-10 question is excluded — returns empty
       .mockReturnValueOnce({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({
-            orderBy: vi.fn().mockResolvedValue([]), // DB returns [] — task 10 question not visible on task 11
+            orderBy: vi.fn().mockResolvedValue([]),
           }),
         }),
       });
 
     const { processPendingQuestions } = await import("./agentComms");
-    // Agent B is on task 11 — question from task 10 must NOT be delivered
     const result = await processPendingQuestions(1, 2, 11);
     expect(result).toHaveLength(0);
   });
@@ -191,24 +192,23 @@ describe("processPendingQuestions", () => {
     expect(result).toHaveLength(0);
   });
 
-  it("regression: questions from a different task are never injected into the current task", async () => {
-    // Agent A stores a question on task 10. Agent B is executing task 20.
-    // The DB WHERE clause (taskId = currentTaskId) ensures task 10 questions
-    // are NEVER delivered during task 20 execution — no context bleed.
+  it("cross-task questions are NOT delivered (strict task scoping)", async () => {
+    // Strict task scoping: Agent A stores a question on task 10. Agent B is executing task 20.
+    // DB filters by taskId=20 so the task-10 question is excluded.
+    // For cross-task comms, questions must be stored under the recipient's active task ID.
     const { db } = await import("@workspace/db");
 
-    // DB returns empty because the taskId filter excludes the task-10 question
     (db.select as ReturnType<typeof vi.fn>)
       .mockReturnValueOnce({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({
-            orderBy: vi.fn().mockResolvedValue([]),
+            orderBy: vi.fn().mockResolvedValue([]), // DB filters to taskId=20, returns nothing
           }),
         }),
       });
 
     const { processPendingQuestions } = await import("./agentComms");
-    const result = await processPendingQuestions(1, 2, 20 /* task 20, question is on task 10 */);
+    const result = await processPendingQuestions(1, 2, 20);
     expect(result).toHaveLength(0);
   });
 });
@@ -252,10 +252,15 @@ describe("persistOutboundQuestions", () => {
     expect(result).toHaveLength(3);
   });
 
-  it("stores the sender's taskId on each question message", async () => {
+  it("stores with taskId=null (floating inbox) when recipient has no active task", async () => {
+    // When the recipient has no assigned task, the question is stored with
+    // taskId=null so processPendingQuestions can deliver it at the start of the
+    // recipient's NEXT task run (floating-inbox path).
+    // This avoids cross-task leakage while guaranteeing eventual delivery.
     const { db } = await import("@workspace/db");
     let capturedValues: Record<string, unknown> | null = null;
     const savedMsg = { id: 20, content: "q", sessionId: 1, messageType: "question", createdAt: new Date().toISOString() };
+    // Default db.select mock returns [] — no active task found for recipient
     (db.insert as ReturnType<typeof vi.fn>).mockReturnValue({
       values: vi.fn().mockImplementation((vals) => {
         capturedValues = vals;
@@ -268,7 +273,41 @@ describe("persistOutboundQuestions", () => {
     const agents = [from, mockAgent(2, "Claude")];
 
     await persistOutboundQuestions(1, from as never, [{ toAgentName: "Claude", question: "Q?" }], 42, agents as never);
-    expect(capturedValues).toMatchObject({ taskId: 42, metadata: { taskId: 42 } });
+    // taskId=null = floating inbox; delivered at recipient's next task run
+    expect(capturedValues).toMatchObject({ taskId: null, metadata: { senderTaskId: 42, questionTaskId: null } });
+  });
+
+  it("stores question under recipient's active task ID for cross-task delivery", async () => {
+    // When Agent B has task 55 in-progress, a question from Agent A (task 42) is stored
+    // under taskId=55. processPendingQuestions(sessionId, B, 55) then finds it via strict filter.
+    const { db } = await import("@workspace/db");
+    let capturedValues: Record<string, unknown> | null = null;
+    const savedMsg = { id: 20, content: "q", sessionId: 1, messageType: "question", createdAt: new Date().toISOString() };
+
+    // First db.select call: tasksTable lookup — recipient has task 55
+    (db.select as ReturnType<typeof vi.fn>)
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            orderBy: vi.fn().mockResolvedValue([{ id: 55 }]),
+          }),
+        }),
+      });
+
+    (db.insert as ReturnType<typeof vi.fn>).mockReturnValue({
+      values: vi.fn().mockImplementation((vals) => {
+        capturedValues = vals;
+        return { returning: vi.fn().mockResolvedValue([savedMsg]) };
+      }),
+    });
+
+    const { persistOutboundQuestions } = await import("./agentComms");
+    const from = mockAgent(1, "ChatGPT");
+    const agents = [from, mockAgent(2, "Claude")];
+
+    await persistOutboundQuestions(1, from as never, [{ toAgentName: "Claude", question: "Q?" }], 42, agents as never);
+    // Question tagged under recipient's task (55), not sender's (42)
+    expect(capturedValues).toMatchObject({ taskId: 55, metadata: { senderTaskId: 42, questionTaskId: 55 } });
   });
 });
 
