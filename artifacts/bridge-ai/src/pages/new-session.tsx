@@ -225,9 +225,15 @@ export default function NewSession() {
   const selectedProviderIds = AVAILABLE_PROVIDERS.filter(p => selectedAgents[p.id]!.selected).map(p => p.id);
   const simulatedSelected = selectedProviderIds.filter(id => !isLive(id));
 
-  const selectedToolCapable = AVAILABLE_PROVIDERS
-    .filter(p => selectedAgents[p.id]!.selected && selectedAgents[p.id]!.canUseTools)
+  const selectedNativeToolCapable = AVAILABLE_PROVIDERS
+    .filter(p => selectedAgents[p.id]!.selected && p.canUseTools)
     .map(p => p.name);
+
+  const selectedBrokerToolCapable = AVAILABLE_PROVIDERS
+    .filter(p => selectedAgents[p.id]!.selected && !p.canUseTools && selectedAgents[p.id]!.canUseTools)
+    .map(p => p.name);
+
+  const selectedToolCapable = [...selectedNativeToolCapable, ...selectedBrokerToolCapable];
 
   const hasRealExecution = repoUrl.trim() !== "" && selectedToolCapable.length > 0;
 
@@ -596,11 +602,15 @@ export default function NewSession() {
                               <FlaskConical className="h-2.5 w-2.5" /> Simulation
                             </Badge>
                           )}
-                          {provider.canUseTools && (
-                            <Badge variant="outline" className="text-blue-500 border-blue-500/30 bg-blue-500/10 gap-1 px-1.5 py-0 text-[10px] flex-shrink-0" title="Can execute tools, code, and git operations">
-                              <Wrench className="h-2.5 w-2.5" /> Tools
+                          {provider.canUseTools ? (
+                            <Badge variant="outline" className="text-blue-500 border-blue-500/30 bg-blue-500/10 gap-1 px-1.5 py-0 text-[10px] flex-shrink-0" title="Uses its own native tool stack (git, code execution, deployment). You pay for these via your existing subscription — VIBA charges only a platform orchestration fee.">
+                              <Wrench className="h-2.5 w-2.5" /> Native Tools
                             </Badge>
-                          )}
+                          ) : selectedAgents[provider.id]!.canUseTools ? (
+                            <Badge variant="outline" className="text-violet-500 border-violet-500/30 bg-violet-500/10 gap-1 px-1.5 py-0 text-[10px] flex-shrink-0" title="Uses VIBA's broker tool suite (GitHub, Railway, Stripe, DNS, Browser, SMTP). Credits charged per tool call.">
+                              <Wrench className="h-2.5 w-2.5" /> Broker Tools
+                            </Badge>
+                          ) : null}
                         </Label>
                       </div>
                       {selectedAgents[provider.id]!.selected && (
