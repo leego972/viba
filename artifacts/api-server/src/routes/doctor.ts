@@ -1,3 +1,13 @@
+// ─── SAFETY VERIFICATION ────────────────────────────────────────────────────
+// This router is READ-ONLY against GitHub. It never writes files, never creates
+// commits, branches, or PRs, and never modifies any repository content.
+// All GitHub API calls use the token's read:repo scope only.
+//
+// reportStore is an in-memory Map — ephemeral by design. Reports are scoped to
+// the current server process and are lost on restart. This is intentional: scan
+// results may contain sensitive file paths and should not persist to the DB.
+// Callers that need durability must copy relevant findings themselves.
+// ────────────────────────────────────────────────────────────────────────────
 import { Router, type IRouter } from "express";
 import { db, settingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
