@@ -867,6 +867,20 @@ type SeoData = {
   checklist: { item: string; done: boolean }[];
   geoActions: string[];
 };
+type AutopilotRunResult = {
+  channelId: string; channelName: string;
+  generated: boolean; posted: boolean; manual: boolean;
+  url?: string; error?: string;
+};
+type GAutopilot = {
+  enabled: boolean;
+  intervalHours: number;
+  lastRunAt: string | null;
+  nextRunAt: string | null;
+  running: boolean;
+  lastRunResults: AutopilotRunResult[];
+  lastRunSummary: { generated: number; posted: number; manual: number; failed: number } | null;
+};
 
 const CATEGORY_COLOR: Record<string, string> = {
   launch:     "bg-purple-500/20 text-purple-300 border-purple-700",
@@ -907,6 +921,46 @@ function GrowthTab({ token }: { token: string }) {
   // seo
   const [seo, setSeo] = useState<SeoData | null>(null);
   const [seoLoading, setSeoLoading] = useState(false);
+
+  // autopilot
+  const [autopilot, setAutopilot] = useState<GAutopilot | null>(null);
+  const [apInterval, setApInterval] = useState(24);
+  const [apToggling, setApToggling] = useState(false);
+  const [apRunning, setApRunning] = useState(false);
+
+  const loadAutopilot = useCallback(() => {
+    adminFetch("/growth/autopilot", token)
+      .then(r => r.json())
+      .then((d: GAutopilot) => { setAutopilot(d); if (d.running) setApRunning(true); else setApRunning(false); })
+      .catch(() => {});
+  }, [token]);
+
+  // Poll while running
+  useEffect(() => {
+    loadAutopilot();
+    const interval = setInterval(() => { if (autopilot?.running || apRunning) loadAutopilot(); }, 5000);
+    return () => clearInterval(interval);
+  }, [loadAutopilot, autopilot?.running, apRunning]);
+
+  const toggleAutopilot = async (enabled: boolean) => {
+    setApToggling(true);
+    try {
+      const r = await adminFetch("/growth/autopilot", token, { method: "POST", body: JSON.stringify({ enabled, intervalHours: apInterval }) });
+      const d = await r.json() as { autopilot: GAutopilot };
+      setAutopilot(d.autopilot);
+      toast({ title: enabled ? "🤖 Autopilot enabled" : "⏸️ Autopilot paused", description: enabled ? `Will run every ${apInterval}h automatically` : "Autopilot scheduler stopped" });
+    } catch (e) { toast({ title: "Error", description: String(e), variant: "destructive" }); }
+    finally { setApToggling(false); }
+  };
+
+  const runAutopilotNow = async () => {
+    setApRunning(true);
+    try {
+      await adminFetch("/growth/autopilot/run-now", token, { method: "POST", body: "{}" });
+      toast({ title: "🚀 Autopilot cycle started", description: "Generating content for all channels — refresh in ~2 minutes to see results" });
+      setTimeout(loadAutopilot, 3000);
+    } catch (e) { toast({ title: "Error", description: String(e), variant: "destructive" }); setApRunning(false); }
+  };
 
   // publish settings
   const emptyConfig: GConfig = { devto_api_key: "", discord_webhook_url: "", reddit_client_id: "", reddit_client_secret: "", reddit_username: "", reddit_password: "", configured: { devto: false, discord: false, reddit: false } };
@@ -1156,6 +1210,139 @@ function GrowthTab({ token }: { token: string }) {
             ))}
           </div>
         )}
+      </div>
+
+      {/* ── AUTOPILOT PANEL ─────────────────────────────────────────────── */}
+      <div className={`rounded-xl border p-5 transition-colors ${autopilot?.enabled ? "border-emerald-700/60 bg-gradient-to-r from-emerald-950/50 to-teal-950/40" : "border-zinc-700/60 bg-zinc-900/50"}`}>
+        <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+          {/* Left: title + status */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-sm font-bold text-zinc-100">🤖 SEO Autopilot</span>
+              {autopilot?.enabled && !apRunning && (
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-900/60 text-emerald-400 border border-emerald-700">ACTIVE</span>
+              )}
+              {apRunning && (
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-yellow-900/60 text-yellow-400 border border-yellow-700 flex items-center gap-1">
+                  <span className="animate-spin inline-block w-2.5 h-2.5 border border-yellow-400/30 border-t-yellow-400 rounded-full" />
+                  RUNNING
+                </span>
+              )}
+              {!autopilot?.enabled && !apRunning && (
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-zinc-800 text-zinc-500 border border-zinc-700">PAUSED</span>
+              )}
+            </div>
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              Automatically generates AI content for every channel and submits to configured channels (Dev.to, Discord, Reddit) on a schedule. Manual channels get ready-to-paste drafts.
+            </p>
+
+            {/* Last / next run */}
+            <div className="mt-2 flex flex-wrap gap-4 text-xs text-zinc-500">
+              {autopilot?.lastRunAt && (
+                <span>
+                  <span className="text-zinc-400">Last run:</span>{" "}
+                  {new Date(autopilot.lastRunAt).toLocaleString()}
+                  {autopilot.lastRunSummary && (
+                    <span className="ml-2">
+                      <span className="text-green-400">{autopilot.lastRunSummary.posted} posted</span>
+                      {" · "}
+                      <span className="text-blue-400">{autopilot.lastRunSummary.manual} manual</span>
+                      {autopilot.lastRunSummary.failed > 0 && (
+                        <>{" · "}<span className="text-red-400">{autopilot.lastRunSummary.failed} failed</span></>
+                      )}
+                    </span>
+                  )}
+                </span>
+              )}
+              {autopilot?.nextRunAt && autopilot.enabled && (
+                <span>
+                  <span className="text-zinc-400">Next run:</span>{" "}
+                  {new Date(autopilot.nextRunAt).toLocaleString()}
+                </span>
+              )}
+              {!autopilot?.lastRunAt && <span className="text-zinc-600 italic">Never run yet</span>}
+            </div>
+
+            {/* Last run per-channel grid */}
+            {autopilot?.lastRunResults && autopilot.lastRunResults.length > 0 && (
+              <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-1">
+                {autopilot.lastRunResults.map(r => (
+                  <div key={r.channelId} className={`text-[10px] px-2 py-1 rounded flex items-center gap-1 truncate ${
+                    r.posted ? "bg-green-900/30 text-green-400"
+                    : r.manual ? "bg-blue-900/20 text-blue-400"
+                    : r.error ? "bg-red-900/20 text-red-400"
+                    : "bg-zinc-800/60 text-zinc-500"
+                  }`}>
+                    <span>{r.posted ? "✓" : r.manual ? "↗" : r.error ? "✗" : "·"}</span>
+                    <span className="truncate">{r.channelName}</span>
+                    {r.url && <a href={r.url} target="_blank" rel="noopener noreferrer" className="shrink-0 underline">↗</a>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Right: controls */}
+          <div className="flex flex-col gap-2 shrink-0 min-w-[200px]">
+            {/* Interval selector */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-zinc-400 shrink-0">Every</span>
+              <select
+                value={apInterval}
+                onChange={e => setApInterval(Number(e.target.value))}
+                className="flex-1 rounded border border-zinc-700 bg-zinc-950 text-zinc-200 text-xs px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              >
+                <option value={24}>24 hours</option>
+                <option value={48}>48 hours</option>
+                <option value={72}>72 hours</option>
+                <option value={168}>7 days</option>
+              </select>
+            </div>
+
+            {/* Enable / Disable toggle */}
+            <div className="flex gap-2">
+              {autopilot?.enabled ? (
+                <Button
+                  onClick={() => toggleAutopilot(false)}
+                  disabled={apToggling}
+                  variant="outline"
+                  className="flex-1 h-8 text-xs border-zinc-600 text-zinc-300 hover:bg-zinc-800"
+                >
+                  {apToggling ? "…" : "⏸ Pause"}
+                </Button>
+              ) : (
+                <Button
+                  onClick={() => toggleAutopilot(true)}
+                  disabled={apToggling}
+                  className="flex-1 h-8 text-xs bg-emerald-700 hover:bg-emerald-600 text-white"
+                >
+                  {apToggling ? "…" : "▶ Enable"}
+                </Button>
+              )}
+              <Button
+                onClick={runAutopilotNow}
+                disabled={apRunning}
+                variant="outline"
+                className="flex-1 h-8 text-xs border-zinc-600 text-zinc-300 hover:bg-zinc-800"
+                title="Run one cycle right now"
+              >
+                {apRunning ? (
+                  <span className="flex items-center gap-1">
+                    <span className="animate-spin inline-block w-2.5 h-2.5 border border-zinc-400/30 border-t-zinc-300 rounded-full" />
+                    Running…
+                  </span>
+                ) : "⚡ Run Now"}
+              </Button>
+            </div>
+
+            {/* Refresh status while running */}
+            {apRunning && (
+              <Button size="sm" variant="ghost" onClick={loadAutopilot} className="h-7 text-[10px] text-zinc-500">
+                ↻ Refresh status
+              </Button>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Stats row */}
