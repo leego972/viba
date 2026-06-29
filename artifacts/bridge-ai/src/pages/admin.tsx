@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { Textarea } from "@/components/ui/textarea";
 
 const SESSION_KEY = "viba_admin_token";
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -842,6 +843,811 @@ function ConfigTab({ token }: { token: string }) {
   );
 }
 
+// ─── Tab: Growth / Advertising ────────────────────────────────────────────────
+
+type GChannel = {
+  id: string; name: string; url: string;
+  category: string; priority: string; note: string; posted: boolean;
+};
+type GSub = {
+  id: string; channelId: string; channelName: string; contentType: string;
+  content: string; status: "draft" | "posted" | "scheduled" | "failed"; note: string; createdAt: string;
+  postedUrl?: string; submitError?: string;
+};
+type GConfigured = { devto: boolean; discord: boolean; reddit: boolean };
+type GConfig = {
+  devto_api_key: string; discord_webhook_url: string;
+  reddit_client_id: string; reddit_client_secret: string;
+  reddit_username: string; reddit_password: string;
+  configured: GConfigured;
+};
+type SeoData = {
+  domain: string;
+  keywords: { primary: string[]; secondary: string[]; longtail: string[]; competitors: string[] };
+  checklist: { item: string; done: boolean }[];
+  geoActions: string[];
+};
+
+const CATEGORY_COLOR: Record<string, string> = {
+  launch:     "bg-purple-500/20 text-purple-300 border-purple-700",
+  community:  "bg-orange-500/20 text-orange-300 border-orange-700",
+  social:     "bg-blue-500/20 text-blue-300 border-blue-700",
+  content:    "bg-green-500/20 text-green-300 border-green-700",
+  newsletter: "bg-yellow-500/20 text-yellow-300 border-yellow-700",
+};
+const PRIORITY_DOT: Record<string, string> = {
+  critical: "bg-red-500",
+  high:     "bg-yellow-400",
+  medium:   "bg-zinc-500",
+};
+
+function GrowthTab({ token }: { token: string }) {
+  const { toast } = useToast();
+
+  // sub-sections
+  const [section, setSection] = useState<"channels" | "generate" | "submissions" | "seo" | "settings">("channels");
+
+  // channels
+  const [channels, setChannels] = useState<GChannel[]>([]);
+  const [chStats, setChStats] = useState({ totalPosted: 0, totalChannels: 0 });
+
+  // content generator
+  const [selChannel, setSelChannel] = useState("");
+  const [generated, setGenerated] = useState("");
+  const [genLabel, setGenLabel] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [genErr, setGenErr] = useState("");
+  const [savingSubmission, setSavingSubmission] = useState(false);
+
+  // submissions
+  const [submissions, setSubmissions] = useState<GSub[]>([]);
+  const [subsLoading, setSubsLoading] = useState(false);
+  const [autoSubmitting, setAutoSubmitting] = useState<string | null>(null);
+
+  // seo
+  const [seo, setSeo] = useState<SeoData | null>(null);
+  const [seoLoading, setSeoLoading] = useState(false);
+
+  // publish settings
+  const emptyConfig: GConfig = { devto_api_key: "", discord_webhook_url: "", reddit_client_id: "", reddit_client_secret: "", reddit_username: "", reddit_password: "", configured: { devto: false, discord: false, reddit: false } };
+  const [channelConfig, setChannelConfig] = useState<GConfig>(emptyConfig);
+  const [configForm, setConfigForm] = useState<Omit<GConfig, "configured">>({ devto_api_key: "", discord_webhook_url: "", reddit_client_id: "", reddit_client_secret: "", reddit_username: "", reddit_password: "" });
+  const [configSaving, setConfigSaving] = useState(false);
+  const [configMsg, setConfigMsg] = useState("");
+
+  const loadChannels = useCallback(() => {
+    adminFetch("/growth/channels", token)
+      .then(r => r.json())
+      .then(d => {
+        setChannels(d.channels ?? []);
+        setChStats({ totalPosted: d.totalPosted ?? 0, totalChannels: d.totalChannels ?? 0 });
+      })
+      .catch(() => {});
+  }, [token]);
+
+  const loadSubmissions = useCallback(() => {
+    setSubsLoading(true);
+    adminFetch("/growth/submissions", token)
+      .then(r => r.json())
+      .then(d => setSubmissions(d.submissions ?? []))
+      .finally(() => setSubsLoading(false));
+  }, [token]);
+
+  const loadSeo = useCallback(() => {
+    setSeoLoading(true);
+    adminFetch("/growth/seo", token)
+      .then(r => r.json())
+      .then(setSeo)
+      .finally(() => setSeoLoading(false));
+  }, [token]);
+
+  const loadChannelConfig = useCallback(() => {
+    adminFetch("/growth/channel-config", token)
+      .then(r => r.json())
+      .then((d: GConfig) => setChannelConfig(d))
+      .catch(() => {});
+  }, [token]);
+
+  useEffect(() => { loadChannels(); loadChannelConfig(); }, [loadChannels, loadChannelConfig]);
+  useEffect(() => { if (section === "submissions") loadSubmissions(); }, [section, loadSubmissions]);
+  useEffect(() => { if (section === "seo") loadSeo(); }, [section, loadSeo]);
+  useEffect(() => { if (section === "settings") loadChannelConfig(); }, [section, loadChannelConfig]);
+
+  // Auto-submit a saved draft
+  const autoSubmit = async (id: string) => {
+    setAutoSubmitting(id);
+    try {
+      const r = await adminFetch(`/growth/auto-submit/${id}`, token, { method: "POST", body: "{}" });
+      const d = await r.json() as { ok: boolean; posted?: boolean; manual?: boolean; url?: string; channelName?: string; reason?: string; instructions?: string; credential?: string; manualUrl?: string };
+      if (d.ok) {
+        toast({ title: `✅ Posted to ${d.channelName ?? "channel"}`, description: d.url ? `Live at ${d.url}` : undefined });
+        loadSubmissions();
+      } else if (d.manual) {
+        toast({
+          title: `⚙️ Manual action needed — ${d.channelName ?? "channel"}`,
+          description: d.instructions ?? (d.credential ? `Add ${d.credential} in Publish Settings` : "Open the channel URL and paste content"),
+        });
+        if (d.credential) setSection("settings");
+      } else {
+        toast({ title: "Submission failed", description: String((d as {reason?:string}).reason ?? "Unknown error"), variant: "destructive" });
+      }
+    } catch (e) {
+      toast({ title: "Auto-submit error", description: String(e), variant: "destructive" });
+    } finally {
+      setAutoSubmitting(null);
+    }
+  };
+
+  // Save publish settings
+  const saveConfig = async () => {
+    setConfigSaving(true); setConfigMsg("");
+    try {
+      const r = await adminFetch("/growth/channel-config", token, { method: "POST", body: JSON.stringify(configForm) });
+      const d = await r.json() as { ok: boolean; saved: number; configured: GConfigured };
+      setChannelConfig(prev => ({ ...prev, configured: d.configured }));
+      setConfigMsg(`✅ Saved ${d.saved} credential${d.saved !== 1 ? "s" : ""}. Auto-submit is now active for configured channels.`);
+      setConfigForm({ devto_api_key: "", discord_webhook_url: "", reddit_client_id: "", reddit_client_secret: "", reddit_username: "", reddit_password: "" });
+      loadChannelConfig();
+    } catch (e) {
+      setConfigMsg(`Error: ${String(e)}`);
+    } finally {
+      setConfigSaving(false);
+    }
+  };
+
+  // Generate content
+  const generate = async () => {
+    if (!selChannel) { setGenErr("Pick a channel first"); return; }
+    setGenerating(true); setGenerated(""); setGenErr("");
+    try {
+      const r = await adminFetch("/growth/generate", token, {
+        method: "POST",
+        body: JSON.stringify({ channelId: selChannel }),
+      });
+      const d = await r.json();
+      if (!r.ok) { setGenErr(d.error ?? "Generation failed"); return; }
+      setGenerated(d.content ?? "");
+      setGenLabel(d.label ?? selChannel);
+    } catch (e) {
+      setGenErr(String(e));
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const copyContent = () => {
+    if (!generated) return;
+    navigator.clipboard.writeText(generated)
+      .then(() => toast({ title: "Copied!", description: "Content copied to clipboard" }))
+      .catch(() => toast({ title: "Error", description: "Clipboard unavailable", variant: "destructive" }));
+  };
+
+  const logAsPosted = async (status: "draft" | "posted" | "scheduled") => {
+    if (!generated || !selChannel) return;
+    setSavingSubmission(true);
+    try {
+      const ch = channels.find(c => c.id === selChannel);
+      await adminFetch("/growth/submissions", token, {
+        method: "POST",
+        body: JSON.stringify({
+          channelId: selChannel,
+          channelName: ch?.name ?? selChannel,
+          contentType: "post",
+          content: generated,
+          status,
+          note: "",
+        }),
+      });
+      toast({ title: status === "posted" ? "Marked as posted!" : "Saved to drafts", description: ch?.name });
+      loadChannels();
+    } catch {
+      toast({ title: "Error", description: "Could not save submission", variant: "destructive" });
+    } finally {
+      setSavingSubmission(false);
+    }
+  };
+
+  const updateSubStatus = async (id: string, status: string) => {
+    await adminFetch(`/growth/submissions/${id}`, token, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    });
+    loadSubmissions(); loadChannels();
+  };
+
+  const deleteSub = async (id: string) => {
+    await adminFetch(`/growth/submissions/${id}`, token, { method: "DELETE" });
+    loadSubmissions();
+  };
+
+  const sectionBtn = (id: typeof section, label: string) => (
+    <button
+      onClick={() => setSection(id)}
+      className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+        section === id ? "bg-blue-600 text-white" : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+      }`}
+    >
+      {label}
+    </button>
+  );
+
+  // ── One-click blast ───────────────────────────────────────────────────────
+  const [blasting, setBlasting] = useState(false);
+  const [blastResult, setBlastResult] = useState<{
+    succeeded: number; failed: number; total: number;
+    results: { channelId: string; channelName: string; ok: boolean; error?: string }[];
+  } | null>(null);
+  const [blastErr, setBlastErr] = useState("");
+
+  const runBlast = async () => {
+    if (blasting) return;
+    setBlasting(true); setBlastResult(null); setBlastErr("");
+    try {
+      const r = await adminFetch("/growth/blast", token, { method: "POST", body: "{}" });
+      const d = await r.json();
+      if (!r.ok) { setBlastErr(d.error ?? "Blast failed"); return; }
+      setBlastResult(d);
+      loadChannels(); loadSubmissions();
+      toast({ title: `✅ Blast complete — ${d.succeeded}/${d.total} channels generated`, description: "All drafts saved to Submission Log" });
+    } catch (e) {
+      setBlastErr(String(e));
+    } finally {
+      setBlasting(false);
+    }
+  };
+
+  // ── Stats bar ──────────────────────────────────────────────────────────────
+  const postedCount = chStats.totalPosted;
+  const pendingCount = chStats.totalChannels - postedCount;
+
+  return (
+    <div className="space-y-5">
+
+      {/* ── ONE-CLICK BLAST ─────────────────────────────────────────────── */}
+      <div className="rounded-xl border border-blue-700/50 bg-gradient-to-r from-blue-950/60 to-indigo-950/60 p-5">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="flex-1">
+            <h3 className="text-sm font-bold text-blue-200 flex items-center gap-2">
+              🚀 One-Click Content Blast
+            </h3>
+            <p className="text-xs text-blue-400/80 mt-1">
+              Generates AI-optimised content for <strong className="text-blue-300">every VIBA channel</strong> in one shot — Reddit, LinkedIn, Twitter, Product Hunt, Hacker News, Dev.to, newsletters, and more. All saved as drafts instantly.
+            </p>
+            {blastResult && (
+              <div className="mt-2 flex gap-3 text-xs">
+                <span className="text-green-400 font-semibold">✓ {blastResult.succeeded} generated</span>
+                {blastResult.failed > 0 && <span className="text-red-400">{blastResult.failed} failed</span>}
+                <button className="text-blue-400 underline hover:text-blue-300" onClick={() => setSection("submissions")}>
+                  View in Submission Log →
+                </button>
+              </div>
+            )}
+            {blastErr && <p className="mt-2 text-xs text-red-400">{blastErr}</p>}
+          </div>
+          <div className="flex-shrink-0">
+            <Button
+              onClick={runBlast}
+              disabled={blasting}
+              className="bg-blue-600 hover:bg-blue-500 text-white font-semibold px-6 h-10 text-sm shadow-lg shadow-blue-900/40"
+            >
+              {blasting ? (
+                <span className="flex items-center gap-2">
+                  <span className="animate-spin inline-block w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full" />
+                  Generating all channels…
+                </span>
+              ) : (
+                "🚀 Generate All + SEO + Advertise"
+              )}
+            </Button>
+          </div>
+        </div>
+        {blasting && (
+          <div className="mt-3 rounded-md bg-blue-900/30 px-3 py-2 text-xs text-blue-300">
+            Generating content for all channels via Groq AI — this takes 60–120 seconds. Do not close this page.
+          </div>
+        )}
+        {blastResult && blastResult.results.length > 0 && (
+          <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+            {blastResult.results.map(r => (
+              <div key={r.channelId} className={`text-[10px] px-2 py-1 rounded flex items-center gap-1 ${r.ok ? "bg-green-900/30 text-green-400" : "bg-red-900/20 text-red-400"}`}>
+                <span>{r.ok ? "✓" : "✗"}</span>
+                <span className="truncate">{r.channelName}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Stats row */}
+      <div className="grid grid-cols-3 gap-3">
+        <Card className="border-zinc-800 bg-zinc-900/60">
+          <CardContent className="p-4">
+            <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Channels covered</p>
+            <p className="text-2xl font-bold text-green-400">{postedCount}</p>
+            <p className="text-xs text-zinc-500 mt-1">of {chStats.totalChannels} free channels</p>
+          </CardContent>
+        </Card>
+        <Card className="border-zinc-800 bg-zinc-900/60">
+          <CardContent className="p-4">
+            <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Still to post</p>
+            <p className="text-2xl font-bold text-yellow-400">{pendingCount}</p>
+            <p className="text-xs text-zinc-500 mt-1">channels pending</p>
+          </CardContent>
+        </Card>
+        <Card className="border-zinc-800 bg-zinc-900/60">
+          <CardContent className="p-4">
+            <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Content saved</p>
+            <p className="text-2xl font-bold text-blue-400">{submissions.length}</p>
+            <p className="text-xs text-zinc-500 mt-1">drafts / posted</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Section nav */}
+      <div className="flex gap-2 flex-wrap">
+        {sectionBtn("channels",    "📡 Channels")}
+        {sectionBtn("generate",    "✨ Generate Content")}
+        {sectionBtn("submissions", "📋 Submission Log")}
+        {sectionBtn("seo",         "🔍 SEO & Keywords")}
+        <button
+          onClick={() => setSection("settings")}
+          className={`text-xs px-3 py-1.5 rounded-md border transition-colors relative ${section === "settings" ? "bg-violet-900/60 border-violet-600 text-violet-200" : "border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500"}`}
+        >
+          ⚙️ Publish Settings
+          {(!channelConfig.configured.devto && !channelConfig.configured.discord && !channelConfig.configured.reddit) && (
+            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-yellow-400" title="No auto-submit credentials configured" />
+          )}
+        </button>
+      </div>
+
+      {/* ── CHANNELS ──────────────────────────────────────────────────── */}
+      {section === "channels" && (
+        <div className="space-y-3">
+          <p className="text-xs text-zinc-500">
+            All free advertising channels for VIBA. Aim for <strong className="text-zinc-300">critical</strong> ones first, then work through high/medium.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {channels.map(ch => (
+              <div
+                key={ch.id}
+                className={`rounded-lg border p-3 flex gap-3 ${
+                  ch.posted ? "border-green-800 bg-green-950/20" : "border-zinc-800 bg-zinc-900/40"
+                }`}
+              >
+                <div className="mt-0.5 flex-shrink-0">
+                  <span className={`inline-block w-2 h-2 rounded-full mt-1 ${PRIORITY_DOT[ch.priority] ?? "bg-zinc-500"}`} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-semibold text-zinc-200">{ch.name}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${CATEGORY_COLOR[ch.category] ?? ""}`}>
+                      {ch.category}
+                    </span>
+                    {ch.posted && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded border bg-green-500/20 text-green-400 border-green-700 font-medium">
+                        ✓ posted
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-zinc-500 mt-0.5 leading-relaxed">{ch.note}</p>
+                  <div className="flex gap-2 mt-2">
+                    <a
+                      href={ch.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] text-blue-400 hover:text-blue-300 underline"
+                    >
+                      Open →
+                    </a>
+                    <button
+                      className="text-[11px] text-zinc-400 hover:text-zinc-200 underline"
+                      onClick={() => { setSelChannel(ch.id); setSection("generate"); }}
+                    >
+                      Generate content
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── GENERATE CONTENT ──────────────────────────────────────────── */}
+      {section === "generate" && (
+        <div className="space-y-4">
+          <p className="text-xs text-zinc-500">
+            AI-powered content generation for each free channel, tuned specifically for VIBA. Uses Groq (free, fast).
+          </p>
+
+          {/* Channel picker */}
+          <div className="space-y-2">
+            <label className="text-xs text-zinc-400 font-medium">Select channel</label>
+            <select
+              value={selChannel}
+              onChange={e => { setSelChannel(e.target.value); setGenerated(""); setGenErr(""); }}
+              className="w-full sm:w-80 rounded-md border border-zinc-700 bg-zinc-900 text-zinc-200 text-xs px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="">— pick a channel —</option>
+              {channels.map(ch => (
+                <option key={ch.id} value={ch.id}>
+                  {ch.name}{ch.posted ? " ✓" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {selChannel && (
+            <div className="rounded-md border border-zinc-700 bg-zinc-900/60 p-3 text-xs text-zinc-400">
+              {channels.find(c => c.id === selChannel)?.note}
+            </div>
+          )}
+
+          <Button
+            onClick={generate}
+            disabled={generating || !selChannel}
+            className="bg-blue-600 hover:bg-blue-700 text-white h-9"
+            size="sm"
+          >
+            {generating ? "Generating…" : "✨ Generate with AI"}
+          </Button>
+
+          {genErr && <p className="text-red-400 text-xs">{genErr}</p>}
+
+          {generated && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium text-zinc-300">{genLabel}</p>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="h-7 text-xs border-zinc-700" onClick={copyContent}>
+                    Copy
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs border-zinc-700"
+                    onClick={() => logAsPosted("draft")}
+                    disabled={savingSubmission}
+                  >
+                    Save draft
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs bg-green-700 hover:bg-green-600 text-white"
+                    onClick={() => logAsPosted("posted")}
+                    disabled={savingSubmission}
+                  >
+                    Mark posted ✓
+                  </Button>
+                </div>
+              </div>
+              <Textarea
+                className="min-h-[320px] font-mono text-xs bg-zinc-950 border-zinc-700 text-zinc-200 resize-y"
+                value={generated}
+                onChange={e => setGenerated(e.target.value)}
+              />
+              <p className="text-[11px] text-zinc-600">
+                You can edit the content above before copying. Changes are local only until you save/mark posted.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── SUBMISSION LOG ────────────────────────────────────────────── */}
+      {section === "submissions" && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-zinc-500">Content saved or marked as posted. Cleared on server restart.</p>
+            <Button size="sm" variant="outline" className="h-7 text-xs border-zinc-700" onClick={loadSubmissions}>
+              Refresh
+            </Button>
+          </div>
+          {subsLoading ? (
+            <p className="text-zinc-500 text-sm">Loading…</p>
+          ) : submissions.length === 0 ? (
+            <p className="text-zinc-600 text-sm">No submissions yet — generate content and save it.</p>
+          ) : (
+            <div className="space-y-2">
+              {submissions.map(s => (
+                <div key={s.id} className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3">
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="text-xs font-semibold text-zinc-200">{s.channelName}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${
+                          s.status === "posted"
+                            ? "bg-green-500/20 text-green-400 border-green-700"
+                            : s.status === "scheduled"
+                            ? "bg-blue-500/20 text-blue-400 border-blue-700"
+                            : "bg-zinc-500/20 text-zinc-400 border-zinc-700"
+                        }`}>
+                          {s.status}
+                        </span>
+                        <span className="text-[10px] text-zinc-600">
+                          {new Date(s.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-zinc-500 line-clamp-2 font-mono leading-relaxed">
+                        {s.content.slice(0, 180)}…
+                      </p>
+                    </div>
+                    <div className="flex gap-1.5 flex-shrink-0 flex-wrap justify-end">
+                      {s.status === "draft" && (
+                        <button
+                          className="text-[11px] text-violet-400 hover:text-violet-300 underline disabled:opacity-40"
+                          disabled={autoSubmitting === s.id}
+                          onClick={() => autoSubmit(s.id)}
+                        >
+                          {autoSubmitting === s.id ? "Submitting…" : "⚡ Auto-Submit"}
+                        </button>
+                      )}
+                      {s.status === "posted" && s.postedUrl && (
+                        <a href={s.postedUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] text-blue-400 hover:text-blue-300 underline">
+                          View post →
+                        </a>
+                      )}
+                      {s.status !== "posted" && (
+                        <button
+                          className="text-[11px] text-green-400 hover:text-green-300 underline"
+                          onClick={() => updateSubStatus(s.id, "posted")}
+                        >
+                          Mark posted
+                        </button>
+                      )}
+                      {s.status !== "draft" && (
+                        <button
+                          className="text-[11px] text-zinc-400 hover:text-zinc-200 underline"
+                          onClick={() => updateSubStatus(s.id, "draft")}
+                        >
+                          Revert draft
+                        </button>
+                      )}
+                      <button
+                        className="text-[11px] text-red-400 hover:text-red-300 underline"
+                        onClick={() => deleteSub(s.id)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── SEO & KEYWORDS ────────────────────────────────────────────── */}
+      {section === "seo" && (
+        <div className="space-y-5">
+          {seoLoading || !seo ? (
+            <p className="text-zinc-500 text-sm">Loading…</p>
+          ) : (
+            <>
+              {/* Keywords */}
+              <Card className="border-zinc-800 bg-zinc-900/60">
+                <CardHeader className="pb-2 pt-4 px-4">
+                  <CardTitle className="text-sm text-zinc-200">Target Keywords</CardTitle>
+                </CardHeader>
+                <CardContent className="px-4 pb-4 space-y-3">
+                  <div>
+                    <p className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1.5">Primary</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {seo.keywords.primary.map(k => (
+                        <span key={k} className="text-[11px] px-2 py-0.5 rounded bg-blue-900/40 text-blue-300 border border-blue-800">{k}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1.5">Secondary</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {seo.keywords.secondary.map(k => (
+                        <span key={k} className="text-[11px] px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700">{k}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1.5">Long-tail</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {seo.keywords.longtail.map(k => (
+                        <span key={k} className="text-[11px] px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-800">{k}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1.5">Competitor targets</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {seo.keywords.competitors.map(k => (
+                        <span key={k} className="text-[11px] px-2 py-0.5 rounded bg-red-900/30 text-red-300 border border-red-900">{k}</span>
+                      ))}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* SEO checklist */}
+              <Card className="border-zinc-800 bg-zinc-900/60">
+                <CardHeader className="pb-2 pt-4 px-4">
+                  <CardTitle className="text-sm text-zinc-200">SEO Checklist</CardTitle>
+                </CardHeader>
+                <CardContent className="px-4 pb-4">
+                  <div className="space-y-1.5">
+                    {seo.checklist.map((item, i) => (
+                      <div key={i} className="flex items-center gap-2 text-xs">
+                        <span className={item.done ? "text-green-400" : "text-zinc-600"}>
+                          {item.done ? "✓" : "○"}
+                        </span>
+                        <span className={item.done ? "text-zinc-300" : "text-zinc-500"}>{item.item}</span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* GEO / AI search */}
+              <Card className="border-zinc-800 bg-zinc-900/60">
+                <CardHeader className="pb-2 pt-4 px-4">
+                  <CardTitle className="text-sm text-zinc-200">GEO — AI Search Optimisation</CardTitle>
+                </CardHeader>
+                <CardContent className="px-4 pb-4">
+                  <p className="text-xs text-zinc-500 mb-3">
+                    Get VIBA cited by ChatGPT Browse, Perplexity, Gemini, and Claude when users ask about multi-agent AI tools.
+                  </p>
+                  <div className="space-y-2">
+                    {seo.geoActions.map((a, i) => (
+                      <div key={i} className="flex items-start gap-2 text-xs">
+                        <span className="text-blue-400 mt-0.5 flex-shrink-0">→</span>
+                        <span className="text-zinc-400">{a}</span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── PUBLISH SETTINGS ──────────────────────────────────────────── */}
+      {section === "settings" && (
+        <div className="space-y-5">
+          <div>
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              Enter credentials for channels that support auto-posting. Saved values are active immediately and persist until the server restarts.
+              For permanent storage, also set them as environment variables on your hosting provider.
+            </p>
+          </div>
+
+          {/* Status summary */}
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { label: "Dev.to", key: "devto" as const, color: "blue", hint: "API key" },
+              { label: "Discord", key: "discord" as const, color: "indigo", hint: "Webhook URL" },
+              { label: "Reddit", key: "reddit" as const, color: "orange", hint: "4 credentials" },
+            ].map(({ label, key, color, hint }) => (
+              <div key={key} className={`rounded-lg border p-3 ${channelConfig.configured[key] ? "border-green-700 bg-green-950/20" : "border-zinc-700 bg-zinc-900/40"}`}>
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${channelConfig.configured[key] ? "bg-green-400" : "bg-zinc-600"}`} />
+                  <span className="text-xs font-semibold text-zinc-200">{label}</span>
+                </div>
+                <p className="text-[10px] text-zinc-500 mt-1">{channelConfig.configured[key] ? "✓ Configured — auto-posting active" : `Not configured (needs ${hint})`}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Dev.to */}
+          <div className="rounded-xl border border-zinc-700 bg-zinc-900/60 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold text-zinc-100">Dev.to</h4>
+              {channelConfig.configured.devto && <span className="text-[10px] px-2 py-0.5 rounded bg-green-900/40 text-green-400 border border-green-700">✓ configured</span>}
+            </div>
+            <p className="text-[11px] text-zinc-500">
+              Get your API key at{" "}
+              <a href="https://dev.to/settings/extensions" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline">dev.to/settings/extensions</a>
+              {" "}→ "DEV Community API Keys" → Generate API key.
+            </p>
+            <div className="space-y-2">
+              <label className="text-xs text-zinc-400">API Key</label>
+              <input
+                type="password"
+                className="w-full rounded-md border border-zinc-700 bg-zinc-950 text-zinc-200 text-xs px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder:text-zinc-600"
+                placeholder={channelConfig.configured.devto ? "••••••••  (already set — enter new value to update)" : "Paste your Dev.to API key…"}
+                value={configForm.devto_api_key}
+                onChange={e => setConfigForm(f => ({ ...f, devto_api_key: e.target.value }))}
+                autoComplete="off"
+              />
+            </div>
+          </div>
+
+          {/* Discord */}
+          <div className="rounded-xl border border-zinc-700 bg-zinc-900/60 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold text-zinc-100">Discord</h4>
+              {channelConfig.configured.discord && <span className="text-[10px] px-2 py-0.5 rounded bg-green-900/40 text-green-400 border border-green-700">✓ configured</span>}
+            </div>
+            <p className="text-[11px] text-zinc-500">
+              In your Discord server: Settings → Integrations → Webhooks → New Webhook → Copy URL.
+              Posts to any channel you choose.
+            </p>
+            <div className="space-y-2">
+              <label className="text-xs text-zinc-400">Webhook URL</label>
+              <input
+                type="password"
+                className="w-full rounded-md border border-zinc-700 bg-zinc-950 text-zinc-200 text-xs px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder:text-zinc-600"
+                placeholder={channelConfig.configured.discord ? "••••••••  (already set — enter new value to update)" : "https://discord.com/api/webhooks/…"}
+                value={configForm.discord_webhook_url}
+                onChange={e => setConfigForm(f => ({ ...f, discord_webhook_url: e.target.value }))}
+                autoComplete="off"
+              />
+            </div>
+          </div>
+
+          {/* Reddit */}
+          <div className="rounded-xl border border-zinc-700 bg-zinc-900/60 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold text-zinc-100">Reddit</h4>
+              {channelConfig.configured.reddit && <span className="text-[10px] px-2 py-0.5 rounded bg-green-900/40 text-green-400 border border-green-700">✓ configured</span>}
+            </div>
+            <p className="text-[11px] text-zinc-500">
+              Create a "script" type app at{" "}
+              <a href="https://www.reddit.com/prefs/apps" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline">reddit.com/prefs/apps</a>.
+              Posts to r/MachineLearning, r/artificial, r/SideProject, r/LocalLLaMA.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs text-zinc-400">Client ID</label>
+                <input type="password" className="w-full rounded-md border border-zinc-700 bg-zinc-950 text-zinc-200 text-xs px-3 py-2 focus:outline-none focus:ring-1 focus:ring-orange-500 placeholder:text-zinc-600"
+                  placeholder={channelConfig.configured.reddit ? "••••••••" : "App client ID"}
+                  value={configForm.reddit_client_id} onChange={e => setConfigForm(f => ({ ...f, reddit_client_id: e.target.value }))} autoComplete="off" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs text-zinc-400">Client Secret</label>
+                <input type="password" className="w-full rounded-md border border-zinc-700 bg-zinc-950 text-zinc-200 text-xs px-3 py-2 focus:outline-none focus:ring-1 focus:ring-orange-500 placeholder:text-zinc-600"
+                  placeholder={channelConfig.configured.reddit ? "••••••••" : "App client secret"}
+                  value={configForm.reddit_client_secret} onChange={e => setConfigForm(f => ({ ...f, reddit_client_secret: e.target.value }))} autoComplete="off" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs text-zinc-400">Reddit Username</label>
+                <input type="text" className="w-full rounded-md border border-zinc-700 bg-zinc-950 text-zinc-200 text-xs px-3 py-2 focus:outline-none focus:ring-1 focus:ring-orange-500 placeholder:text-zinc-600"
+                  placeholder="Your Reddit account username"
+                  value={configForm.reddit_username} onChange={e => setConfigForm(f => ({ ...f, reddit_username: e.target.value }))} autoComplete="off" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs text-zinc-400">Reddit Password</label>
+                <input type="password" className="w-full rounded-md border border-zinc-700 bg-zinc-950 text-zinc-200 text-xs px-3 py-2 focus:outline-none focus:ring-1 focus:ring-orange-500 placeholder:text-zinc-600"
+                  placeholder={channelConfig.configured.reddit ? "••••••••" : "Your Reddit account password"}
+                  value={configForm.reddit_password} onChange={e => setConfigForm(f => ({ ...f, reddit_password: e.target.value }))} autoComplete="off" />
+              </div>
+            </div>
+          </div>
+
+          {/* Manual channels notice */}
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-3">
+            <p className="text-[11px] text-zinc-500 leading-relaxed">
+              <span className="text-zinc-400 font-medium">Manual channels</span> (Product Hunt, Hacker News, Twitter/X, LinkedIn, Medium, newsletters, directories)
+              require you to log in on their site. When you click <strong className="text-zinc-300">⚡ Auto-Submit</strong> on those drafts,
+              the system will open the submission page and show you the generated content to paste.
+            </p>
+          </div>
+
+          {/* Save button */}
+          <div className="flex items-center gap-4">
+            <Button onClick={saveConfig} disabled={configSaving} className="bg-violet-700 hover:bg-violet-600 text-white h-9 px-5 text-sm">
+              {configSaving ? "Saving…" : "💾 Save Credentials"}
+            </Button>
+            {configMsg && (
+              <p className={`text-xs ${configMsg.startsWith("✅") ? "text-green-400" : "text-red-400"}`}>
+                {configMsg}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Admin page ──────────────────────────────────────────────────────────
 
 const TABS = [
@@ -853,6 +1659,7 @@ const TABS = [
   { id: "logs", label: "Logs" },
   { id: "abuse", label: "Abuse" },
   { id: "config", label: "Config" },
+  { id: "growth", label: "🚀 Growth" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -968,6 +1775,7 @@ export default function AdminPage() {
         {activeTab === "logs"      && <LogsTab      token={token} />}
         {activeTab === "abuse"     && <AbuseTab     token={token} />}
         {activeTab === "config"    && <ConfigTab    token={token} />}
+        {activeTab === "growth"    && <GrowthTab    token={token} />}
       </div>
     </div>
   );
