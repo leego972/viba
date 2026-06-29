@@ -10,25 +10,39 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..800;1,14..32,300..700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <script>
       window.onerror = function(msg, src, line, col, err) {
+        clearTimeout(window.__VIBA_TIMEOUT__);
         var el = document.getElementById('viba-error');
         if (!el) { el = document.createElement('div'); el.id = 'viba-error'; document.body.appendChild(el); }
         el.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#c00;color:#fff;padding:1rem;font:14px monospace;z-index:9999;white-space:pre-wrap;';
         el.textContent = 'JS Error: ' + msg + '\n' + src + ':' + line + ':' + col + (err ? '\n' + err.stack : '');
       };
       window.addEventListener('unhandledrejection', function(e) {
+        clearTimeout(window.__VIBA_TIMEOUT__);
         var el = document.getElementById('viba-error');
         if (!el) { el = document.createElement('div'); el.id = 'viba-error'; document.body.appendChild(el); }
         el.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#c00;color:#fff;padding:1rem;font:14px monospace;z-index:9999;white-space:pre-wrap;';
         el.textContent = 'Unhandled rejection: ' + (e.reason && e.reason.stack ? e.reason.stack : String(e.reason));
       });
+      window.__VIBA_TIMEOUT__ = setTimeout(function() {
+        var root = document.getElementById('root');
+        if (root && !root.firstElementChild) {
+          root.innerHTML = '<div style="position:fixed;top:0;left:0;right:0;bottom:0;background:#0d1117;display:flex;align-items:center;justify-content:center;font-family:sans-serif;flex-direction:column;gap:16px"><div style="color:#7c3aed;font-size:32px;font-weight:700">VIBA</div><div style="color:#94a3b8;font-size:15px">Loading failed — please hard-refresh (Ctrl+Shift+R or Cmd+Shift+R)</div><div style="color:#475569;font-size:13px">If this persists, try a different browser or disable extensions</div></div>';
+        }
+      }, 8000);
     </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div style="position:fixed;top:0;left:0;right:0;bottom:0;background:#0d1117;display:flex;align-items:center;justify-content:center;font-family:sans-serif;flex-direction:column;gap:12px">
+        <div style="color:#7c3aed;font-size:28px;font-weight:700;letter-spacing:-0.5px">⬡ VIBA</div>
+        <div style="color:#64748b;font-size:14px">Loading…</div>
+      </div>
+    </div>
     <noscript>
-      <div style="padding:2rem;font-family:sans-serif;text-align:center">
-        <h1>VIBA requires JavaScript</h1>
-        <p>Please enable JavaScript in your browser to use VIBA.</p>
+      <div style="position:fixed;top:0;left:0;right:0;bottom:0;background:#0d1117;display:flex;align-items:center;justify-content:center;font-family:sans-serif;flex-direction:column;gap:12px">
+        <div style="color:#7c3aed;font-size:28px;font-weight:700">⬡ VIBA</div>
+        <div style="color:#f87171;font-size:15px">JavaScript is required to run VIBA.</div>
+        <div style="color:#94a3b8;font-size:13px">Please enable JavaScript in your browser settings.</div>
       </div>
     </noscript>
     <script type="module" src="/src/main.tsx"></script>
