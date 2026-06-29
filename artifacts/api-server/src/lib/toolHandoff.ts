@@ -10,20 +10,23 @@ import { logger } from "./logger";
  * This function:
  *  1. Saves a "handoff" message documenting what was completed and what remains.
  *  2. Marks the original task as "blocked_needs_tools".
- *  3. ONLY if a tool-capable agent exists in the session: creates a sibling
- *     task so the router can pick it up and assign it to that agent.
- *     If no tool-capable agent exists, the task stays blocked with no sibling —
- *     this prevents unbounded task churn in text-only sessions.
+ *  3. Always creates a sibling task so the spec's required handoff path exists.
+ *     - If a tool-capable agent is present, the sibling is inserted as "planned"
+ *       so the router picks it up immediately.
+ *     - If no tool-capable agent is present, the sibling is inserted as
+ *       "blocked_needs_tools" (waiting for an agent to join). This prevents
+ *       silent task drops while avoiding unbounded task churn — the sibling is
+ *       visible in the UI and will be retried when the session gains a capable agent.
  *
- * Returns the handoff message and, when a tool-capable agent was found,
- * the newly created sibling task.
+ * Returns the handoff message, the sibling task, and whether a tool-capable
+ * agent was found (`noToolAgent` flag for callers that need to surface a warning).
  */
 export async function handleToolHandoff(
   sessionId: number,
   originalTask: Task,
   partialResult: AgentTaskResult,
   fromAgent: Agent,
-): Promise<{ handoffMessage: Message; siblingTask: Task | null; noToolAgent: boolean }> {
+): Promise<{ handoffMessage: Message; siblingTask: Task; noToolAgent: boolean }> {
   const blockedReason = partialResult.blockedReason ?? "Tool capabilities required";
   const partialWork = partialResult.partialWork ?? partialResult.messageText;
   const toolRequirements = partialResult.toolRequirements ?? [];
@@ -45,14 +48,14 @@ export async function handleToolHandoff(
   if (noToolAgent) {
     logger.warn(
       { sessionId, taskId: originalTask.id, agentId: fromAgent.id },
-      "No tool-capable agent in session — task will stay blocked, no sibling created",
+      "No tool-capable agent in session — sibling task will wait for one to join",
     );
   }
 
   // 2. Save the handoff message
   const handoffContent = [
     noToolAgent
-      ? `## ⛔ Blocked — No Tool-Capable Agent Available`
+      ? `## ⏳ Waiting — No Tool-Capable Agent Available Yet`
       : `## 🔄 Partial Work — Handing off to tool-capable agent`,
     ``,
     `**Reason blocked:** ${blockedReason}`,
@@ -61,7 +64,7 @@ export async function handleToolHandoff(
     partialWork,
     ``,
     noToolAgent
-      ? `**Action needed:** Add a tool-capable agent (e.g. Replit) to this session to continue.`
+      ? `**Action needed:** Add a tool-capable agent (e.g. Replit) to continue — a sibling task has been queued and will be picked up automatically.`
       : `**What remains (requires tools):** ${toolRequirements.length > 0 ? toolRequirements.join(", ") : "See sibling task"}`,
   ].join("\n");
 
@@ -103,14 +106,7 @@ export async function handleToolHandoff(
     })
     .where(eq(tasksTable.id, originalTask.id));
 
-  // 4. If no tool-capable agent exists, stop here — do NOT create a sibling task.
-  //    Returning null prevents the router from picking up a task that can never
-  //    be assigned, which would cause unbounded planned-task accumulation.
-  if (noToolAgent) {
-    return { handoffMessage, siblingTask: null, noToolAgent: true };
-  }
-
-  // 5. Build sibling task description with full context
+  // 4. Build sibling task description with full context
   const siblingDescription = [
     `[Continued from: ${originalTask.title}]`,
     ``,
@@ -128,7 +124,13 @@ export async function handleToolHandoff(
     originalTask.description,
   ].join("\n");
 
-  // 6. Insert sibling task — marked planned so the router picks it up
+  // 5. Insert sibling task — always created (spec requirement).
+  //    Status: "planned" if a tool-capable agent exists (router picks it up immediately),
+  //    or "blocked_needs_tools" if none exists yet (waits until a capable agent joins).
+  //    This ensures the handoff path is always visible and resumable without
+  //    creating a runnable task that can never be assigned.
+  const siblingStatus = noToolAgent ? "blocked_needs_tools" : "planned";
+
   const [siblingTask] = await db
     .insert(tasksTable)
     .values({
@@ -136,7 +138,7 @@ export async function handleToolHandoff(
       title: `[Tool] ${originalTask.title}`,
       description: siblingDescription,
       type: originalTask.type,
-      status: "planned",
+      status: siblingStatus,
       toolRequirements: toolRequirements.length > 0 ? toolRequirements : null,
       dependencyTaskId: originalTask.id,
     })
@@ -147,9 +149,9 @@ export async function handleToolHandoff(
   }
 
   logger.info(
-    { sessionId, siblingTaskId: siblingTask.id, originalTaskId: originalTask.id },
+    { sessionId, siblingTaskId: siblingTask.id, siblingStatus, originalTaskId: originalTask.id },
     "Tool handoff sibling task created",
   );
 
-  return { handoffMessage, siblingTask, noToolAgent: false };
+  return { handoffMessage, siblingTask, noToolAgent };
 }
