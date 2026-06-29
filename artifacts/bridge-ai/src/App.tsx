@@ -36,7 +36,6 @@ import AssistedBrowserPage from "@/pages/assisted-browser";
 import OnboardingPage from "@/pages/onboarding";
 import ConnectionsPage from "@/pages/connections";
 import LaunchReadinessPage from "@/pages/launch-readiness";
-import ProofReportPage from "@/pages/proof-report";
 import CompletionPage, {
   CollaborationMapPage,
   DemoDoctorReport,
@@ -124,7 +123,6 @@ function GatedRouter() {
         <Route path="/onboarding" component={OnboardingPage} />
         <Route path="/connections" component={ConnectionsPage} />
         <Route path="/launch-readiness" component={LaunchReadinessPage} />
-        <Route path="/proof-report" component={ProofReportPage} />
         <Route component={NotFound} />
       </Switch>
     </AuthGuard>
