@@ -9,6 +9,10 @@ const basePath = process.env.BASE_PATH ?? "/";
 const isDev = process.env.NODE_ENV !== "production";
 const isReplit = process.env.REPL_ID !== undefined;
 
+// Safari 14.0 encoded as (major << 16) | (minor << 8) | patch
+// Targeting Safari 14+ covers ~99% of Safari users as of 2025
+const SAFARI_14 = (14 << 16) | (0 << 8) | 0;
+
 export default defineConfig({
   base: basePath,
   plugins: [
@@ -36,7 +40,19 @@ export default defineConfig({
     dedupe: ["react", "react-dom"],
   },
   root: path.resolve(import.meta.dirname),
+  css: {
+    transformer: "lightningcss",
+    lightningcss: {
+      targets: {
+        safari: SAFARI_14,
+        chrome: (90 << 16),
+        firefox: (90 << 16),
+      },
+    },
+  },
   build: {
+    target: ["es2020", "safari14"],
+    cssMinify: "lightningcss",
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
     rollupOptions: {
