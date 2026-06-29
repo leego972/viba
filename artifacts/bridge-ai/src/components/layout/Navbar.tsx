@@ -1,6 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Settings, FlaskConical, CreditCard, Zap, LayoutDashboard, Radio, Plus, Cpu, Rocket, Bot, ShieldCheck, Terminal, Wrench, ClipboardCheck, FolderInput, Activity, ShieldAlert, Globe } from "lucide-react";
+import { Settings, FlaskConical, CreditCard, Zap, LayoutDashboard, Radio, Plus, Cpu, Rocket, Bot, ShieldCheck, Terminal, Wrench, ClipboardCheck, FolderInput, Activity, ShieldAlert, Globe, Sun, Moon, Plug } from "lucide-react";
+import { useTheme } from "@/contexts/ThemeContext";
 
 interface NavLink {
   href: string;
@@ -13,7 +14,7 @@ interface NavLink {
 const NAV_LINKS: NavLink[] = [
   { href: "/dashboard",        label: "Dashboard",    icon: LayoutDashboard, match: (l) => l.startsWith("/dashboard") || l.startsWith("/sessions") },
   { href: "/workbench",        label: "Workbench",    icon: FlaskConical,    match: (l) => l.startsWith("/workbench") },
-  { href: "/providers",        label: "AI Providers", icon: Cpu,             match: (l) => l.startsWith("/providers") || l.startsWith("/doctor") },
+  { href: "/connections",      label: "Connections",  icon: Plug,            match: (l) => l.startsWith("/connections") || l.startsWith("/providers") || l.startsWith("/credentials") },
   { href: "/agent-console",    label: "Agent Console",icon: Terminal,        match: (l) => l.startsWith("/agent-console") },
   { href: "/tool-console",     label: "Tools",        icon: Wrench,          match: (l) => l.startsWith("/tool-console"), desktopOnly: true },
   { href: "/credentials",      label: "Vault",        icon: ShieldCheck,     match: (l) => l.startsWith("/credentials"), desktopOnly: true },
@@ -32,6 +33,7 @@ const NAV_LINKS: NavLink[] = [
 
 export function Navbar() {
   const [location] = useLocation();
+  const { theme, toggleTheme } = useTheme();
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-white/[0.06] bg-background/90 backdrop-blur-xl">
@@ -44,10 +46,9 @@ export function Navbar() {
           <div className="relative">
             <div className="absolute inset-0 rounded-lg bg-primary/20 blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             <img
-              src="/viba-logo.png"
-              alt="VIBA"
-              className="relative h-10 w-auto object-contain"
-              style={{ filter: 'drop-shadow(1px 0 0 rgba(0,0,0,0.75)) drop-shadow(-1px 0 0 rgba(0,0,0,0.75)) drop-shadow(0 1px 0 rgba(0,0,0,0.75)) drop-shadow(0 -1px 0 rgba(0,0,0,0.75))' }}
+              src="/virelle-logo.png"
+              alt="Virelle Studios"
+              className="relative h-14 w-auto object-contain"
             />
           </div>
         </Link>
@@ -98,6 +99,15 @@ export function Navbar() {
             );
           })}
         </nav>
+
+        {/* Theme toggle */}
+        <button
+          onClick={toggleTheme}
+          className="shrink-0 flex items-center justify-center h-9 w-9 rounded-lg border border-border/50 text-foreground/60 hover:text-foreground hover:bg-white/[0.06] transition-all duration-150"
+          title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+        >
+          {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+        </button>
 
         {/* New Session CTA */}
         <Link href="/sessions/new" className="shrink-0">
