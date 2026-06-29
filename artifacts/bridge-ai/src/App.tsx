@@ -36,6 +36,7 @@ import AssistedBrowserPage from "@/pages/assisted-browser";
 import OnboardingPage from "@/pages/onboarding";
 import ConnectionsPage from "@/pages/connections";
 import LaunchReadinessPage from "@/pages/launch-readiness";
+import ProofReportPage from "@/pages/proof-report";
 import CompletionPage, {
   CollaborationMapPage,
   DemoDoctorReport,
@@ -123,6 +124,7 @@ function GatedRouter() {
         <Route path="/onboarding" component={OnboardingPage} />
         <Route path="/connections" component={ConnectionsPage} />
         <Route path="/launch-readiness" component={LaunchReadinessPage} />
+        <Route path="/proof-report" component={ProofReportPage} />
         <Route component={NotFound} />
       </Switch>
     </AuthGuard>
@@ -161,39 +163,39 @@ function App() {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
   return (
+    <ErrorBoundary>
     <ThemeProvider>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={basePath}>
           <BypassHandler />
-          <ErrorBoundary>
-            <Switch>
-              {/* Public routes */}
-              <Route path="/login" component={LoginPage} />
-              <Route path="/signup" component={SignUpPage} />
-              <Route path="/forgot-password" component={ForgotPassword} />
-              <Route path="/reset-password" component={ResetPassword} />
-              <Route path="/verify-email" component={VerifyEmail} />
-              <Route path="/pricing" component={Pricing} />
-              <Route path="/checkout/success" component={CheckoutSuccess} />
-              {/* Public demo & share — no auth required */}
-              <Route path="/demo/doctor-report" component={DemoDoctorReport} />
-              <Route path="/demo/proof-report" component={DemoProofReport} />
-              <Route path="/demo" component={DemoPage} />
-              <Route path="/share/reports/:shareId" component={ShareReportPage} />
-              {/* Admin — self-gated by ADMIN_TOKEN, no session required */}
-              <Route path="/admin" component={Admin} />
-              {/* Home — public landing page */}
-              <Route path="/" component={Home} />
-              {/* All other routes — gated by AuthGuard */}
-              <Route component={GatedRouter} />
-            </Switch>
-          </ErrorBoundary>
+          <Switch>
+            {/* Public routes */}
+            <Route path="/login" component={LoginPage} />
+            <Route path="/signup" component={SignUpPage} />
+            <Route path="/forgot-password" component={ForgotPassword} />
+            <Route path="/reset-password" component={ResetPassword} />
+            <Route path="/verify-email" component={VerifyEmail} />
+            <Route path="/pricing" component={Pricing} />
+            <Route path="/checkout/success" component={CheckoutSuccess} />
+            {/* Public demo & share — no auth required */}
+            <Route path="/demo/doctor-report" component={DemoDoctorReport} />
+            <Route path="/demo/proof-report" component={DemoProofReport} />
+            <Route path="/demo" component={DemoPage} />
+            <Route path="/share/reports/:shareId" component={ShareReportPage} />
+            {/* Admin — self-gated by ADMIN_TOKEN, no session required */}
+            <Route path="/admin" component={Admin} />
+            {/* Home — public landing page */}
+            <Route path="/" component={Home} />
+            {/* All other routes — gated by AuthGuard */}
+            <Route component={GatedRouter} />
+          </Switch>
         </WouterRouter>
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>
     </ThemeProvider>
+    </ErrorBoundary>
   );
 }
 
