@@ -148,8 +148,9 @@ export async function runNextAgentStep(sessionId: number, userId = 0): Promise<{
 
   const [memory] = await db.select().from(memoryTable).where(eq(memoryTable.sessionId, sessionId));
 
-  // Fetch pending questions directed at this agent — session + recipient scoped,
-  // NOT filtered by taskId so cross-task questions are delivered (see agentComms.ts)
+  // Fetch pending questions directed at this agent for the current task.
+  // persistOutboundQuestions stores questions under the recipient's active task ID,
+  // so strict task-scoped filtering here still delivers cross-agent questions.
   const pendingQuestions = await processPendingQuestions(sessionId, assignedAgent.id, nextTask.id);
 
   // ── Complexity-based credit billing ─────────────────────────────────────────
@@ -296,26 +297,37 @@ export async function runNextAgentStep(sessionId: number, userId = 0): Promise<{
       "Agent blocked — initiating tool handoff",
     );
 
-    const { handoffMessage, siblingTask } = await handleToolHandoff(
+    const { handoffMessage, siblingTask, noToolAgent } = await handleToolHandoff(
       sessionId,
       nextTask,
       result,
       assignedAgent,
     );
 
-    await logAudit(sessionId, "tool_handoff", `${assignedAgent.name} blocked — tool handoff to capable agent`, {
-      originalTaskId: nextTask.id,
-      siblingTaskId: siblingTask.id,
-      blockedReason: result.blockedReason,
-    });
+    await logAudit(
+      sessionId,
+      "tool_handoff",
+      noToolAgent
+        ? `${assignedAgent.name} blocked — no tool-capable agent in session, task stays blocked`
+        : `${assignedAgent.name} blocked — tool handoff to capable agent`,
+      {
+        originalTaskId: nextTask.id,
+        siblingTaskId: siblingTask?.id ?? null,
+        blockedReason: result.blockedReason,
+        noToolAgent,
+      },
+    );
 
     // Update session cost
     const updatedCost = (session.estimatedCost ?? 0) + result.estimatedCost;
     await db.update(sessionsTable).set({ estimatedCost: updatedCost }).where(eq(sessionsTable.id, sessionId));
 
+    const updatedTasks: Task[] = [{ ...nextTask, status: "blocked_needs_tools" } as Task];
+    if (siblingTask) updatedTasks.push(siblingTask);
+
     return {
       newMessages: [handoffMessage],
-      updatedTasks: [{ ...nextTask, status: "blocked_needs_tools" } as Task, siblingTask],
+      updatedTasks,
       approvalRequired: false,
       approval: null,
     };
