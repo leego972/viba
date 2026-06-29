@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Zap, Shield, Blocks, ArrowRight, FileText, KeyRound, Stethoscope } from "lucide-react";
+import { Zap, Shield, Blocks, ArrowRight, FileText, KeyRound, Wrench, CheckCircle2 } from "lucide-react";
 
 export default function Home() {
   return (
@@ -12,10 +12,7 @@ export default function Home() {
           <img
             src="/viba-logo.png"
             alt="VIBA"
-            className="h-16 w-auto object-contain"
-            style={{
-              filter: "drop-shadow(0 0 0 1px rgba(0,0,0,0.08)) drop-shadow(0 1px 3px rgba(0,0,0,0.15))",
-            }}
+            className="h-12 w-auto object-contain"
           />
         </Link>
         <nav className="ml-auto flex gap-3">
@@ -31,7 +28,6 @@ export default function Home() {
       <main className="flex-1">
         {/* ─── Hero ─── */}
         <section className="w-full py-24 md:py-36 lg:py-48 relative overflow-hidden">
-          {/* Subtle background blobs — light-themed */}
           <div className="absolute inset-0 pointer-events-none"
             style={{ background: "linear-gradient(180deg, rgba(99,102,241,0.04) 0%, transparent 60%)" }} />
           <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-[900px] h-[500px] rounded-full pointer-events-none"
@@ -47,13 +43,13 @@ export default function Home() {
                     style={{ background: "#6366f1" }} />
                   <span className="relative inline-flex h-2 w-2 rounded-full" style={{ background: "#6366f1" }} />
                 </span>
-                Controlled AI Collaboration Platform
+                VIBA — Very Important Business Asset
               </div>
 
               {/* Headline */}
               <div className="space-y-6 max-w-4xl">
                 <h1 className="font-extrabold" style={{ fontSize: "clamp(2.5rem,7vw,4.5rem)", lineHeight: 1.1, letterSpacing: "-0.03em", color: "#111" }}>
-                  AI collaboration{" "}
+                  AI collaboration that{" "}
                   <br className="hidden sm:block" />
                   <span style={{
                     background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #4f46e5 100%)",
@@ -61,12 +57,12 @@ export default function Home() {
                     WebkitTextFillColor: "transparent",
                     backgroundClip: "text",
                   }}>
-                    for serious project work.
+                    tests, fixes, and ships software faster.
                   </span>
                 </h1>
                 <p className="mx-auto max-w-[680px] text-lg md:text-xl leading-relaxed font-light tracking-[-0.01em]"
                   style={{ color: "#6b7280" }}>
-                  VIBA coordinates specialist AI agents to diagnose, plan, build, review, and improve projects — with approvals, budget control, audit trails, and proof reports built in.
+                  Connect ChatGPT, Claude, Gemini, Perplexity, Manus, and Replit in one session. Assign specialist roles, run a structured workflow, and get evidence-backed reports a human owner can trust.
                 </p>
               </div>
 
@@ -77,18 +73,18 @@ export default function Home() {
                     className="relative flex items-center gap-2 h-12 px-8 rounded-xl text-base font-semibold text-white overflow-hidden transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
                     style={{ background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)", boxShadow: "0 0 24px rgba(99,102,241,0.3), 0 2px 8px rgba(0,0,0,0.12)" }}
                   >
-                    Start Controlled Workflow <ArrowRight className="h-4 w-4" />
+                    Start a VIBA session <ArrowRight className="h-4 w-4" />
                   </button>
                 </Link>
-                <Link href="/doctor">
+                <Link href="/launch-readiness">
                   <button
                     className="flex items-center gap-2 h-12 px-8 rounded-xl text-base font-medium transition-all duration-200"
                     style={{ border: "1px solid #d1d5db", background: "#f9fafb", color: "#374151" }}
                     onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "#f3f4f6"; }}
                     onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "#f9fafb"; }}
                   >
-                    <Stethoscope className="h-4 w-4" />
-                    Run Project Doctor
+                    <CheckCircle2 className="h-4 w-4" />
+                    View launch readiness
                   </button>
                 </Link>
               </div>
@@ -112,52 +108,70 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ─── Core value proposition ─── */}
+        {/* ─── Built for technical problem solving ─── */}
         <section className="w-full py-16 md:py-24" style={{ borderTop: "1px solid #e5e7eb", background: "#f9fafb" }}>
           <div className="container px-4 md:px-6">
             <div className="mx-auto flex max-w-2xl flex-col items-center gap-3 text-center mb-12">
               <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl" style={{ color: "#111" }}>
-                Collaboration is the engine. Control is the product.
+                Built for technical problem solving
               </h2>
               <p className="md:text-lg" style={{ color: "#6b7280" }}>
-                VIBA gives each AI agent a defined role, a budget limit, and an audit trail. The result is AI work you can review, hand over, and stand behind.
+                Every capability is designed to resolve real engineering failures — not to generate content or brainstorm ideas.
               </p>
             </div>
 
-            <div className="mx-auto grid max-w-5xl gap-5 lg:grid-cols-3">
+            <div className="mx-auto grid max-w-5xl gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {[
                 {
                   icon: Blocks,
-                  title: "Collaborate",
-                  desc: "Specialist agents divide work, ask focused questions, and route tasks to the right model or tool.",
+                  title: "Multi-agent orchestration",
+                  desc: "Route each task to the best available model or tool, then let agents compare results before final action.",
                   accent: "#4f46e5",
                 },
                 {
-                  icon: Shield,
-                  title: "Control",
-                  desc: "Approvals, budget caps, and workflow gates keep the owner in charge of cost and scope.",
-                  accent: "#7c3aed",
+                  icon: Wrench,
+                  title: "Build and deployment repair",
+                  desc: "Inspect logs, isolate the failing file, apply the smallest safe patch, rebuild, and verify the result.",
+                  accent: "#d97706",
                 },
                 {
                   icon: FileText,
-                  title: "Prove",
-                  desc: "Reports, receipts, findings, and audit trails make serious AI work easier to review and hand over.",
+                  title: "Self-audit and proof reports",
+                  desc: "Generate evidence-backed reports that separate code checks, build checks, runtime checks, deployment checks, and manual browser checks.",
                   accent: "#2563eb",
+                },
+                {
+                  icon: Shield,
+                  title: "Owner-controlled automation",
+                  desc: "High-risk actions such as repository changes, deployment changes, credential use, and security-sensitive work require explicit approval.",
+                  accent: "#7c3aed",
+                },
+                {
+                  icon: Zap,
+                  title: "Provider-aware routing",
+                  desc: "Use low-cost models for simple reasoning and reserve premium providers or GitHub tools for tasks that need them.",
+                  accent: "#dc2626",
+                },
+                {
+                  icon: CheckCircle2,
+                  title: "Production readiness",
+                  desc: "Check environment variables, health endpoints, public routes, frontend output, backend output, and unresolved launch risks.",
+                  accent: "#059669",
                 },
               ].map(({ icon: Icon, title, desc, accent }) => (
                 <div
                   key={title}
-                  className="group relative flex flex-col items-center gap-4 rounded-2xl p-8 text-center transition-all duration-250"
+                  className="group relative flex flex-col gap-4 rounded-2xl p-7 transition-all duration-250"
                   style={{ border: "1px solid #e5e7eb", background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}
                 >
                   <div className="absolute top-0 left-0 right-0 h-[2px] rounded-t-2xl"
                     style={{ background: `linear-gradient(90deg, transparent, ${accent}55, transparent)` }} />
-                  <div className="flex h-14 w-14 items-center justify-center rounded-xl"
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl"
                     style={{ background: `${accent}14`, border: `1px solid ${accent}30` }}>
-                    <Icon className="h-6 w-6" style={{ color: accent }} />
+                    <Icon className="h-5 w-5" style={{ color: accent }} />
                   </div>
                   <div className="space-y-2">
-                    <h3 className="text-lg font-bold tracking-tight" style={{ color: "#111" }}>{title}</h3>
+                    <h3 className="text-base font-bold tracking-tight" style={{ color: "#111" }}>{title}</h3>
                     <p className="text-sm leading-relaxed" style={{ color: "#6b7280" }}>{desc}</p>
                   </div>
                 </div>
@@ -166,8 +180,30 @@ export default function Home() {
           </div>
         </section>
 
+        {/* ─── No fake green lights (trust section) ─── */}
+        <section className="w-full py-14 md:py-20" style={{ borderTop: "1px solid #e5e7eb", background: "#fff" }}>
+          <div className="container px-4 md:px-6">
+            <div className="mx-auto max-w-3xl rounded-2xl p-10 text-center"
+              style={{ border: "1px solid rgba(99,102,241,0.2)", background: "linear-gradient(135deg, rgba(99,102,241,0.03) 0%, rgba(124,58,237,0.03) 100%)" }}>
+              <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold mb-5"
+                style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)", color: "#4f46e5" }}>
+                Honesty by design
+              </div>
+              <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl mb-4" style={{ color: "#111" }}>
+                No fake green lights
+              </h2>
+              <p className="text-lg leading-relaxed mb-6" style={{ color: "#6b7280" }}>
+                VIBA must not claim READY unless build, startup, health, public route, and deployment evidence are present. Missing browser verification or missing optional provider keys must be reported as warnings, not hidden.
+              </p>
+              <p className="text-sm font-medium" style={{ color: "#9ca3af" }}>
+                VIBA is designed for owners who need technical issues resolved with evidence, not guesswork.
+              </p>
+            </div>
+          </div>
+        </section>
+
         {/* ─── How it works ─── */}
-        <section className="w-full py-16 md:py-20" style={{ borderTop: "1px solid #e5e7eb", background: "#fff" }}>
+        <section className="w-full py-16 md:py-20" style={{ borderTop: "1px solid #e5e7eb", background: "#f9fafb" }}>
           <div className="container px-4 md:px-6">
             <div className="mx-auto flex max-w-2xl flex-col items-center gap-3 text-center mb-10">
               <div className="inline-block rounded-full px-3 py-1 text-xs font-semibold"
@@ -183,7 +219,6 @@ export default function Home() {
             </div>
             <div className="mx-auto max-w-3xl rounded-2xl overflow-hidden"
               style={{ border: "1px solid #e5e7eb", boxShadow: "0 4px 24px rgba(0,0,0,0.07)" }}>
-              {/* Terminal header */}
               <div className="flex items-center gap-3 px-4 py-3"
                 style={{ borderBottom: "1px solid #e5e7eb", background: "#f9fafb" }}>
                 <div className="flex gap-1.5">
@@ -219,7 +254,6 @@ export default function Home() {
                     <p className="text-sm leading-relaxed" style={{ color: textColor, opacity: 0.9 }}>{text}</p>
                   </div>
                 ))}
-                {/* Approval gate banner */}
                 <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
                   style={{ border: "1px solid #fcd34d", background: "#fffbeb" }}>
                   <Shield className="h-4 w-4 shrink-0" style={{ color: "#d97706" }} />
@@ -254,7 +288,6 @@ export default function Home() {
               </div>
 
               <div className="grid md:grid-cols-2 gap-5">
-                {/* Groq card */}
                 <div className="rounded-2xl p-7 flex flex-col gap-4"
                   style={{ border: "1px solid rgba(220,38,38,0.25)", background: "#fff" }}>
                   <div className="flex items-center gap-3">
@@ -286,7 +319,6 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* BYOK card */}
                 <div className="rounded-2xl p-7 flex flex-col gap-4"
                   style={{ border: "1px solid #e5e7eb", background: "#fff" }}>
                   <div className="flex items-center gap-3">
@@ -335,15 +367,14 @@ export default function Home() {
       <footer className="w-full" style={{ borderTop: "1px solid #e5e7eb", background: "#f9fafb" }}>
         <div className="container flex flex-col sm:flex-row items-center justify-between gap-3 py-6 md:h-16">
           <div className="flex items-center gap-2">
-            <img src="/viba-logo.png" alt="VIBA" className="h-8 w-auto"
-              style={{ opacity: 0.6, filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.1))" }} />
+            <img src="/viba-logo.png" alt="VIBA" className="h-10 w-auto object-contain" />
             <p className="text-sm" style={{ color: "#9ca3af" }}>
-              VIBA · Controlled AI Collaboration Platform
+              VIBA is designed for owners who need technical issues resolved with evidence, not guesswork.
             </p>
           </div>
           <div className="flex items-center gap-4 text-xs" style={{ color: "#9ca3af" }}>
             <Link href="/pricing" className="hover:text-gray-600 transition-colors">Pricing</Link>
-            <Link href="/doctor" className="hover:text-gray-600 transition-colors">Project Doctor</Link>
+            <Link href="/launch-readiness" className="hover:text-gray-600 transition-colors">Launch Readiness</Link>
             <Link href="/settings" className="hover:text-gray-600 transition-colors">Settings</Link>
             <Link href="/dashboard" className="hover:text-gray-600 transition-colors">Dashboard</Link>
             <span style={{ color: "#d1d5db" }}>|</span>
