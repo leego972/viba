@@ -12,6 +12,28 @@ import { reserveCreditsForAction, chargeVibaToolCall, chargeCollaboration } from
 import { executeToolAction } from "./toolActionBroker";
 
 const APPROVAL_TASK_TYPES = new Set(["final_qa"]);
+
+/**
+ * Maps an adapter's completionStatus to the DB task status string.
+ *
+ * "in_progress" must map to "planned" (not "review") so the task is re-picked
+ * on the next runNextAgentStep call. Replit/Manus adapters return "in_progress"
+ * when their workspace task times out mid-execution with partial progress —
+ * those tasks must remain retryable, not get stranded in review.
+ *
+ * Exported for unit-testing the mapping in isolation.
+ */
+export function resolveTaskDbStatus(
+  completionStatus: "in_progress" | "complete" | "needs_review" | "approval_required",
+): string {
+  switch (completionStatus) {
+    case "complete":         return "complete";
+    case "needs_review":     return "review";
+    case "in_progress":      return "planned"; // still running — reset for retry
+    case "approval_required":
+    default:                 return "review";
+  }
+}
 const MAX_TURNS = 12;
 
 /**
@@ -574,14 +596,7 @@ export async function runNextAgentStep(sessionId: number, userId = 0): Promise<{
   }
 
   // ── Update task status ─────────────────────────────────────────────────────
-  let newTaskStatus: string;
-  if (result.completionStatus === "complete") {
-    newTaskStatus = "complete";
-  } else if (result.completionStatus === "needs_review") {
-    newTaskStatus = "review";
-  } else {
-    newTaskStatus = "review";
-  }
+  const newTaskStatus = resolveTaskDbStatus(result.completionStatus);
 
   const [updatedTask] = await db
     .update(tasksTable)
