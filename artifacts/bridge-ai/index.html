@@ -1,17 +1,36 @@
 <!DOCTYPE html>
-  <html lang="en">
-    <head>
-      <meta charset="UTF-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <title>VIBA — Collaborative Multi-Agent Orchestration System</title>
-      <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-      <link rel="preconnect" href="https://fonts.googleapis.com">
-      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    </head>
-    <body>
-      <div id="root"></div>
-      <script type="module" src="/src/main.tsx"></script>
-    </body>
-  </html>
-  
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VIBA — Collaborative Multi-Agent Orchestration System</title>
+    <link rel="icon" type="image/png" href="/viba-logo.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..800;1,14..32,300..700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script>
+      window.onerror = function(msg, src, line, col, err) {
+        var el = document.getElementById('viba-error');
+        if (!el) { el = document.createElement('div'); el.id = 'viba-error'; document.body.appendChild(el); }
+        el.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#c00;color:#fff;padding:1rem;font:14px monospace;z-index:9999;white-space:pre-wrap;';
+        el.textContent = 'JS Error: ' + msg + '\n' + src + ':' + line + ':' + col + (err ? '\n' + err.stack : '');
+      };
+      window.addEventListener('unhandledrejection', function(e) {
+        var el = document.getElementById('viba-error');
+        if (!el) { el = document.createElement('div'); el.id = 'viba-error'; document.body.appendChild(el); }
+        el.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#c00;color:#fff;padding:1rem;font:14px monospace;z-index:9999;white-space:pre-wrap;';
+        el.textContent = 'Unhandled rejection: ' + (e.reason && e.reason.stack ? e.reason.stack : String(e.reason));
+      });
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>
+      <div style="padding:2rem;font-family:sans-serif;text-align:center">
+        <h1>VIBA requires JavaScript</h1>
+        <p>Please enable JavaScript in your browser to use VIBA.</p>
+      </div>
+    </noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
