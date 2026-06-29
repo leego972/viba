@@ -31,7 +31,7 @@ Project Goal: ${input.projectGoal}
 Shared Memory Summary: ${input.memorySummary || "No previous context."}
 
 Your task: ${input.taskInstruction}
-${buildAdapterJsonSchema(this.canUseTools, input.pendingQuestions)}`;
+${buildAdapterJsonSchema(this.canUseTools, input.pendingQuestions, this.canUseTools)}`;
 
     const messages = input.previousMessages.map((m) => ({
       role: (m.role === "user" ? "user" : "assistant") as "user" | "assistant",
