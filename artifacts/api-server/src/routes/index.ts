@@ -44,8 +44,13 @@ import costControlRouter from "./costControl";
 import betaChaosRouter from "./betaChaos";
 import launchReadinessRouter from "./launchReadiness";
 import proofReportRouter from "./proofReport";
+import valueRouterRouter from "./valueRouter";
 import betaTesterRouter from "./betaTester";
 import accountRouter from "./account";
+import seoRouter from "./seo";
+import marketingRouter from "./marketing";
+import advertisingRouter from "./advertising";
+import contentCreatorRouter from "./contentCreator";
 
 const router: IRouter = Router();
 
@@ -95,7 +100,12 @@ router.use(costControlRouter);
 router.use(betaChaosRouter);
 router.use(launchReadinessRouter);
 router.use(proofReportRouter);
+router.use(valueRouterRouter);
 router.use(betaTesterRouter);
 router.use(accountRouter);
+router.use(seoRouter);
+router.use(marketingRouter);
+router.use(advertisingRouter);
+router.use(contentCreatorRouter);
 
 export default router;
