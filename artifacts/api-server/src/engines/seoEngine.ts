@@ -370,3 +370,64 @@ export async function submitBatchToGoogleIndexing(urls: string[]) {
   logger.info(`[SEO] Google batch indexing submission: ${urls.length} URLs`);
   return { submitted: urls.length, success: true, timestamp: new Date().toISOString() };
 }
+
+// ── SEO Scheduler ────────────────────────────────────────────────────────────
+const SEO_SCHEDULER_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+let _seoSchedulerInterval: ReturnType<typeof setInterval> | null = null;
+let _seoSchedulerLastRun: Date | null = null;
+let _seoSchedulerNextRun: Date | null = null;
+let _seoSchedulerCycleCount = 0;
+let _seoSchedulerRunning = false;
+
+async function runSeoSchedulerCycle() {
+  if (_seoSchedulerRunning) return;
+  _seoSchedulerRunning = true;
+  try {
+    logSeoEvent("scheduler_cycle_start", `Cycle #${_seoSchedulerCycleCount + 1}`);
+    await runScheduledSeoOptimization();
+    _seoSchedulerCycleCount++;
+    _seoSchedulerLastRun = new Date();
+    _seoSchedulerNextRun = new Date(Date.now() + SEO_SCHEDULER_INTERVAL_MS);
+    logSeoEvent("scheduler_cycle_complete", `Score updated. Next run: ${_seoSchedulerNextRun.toISOString()}`);
+    logger.info(`[SEO] Scheduler cycle #${_seoSchedulerCycleCount} complete. Next: ${_seoSchedulerNextRun.toISOString()}`);
+  } catch (err) {
+    logger.error(`[SEO] Scheduler cycle failed: ${String(err)}`);
+    logSeoEvent("scheduler_cycle_error", String(err));
+  } finally {
+    _seoSchedulerRunning = false;
+  }
+}
+
+export function startSeoScheduler() {
+  if (_seoSchedulerInterval) return; // already running
+  logger.info("[SEO] Auto-scheduler started (24h interval)");
+  logSeoEvent("scheduler_started", "SEO auto-scheduler activated");
+  // Run immediately on start, then every 24h
+  runSeoSchedulerCycle().catch((err) => logger.error(`[SEO] Initial cycle failed: ${String(err)}`));
+  _seoSchedulerNextRun = new Date(Date.now() + SEO_SCHEDULER_INTERVAL_MS);
+  _seoSchedulerInterval = setInterval(() => {
+    runSeoSchedulerCycle().catch((err) => logger.error(`[SEO] Scheduler cycle error: ${String(err)}`));
+  }, SEO_SCHEDULER_INTERVAL_MS);
+}
+
+export function stopSeoScheduler() {
+  if (_seoSchedulerInterval) {
+    clearInterval(_seoSchedulerInterval);
+    _seoSchedulerInterval = null;
+    _seoSchedulerNextRun = null;
+    logger.info("[SEO] Auto-scheduler stopped");
+    logSeoEvent("scheduler_stopped", "SEO auto-scheduler deactivated");
+  }
+}
+
+export function getSeoSchedulerStatus() {
+  return {
+    active: _seoSchedulerInterval !== null,
+    cycleCount: _seoSchedulerCycleCount,
+    lastRun: _seoSchedulerLastRun?.toISOString() ?? null,
+    nextRun: _seoSchedulerNextRun?.toISOString() ?? null,
+    intervalHours: SEO_SCHEDULER_INTERVAL_MS / (60 * 60 * 1000),
+    currentlyRunning: _seoSchedulerRunning,
+  };
+}
