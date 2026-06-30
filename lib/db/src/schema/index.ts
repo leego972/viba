@@ -15,3 +15,5 @@ export * from "./creditTransactions";
 export * from "./teamMembers";
 export * from "./clients";
 export * from "./clientReports";
+export * from "./marketing";
+export * from "./contentCreator";
