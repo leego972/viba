@@ -14,7 +14,7 @@ echo "[build] node=$(node -v)"
 echo "[build] pnpm=$(pnpm --version 2>/dev/null || echo 'unknown')"
 
 echo "[build] installing dependencies..."
-pnpm install --no-frozen-lockfile --prod=false
+pnpm install --frozen-lockfile --prod=false
 echo "[build] install done"
 
 echo "[build] skipping DB schema push — tables are created by server startup migrations"
