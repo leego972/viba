@@ -4,9 +4,12 @@ set -e
 export NODE_ENV=production
 export NPM_CONFIG_PRODUCTION=false
 
-echo "[build] ensuring pnpm@10.26.1 is active..."
-corepack enable 2>/dev/null || true
-corepack prepare pnpm@10.26.1 --activate 2>/dev/null || npm install -g pnpm@10.26.1 --quiet
+# Render sets up pnpm via PNPM_VERSION env var before this script runs.
+# Only install manually if pnpm is somehow missing.
+if ! command -v pnpm &>/dev/null; then
+  echo "[build] pnpm not in PATH — installing via npm..."
+  npm install -g pnpm@10.26.1 --quiet
+fi
 
 echo "[build] node=$(node -v)"
 echo "[build] pnpm=$(pnpm --version 2>/dev/null || echo 'unknown')"
