@@ -445,6 +445,20 @@ loadCircuitStateFromDb()
   .then(() => {
     listenWithRetry(1);
 
+    // Self-ping keep-alive — prevents free-tier hosts (e.g. Render) from
+    // spinning down the service after inactivity. Set SELF_PING_URL to the
+    // public URL of this service (e.g. https://viba.guru) to enable.
+    const selfPingUrl = process.env["SELF_PING_URL"];
+    if (selfPingUrl) {
+      const PING_INTERVAL_MS = 10 * 60 * 1000; // every 10 minutes
+      setInterval(() => {
+        fetch(`${selfPingUrl}/api/healthz`)
+          .then(() => logger.info({ url: selfPingUrl }, "Keep-alive ping OK"))
+          .catch((err: unknown) => logger.warn({ err, url: selfPingUrl }, "Keep-alive ping failed"));
+      }, PING_INTERVAL_MS);
+      logger.info({ url: selfPingUrl, intervalMin: 10 }, "Keep-alive pinging enabled");
+    }
+
     // Run retention cleaner immediately on start, then every 24h
     // Purges accounts past their 6-month post-deletion retention window
     const { runRetentionCleaner } = require("./lib/archiveService") as typeof import("./lib/archiveService");
