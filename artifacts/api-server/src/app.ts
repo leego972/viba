@@ -40,6 +40,7 @@ app.use(securityHeaders());
 // To add Archibald's domain: set CORS_ALLOWED_ORIGINS=https://archibald.example.com in Railway.
 const PRODUCTION_ALLOWED_ORIGINS = new Set([
   "https://viba.guru",
+  "https://www.viba.guru",
   ...(process.env.CORS_ALLOWED_ORIGINS ?? "")
     .split(",")
     .map((s) => s.trim())
@@ -218,8 +219,18 @@ app.use(
 
       next();
     } catch (err) {
-      logger.error({ err }, "Credit gate error — failing open to avoid blocking users");
-      next(); // Fail open — billing errors must not block legitimate users
+      // BUG 9 FIX: In production, billing errors must NOT grant free access — fail closed with 503.
+      // In development/test, fail open so local workflows aren't blocked by missing Stripe config.
+      if (process.env.NODE_ENV === "production") {
+        logger.error({ err }, "Credit gate error in production — failing closed (503)");
+        res.status(503).json({
+          error: "billing_unavailable",
+          message: "Billing service is temporarily unavailable. Please try again in a moment.",
+        });
+        return;
+      }
+      logger.warn({ err }, "Credit gate error in dev/test — failing open");
+      next();
     }
   },
 );
@@ -228,6 +239,7 @@ app.use(
 // Sets approval to rejected, pauses the session for human review.
 app.post("/api/sessions/:id/reject-approval", apiLimiter, requireSession, async (req, res): Promise<void> => {
   const sessionId = parseInt(String(req.params.id ?? ""), 10);
+  const userId = req.session?.userId;
   const body = req.body as { approvalId?: unknown; rejectedReason?: unknown };
   const approvalId = typeof body.approvalId === "number" ? body.approvalId : null;
   const reason = typeof body.rejectedReason === "string" ? body.rejectedReason.trim().slice(0, 1000) : "";
@@ -236,6 +248,16 @@ app.post("/api/sessions/:id/reject-approval", apiLimiter, requireSession, async 
     return;
   }
   try {
+    // BUG 7 FIX: verify session ownership before mutating — WHERE user_id = $N ensures
+    // another authenticated user cannot reject approvals on a session they don't own.
+    const { rows: owned } = await pool.query<{ id: number }>(
+      `SELECT id FROM sessions WHERE id = $1 AND user_id = $2`,
+      [sessionId, userId],
+    );
+    if (!owned[0]) {
+      res.status(403).json({ error: "forbidden", message: "You do not own this session." });
+      return;
+    }
     await pool.query(
       `UPDATE approvals
          SET status = 'rejected', rejected_at = NOW(), rejected_reason = $1, updated_at = NOW()
@@ -257,13 +279,19 @@ app.post("/api/sessions/:id/reject-approval", apiLimiter, requireSession, async 
 // ─── Session: reopen (resume completed session) ───────────────────────────────
 app.post("/api/sessions/:id/reopen", apiLimiter, requireSession, async (req, res): Promise<void> => {
   const sessionId = parseInt(String(req.params.id ?? ""), 10);
+  const userId = req.session?.userId;
   if (!sessionId) { res.status(400).json({ error: "invalid session id" }); return; }
   try {
-    await pool.query(
+    // BUG 7 FIX: scope update to user_id so another user cannot reopen someone else's session.
+    const { rowCount } = await pool.query(
       `UPDATE sessions SET status = 'active', updated_at = NOW()
-       WHERE id = $1 AND status IN ('completed', 'paused', 'stopped')`,
-      [sessionId],
+       WHERE id = $1 AND user_id = $2 AND status IN ('completed', 'paused', 'stopped')`,
+      [sessionId, userId],
     );
+    if (!rowCount) {
+      res.status(403).json({ error: "forbidden", message: "Session not found or you do not own it." });
+      return;
+    }
     req.log?.info?.({ sessionId }, "Session reopened");
     res.json({ ok: true });
   } catch (err) {
@@ -278,13 +306,16 @@ app.post("/api/sessions/:id/reopen", apiLimiter, requireSession, async (req, res
 // If ALL agents refuse, the endpoint returns passed: false with combined reasons.
 app.post("/api/sessions/:id/safety-vote", apiLimiter, requireSession, async (req, res): Promise<void> => {
   const sessionId = parseInt(String(req.params.id ?? ""), 10);
+  const userId = req.session?.userId;
   if (!sessionId) { res.status(400).json({ error: "invalid session id" }); return; }
   try {
+    // BUG 7 FIX: include user_id in the WHERE clause so a user cannot trigger a safety vote
+    // (and consequently mutate agents) on a session belonging to another user.
     const { rows: sessionRows } = await pool.query<{ goal: string }>(
-      "SELECT goal FROM sessions WHERE id = $1", [sessionId],
+      "SELECT goal FROM sessions WHERE id = $1 AND user_id = $2", [sessionId, userId],
     );
     const sessionRow = sessionRows[0];
-    if (!sessionRow) { res.status(404).json({ error: "session not found" }); return; }
+    if (!sessionRow) { res.status(403).json({ error: "forbidden", message: "Session not found or you do not own it." }); return; }
 
     const { rows: agentRows } = await pool.query<{
       id: number; name: string; role: string; provider: string; can_use_tools: boolean; is_mock: boolean;
