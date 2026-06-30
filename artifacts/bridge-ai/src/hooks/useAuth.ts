@@ -7,10 +7,18 @@ export interface AuthUser {
 }
 
 async function fetchMe(): Promise<AuthUser | null> {
-  const res = await fetch("/api/auth/me", { credentials: "include" });
-  if (res.status === 401) return null;
-  if (!res.ok) return null;
-  return res.json() as Promise<AuthUser>;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch("/api/auth/me", { credentials: "include", signal: controller.signal });
+    if (res.status === 401) return null;
+    if (!res.ok) return null;
+    return res.json() as Promise<AuthUser>;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export function useAuth() {
