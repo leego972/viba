@@ -13,15 +13,18 @@ fi
 
 echo "[build] node=$(node -v)"
 echo "[build] pnpm=$(pnpm --version 2>/dev/null || echo 'unknown')"
+echo "[build] platform=$(node -e 'console.log(process.platform+"-"+process.arch)')"
 
 echo "[build] installing dependencies..."
-pnpm install --frozen-lockfile --prod=false
+# --no-frozen-lockfile: lets pnpm pick the correct platform-specific native
+# binaries (lightningcss, esbuild, @tailwindcss/oxide) for whatever ABI
+# Render's build container uses (glibc vs musl, x64 vs arm64).
+pnpm install --no-frozen-lockfile --prod=false
 echo "[build] install done"
 
-echo "[build] skipping DB schema push — tables are created by server startup migrations"
-
 echo "[build] building bridge-ai..."
-pnpm --filter @workspace/bridge-ai run build
+# NODE_OPTIONS cap: prevents OOM on memory-constrained build instances.
+NODE_OPTIONS='--max-old-space-size=512' pnpm --filter @workspace/bridge-ai run build
 echo "[build] bridge-ai done"
 
 echo "[build] building api-server..."
