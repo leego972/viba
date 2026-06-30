@@ -36,6 +36,9 @@ import {
   generateEEATStructuredData,
   generateSitemapIndex,
   submitBatchToGoogleIndexing,
+  startSeoScheduler,
+  stopSeoScheduler,
+  getSeoSchedulerStatus,
 } from "../engines/seoEngine";
 
 const router: IRouter = Router();
@@ -179,6 +182,21 @@ router.get("/api/seo/sitemap-index", requireAdmin, async (_req, res): Promise<vo
 router.post("/api/seo/google-indexing", requireAdmin, async (req, res): Promise<void> => {
   const { urls } = req.body as { urls: string[] };
   res.json(await submitBatchToGoogleIndexing(urls ?? []));
+});
+
+// ── Scheduler control ────────────────────────────────────────────────────────
+router.get("/api/seo/scheduler/status", requireAdmin, async (_req, res): Promise<void> => {
+  res.json(getSeoSchedulerStatus());
+});
+
+router.post("/api/seo/scheduler/start", requireAdmin, async (_req, res): Promise<void> => {
+  startSeoScheduler();
+  res.json({ success: true, message: "SEO scheduler started", ...getSeoSchedulerStatus() });
+});
+
+router.post("/api/seo/scheduler/stop", requireAdmin, async (_req, res): Promise<void> => {
+  stopSeoScheduler();
+  res.json({ success: true, message: "SEO scheduler stopped", ...getSeoSchedulerStatus() });
 });
 
 export default router;
