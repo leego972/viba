@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Settings, FlaskConical, CreditCard, Zap, LayoutDashboard, Radio, Plus, Cpu, Rocket, Bot, ShieldCheck, Terminal, Wrench, ClipboardCheck, FolderInput, Activity, ShieldAlert, Globe, Sun, Moon, Plug } from "lucide-react";
+import { Settings, FlaskConical, CreditCard, Zap, LayoutDashboard, Radio, Plus, Cpu, Rocket, Bot, ShieldCheck, Terminal, Wrench, ClipboardCheck, FolderInput, Activity, ShieldAlert, Globe, Sun, Moon, Plug, Search, Megaphone, PenTool, Building2 } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 
 interface NavLink {
@@ -29,6 +29,10 @@ const NAV_LINKS: NavLink[] = [
   { href: "/security-center",  label: "Security Center", icon: ShieldAlert,  match: (l) => l.startsWith("/security-center"), desktopOnly: true },
   { href: "/domain-setup",     label: "Domain Setup",    icon: Globe,        match: (l) => l.startsWith("/domain-setup"),     desktopOnly: true },
   { href: "/launch-readiness", label: "Launch Readiness", icon: Rocket,       match: (l) => l.startsWith("/launch-readiness"),  desktopOnly: true },
+  { href: "/seo",              label: "SEO",              icon: Search,        match: (l) => l.startsWith("/seo"),              desktopOnly: true },
+  { href: "/advertising",      label: "Advertising",      icon: Megaphone,     match: (l) => l.startsWith("/advertising"),      desktopOnly: true },
+  { href: "/content-creator",  label: "Content Creator",  icon: PenTool,       match: (l) => l.startsWith("/content-creator"),  desktopOnly: true },
+  { href: "/brand-outreach",   label: "Brand Outreach",   icon: Building2,     match: (l) => l.startsWith("/brand-outreach"),   desktopOnly: true },
 ];
 
 export function Navbar() {
