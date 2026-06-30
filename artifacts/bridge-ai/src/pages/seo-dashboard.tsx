@@ -10,7 +10,7 @@ import {
   Search, TrendingUp, BarChart3, Globe, Link, FileText,
   CheckCircle2, XCircle, AlertCircle, Zap, Activity, Eye,
   Target, RefreshCw, AlertTriangle, ExternalLink, Hash,
-  BookOpen, Clock, Loader2,
+  BookOpen, Clock, Loader2, Power, PowerOff,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -66,22 +66,40 @@ export default function SeoDashboard() {
   const [eventLog, setEventLog] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
+  const [scheduler, setScheduler] = useState<{ active: boolean; cycleCount: number; lastRun: string | null; nextRun: string | null; intervalHours: number; currentlyRunning: boolean } | null>(null);
+  const [schedulerToggling, setSchedulerToggling] = useState(false);
 
   async function loadAll() {
     setLoading(true);
     try {
-      const [s, h, k, v, e] = await Promise.all([
+      const [s, h, k, v, e, sched] = await Promise.all([
         api("/api/seo/status"),
         api("/api/seo/health"),
         api("/api/seo/keywords"),
         api("/api/seo/web-vitals"),
         api("/api/seo/event-log?limit=20"),
+        api("/api/seo/scheduler/status"),
       ]);
-      setStatus(s); setHealth(h); setKeywords(Array.isArray(k) ? k : []); setVitals(v); setEventLog(Array.isArray(e) ? e : []);
+      setStatus(s); setHealth(h); setKeywords(Array.isArray(k) ? k : []); setVitals(v); setEventLog(Array.isArray(e) ? e : []); setScheduler(sched);
     } catch (err) {
       toast({ title: "Load failed", description: String(err), variant: "destructive" });
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function toggleScheduler() {
+    if (!scheduler) return;
+    setSchedulerToggling(true);
+    try {
+      const endpoint = scheduler.active ? "/api/seo/scheduler/stop" : "/api/seo/scheduler/start";
+      const r = await api(endpoint, { method: "POST" });
+      setScheduler(r);
+      toast({ title: r.active ? "Scheduler started" : "Scheduler stopped", description: r.active ? `Runs every ${r.intervalHours}h automatically` : "SEO auto-runs paused" });
+    } catch (err) {
+      toast({ title: "Error", description: String(err), variant: "destructive" });
+    } finally {
+      setSchedulerToggling(false);
     }
   }
 
@@ -128,10 +146,47 @@ export default function SeoDashboard() {
             <Button variant="outline" size="sm" onClick={loadAll}><RefreshCw className="h-4 w-4 mr-1" /> Refresh</Button>
             <Button size="sm" onClick={runOptimize} disabled={running} className="bg-amber-500 hover:bg-amber-600 text-black">
               {running ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Zap className="h-4 w-4 mr-1" />}
-              Run Optimization
+              Run Now
             </Button>
           </div>
         </div>
+
+        {/* Scheduler status banner */}
+        {scheduler && (
+          <div className={`flex items-center justify-between rounded-lg border px-4 py-3 ${scheduler.active ? "border-green-500/30 bg-green-500/5" : "border-border/50 bg-card/50"}`}>
+            <div className="flex items-center gap-3">
+              <span className={`relative flex h-2.5 w-2.5 ${scheduler.active ? "block" : "hidden"}`}>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" />
+              </span>
+              {!scheduler.active && <span className="h-2.5 w-2.5 rounded-full bg-zinc-600" />}
+              <div>
+                <p className="text-sm font-medium flex items-center gap-2">
+                  SEO Auto-Scheduler
+                  <Badge variant={scheduler.active ? "default" : "secondary"} className={scheduler.active ? "bg-green-500/20 text-green-400 border-green-500/30" : ""}>
+                    {scheduler.currentlyRunning ? "Running…" : scheduler.active ? "Live" : "Offline"}
+                  </Badge>
+                  {scheduler.active && <span className="text-xs text-muted-foreground">· every {scheduler.intervalHours}h</span>}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {scheduler.active
+                    ? `Cycle #${scheduler.cycleCount} complete${scheduler.nextRun ? ` · Next: ${new Date(scheduler.nextRun).toLocaleString()}` : ""}`
+                    : "Auto-optimization is paused. Start it to run SEO every 24 hours automatically."}
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant={scheduler.active ? "outline" : "default"}
+              onClick={toggleScheduler}
+              disabled={schedulerToggling}
+              className={scheduler.active ? "border-red-500/40 text-red-400 hover:bg-red-500/10" : "bg-green-600 hover:bg-green-700 text-white"}
+            >
+              {schedulerToggling ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : scheduler.active ? <PowerOff className="h-3.5 w-3.5 mr-1" /> : <Power className="h-3.5 w-3.5 mr-1" />}
+              {scheduler.active ? "Stop Scheduler" : "Start Scheduler"}
+            </Button>
+          </div>
+        )}
 
         {/* Overview */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
