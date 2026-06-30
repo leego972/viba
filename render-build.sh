@@ -17,9 +17,7 @@ echo "[build] installing dependencies..."
 pnpm install --no-frozen-lockfile --prod=false
 echo "[build] install done"
 
-echo "[build] pushing DB schema (non-fatal)..."
-timeout 45 pnpm --filter @workspace/db run push-force 2>&1 || echo "[build] db push exited non-zero — continuing"
-echo "[build] db push done"
+echo "[build] skipping DB schema push — tables are created by server startup migrations"
 
 echo "[build] building bridge-ai..."
 pnpm --filter @workspace/bridge-ai run build
