@@ -4,11 +4,9 @@ set -e
 export NODE_ENV=production
 export NPM_CONFIG_PRODUCTION=false
 
-# Ensure pnpm is available — Render may need corepack activated explicitly
-if ! command -v pnpm &>/dev/null; then
-  echo "[build] pnpm not in PATH — enabling via corepack..."
-  corepack enable pnpm || npm install -g pnpm@10.24.0
-fi
+echo "[build] ensuring pnpm@10.26.1 is active..."
+corepack enable 2>/dev/null || true
+corepack prepare pnpm@10.26.1 --activate 2>/dev/null || npm install -g pnpm@10.26.1 --quiet
 
 echo "[build] node=$(node -v)"
 echo "[build] pnpm=$(pnpm --version 2>/dev/null || echo 'unknown')"
