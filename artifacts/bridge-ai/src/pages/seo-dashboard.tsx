@@ -14,12 +14,15 @@ import {
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
-const ADMIN_TOKEN = localStorage.getItem("viba_admin_token") ?? "";
+
+function getAdminToken(): string {
+  try { return localStorage.getItem("viba_admin_token") ?? ""; } catch { return ""; }
+}
 
 async function api(path: string, opts?: RequestInit) {
   const res = await fetch(`${BASE}${path}`, {
     ...opts,
-    headers: { "Authorization": `Bearer ${ADMIN_TOKEN}`, "Content-Type": "application/json", ...opts?.headers },
+    headers: { "Authorization": `Bearer ${getAdminToken()}`, "Content-Type": "application/json", ...opts?.headers },
   });
   if (!res.ok) throw new Error(`API error ${res.status}`);
   return res.json();
