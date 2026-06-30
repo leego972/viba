@@ -9,6 +9,8 @@ import { logger } from "./lib/logger";
 import { pool } from "@workspace/db";
 import { loadCircuitStateFromDb, validateCircuitBreakerEnv } from "./lib/adapterRetry";
 import { provisionStripeProducts } from "./lib/billing";
+import { startSeoScheduler } from "./engines/seoEngine";
+import { startAdvertisingScheduler } from "./engines/advertisingEngine";
 import bcrypt from "bcryptjs";
 
 // Fail fast if circuit breaker env vars are set to invalid values.
@@ -458,6 +460,10 @@ loadCircuitStateFromDb()
       }, PING_INTERVAL_MS);
       logger.info({ url: selfPingUrl, intervalMin: 10 }, "Keep-alive pinging enabled");
     }
+
+    // Start autonomous schedulers
+    startSeoScheduler();
+    startAdvertisingScheduler();
 
     // Run retention cleaner immediately on start, then every 24h
     // Purges accounts past their 6-month post-deletion retention window
