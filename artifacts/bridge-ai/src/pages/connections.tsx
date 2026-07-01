@@ -358,27 +358,27 @@ export default function ConnectionsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {[
-                { label: "API Keys & Tokens", desc: "Saved provider keys, custom tokens", href: "/credentials" },
-                { label: "Custom AI Keys", desc: "Additional AI provider credentials", href: "/credentials" },
-                { label: "Deployment Credentials", desc: "Railway, Render, GitHub tokens", href: "/credentials" },
-              ].map(({ label, desc, href }) => (
-                <Link key={label} href={href}>
-                  <div className="flex items-center justify-between rounded-xl border border-white/[0.07] bg-white/[0.02] px-4 py-3 hover:border-white/[0.14] hover:bg-white/[0.04] transition-all cursor-pointer group">
-                    <div>
-                      <p className="text-sm font-medium">{label}</p>
-                      <p className="text-xs text-muted-foreground">{desc}</p>
-                    </div>
-                    <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
-                  </div>
+            <div className="space-y-4">
+              <div className="grid gap-2">
+                <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] px-4 py-3">
+                  <p className="text-sm font-medium">API Keys & Tokens</p>
+                  <p className="text-xs text-muted-foreground">OpenAI, Claude, Groq, Gemini, GitHub, Railway, Render, and custom tokens.</p>
+                </div>
+                <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] px-4 py-3">
+                  <p className="text-sm font-medium">Deployment Credentials</p>
+                  <p className="text-xs text-muted-foreground">Deployment provider tokens and service IDs are kept in the same encrypted vault.</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Link href="/credentials?action=add">
+                  <Button size="sm" className="gap-1.5 text-xs">
+                    <Key className="h-3.5 w-3.5" />
+                    Add credential
+                  </Button>
                 </Link>
-              ))}
-              <div className="pt-1">
                 <Link href="/credentials">
                   <Button variant="outline" size="sm" className="gap-1.5 text-xs">
-                    <Key className="h-3.5 w-3.5" />
-                    Open full vault
+                    Open vault
                     <ArrowRight className="h-3.5 w-3.5" />
                   </Button>
                 </Link>
