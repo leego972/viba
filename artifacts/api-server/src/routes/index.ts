@@ -6,6 +6,7 @@ import statsRouter from "./stats";
 import circuitStatusRouter from "./circuitStatus";
 import workbenchRouter from "../workbench/serverRoutes";
 import authRouter from "./auth";
+import adminBootstrapRouter from "./adminBootstrap";
 import stripeRouter from "./stripe";
 import billingRouter from "./billing";
 import githubRouter from "./github";
@@ -56,6 +57,7 @@ const router: IRouter = Router();
 
 // auth routes are registered first and bypass the ACCESS_TOKEN gate in app.ts
 router.use(authRouter);
+router.use(adminBootstrapRouter);
 router.use(healthRouter);
 router.use(sessionAccessRouter);
 router.use(coreDefaultsRouter);
