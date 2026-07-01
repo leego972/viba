@@ -1,7 +1,8 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Settings, FlaskConical, CreditCard, Zap, LayoutDashboard, Radio, Plus, Cpu, Rocket, Bot, ShieldCheck, Terminal, Wrench, ClipboardCheck, FolderInput, Activity, ShieldAlert, Globe, Sun, Moon, Plug, Search, Megaphone, PenTool, Building2 } from "lucide-react";
+import { Settings, FlaskConical, CreditCard, Zap, LayoutDashboard, Radio, Plus, Cpu, Rocket, Bot, ShieldCheck, Terminal, Wrench, ClipboardCheck, FolderInput, Activity, ShieldAlert, Globe, Sun, Moon, Plug, Search, Megaphone, PenTool, Building2, Coins } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useAuth } from "@/hooks/useAuth";
 
 interface NavLink {
   href: string;
@@ -35,6 +36,54 @@ const NAV_LINKS: NavLink[] = [
   { href: "/brand-outreach",   label: "Brand Outreach",   icon: Building2,     match: (l) => l.startsWith("/brand-outreach"),   desktopOnly: true },
 ];
 
+function formatCredits(value: number): string {
+  if (!Number.isFinite(value)) return "0";
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M`;
+  if (value >= 10_000) return `${Math.floor(value / 1000)}k`;
+  return value.toLocaleString();
+}
+
+function CreditStatusPill() {
+  const { user } = useAuth();
+  if (!user) return null;
+
+  const credits = Number(user.creditsRemaining ?? 0);
+  const low = credits > 0 && credits <= 100;
+  const empty = credits <= 0;
+  const subscriptionStatus = user.subscriptionStatus ?? "none";
+
+  return (
+    <Link href="/billing" className="shrink-0">
+      <div
+        className={`hidden sm:flex items-center gap-1.5 h-9 px-3 rounded-lg border text-xs font-semibold transition-all hover:bg-white/[0.06] ${
+          empty
+            ? "border-red-500/35 bg-red-500/10 text-red-300"
+            : low
+              ? "border-amber-500/35 bg-amber-500/10 text-amber-300"
+              : "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+        }`}
+        title={`Credits remaining: ${credits.toLocaleString()} · Plan: ${subscriptionStatus}`}
+      >
+        <Coins className="h-4 w-4" />
+        <span>{formatCredits(credits)}</span>
+        <span className="hidden lg:inline text-current/70">credits</span>
+      </div>
+      <div
+        className={`sm:hidden flex items-center justify-center h-9 w-9 rounded-lg border ${
+          empty
+            ? "border-red-500/35 bg-red-500/10 text-red-300"
+            : low
+              ? "border-amber-500/35 bg-amber-500/10 text-amber-300"
+              : "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+        }`}
+        title={`Credits remaining: ${credits.toLocaleString()}`}
+      >
+        <Coins className="h-4 w-4" />
+      </div>
+    </Link>
+  );
+}
+
 export function Navbar() {
   const [location] = useLocation();
   const { theme, toggleTheme } = useTheme();
@@ -61,14 +110,14 @@ export function Navbar() {
         <div className="hidden md:block h-5 w-px bg-border/50 shrink-0" />
 
         {/* Desktop nav */}
-        <nav className="hidden md:flex items-center gap-0.5 flex-1">
+        <nav className="hidden md:flex items-center gap-0.5 flex-1 overflow-x-auto">
           {NAV_LINKS.map(({ href, label, icon: Icon, match }) => {
             const active = match(location);
             return (
               <Link
                 key={href}
                 href={href}
-                className={`relative flex items-center gap-1.5 h-9 px-3.5 rounded-lg text-sm font-medium transition-all duration-150 ${
+                className={`relative flex items-center gap-1.5 h-9 px-3.5 rounded-lg text-sm font-medium transition-all duration-150 whitespace-nowrap ${
                   active
                     ? "text-foreground bg-primary/10 border border-primary/25 shadow-[0_0_12px_rgba(99,102,241,0.15)]"
                     : "text-foreground/55 hover:text-foreground/90 hover:bg-white/[0.05] border border-transparent"
@@ -103,6 +152,8 @@ export function Navbar() {
             );
           })}
         </nav>
+
+        <CreditStatusPill />
 
         {/* Theme toggle */}
         <button
