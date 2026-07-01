@@ -11,11 +11,23 @@ import {
 
 const router: IRouter = Router();
 
-type Provider = "github" | "railway" | "railway_mcp" | "openai" | "anthropic" | "gemini" | "perplexity" | "groq" | "replit" | "manus";
+type Provider =
+  | "github"
+  | "railway"
+  | "render"
+  | "railway_mcp"
+  | "openai"
+  | "anthropic"
+  | "gemini"
+  | "perplexity"
+  | "groq"
+  | "replit"
+  | "manus";
 
 const REQUIRED_ENV: Record<Provider, string[]> = {
   github: ["GITHUB_TOKEN"],
   railway: ["RAILWAY_TOKEN"],
+  render: ["RENDER_API_KEY", "RENDER_SERVICE_ID"],
   railway_mcp: ["RAILWAY_MCP_URL", "RAILWAY_TOKEN"],
   openai: ["OPENAI_API_KEY"],
   anthropic: ["ANTHROPIC_API_KEY"],
@@ -84,6 +96,10 @@ async function validateProvider(provider: Provider, token: string): Promise<{ ok
   if (provider === "railway") return validateRailway(token);
   if (provider === "groq") return validateGroq(token);
   if (provider === "railway_mcp") return { ok: true, message: "RAILWAY_MCP_URL is saved. Tool discovery should be tested through /connections/railway-mcp/tools." };
+  if (provider === "render") {
+    if (token.length < 8) return { ok: false, message: "RENDER_API_KEY looks too short. Replace RENDER_API_KEY." };
+    return { ok: true, message: "Render credential is saved. Render API validation/deploy actions can use this token once the Render adapter is enabled." };
+  }
   if (token.length < 8) return { ok: false, message: `${REQUIRED_ENV[provider][0]} looks too short. Replace ${REQUIRED_ENV[provider][0]}.` };
   return { ok: true, message: `${REQUIRED_ENV[provider][0]} is saved. Live provider call validation can be added per provider.` };
 }
@@ -161,8 +177,8 @@ router.get("/credentials/:provider/current", async (req, res): Promise<void> => 
 
 router.post("/credentials/browser-profile-note", async (req, res): Promise<void> => {
   const body = req.body as { provider?: unknown };
-  if (!isProvider(body.provider) || !["github", "railway"].includes(body.provider)) {
-    res.status(400).json({ error: "provider must be github or railway" });
+  if (!isProvider(body.provider) || !["github", "railway", "render"].includes(body.provider)) {
+    res.status(400).json({ error: "provider must be github, railway, or render" });
     return;
   }
   await logVibaEvent({ userId: userId(req), eventType: "browser_profile_requested", provider: body.provider, status: "pending", message: `${body.provider} browser access requested. API token connection remains preferred.` });
@@ -173,10 +189,6 @@ router.post("/credentials/browser-profile-note", async (req, res): Promise<void>
   });
 });
 
-/**
- * GET /api/credentials/vault-list
- * Returns metadata for all saved credentials. Raw values NEVER returned.
- */
 router.get("/credentials/vault-list", async (req, res): Promise<void> => {
   const uid = userId(req);
   const all = await listVibaCredentials(uid);
@@ -197,10 +209,6 @@ router.get("/credentials/vault-list", async (req, res): Promise<void> => {
   res.json({ credentials, rawValueReturned: false });
 });
 
-/**
- * GET /api/credentials/access-logs
- * Returns access log entries for the current user. No raw values.
- */
 router.get("/credentials/access-logs", async (req, res): Promise<void> => {
   const uid = userId(req);
   const provider = typeof req.query.provider === "string" ? req.query.provider : undefined;
@@ -220,10 +228,6 @@ router.get("/credentials/access-logs", async (req, res): Promise<void> => {
   res.json({ logs, rawValuesReturned: false });
 });
 
-/**
- * DELETE /api/credentials
- * Deletes a saved credential by (provider, kind, label). Cannot recover.
- */
 router.delete("/credentials", async (req, res): Promise<void> => {
   const body = req.body as { provider?: unknown; kind?: unknown; label?: unknown };
   const provider = typeof body.provider === "string" ? body.provider.trim() : "";
