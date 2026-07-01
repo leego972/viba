@@ -4,6 +4,9 @@ export interface AuthUser {
   id: number;
   email: string;
   name: string | null;
+  subscriptionStatus?: string;
+  creditsRemaining?: number;
+  creditsPeriodEnd?: string | null;
 }
 
 async function fetchMe(): Promise<AuthUser | null> {
@@ -27,8 +30,8 @@ export function useAuth() {
     queryFn: fetchMe,
     retry: 1,
     retryDelay: 800,
-    staleTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: false,
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: true,
   });
 
   return {
