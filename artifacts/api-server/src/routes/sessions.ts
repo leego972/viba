@@ -231,6 +231,16 @@ router.post("/sessions", async (req, res): Promise<void> => {
   const createdAgents = [];
   for (const agentInput of agents) {
     const role = agentInput.role || autoRoles[agentInput.provider] || "Strategist";
+    // credentialLabel is an extension field not in the generated schema — read from raw body
+    const rawBodyAgents = Array.isArray((req.body as Record<string, unknown>)?.["agents"])
+      ? ((req.body as Record<string, unknown>)["agents"] as Array<Record<string, unknown>>)
+      : [];
+    const rawBodyAgent: Record<string, unknown> | undefined = rawBodyAgents[createdAgents.length];
+    const rawLabelStr: unknown = rawBodyAgent?.["credentialLabel"];
+    const rawLabel: string = typeof rawLabelStr === "string"
+      ? rawLabelStr.trim().slice(0, 80) || "default"
+      : "default";
+
     const [agent] = await db
       .insert(agentsTable)
       .values({
@@ -241,6 +251,7 @@ router.post("/sessions", async (req, res): Promise<void> => {
         capabilities: getCapabilities(agentInput.provider),
         canUseTools: agentInput.canUseTools ?? TOOL_CAPABLE_PROVIDERS.has(agentInput.provider.toLowerCase()),
         isMock: agentInput.isMock,
+        credentialLabel: rawLabel,
       })
       .returning();
     if (agent) {
@@ -859,8 +870,9 @@ router.delete("/sessions/:id/banner-dismissal", async (req, res): Promise<void> 
       db.select().from(messagesTable).where(eq(messagesTable.sessionId, id)).orderBy(asc(messagesTable.id)),
     ]);
 
+    // "complete" is the canonical task status in the tasks schema (not "completed")
     const taskLines = tasks.map((t) =>
-      `- [${t.status === "completed" ? "x" : " "}] **${t.title}** (${t.type}) — ${t.status}`
+      `- [${t.status === "complete" ? "x" : " "}] **${t.title}** (${t.type}) — ${t.status}`
     );
 
     const messageLines = messages.flatMap((m) => [
