@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Mail, Lock, ArrowRight, Loader2, Eye, EyeOff } from "lucide-react";
+import { Mail, Lock, ArrowRight, Loader2, Eye, EyeOff, MailCheck } from "lucide-react";
 import SocialLoginButtons from "@/components/SocialLoginButtons";
 import { useLocation } from "wouter";
+
 
 export default function LoginPage() {
   const [, setLocation] = useLocation();
@@ -12,10 +13,14 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [unverified, setUnverified] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendSent, setResendSent] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setUnverified(false);
     setLoading(true);
     try {
       const res = await fetch("/api/auth/login", {
@@ -24,8 +29,12 @@ export default function LoginPage() {
         credentials: "include",
         body: JSON.stringify({ email: email.trim(), password }),
       });
-      const data = await res.json() as { user?: { email?: string; name?: string }; error?: string };
+      const data = await res.json() as { user?: { email?: string; name?: string }; error?: string; code?: string };
       if (!res.ok) {
+        if (data.code === "EMAIL_NOT_VERIFIED") {
+          setUnverified(true);
+          return;
+        }
         setError(data.error ?? "Invalid email or password.");
         return;
       }
@@ -40,65 +49,131 @@ export default function LoginPage() {
     }
   };
 
+  const handleResend = async () => {
+    setResending(true);
+    try {
+      await fetch("/api/auth/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      setResendSent(true);
+    } catch {
+      // silent — endpoint always returns ok
+    } finally {
+      setResending(false);
+    }
+  };
+
   return (
-    <div className="min-h-[100dvh] bg-[#0a0e1a] flex items-center justify-center p-4">
-      <div className="fixed inset-0 bg-gradient-to-br from-blue-950/60 via-[#0a0e1a] to-indigo-950/40 pointer-events-none" />
-      <div
-        className="fixed inset-0 opacity-[0.03] pointer-events-none"
-        style={{
-          backgroundImage: `linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)`,
-          backgroundSize: "40px 40px",
-        }}
-      />
-      <div className="relative z-10 w-full max-w-md">
-        <div className="flex flex-col items-center gap-3 mb-8">
-          <div className="relative">
-            <div className="absolute inset-0 bg-blue-500/20 blur-3xl rounded-full" />
-            <img
-              src="/viba-logo.png"
-              alt="VIBA"
-              className="relative h-20 w-auto object-contain drop-shadow-2xl"
-              style={{ filter: 'drop-shadow(1px 0 0 rgba(0,0,0,0.75)) drop-shadow(-1px 0 0 rgba(0,0,0,0.75)) drop-shadow(0 1px 0 rgba(0,0,0,0.75)) drop-shadow(0 -1px 0 rgba(0,0,0,0.75))' }}
-            />
-          </div>
-          <p className="text-sm text-gray-400">Collaborative Multi-Agent Orchestration</p>
+    <div className="min-h-[100dvh] flex" style={{ background: "#f0f4f8" }}>
+      <div className="flex flex-col items-center justify-center w-full p-4">
+
+        {/* Logo */}
+        <div className="flex flex-col items-center gap-2 mb-8">
+          <img
+            src="/viba-logo.png"
+            alt="VIBA"
+            className="h-28 w-auto object-contain rounded-xl"
+            style={{ backgroundColor: "white" }}
+          />
+          <span
+            className="text-xs font-semibold tracking-[0.2em] uppercase"
+            style={{ color: "#0f766e", letterSpacing: "0.18em" }}
+          >
+            Collaborative · Multi-Agent · Orchestration
+          </span>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-2xl p-6 space-y-5">
-          <div className="text-center space-y-1">
-            <h2 className="text-xl font-bold text-white">Sign in to your account</h2>
-            <p className="text-sm text-gray-400">Welcome back — enter your credentials to continue.</p>
+        {/* Card */}
+        <div
+          className="w-full max-w-sm bg-white p-8 space-y-6"
+          style={{ border: "1px solid #d1d9e0", borderRadius: "4px", boxShadow: "0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)" }}
+        >
+          <div className="space-y-0.5">
+            <h1 className="text-lg font-semibold tracking-tight" style={{ color: "#0f172a" }}>
+              Sign in
+            </h1>
+            <p className="text-sm" style={{ color: "#64748b" }}>
+              Access your VIBA workspace
+            </p>
           </div>
 
           <SocialLoginButtons mode="login" returnPath="/dashboard" />
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-white/10" />
+              <div className="w-full" style={{ borderTop: "1px solid #e2e8f0" }} />
             </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-[#0f1320] px-2 text-gray-500">or sign in with email</span>
+            <div className="relative flex justify-center">
+              <span className="bg-white px-3 text-xs font-medium tracking-wider uppercase" style={{ color: "#94a3b8" }}>
+                or
+              </span>
             </div>
           </div>
 
+          {unverified && (
+            <div
+              className="px-4 py-3.5 space-y-3"
+              style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "4px" }}
+            >
+              <div className="flex items-start gap-2.5">
+                <MailCheck className="w-4 h-4 mt-0.5 shrink-0" style={{ color: "#92400e" }} />
+                <div>
+                  <p className="text-sm font-semibold" style={{ color: "#92400e" }}>Check your inbox</p>
+                  <p className="text-xs mt-0.5" style={{ color: "#78350f" }}>
+                    Please verify your email before signing in. Click the link we sent to <strong>{email}</strong>.
+                  </p>
+                </div>
+              </div>
+              {resendSent ? (
+                <p className="text-xs font-medium" style={{ color: "#065f46" }}>✓ Verification email sent — check your inbox.</p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void handleResend()}
+                  disabled={resending}
+                  className="text-xs font-semibold underline underline-offset-2 disabled:opacity-50"
+                  style={{ color: "#b45309" }}
+                >
+                  {resending ? "Sending…" : "Resend verification email"}
+                </button>
+              )}
+            </div>
+          )}
+
           {error && (
-            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+            <div
+              className="px-3 py-2.5 text-sm"
+              style={{ background: "#fff1f2", border: "1px solid #fecdd3", borderRadius: "4px", color: "#be123c" }}
+            >
               {error}
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <label htmlFor="login-email" className="block text-sm font-medium text-gray-300">Email</label>
+            <div className="space-y-1.5">
+              <label htmlFor="login-email" className="block text-xs font-semibold tracking-wide uppercase" style={{ color: "#475569" }}>
+                Email
+              </label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "#94a3b8" }} />
                 <input
                   id="login-email"
                   type="email"
                   placeholder="you@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 rounded-md bg-white/5 border border-white/10 text-white placeholder:text-gray-500 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 text-base md:text-sm"
+                  className="w-full pl-9 pr-4 py-2.5 text-sm"
+                  style={{
+                    background: "#f8fafc",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: "4px",
+                    color: "#0f172a",
+                    outline: "none",
+                  }}
+                  onFocus={e => { e.target.style.borderColor = "#0d9488"; e.target.style.boxShadow = "0 0 0 2px rgba(13,148,136,0.12)"; }}
+                  onBlur={e => { e.target.style.borderColor = "#cbd5e1"; e.target.style.boxShadow = "none"; }}
                   required
                   autoComplete="email"
                   autoFocus
@@ -106,24 +181,46 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label htmlFor="login-password" className="block text-sm font-medium text-gray-300">Password</label>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label htmlFor="login-password" className="block text-xs font-semibold tracking-wide uppercase" style={{ color: "#475569" }}>
+                  Password
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setLocation("/forgot-password")}
+                  className="text-xs font-medium"
+                  style={{ color: "#0d9488" }}
+                >
+                  Forgot?
+                </button>
+              </div>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "#94a3b8" }} />
                 <input
                   id="login-password"
                   type={showPassword ? "text" : "password"}
-                  placeholder="Enter your password"
+                  placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-10 py-2.5 rounded-md bg-white/5 border border-white/10 text-white placeholder:text-gray-500 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 text-base md:text-sm"
+                  className="w-full pl-9 pr-10 py-2.5 text-sm"
+                  style={{
+                    background: "#f8fafc",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: "4px",
+                    color: "#0f172a",
+                    outline: "none",
+                  }}
+                  onFocus={e => { e.target.style.borderColor = "#0d9488"; e.target.style.boxShadow = "0 0 0 2px rgba(13,148,136,0.12)"; }}
+                  onBlur={e => { e.target.style.borderColor = "#cbd5e1"; e.target.style.boxShadow = "none"; }}
                   required
                   autoComplete="current-password"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2"
+                  style={{ color: "#94a3b8" }}
                   tabIndex={-1}
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -134,33 +231,30 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 h-11 rounded-md bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 text-white font-medium text-sm transition-all mt-2"
+              className="w-full flex items-center justify-center gap-2 h-10 text-sm font-semibold text-white transition-opacity disabled:opacity-60"
+              style={{ background: "#0d9488", borderRadius: "4px", letterSpacing: "0.01em" }}
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
               {loading ? "Signing in…" : "Sign In"}
             </button>
           </form>
 
-          <div className="flex items-center justify-between pt-1">
-            <p className="text-sm text-gray-500">
-              Don&apos;t have an account?{" "}
-              <button
-                type="button"
-                onClick={() => setLocation("/signup")}
-                className="text-blue-400 hover:text-blue-300 underline-offset-4 hover:underline transition-colors font-medium"
-              >
-                Sign up free
-              </button>
-            </p>
+          <p className="text-center text-sm" style={{ color: "#64748b" }}>
+            No account?{" "}
             <button
               type="button"
-              onClick={() => setLocation("/forgot-password")}
-              className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
+              onClick={() => setLocation("/signup")}
+              className="font-semibold"
+              style={{ color: "#0d9488" }}
             >
-              Forgot password?
+              Create one free
             </button>
-          </div>
+          </p>
         </div>
+
+        <p className="mt-6 text-xs" style={{ color: "#94a3b8" }}>
+          © {new Date().getFullYear()} VIBA. All rights reserved.
+        </p>
       </div>
     </div>
   );
