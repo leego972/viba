@@ -421,8 +421,21 @@ function ProviderSection() {
     );
   }
 
+  const hasRealKey = configured.some(p => p.id !== "groq");
+
   return (
     <div className="space-y-3">
+      {!hasRealKey && providers.length > 0 && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-500/25 bg-amber-500/8 px-4 py-3.5">
+          <Key className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-amber-300">Add your first API key to unlock live sessions</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Groq is included free and ready to go. Connect OpenAI, Claude, or Gemini below to run sessions with more powerful models.
+            </p>
+          </div>
+        </div>
+      )}
       {configured.length > 0 && (
         <div className="space-y-2">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Connected</p>
