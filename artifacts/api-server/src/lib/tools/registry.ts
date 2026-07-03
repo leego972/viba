@@ -8,6 +8,7 @@
  *   Web tools       — web_fetch, npm_search, npm_package_info (always on)
  *   GitHub tools    — read/write repo files (when githubToken provided)
  *   Browser tools   — navigate, screenshot, click, type, extract (VIBA Chromium)
+ *   User Browser    — navigate, screenshot, click, type, extract (user's real Chrome via CDP)
  *   Vision tools    — analyze_image, compare_frames, check_person, check_background (Groq free)
  *   Continuity tools — run_check, score_report (Groq free vision)
  *   Site operator   — site_login, site_api_call, site_fill_and_submit (vault + Chromium)
@@ -19,6 +20,7 @@ import { getBrowserTools } from "./browser";
 import { getVisionTools } from "./vision";
 import { getContinuityTools } from "./continuity";
 import { getSiteOperatorTools } from "./siteOperator";
+import { getUserBrowserTools } from "./userBrowser";
 
 export interface ToolContext {
   githubToken?: string;
@@ -68,6 +70,14 @@ function buildAllTools(ctx: ToolContext): RegistryTool[] {
     });
   }
 
+  // ── User Browser tools — user's real Chrome via CDP (when connected) ──────
+  for (const t of getUserBrowserTools()) {
+    tools.push({
+      definition: t.definition,
+      execute: (args) => t.execute(args, ctx.userId ?? null),
+    });
+  }
+
   // ── GitHub tools — only when token is provided ───────────────────────────
   if (ctx.githubToken) {
     const ghCtx: GitHubContext = { token: ctx.githubToken };
@@ -95,6 +105,7 @@ export function getToolSummary(ctx: ToolContext): Record<string, string[]> {
   const summary: Record<string, string[]> = {
     web: [],
     browser: [],
+    user_browser: [],
     vision: [],
     continuity: [],
     site_operator: [],
@@ -103,6 +114,7 @@ export function getToolSummary(ctx: ToolContext): Record<string, string[]> {
   for (const t of tools) {
     const name = t.definition.function.name;
     if (name.startsWith("web_") || name.startsWith("npm_")) summary["web"]!.push(name);
+    else if (name.startsWith("user_browser_")) summary["user_browser"]!.push(name);
     else if (name.startsWith("browser_")) summary["browser"]!.push(name);
     else if (name.startsWith("vision_")) summary["vision"]!.push(name);
     else if (name.startsWith("continuity_")) summary["continuity"]!.push(name);
