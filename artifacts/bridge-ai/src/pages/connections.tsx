@@ -65,12 +65,26 @@ function StatusBadge({ status }: { status: ProviderInfo["status"] }) {
   );
 }
 
+interface SavedKeyEntry { label: string; status: string; updatedAt: string; }
+interface AddKeyForm { label: string; value: string; saving: boolean; open: boolean; showVal: boolean; }
+
 function ProviderSection() {
   const { toast } = useToast();
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [localState, setLocalState] = useState<Record<string, ProviderLocalState>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [keysByProvider, setKeysByProvider] = useState<Record<string, SavedKeyEntry[]>>({});
+  const [addKeyForms, setAddKeyForms] = useState<Record<string, AddKeyForm>>({});
+
+  const fetchProviderKeys = useCallback(async (providerId: string) => {
+    try {
+      const res = await fetch(`${BASE}/api/providers/${providerId}/keys`, { credentials: "include" });
+      if (!res.ok) return;
+      const data = await res.json() as { keys: SavedKeyEntry[] };
+      setKeysByProvider(prev => ({ ...prev, [providerId]: data.keys }));
+    } catch {}
+  }, []);
 
   const fetchProviders = useCallback(async () => {
     try {
@@ -181,7 +195,11 @@ function ProviderSection() {
               variant="ghost"
               size="sm"
               className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
-              onClick={() => setExpanded(prev => ({ ...prev, [provider.id]: !prev[provider.id] }))}
+              onClick={() => {
+                const opening = !(expanded[provider.id] ?? false);
+                setExpanded(prev => ({ ...prev, [provider.id]: opening }));
+                if (opening) void fetchProviderKeys(provider.id);
+              }}
             >
               {isExpanded ? "Collapse" : (provider.status === "not_configured" ? "Connect" : "Edit")}
             </Button>
@@ -263,6 +281,140 @@ function ProviderSection() {
                 Save
               </Button>
             </div>
+
+            {/* ── Multi-account keys ─────────────────────────────────── */}
+            {(keysByProvider[provider.id]?.length ?? 0) > 0 && (
+              <div className="space-y-2 pt-1 border-t border-white/[0.06]">
+                <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                  <Key className="h-3 w-3" /> Saved accounts
+                </p>
+                {keysByProvider[provider.id]!.map((entry) => (
+                  <div key={entry.label} className="flex items-center justify-between rounded-lg border border-white/[0.07] bg-white/[0.02] px-3 py-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0" />
+                      <span className="text-xs font-medium truncate">{entry.label}</span>
+                      <span className="text-[10px] text-muted-foreground/60">
+                        {entry.label === "default" ? "Default slot" : "Named slot"}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      title={`Remove "${entry.label}" key`}
+                      onClick={async () => {
+                        try {
+                          const res = await fetch(`${BASE}/api/providers/${provider.id}/keys/${encodeURIComponent(entry.label)}`, {
+                            method: "DELETE", credentials: "include",
+                          });
+                          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                          toast({ title: `Key "${entry.label}" removed` });
+                          void fetchProviderKeys(provider.id);
+                          void fetchProviders();
+                        } catch {
+                          toast({ title: "Delete failed", variant: "destructive" });
+                        }
+                      }}
+                      className="text-muted-foreground/50 hover:text-destructive transition-colors p-0.5"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Add another account */}
+            {provider.id !== "local" && provider.hasKey !== undefined && (
+              <div className="pt-1 border-t border-white/[0.06]">
+                {!(addKeyForms[provider.id]?.open) ? (
+                  <button
+                    type="button"
+                    onClick={() => setAddKeyForms(prev => ({
+                      ...prev,
+                      [provider.id]: { label: "", value: "", saving: false, open: true, showVal: false },
+                    }))}
+                    className="text-xs text-primary/70 hover:text-primary flex items-center gap-1 transition-colors"
+                  >
+                    + Add another account
+                  </button>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">Add another API key</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">Account label</Label>
+                        <Input
+                          placeholder="e.g. Account 2"
+                          value={addKeyForms[provider.id]?.label ?? ""}
+                          onChange={(e) => setAddKeyForms(prev => ({
+                            ...prev,
+                            [provider.id]: { ...prev[provider.id]!, label: e.target.value },
+                          }))}
+                          className="h-8 text-xs bg-background/50"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">API key</Label>
+                        <div className="relative">
+                          <Input
+                            type={addKeyForms[provider.id]?.showVal ? "text" : "password"}
+                            placeholder="Paste key…"
+                            value={addKeyForms[provider.id]?.value ?? ""}
+                            onChange={(e) => setAddKeyForms(prev => ({
+                              ...prev,
+                              [provider.id]: { ...prev[provider.id]!, value: e.target.value },
+                            }))}
+                            className="h-8 pr-8 text-xs font-mono bg-background/50"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setAddKeyForms(prev => ({
+                              ...prev,
+                              [provider.id]: { ...prev[provider.id]!, showVal: !prev[provider.id]!.showVal },
+                            }))}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          >
+                            {addKeyForms[provider.id]?.showVal ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        variant="ghost" size="sm" className="h-7 text-xs"
+                        onClick={() => setAddKeyForms(prev => ({ ...prev, [provider.id]: { ...prev[provider.id]!, open: false } }))}
+                      >Cancel</Button>
+                      <Button
+                        size="sm" className="h-7 text-xs gap-1"
+                        disabled={!addKeyForms[provider.id]?.label.trim() || !addKeyForms[provider.id]?.value.trim() || addKeyForms[provider.id]?.saving}
+                        onClick={async () => {
+                          const form = addKeyForms[provider.id]!;
+                          setAddKeyForms(prev => ({ ...prev, [provider.id]: { ...prev[provider.id]!, saving: true } }));
+                          try {
+                            const res = await fetch(`${BASE}/api/providers/${provider.id}/keys`, {
+                              method: "POST",
+                              credentials: "include",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ label: form.label.trim(), key: form.value.trim() }),
+                            });
+                            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                            toast({ title: `Key "${form.label}" saved` });
+                            setAddKeyForms(prev => ({ ...prev, [provider.id]: { label: "", value: "", saving: false, open: false, showVal: false } }));
+                            void fetchProviderKeys(provider.id);
+                            void fetchProviders();
+                          } catch {
+                            toast({ title: "Save failed", variant: "destructive" });
+                            setAddKeyForms(prev => ({ ...prev, [provider.id]: { ...prev[provider.id]!, saving: false } }));
+                          }
+                        }}
+                      >
+                        {addKeyForms[provider.id]?.saving ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                        Save key
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
