@@ -8,10 +8,45 @@ import type { AgentTaskResult } from "./adapters/interface";
 import { runAdapterWithRetry } from "./adapterRetry";
 import { handleToolHandoff } from "./toolHandoff";
 import { processPendingQuestions, persistOutboundQuestions, persistAnswers } from "./agentComms";
-import { reserveCreditsForAction } from "./actionCreditBilling";
+import { reserveCreditsForAction, chargeVibaToolCall, chargeCollaboration } from "./actionCreditBilling";
+import { executeToolAction } from "./toolActionBroker";
 
 const APPROVAL_TASK_TYPES = new Set(["final_qa"]);
+
+/**
+ * Maps an adapter's completionStatus to the DB task status string.
+ *
+ * "in_progress" must map to "planned" (not "review") so the task is re-picked
+ * on the next runNextAgentStep call. Replit/Manus adapters return "in_progress"
+ * when their workspace task times out mid-execution with partial progress —
+ * those tasks must remain retryable, not get stranded in review.
+ *
+ * Exported for unit-testing the mapping in isolation.
+ */
+export function resolveTaskDbStatus(
+  completionStatus: "in_progress" | "complete" | "needs_review" | "approval_required",
+): string {
+  switch (completionStatus) {
+    case "complete":         return "complete";
+    case "needs_review":     return "review";
+    case "in_progress":      return "planned"; // still running — reset for retry
+    case "approval_required":
+    default:                 return "review";
+  }
+}
 const MAX_TURNS = 12;
+
+/**
+ * Providers that handle tool execution natively inside their own adapter loop
+ * (Replit agent URL polling, Manus workspace API, Railway MCP).
+ * These are excluded from the VIBA broker tool loop in agentLoop — they must
+ * NOT be routed through the broker for their own tools.
+ * They ARE still charged per VIBA broker tool call if they explicitly request one.
+ */
+const NATIVE_EXECUTION_PROVIDERS = new Set(["replit", "manus", "railway"]);
+
+/** Max VIBA broker tool calls per task step for a single text agent. */
+const MAX_BROKER_LOOPS = 3;
 const RETRY_DELAY_MS = 1_500;
 const LIVE_STEP_TIMEOUT_MS = 120_000; // 2 min for live API calls
 const SIM_STEP_TIMEOUT_MS  = 30_000;  // 30 s for simulation steps
@@ -201,7 +236,7 @@ export async function runNextAgentStep(sessionId: number, userId = 0): Promise<{
   try {
     retryOutcome = await Promise.race([
       runAdapterWithRetry({
-        buildLiveAdapter: () => buildAdapter(assignedAgent),
+        buildLiveAdapter: () => buildAdapter(assignedAgent, userId),
         buildFallbackAdapter: () => buildMockAdapter(assignedAgent),
         taskInput: {
           systemRole: assignedAgent.role,
@@ -290,6 +325,142 @@ export async function runNextAgentStep(sessionId: number, userId = 0): Promise<{
     await db.update(agentsTable).set({ lastUsedModel: usedModel }).where(eq(agentsTable.id, assignedAgent.id));
   }
 
+  // ── VIBA broker tool loop (text agents with broker tools enabled) ──────────
+  // Runs only for non-native providers that have canUseTools=true.
+  // Native executors (Replit, Manus, Railway) handle their own tool loops inside
+  // their adapters and must NOT be routed here — they use their own tools for free.
+  // Each broker tool call costs credits (risk-level based) separate from the task fee.
+  const isBrokerEligible =
+    assignedAgent.canUseTools &&
+    !NATIVE_EXECUTION_PROVIDERS.has(assignedAgent.provider.toLowerCase()) &&
+    !assignedAgent.isMock;
+
+  if (isBrokerEligible && result.toolCall) {
+    const brokerMessages: Message[] = [];
+    let currentResult = result;
+
+    for (let loop = 0; loop < MAX_BROKER_LOOPS && currentResult.toolCall; loop++) {
+      const { toolId, action, payload } = currentResult.toolCall;
+
+      await logAudit(sessionId, "broker_tool_requested", `${assignedAgent.name} requested VIBA broker tool: ${toolId}`, {
+        taskId: nextTask.id, agentId: assignedAgent.id, toolId, action, loop,
+      });
+
+      let brokerOutcome: Awaited<ReturnType<typeof executeToolAction>>;
+      try {
+        brokerOutcome = await executeToolAction({
+          userId,
+          taskId: nextTask.id,
+          toolId,
+          action,
+          payload,
+          requestedByAgent: assignedAgent.name,
+        });
+      } catch (brokerErr) {
+        logger.warn({ brokerErr, toolId, agentId: assignedAgent.id }, "Broker tool execution threw — aborting tool loop");
+        break;
+      }
+
+      // Charge credits for this VIBA broker tool call
+      if (userId > 0) {
+        const chargeResult = await chargeVibaToolCall({
+          userId,
+          sessionId,
+          taskId: nextTask.id,
+          toolId,
+          riskLevel: brokerOutcome.riskLevel,
+          agentName: assignedAgent.name,
+          agentId: assignedAgent.id,
+        });
+        if (!chargeResult.ok) {
+          // Insufficient credits — stop the broker loop gracefully
+          await logAudit(sessionId, "broker_tool_loop_stopped", `Broker tool loop stopped — insufficient credits for ${toolId}`, {
+            taskId: nextTask.id, agentId: assignedAgent.id,
+          });
+          break;
+        }
+      }
+
+      // Persist tool result as a context message so the agent sees it next turn
+      const toolResultContent = brokerOutcome.status === "executed"
+        ? `🔧 **Tool result: ${toolId}**\nStatus: ${brokerOutcome.status}\n${brokerOutcome.message}${brokerOutcome.dryRunResult ? `\n\nResult: ${JSON.stringify(brokerOutcome.dryRunResult, null, 2)}` : ""}`
+        : `🔧 **Tool: ${toolId}**\nStatus: ${brokerOutcome.status} — ${brokerOutcome.message}${brokerOutcome.warnings.length > 0 ? `\nWarnings: ${brokerOutcome.warnings.join(", ")}` : ""}`;
+
+      const [toolResultMsg] = await db.insert(messagesTable).values({
+        sessionId,
+        agentId: null,
+        role: "assistant",
+        provider: "system",
+        agentName: "VIBA System",
+        agentRole: "Tool Broker",
+        content: toolResultContent,
+        messageType: "context",
+        taskId: nextTask.id,
+        metadata: {
+          type: "broker_tool_result",
+          toolId,
+          action,
+          status: brokerOutcome.status,
+          riskLevel: brokerOutcome.riskLevel,
+          requestedByAgent: assignedAgent.name,
+          invocationId: brokerOutcome.invocationId,
+        },
+      }).returning();
+
+      if (toolResultMsg) brokerMessages.push(toolResultMsg);
+
+      // If the tool needs approval or is blocked, stop the loop
+      if (brokerOutcome.status === "needs_user_approval" || brokerOutcome.status === "blocked" || brokerOutcome.status === "scope_denied") {
+        await logAudit(sessionId, "broker_tool_loop_stopped", `Broker tool loop stopped — status: ${brokerOutcome.status}`, {
+          taskId: nextTask.id, agentId: assignedAgent.id, toolId,
+        });
+        break;
+      }
+
+      // Re-run the adapter with the tool result injected into the conversation
+      const updatedMessages = [
+        ...recentMessages.map(m => ({ role: m.role, content: m.content, agentName: m.agentName ?? undefined })),
+        ...brokerMessages.map(m => ({ role: m.role, content: m.content, agentName: m.agentName ?? undefined })),
+      ].slice(-15);
+
+      let nextOutcome: Awaited<ReturnType<typeof runAdapterWithRetry>>;
+      try {
+        nextOutcome = await runAdapterWithRetry({
+          buildLiveAdapter: () => buildAdapter(assignedAgent, userId),
+          buildFallbackAdapter: () => buildMockAdapter(assignedAgent),
+          taskInput: {
+            systemRole: assignedAgent.role,
+            projectGoal: session.goal,
+            memorySummary: memory?.summary ?? "",
+            taskInstruction: nextTask.description || nextTask.title,
+            previousMessages: updatedMessages,
+            peerAgents: activeAgents.filter(a => a.id !== assignedAgent.id).map(a => ({ name: a.name, role: a.role })),
+            taskType: nextTask.type,
+            canUseTools: assignedAgent.canUseTools,
+            repoUrl: session.repoUrl ?? undefined,
+            repoBranch: session.repoBranch ?? undefined,
+            workspaceEnv: session.workspaceEnv ?? undefined,
+          },
+          retryDelayMs: RETRY_DELAY_MS,
+          logAudit: (eventType, description, metadata) => logAudit(sessionId, eventType, description, metadata),
+          context: { sessionId, agentId: assignedAgent.id, provider: assignedAgent.provider, taskId: nextTask.id, taskTitle: nextTask.title },
+        });
+      } catch {
+        break; // Adapter error after tool result — use current result as final
+      }
+
+      currentResult = nextOutcome.result;
+    }
+
+    // Merge broker messages into result and continue to normal completion
+    result = currentResult;
+    if (brokerMessages.length > 0) {
+      await logAudit(sessionId, "broker_tool_loop_complete", `Broker tool loop finished after ${brokerMessages.length} tool call(s) for ${assignedAgent.name}`, {
+        taskId: nextTask.id, agentId: assignedAgent.id,
+      });
+    }
+  }
+
   // ── Tool handoff: text-only agent hit a tool blocker ──────────────────────
   if (result.blockedReason && !assignedAgent.canUseTools) {
     logger.info(
@@ -297,26 +468,37 @@ export async function runNextAgentStep(sessionId: number, userId = 0): Promise<{
       "Agent blocked — initiating tool handoff",
     );
 
-    const { handoffMessage, siblingTask } = await handleToolHandoff(
+    const { handoffMessage, siblingTask, noToolAgent } = await handleToolHandoff(
       sessionId,
       nextTask,
       result,
       assignedAgent,
     );
 
-    await logAudit(sessionId, "tool_handoff", `${assignedAgent.name} blocked — tool handoff to capable agent`, {
-      originalTaskId: nextTask.id,
-      siblingTaskId: siblingTask.id,
-      blockedReason: result.blockedReason,
-    });
+    await logAudit(
+      sessionId,
+      "tool_handoff",
+      noToolAgent
+        ? `${assignedAgent.name} blocked — no tool-capable agent in session, task stays blocked`
+        : `${assignedAgent.name} blocked — tool handoff to capable agent`,
+      {
+        originalTaskId: nextTask.id,
+        siblingTaskId: siblingTask?.id ?? null,
+        blockedReason: result.blockedReason,
+        noToolAgent,
+      },
+    );
 
     // Update session cost
     const updatedCost = (session.estimatedCost ?? 0) + result.estimatedCost;
     await db.update(sessionsTable).set({ estimatedCost: updatedCost }).where(eq(sessionsTable.id, sessionId));
 
+    const updatedTasks: Task[] = [{ ...nextTask, status: "blocked_needs_tools" } as Task];
+    if (siblingTask) updatedTasks.push(siblingTask);
+
     return {
       newMessages: [handoffMessage],
-      updatedTasks: [{ ...nextTask, status: "blocked_needs_tools" } as Task, siblingTask],
+      updatedTasks,
       approvalRequired: false,
       approval: null,
     };
@@ -371,6 +553,19 @@ export async function runNextAgentStep(sessionId: number, userId = 0): Promise<{
     nextTask.id,
   );
 
+  // Charge collaboration credits for answers given (fire-and-forget, no session pause)
+  if (answerMessages.length > 0 && userId > 0) {
+    void chargeCollaboration({
+      userId,
+      sessionId,
+      taskId: nextTask.id,
+      agentId: assignedAgent.id,
+      agentName: assignedAgent.name,
+      type: "answer",
+      count: answerMessages.length,
+    });
+  }
+
   // Persist outbound questions (cap enforced inside persistOutboundQuestions)
   const questionMessages = await persistOutboundQuestions(
     sessionId,
@@ -385,17 +580,23 @@ export async function runNextAgentStep(sessionId: number, userId = 0): Promise<{
       taskId: nextTask.id,
       questionCount: questionMessages.length,
     });
+
+    // Charge collaboration credits for questions sent (fire-and-forget, no session pause)
+    if (userId > 0) {
+      void chargeCollaboration({
+        userId,
+        sessionId,
+        taskId: nextTask.id,
+        agentId: assignedAgent.id,
+        agentName: assignedAgent.name,
+        type: "question",
+        count: questionMessages.length,
+      });
+    }
   }
 
   // ── Update task status ─────────────────────────────────────────────────────
-  let newTaskStatus: string;
-  if (result.completionStatus === "complete") {
-    newTaskStatus = "complete";
-  } else if (result.completionStatus === "needs_review") {
-    newTaskStatus = "review";
-  } else {
-    newTaskStatus = "review";
-  }
+  const newTaskStatus = resolveTaskDbStatus(result.completionStatus);
 
   const [updatedTask] = await db
     .update(tasksTable)
