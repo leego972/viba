@@ -219,7 +219,7 @@ export async function sendCreditsExhaustedEmail(to: string): Promise<void> {
 
 // ─── Low credits warning (throttled — once per 7 days per user) ──────────────
 // Fires when credits drop to or below LOW_CREDITS_THRESHOLD.
-const LOW_CREDITS_THRESHOLD = 100;
+const LOW_CREDITS_THRESHOLD = 200;
 
 export async function sendLowCreditsWarningIfNeeded(userId: number): Promise<void> {
   try {
