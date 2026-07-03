@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Cpu, CheckCircle2, XCircle, MinusCircle, Zap, Save, RefreshCw,
   AlertTriangle, Key, Globe, Eye, EyeOff, Shield, ArrowRight, Plug,
+  Monitor, Wifi, WifiOff, Trash2, ChevronDown, ChevronUp, Copy,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -288,6 +289,282 @@ function ProviderSection() {
   );
 }
 
+// ── My Browser Section ────────────────────────────────────────────────────────
+
+interface BrowserStatus {
+  configured: boolean;
+  connected: boolean;
+  tabs?: Array<{ index: number; url: string; title: string }>;
+  error?: string;
+}
+
+function MyBrowserSection() {
+  const { toast } = useToast();
+  const [status, setStatus] = useState<BrowserStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [cdpInput, setCdpInput] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [showInstructions, setShowInstructions] = useState(false);
+
+  const fetchStatus = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${BASE}/api/user-browser/status`, { credentials: "include" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json() as BrowserStatus;
+      setStatus(data);
+    } catch {
+      setStatus({ configured: false, connected: false });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void fetchStatus(); }, [fetchStatus]);
+
+  async function save() {
+    const url = cdpInput.trim();
+    if (!url) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`${BASE}/api/user-browser/config`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cdpUrl: url }),
+      });
+      const data = await res.json() as { ok?: boolean; error?: string; tabs?: BrowserStatus["tabs"] };
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      toast({ title: "My Browser connected!", description: `Found ${data.tabs?.length ?? 0} open tab(s).` });
+      setCdpInput("");
+      await fetchStatus();
+    } catch (err) {
+      toast({ title: "Connection failed", description: String(err), variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function testConnection() {
+    setTesting(true);
+    try {
+      const res = await fetch(`${BASE}/api/user-browser/test`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json() as { ok?: boolean; tabs?: BrowserStatus["tabs"]; error?: string };
+      if (data.ok) {
+        toast({ title: "Browser connected", description: `${data.tabs?.length ?? 0} tab(s) visible to agents.` });
+      } else {
+        toast({ title: "Connection failed", description: data.error ?? "Could not reach browser.", variant: "destructive" });
+      }
+      await fetchStatus();
+    } catch (err) {
+      toast({ title: "Test failed", description: String(err), variant: "destructive" });
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  async function remove() {
+    setRemoving(true);
+    try {
+      await fetch(`${BASE}/api/user-browser/config`, { method: "DELETE", credentials: "include" });
+      toast({ title: "My Browser disconnected" });
+      await fetchStatus();
+    } catch {
+      toast({ title: "Remove failed", variant: "destructive" });
+    } finally {
+      setRemoving(false);
+    }
+  }
+
+  function copyToClipboard(text: string) {
+    void navigator.clipboard.writeText(text).then(() =>
+      toast({ title: "Copied to clipboard" })
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-16">
+        <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  const isConnected = status?.configured && status?.connected;
+
+  return (
+    <div className="space-y-4">
+      {/* Status row */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 ${
+            isConnected
+              ? "bg-emerald-500/15 border border-emerald-500/25"
+              : status?.configured
+                ? "bg-amber-500/15 border border-amber-500/25"
+                : "bg-muted/30 border border-border/50"
+          }`}>
+            <Monitor className={`h-4 w-4 ${
+              isConnected ? "text-emerald-400" : status?.configured ? "text-amber-400" : "text-muted-foreground"
+            }`} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">My Browser</span>
+              {isConnected ? (
+                <Badge className="gap-1 bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/15">
+                  <Wifi className="h-3 w-3" /> Live
+                </Badge>
+              ) : status?.configured ? (
+                <Badge className="gap-1 bg-amber-500/15 text-amber-400 border-amber-500/30 hover:bg-amber-500/15">
+                  <WifiOff className="h-3 w-3" /> Disconnected
+                </Badge>
+              ) : (
+                <Badge className="gap-1 bg-zinc-500/15 text-zinc-400 border-zinc-500/30 hover:bg-zinc-500/15">
+                  <XCircle className="h-3 w-3" /> Not set up
+                </Badge>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {isConnected
+                ? `${status?.tabs?.length ?? 0} tab(s) accessible to agents`
+                : "Agents will use your real Chrome with your sessions & cookies"}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {status?.configured && (
+            <>
+              <Button size="sm" variant="outline" onClick={testConnection} disabled={testing} className="gap-1.5 text-xs h-8">
+                {testing ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Wifi className="h-3 w-3" />}
+                {testing ? "Testing…" : "Test"}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={remove} disabled={removing} className="gap-1.5 text-xs h-8 text-destructive hover:text-destructive">
+                {removing ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Open tabs preview */}
+      {isConnected && status?.tabs && status.tabs.length > 0 && (
+        <div className="rounded-lg border border-white/[0.07] bg-white/[0.02] divide-y divide-white/[0.05]">
+          {status.tabs.slice(0, 6).map((tab) => (
+            <div key={tab.index} className="flex items-center gap-3 px-3 py-2">
+              <span className="text-xs text-muted-foreground w-4 shrink-0">{tab.index}</span>
+              <Globe className="h-3 w-3 text-muted-foreground/60 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium truncate">{tab.title || "(Untitled)"}</p>
+                <p className="text-[11px] text-muted-foreground truncate">{tab.url}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Error */}
+      {status?.configured && !status?.connected && status?.error && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/8 px-3 py-2.5">
+          <AlertTriangle className="h-3.5 w-3.5 text-amber-400 mt-0.5 shrink-0" />
+          <p className="text-xs text-amber-200/80">{status.error}</p>
+        </div>
+      )}
+
+      {/* Connect form */}
+      {!status?.configured && (
+        <div className="space-y-3 pt-1">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Chrome DevTools URL</Label>
+            <div className="flex gap-2">
+              <Input
+                className="h-9 text-sm font-mono"
+                placeholder="https://xyz.trycloudflare.com"
+                value={cdpInput}
+                onChange={(e) => setCdpInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") void save(); }}
+              />
+              <Button size="sm" onClick={save} disabled={saving || !cdpInput.trim()} className="gap-1.5 h-9 px-4">
+                {saving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                {saving ? "Connecting…" : "Connect"}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">Paste the public tunnel URL for your Chrome DevTools port.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Setup instructions accordion */}
+      <button
+        type="button"
+        onClick={() => setShowInstructions(!showInstructions)}
+        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+      >
+        {showInstructions ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+        {showInstructions ? "Hide" : "Show"} setup instructions
+      </button>
+
+      {showInstructions && (
+        <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-4 space-y-4 text-xs">
+          <p className="text-sm font-medium">How to connect your Chrome browser</p>
+
+          <div className="space-y-2">
+            <p className="font-medium text-muted-foreground uppercase tracking-wide text-[10px]">Step 1 — Launch Chrome with remote debugging</p>
+            <div className="space-y-1.5">
+              {[
+                { label: "macOS", cmd: "/Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome --remote-debugging-port=9222 --user-data-dir=/tmp/viba-chrome" },
+                { label: "Windows", cmd: "chrome.exe --remote-debugging-port=9222 --user-data-dir=C:\\tmp\\viba-chrome" },
+                { label: "Linux", cmd: "google-chrome --remote-debugging-port=9222 --user-data-dir=/tmp/viba-chrome" },
+              ].map(({ label, cmd }) => (
+                <div key={label} className="rounded-lg border border-white/[0.07] bg-black/30 p-2.5">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] text-muted-foreground">{label}</span>
+                    <button type="button" onClick={() => copyToClipboard(cmd)} className="text-muted-foreground hover:text-foreground transition-colors">
+                      <Copy className="h-3 w-3" />
+                    </button>
+                  </div>
+                  <code className="text-[11px] text-emerald-300 break-all">{cmd}</code>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <p className="font-medium text-muted-foreground uppercase tracking-wide text-[10px]">Step 2 — Create a public tunnel to port 9222</p>
+            <div className="rounded-lg border border-white/[0.07] bg-black/30 p-2.5">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] text-muted-foreground">Cloudflare tunnel (free, no account needed)</span>
+                <button type="button" onClick={() => copyToClipboard("cloudflared tunnel --url http://localhost:9222")} className="text-muted-foreground hover:text-foreground transition-colors">
+                  <Copy className="h-3 w-3" />
+                </button>
+              </div>
+              <code className="text-[11px] text-emerald-300">cloudflared tunnel --url http://localhost:9222</code>
+            </div>
+            <p className="text-muted-foreground/70">cloudflared will print a URL like <code className="text-foreground/80">https://abc-def.trycloudflare.com</code> — paste that above.</p>
+          </div>
+
+          <div className="space-y-1">
+            <p className="font-medium text-muted-foreground uppercase tracking-wide text-[10px]">Step 3 — Paste the tunnel URL above and click Connect</p>
+            <p className="text-muted-foreground/70">VIBA will verify the connection, then agents can use <code className="text-foreground/80">user_browser_*</code> tools that operate in your real Chrome — with all your sessions and cookies.</p>
+          </div>
+
+          <div className="flex items-start gap-2 rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2">
+            <Shield className="h-3.5 w-3.5 text-blue-400 mt-0.5 shrink-0" />
+            <p className="text-muted-foreground/80">The tunnel URL is stored encrypted in your vault. Only VIBA agents you explicitly run can access your browser. Close Chrome or kill the tunnel to instantly revoke access.</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ConnectionsPage() {
   return (
     <AppLayout>
@@ -314,6 +591,22 @@ export default function ConnectionsPage() {
             Connecting a provider makes it available for sessions — each session still requires explicit budget approval before any paid call is made.
           </p>
         </div>
+
+        {/* My Browser */}
+        <Card className="border-white/[0.07] bg-white/[0.01]">
+          <CardHeader className="pb-4">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Monitor className="h-4.5 w-4.5 text-primary" />
+              My Browser
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Give agents access to your real Chrome — with your sessions, cookies, and logged-in accounts. Agents use <code className="text-foreground/70">user_browser_*</code> tools to see and control your tabs.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <MyBrowserSection />
+          </CardContent>
+        </Card>
 
         {/* AI Providers */}
         <Card className="border-white/[0.07] bg-white/[0.01]">
@@ -358,27 +651,27 @@ export default function ConnectionsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div className="grid gap-2">
-                <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] px-4 py-3">
-                  <p className="text-sm font-medium">API Keys & Tokens</p>
-                  <p className="text-xs text-muted-foreground">OpenAI, Claude, Groq, Gemini, GitHub, Railway, Render, and custom tokens.</p>
-                </div>
-                <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] px-4 py-3">
-                  <p className="text-sm font-medium">Deployment Credentials</p>
-                  <p className="text-xs text-muted-foreground">Deployment provider tokens and service IDs are kept in the same encrypted vault.</p>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2 pt-1">
-                <Link href="/credentials?action=add">
-                  <Button size="sm" className="gap-1.5 text-xs">
-                    <Key className="h-3.5 w-3.5" />
-                    Add credential
-                  </Button>
+            <div className="space-y-3">
+              {[
+                { label: "API Keys & Tokens", desc: "Saved provider keys, custom tokens", href: "/credentials" },
+                { label: "Custom AI Keys", desc: "Additional AI provider credentials", href: "/credentials" },
+                { label: "Deployment Credentials", desc: "Railway, Render, GitHub tokens", href: "/credentials" },
+              ].map(({ label, desc, href }) => (
+                <Link key={label} href={href}>
+                  <div className="flex items-center justify-between rounded-xl border border-white/[0.07] bg-white/[0.02] px-4 py-3 hover:border-white/[0.14] hover:bg-white/[0.04] transition-all cursor-pointer group">
+                    <div>
+                      <p className="text-sm font-medium">{label}</p>
+                      <p className="text-xs text-muted-foreground">{desc}</p>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+                  </div>
                 </Link>
+              ))}
+              <div className="pt-1">
                 <Link href="/credentials">
                   <Button variant="outline" size="sm" className="gap-1.5 text-xs">
-                    Open vault
+                    <Key className="h-3.5 w-3.5" />
+                    Open full vault
                     <ArrowRight className="h-3.5 w-3.5" />
                   </Button>
                 </Link>
