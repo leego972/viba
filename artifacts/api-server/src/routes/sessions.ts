@@ -1,5 +1,6 @@
 import { z } from "zod/v4";
 import { Router, type IRouter } from "express";
+import { sessionCreationUserLimiter, agentRunUserLimiter } from "../middlewares/rateLimits";
 import { eq, asc, desc, inArray, sql, and, isNull, or } from "drizzle-orm";
 import {
   db,
@@ -193,7 +194,7 @@ async function withAgentModes<T extends { id: number }>(session: T) {
   });
 
 // POST /sessions
-router.post("/sessions", async (req, res): Promise<void> => {
+router.post("/sessions", sessionCreationUserLimiter, async (req, res): Promise<void> => {
   const parsed = CreateSessionBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -385,7 +386,7 @@ router.delete("/sessions/:id", async (req, res): Promise<void> => {
 });
 
 // POST /sessions/:id/run-next
-router.post("/sessions/:id/run-next", async (req, res): Promise<void> => {
+router.post("/sessions/:id/run-next", agentRunUserLimiter, async (req, res): Promise<void> => {
   const params = RunNextStepParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -414,7 +415,7 @@ router.post("/sessions/:id/run-next", async (req, res): Promise<void> => {
 });
 
 // POST /sessions/:id/run-full
-router.post("/sessions/:id/run-full", async (req, res): Promise<void> => {
+router.post("/sessions/:id/run-full", agentRunUserLimiter, async (req, res): Promise<void> => {
   const params = RunFullWorkflowParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
