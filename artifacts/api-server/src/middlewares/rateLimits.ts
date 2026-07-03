@@ -8,7 +8,7 @@
  *   { error: "RATE_LIMITED", message: "Too many requests. Try again later." }
  */
 
-import { createRateLimiter } from "./rateLimiter";
+import { createRateLimiter, createUserRateLimiter } from "./rateLimiter";
 
 const RATE_LIMITED_BODY = JSON.stringify({
   error: "RATE_LIMITED",
@@ -70,3 +70,9 @@ export const creditMutationLimiter = rl(MINUTE, 5);
 // ─── Deployment Providers ─────────────────────────────────────────────────────
 /** Deployment execute endpoint */
 export const deploymentExecuteLimiter = rl(MINUTE, 10);
+
+// ─── Per-user limits (keyed on session userId, not IP) ────────────────────────
+/** Session creation: max 20 sessions per hour per authenticated user */
+export const sessionCreationUserLimiter = createUserRateLimiter({ windowMs: 60 * MINUTE, max: 20, message: "Too many sessions created. Please wait before starting another." });
+/** Agent run step: max 60 run-next/run-full calls per 10 minutes per user */
+export const agentRunUserLimiter = createUserRateLimiter({ windowMs: 10 * MINUTE, max: 60, message: "Agent execution rate limit reached. Please wait a moment before continuing." });
