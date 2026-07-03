@@ -381,6 +381,19 @@ async function runStartupMigrations(): Promise<void> {
     WHERE deleted_at IS NULL
   `);
 
+  // ── agents: credential_label column (multi-key vault slot per agent) ─────────
+  await pool.query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'agents' AND column_name = 'credential_label'
+      ) THEN
+        ALTER TABLE agents
+          ADD COLUMN credential_label TEXT NOT NULL DEFAULT 'default';
+      END IF;
+    END $$
+  `);
+
   logger.info("Startup migrations complete");
 }
 
