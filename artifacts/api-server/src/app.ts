@@ -145,6 +145,7 @@ app.post("/api/auth/register", authLimiter);
 app.post("/api/auth/forgot-password", authLimiter);
 app.post("/api/auth/reset-password", authLimiter);
 app.post("/api/auth/verify-email", authLimiter);
+app.post("/api/auth/resend-verification", authLimiter);
 
 // ─── Request logging ──────────────────────────────────────────────────────────
 app.use(
@@ -398,6 +399,7 @@ const AUTH_EXEMPT_PATHS = new Set([
   "/auth/forgot-password",
   "/auth/reset-password",
   "/auth/verify-email",
+  "/auth/resend-verification",
   "/stripe/config",
   "/stripe/checkout",
   "/stripe/subscription",
