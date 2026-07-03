@@ -23,6 +23,7 @@ import type { Agent } from "@workspace/db";
 import { db, settingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "./logger";
+import { getVibaCredential } from "./vibaVault";
 
 async function getSetting(uppercaseKey: string): Promise<string | null> {
   const [upper] = await db.select().from(settingsTable).where(eq(settingsTable.key, uppercaseKey));
@@ -50,66 +51,102 @@ export function buildMockAdapter(agent: Agent): AgentAdapter {
   return new ChatGPTMockAdapter(String(agent.id), agent.name, agent.role);
 }
 
-export async function buildAdapter(agent: Agent): Promise<AgentAdapter> {
+/**
+ * Resolves an API key for the given provider. Priority order:
+ *   1. User-specific vault entry matching the agent's credentialLabel (multi-key support)
+ *   2. Global admin settings table
+ *   3. Environment variable
+ */
+async function resolveApiKey(
+  userId: number | null | undefined,
+  provider: string,
+  credentialLabel: string,
+  settingKey: string,
+  envKey: string = settingKey,
+): Promise<string> {
+  // 1. User vault: check for the labeled credential first
+  if (userId) {
+    const vaultKey = await getVibaCredential({ userId, provider, kind: "api_key", label: credentialLabel });
+    if (vaultKey) return vaultKey;
+    // If a non-default label was requested but not found, log a warning
+    if (credentialLabel !== "default") {
+      logger.warn({ provider, credentialLabel }, "Requested credential label not found in vault — falling back to global settings");
+    }
+    // Also try the "default" label in vault before going to settingsTable
+    if (credentialLabel !== "default") {
+      const defaultVaultKey = await getVibaCredential({ userId, provider, kind: "api_key", label: "default" });
+      if (defaultVaultKey) return defaultVaultKey;
+    }
+  }
+  // 2. Admin settings table
+  const settingVal = await getSetting(settingKey);
+  if (settingVal) return settingVal;
+  // 3. Environment variable
+  return process.env[envKey] ?? "";
+}
+
+export async function buildAdapter(agent: Agent, userId?: number | null): Promise<AgentAdapter> {
   const provider = agent.provider.toLowerCase();
+  const credLabel = agent.credentialLabel ?? "default";
 
   // Shared tool tokens — loaded once and reused across tool-capable adapters
+  // For tool tokens, always use admin settings / env (they are global infrastructure tokens)
   const [railwayToken, githubToken] = await Promise.all([
     getSetting("RAILWAY_TOKEN").then((v) => v ?? process.env["RAILWAY_TOKEN"] ?? null),
     getSetting("GITHUB_TOKEN").then((v) => v ?? process.env["GITHUB_TOKEN"] ?? null),
   ]);
 
   if (provider === "openai") {
-    const apiKey = await getSetting("OPENAI_API_KEY") ?? process.env["OPENAI_API_KEY"] ?? "";
+    const apiKey = await resolveApiKey(userId, provider, credLabel, "OPENAI_API_KEY");
     if (isValidKey(apiKey)) {
       const model = await getSetting("OPENAI_MODEL") ?? undefined;
       return new OpenAIAdapter(String(agent.id), agent.name, agent.role, apiKey, model, agent.canUseTools);
     }
-    logger.warn({ provider }, "No OpenAI API key found — using simulation mode");
+    logger.warn({ provider, credLabel }, "No OpenAI API key found — using simulation mode");
     return new ChatGPTMockAdapter(String(agent.id), agent.name, agent.role);
   }
 
   if (provider === "anthropic") {
-    const apiKey = await getSetting("ANTHROPIC_API_KEY") ?? process.env["ANTHROPIC_API_KEY"] ?? "";
+    const apiKey = await resolveApiKey(userId, provider, credLabel, "ANTHROPIC_API_KEY");
     if (isValidKey(apiKey)) {
       const model = await getSetting("ANTHROPIC_MODEL") ?? undefined;
       return new AnthropicAdapter(String(agent.id), agent.name, agent.role, apiKey, model, agent.canUseTools);
     }
-    logger.warn({ provider }, "No Anthropic API key found — using simulation mode");
+    logger.warn({ provider, credLabel }, "No Anthropic API key found — using simulation mode");
     return new ClaudeMockAdapter(String(agent.id), agent.name, agent.role);
   }
 
   if (provider === "google") {
-    const apiKey = await getSetting("GEMINI_API_KEY") ?? process.env["GEMINI_API_KEY"] ?? "";
+    const apiKey = await resolveApiKey(userId, provider, credLabel, "GEMINI_API_KEY");
     if (isValidKey(apiKey)) {
       const model = await getSetting("GEMINI_MODEL") ?? undefined;
       return new GeminiAdapter(String(agent.id), agent.name, agent.role, apiKey, model, agent.canUseTools);
     }
-    logger.warn({ provider }, "No Gemini API key found — using simulation mode");
+    logger.warn({ provider, credLabel }, "No Gemini API key found — using simulation mode");
     return new GeminiMockAdapter(String(agent.id), agent.name, agent.role);
   }
 
   if (provider === "perplexity") {
-    const apiKey = await getSetting("PERPLEXITY_API_KEY") ?? process.env["PERPLEXITY_API_KEY"] ?? "";
+    const apiKey = await resolveApiKey(userId, provider, credLabel, "PERPLEXITY_API_KEY");
     if (isValidKey(apiKey)) {
       const model = await getSetting("PERPLEXITY_MODEL") ?? undefined;
       return new PerplexityAdapter(String(agent.id), agent.name, agent.role, apiKey, model, agent.canUseTools);
     }
-    logger.warn({ provider }, "No Perplexity API key found — using simulation mode");
+    logger.warn({ provider, credLabel }, "No Perplexity API key found — using simulation mode");
     return new PerplexityMockAdapter(String(agent.id), agent.name, agent.role);
   }
 
   if (provider === "replit") {
-    const apiKey = await getSetting("REPLIT_API_KEY") ?? process.env["REPLIT_API_KEY"] ?? "";
+    const apiKey = await resolveApiKey(userId, provider, credLabel, "REPLIT_API_KEY");
     if (isValidKey(apiKey)) {
       return new ReplitAdapter(String(agent.id), agent.name, agent.role, apiKey, undefined, agent.canUseTools);
     }
-    logger.warn({ provider }, "No Replit API key found — using simulation mode");
+    logger.warn({ provider, credLabel }, "No Replit API key found — using simulation mode");
     return new ReplitMockAdapter(String(agent.id), agent.name, agent.role, agent.canUseTools);
   }
 
   if (provider === "groq") {
-    const apiKey = await getSetting("GROQ_API_KEY") ?? process.env["GROQ_API_KEY"] ?? "";
+    const apiKey = await resolveApiKey(userId, provider, credLabel, "GROQ_API_KEY");
     if (isValidKey(apiKey)) {
       const model = await getSetting("GROQ_MODEL") ?? undefined;
       return new GroqAdapter(
@@ -118,7 +155,7 @@ export async function buildAdapter(agent: Agent): Promise<AgentAdapter> {
         githubToken ?? undefined,
       );
     }
-    logger.warn({ provider }, "No Groq API key found — using simulation mode");
+    logger.warn({ provider, credLabel }, "No Groq API key found — using simulation mode");
     return new GroqMockAdapter(String(agent.id), agent.name, agent.role);
   }
 
@@ -144,11 +181,11 @@ export async function buildAdapter(agent: Agent): Promise<AgentAdapter> {
   }
 
   if (provider === "manus") {
-    const apiKey = await getSetting("MANUS_API_KEY") ?? process.env["MANUS_API_KEY"] ?? "";
+    const apiKey = await resolveApiKey(userId, provider, credLabel, "MANUS_API_KEY");
     if (isValidKey(apiKey)) {
       return new ManusAdapter(String(agent.id), agent.name, agent.role, apiKey, undefined, agent.canUseTools);
     }
-    logger.warn({ provider }, "No Manus API key found — using simulation mode");
+    logger.warn({ provider, credLabel }, "No Manus API key found — using simulation mode");
     return new ManusMockAdapter(String(agent.id), agent.name, agent.role, agent.canUseTools);
   }
 
