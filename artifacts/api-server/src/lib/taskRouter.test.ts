@@ -14,6 +14,7 @@ function makeAgent(overrides: Partial<Agent> = {}): Agent {
     canUseTools: false,
     lastUsedModel: null,
     satOutReason: null,
+    credentialLabel: "default",
     createdAt: new Date(),
     ...overrides,
   };
