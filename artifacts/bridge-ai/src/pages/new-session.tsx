@@ -201,6 +201,28 @@ export default function NewSession() {
     }, 600);
   };
 
+  // Multi-key: available labels per provider and per-agent selected label
+  const [providerKeyLabels, setProviderKeyLabels] = useState<Record<string, string[]>>({});
+  const [credentialLabels, setCredentialLabels] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+    const providers = ["openai", "anthropic", "google", "perplexity", "groq", "manus", "replit", "railway"];
+    void Promise.allSettled(
+      providers.map(async (id) => {
+        try {
+          const res = await fetch(`${BASE}/api/providers/${id}/keys`, { credentials: "include" });
+          if (!res.ok) return;
+          const data = await res.json() as { keys: Array<{ label: string }> };
+          const labels = data.keys.map((k) => k.label);
+          if (labels.length > 0) {
+            setProviderKeyLabels(prev => ({ ...prev, [id]: labels }));
+          }
+        } catch {}
+      })
+    );
+  }, []);
+
   const [selectedAgents, setSelectedAgents] = useState<Record<string, { selected: boolean; role: string; canUseTools: boolean }>>(() => {
     const initial: Record<string, { selected: boolean; role: string; canUseTools: boolean }> = {};
     AVAILABLE_PROVIDERS.forEach(p => {
@@ -225,9 +247,15 @@ export default function NewSession() {
   const selectedProviderIds = AVAILABLE_PROVIDERS.filter(p => selectedAgents[p.id]!.selected).map(p => p.id);
   const simulatedSelected = selectedProviderIds.filter(id => !isLive(id));
 
-  const selectedToolCapable = AVAILABLE_PROVIDERS
-    .filter(p => selectedAgents[p.id]!.selected && selectedAgents[p.id]!.canUseTools)
+  const selectedNativeToolCapable = AVAILABLE_PROVIDERS
+    .filter(p => selectedAgents[p.id]!.selected && p.canUseTools)
     .map(p => p.name);
+
+  const selectedBrokerToolCapable = AVAILABLE_PROVIDERS
+    .filter(p => selectedAgents[p.id]!.selected && !p.canUseTools && selectedAgents[p.id]!.canUseTools)
+    .map(p => p.name);
+
+  const selectedToolCapable = [...selectedNativeToolCapable, ...selectedBrokerToolCapable];
 
   const hasRealExecution = repoUrl.trim() !== "" && selectedToolCapable.length > 0;
 
@@ -310,6 +338,7 @@ export default function NewSession() {
         role: selectedAgents[p.id]!.role,
         isMock: !isLive(p.id),
         canUseTools: selectedAgents[p.id]!.canUseTools,
+        credentialLabel: credentialLabels[p.id] ?? "default",
       }));
 
     if (agentsList.length === 0) {
@@ -596,11 +625,15 @@ export default function NewSession() {
                               <FlaskConical className="h-2.5 w-2.5" /> Simulation
                             </Badge>
                           )}
-                          {provider.canUseTools && (
-                            <Badge variant="outline" className="text-blue-500 border-blue-500/30 bg-blue-500/10 gap-1 px-1.5 py-0 text-[10px] flex-shrink-0" title="Can execute tools, code, and git operations">
-                              <Wrench className="h-2.5 w-2.5" /> Tools
+                          {provider.canUseTools ? (
+                            <Badge variant="outline" className="text-blue-500 border-blue-500/30 bg-blue-500/10 gap-1 px-1.5 py-0 text-[10px] flex-shrink-0" title="Uses its own native tool stack (git, code execution, deployment). You pay for these via your existing subscription — VIBA charges only a platform orchestration fee.">
+                              <Wrench className="h-2.5 w-2.5" /> Native Tools
                             </Badge>
-                          )}
+                          ) : selectedAgents[provider.id]!.canUseTools ? (
+                            <Badge variant="outline" className="text-violet-500 border-violet-500/30 bg-violet-500/10 gap-1 px-1.5 py-0 text-[10px] flex-shrink-0" title="Uses VIBA's broker tool suite (GitHub, Railway, Stripe, DNS, Browser, SMTP). Credits charged per tool call.">
+                              <Wrench className="h-2.5 w-2.5" /> Broker Tools
+                            </Badge>
+                          ) : null}
                         </Label>
                       </div>
                       {selectedAgents[provider.id]!.selected && (
@@ -618,6 +651,22 @@ export default function NewSession() {
                               ))}
                             </SelectContent>
                           </Select>
+                          {/* Multi-key: show account picker when provider has >1 saved key */}
+                          {(providerKeyLabels[provider.id]?.length ?? 0) > 1 && (
+                            <Select
+                              value={credentialLabels[provider.id] ?? "default"}
+                              onValueChange={(val) => setCredentialLabels(prev => ({ ...prev, [provider.id]: val }))}
+                            >
+                              <SelectTrigger className="w-[110px] h-8 text-xs flex-shrink-0" title="Which API account to use">
+                                <SelectValue placeholder="Account" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {providerKeyLabels[provider.id]!.map(label => (
+                                  <SelectItem key={label} value={label} className="text-xs">{label}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
                           {!provider.canUseTools && (
                             <button
                               type="button"
