@@ -1,23 +1,33 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("@workspace/db", () => ({
-  db: {
-    select: vi.fn().mockReturnValue({
-      from: vi.fn().mockReturnValue({
-        where: vi.fn().mockReturnValue({
-          orderBy: vi.fn().mockResolvedValue([]),
+vi.mock("@workspace/db", () => {
+  // Default select chain supports BOTH `await ...where(...)` (thenable) and
+  // `...where(...).orderBy(...)` — mirrors drizzle's fluent/awaitable builder.
+  const makeWhereResult = () => {
+    const whereResult: Record<string, unknown> = {
+      orderBy: vi.fn().mockResolvedValue([]),
+      then: (resolve: (v: unknown[]) => unknown) => Promise.resolve([]).then(resolve),
+    };
+    return whereResult;
+  };
+  return {
+    db: {
+      select: vi.fn().mockImplementation(() => ({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockImplementation(() => makeWhereResult()),
+        }),
+      })),
+      insert: vi.fn().mockReturnValue({
+        values: vi.fn().mockReturnValue({
+          returning: vi.fn().mockResolvedValue([]),
         }),
       }),
-    }),
-    insert: vi.fn().mockReturnValue({
-      values: vi.fn().mockReturnValue({
-        returning: vi.fn().mockResolvedValue([]),
-      }),
-    }),
-  },
-  messagesTable: {},
-  agentsTable: {},
-}));
+    },
+    messagesTable: { id: {}, sessionId: {}, messageType: {}, toAgentId: {}, taskId: {} },
+    agentsTable: {},
+    tasksTable: { id: {}, sessionId: {}, assignedAgentId: {}, status: {} },
+  };
+});
 
 const mockAgent = (id: number, name: string, provider = "openai") => ({
   id,

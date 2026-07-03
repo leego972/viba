@@ -40,6 +40,7 @@ import SeoDashboardPage from "@/pages/seo-dashboard";
 import AdvertisingDashboardPage from "@/pages/advertising-dashboard";
 import ContentCreatorPage from "@/pages/content-creator";
 import BrandOutreachPage from "@/pages/brand-outreach";
+import AppStoreDeploymentPage from "@/pages/app-store-deployment";
 import CompletionPage, {
   CollaborationMapPage,
   DemoDoctorReport,
@@ -131,6 +132,7 @@ function GatedRouter() {
         <Route path="/advertising" component={AdvertisingDashboardPage} />
         <Route path="/content-creator" component={ContentCreatorPage} />
         <Route path="/brand-outreach" component={BrandOutreachPage} />
+        <Route path="/app-store" component={AppStoreDeploymentPage} />
         <Route component={NotFound} />
       </Switch>
     </AuthGuard>

@@ -52,6 +52,7 @@ import marketingRouter from "./marketing";
 import advertisingRouter from "./advertising";
 import contentCreatorRouter from "./contentCreator";
 import userBrowserRouter from "./userBrowserRouter";
+import appStoreDeploymentRouter from "./appStoreDeployment";
 
 const router: IRouter = Router();
 
@@ -109,5 +110,6 @@ router.use(marketingRouter);
 router.use(advertisingRouter);
 router.use(contentCreatorRouter);
 router.use(userBrowserRouter);
+router.use(appStoreDeploymentRouter);
 
 export default router;

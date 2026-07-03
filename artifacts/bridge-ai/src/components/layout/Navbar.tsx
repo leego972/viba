@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Settings, FlaskConical, CreditCard, Zap, LayoutDashboard, Radio, Plus, Cpu, Rocket, Bot, ShieldCheck, Terminal, Wrench, ClipboardCheck, FolderInput, Activity, ShieldAlert, Globe, Sun, Moon, Plug, Search, Megaphone, PenTool, Building2, Coins } from "lucide-react";
+import { Settings, FlaskConical, CreditCard, Zap, LayoutDashboard, Radio, Plus, Cpu, Rocket, Bot, ShieldCheck, Terminal, Wrench, ClipboardCheck, FolderInput, Activity, ShieldAlert, Globe, Sun, Moon, Plug, Search, Megaphone, PenTool, Building2, Coins, Apple } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -34,6 +34,7 @@ const NAV_LINKS: NavLink[] = [
   { href: "/advertising",      label: "Advertising",      icon: Megaphone,     match: (l) => l.startsWith("/advertising"),      desktopOnly: true },
   { href: "/content-creator",  label: "Content Creator",  icon: PenTool,       match: (l) => l.startsWith("/content-creator"),  desktopOnly: true },
   { href: "/brand-outreach",   label: "Brand Outreach",   icon: Building2,     match: (l) => l.startsWith("/brand-outreach"),   desktopOnly: true },
+  { href: "/app-store",        label: "App Store",        icon: Apple,         match: (l) => l.startsWith("/app-store"),        desktopOnly: true },
 ];
 
 function formatCredits(value: number): string {
