@@ -29,6 +29,44 @@ import type { Request, Response, NextFunction } from "express";
    * within a sliding window. For multi-instance deployments, replace
    * the in-memory store with a shared Redis or DB counter.
    */
+  /**
+   * Per-authenticated-user rate limiter. Uses req.session.userId as the key
+   * so each account has its own independent counter regardless of IP address.
+   * Falls back to IP when the request has no session (unauthenticated routes).
+   */
+  export function createUserRateLimiter(opts: RateLimiterOptions) {
+    const {
+      windowMs,
+      max,
+      message = "Too many requests — please slow down.",
+    } = opts;
+
+    return (req: Request, res: Response, next: NextFunction): void => {
+      if (process.env.NODE_ENV === "test") { next(); return; }
+      const session = req.session as unknown as ({ userId?: number } | undefined);
+      const userId = session?.userId;
+      const key = userId
+        ? `user:${userId}`
+        : `ip:${req.ip ?? req.socket?.remoteAddress ?? "unknown"}`;
+      const now = Date.now();
+      const record = windows.get(key);
+
+      if (!record || now > record.resetAt) {
+        windows.set(key, { count: 1, resetAt: now + windowMs });
+        next();
+        return;
+      }
+
+      record.count += 1;
+      if (record.count > max) {
+        res.status(429).json({ error: message });
+        return;
+      }
+
+      next();
+    };
+  }
+
   export function createRateLimiter(opts: RateLimiterOptions) {
     const {
       windowMs,
