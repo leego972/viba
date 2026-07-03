@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, settingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { saveVibaCredential, resolveVibaCredential, logVibaEvent } from "../lib/vibaVault";
+import { saveVibaCredential, resolveVibaCredential, logVibaEvent, listVibaCredentials, deleteVibaCredential } from "../lib/vibaVault";
 
 const router: IRouter = Router();
 
@@ -268,6 +268,59 @@ router.post("/providers/:provider/test", async (req, res): Promise<void> => {
     message:
       "API key is present. Live validation requires a real session. No paid calls are made automatically.",
   });
+});
+
+// PATCH /providers/:provider — update non-secret config + enable/disable + key (key → vault only)
+// Accepts optional `label` to save a key under a named slot (multi-key support).
+// Extending here to avoid duplication — the previous PATCH handler is above, this extends the key-save path.
+
+// GET /providers/:provider/keys — list all saved key labels for a provider (values never returned)
+router.get("/providers/:provider/keys", async (req, res): Promise<void> => {
+  const id = String(req.params["provider"] ?? "");
+  const def = PROVIDER_DEFS.find((d) => d.id === id);
+  if (!def) { res.status(404).json({ error: `Unknown provider: ${id}` }); return; }
+
+  const all = await listVibaCredentials(userId(req));
+  const keys = all
+    .filter((c) => c.provider === def.id && c.kind === "api_key")
+    .map((c) => ({
+      label: c.label,
+      status: c.status,
+      lastUsedAt: c.last_used_at ?? null,
+      updatedAt: c.updated_at,
+    }));
+  res.json({ provider: def.id, keys });
+});
+
+// POST /providers/:provider/keys — save a labeled key to the vault
+router.post("/providers/:provider/keys", async (req, res): Promise<void> => {
+  const id = String(req.params["provider"] ?? "");
+  const def = PROVIDER_DEFS.find((d) => d.id === id);
+  if (!def) { res.status(404).json({ error: `Unknown provider: ${id}` }); return; }
+  if (def.keyEnvVar === null) { res.status(400).json({ error: "This provider does not use an API key." }); return; }
+
+  const body = req.body as { key?: string; label?: string };
+  const rawLabel = typeof body.label === "string" ? body.label.trim().slice(0, 80) : "";
+  const label = rawLabel || "default";
+  const key = typeof body.key === "string" ? body.key.trim() : "";
+  if (!key) { res.status(400).json({ error: "key is required" }); return; }
+
+  await saveVibaCredential({ userId: userId(req), provider: def.id, kind: "api_key", value: key, label });
+  await logVibaEvent({ userId: userId(req), eventType: "provider_key_saved", provider: def.id, status: "saved", message: `${def.label} API key saved to vault with label "${label}".` });
+  res.json({ ok: true, provider: def.id, label });
+});
+
+// DELETE /providers/:provider/keys/:label — remove a specific labeled key
+router.delete("/providers/:provider/keys/:label", async (req, res): Promise<void> => {
+  const id = String(req.params["provider"] ?? "");
+  const label = String(req.params["label"] ?? "");
+  const def = PROVIDER_DEFS.find((d) => d.id === id);
+  if (!def) { res.status(404).json({ error: `Unknown provider: ${id}` }); return; }
+  if (!label) { res.status(400).json({ error: "label is required" }); return; }
+
+  const result = await deleteVibaCredential({ userId: userId(req), provider: def.id, kind: "api_key", label });
+  await logVibaEvent({ userId: userId(req), eventType: "provider_key_deleted", provider: def.id, status: "deleted", message: `${def.label} API key with label "${label}" removed from vault.` });
+  res.json({ ok: true, deleted: result.deleted, provider: def.id, label });
 });
 
 // GET /providers/setting/:key — safe single-setting read (non-secret only)
