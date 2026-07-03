@@ -22,6 +22,14 @@ export const agentsTable = pgTable("agents", {
    * Set by the safety-vote endpoint; cleared on re-vote.
    */
   satOutReason: text("sat_out_reason"),
+  /**
+   * Which labeled credential in the vault to use for this agent.
+   * Defaults to "default" (the single key saved via the Connections page).
+   * Set to a user-supplied label (e.g. "Account 2") when multiple keys for
+   * the same provider are registered and the user picks a specific slot.
+   * MIGRATION NOTE: ALTER TABLE agents ADD COLUMN credential_label TEXT NOT NULL DEFAULT 'default';
+   */
+  credentialLabel: text("credential_label").notNull().default("default"),
   // MIGRATION NOTE: ALTER TABLE agents ADD COLUMN created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
