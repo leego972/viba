@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-set -x
   set -e
 
   export NODE_ENV=production
