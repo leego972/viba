@@ -87,6 +87,27 @@ These keys power the LLM chat completion calls made by each provider adapter. Th
 
 ---
 
+## Render API (Deployment Control)
+
+VIBA has a full REST API integration for Render.com — deploy trigger, env var management, deploy history, and service logs. Both variables must be set for full integration.
+
+| Variable | Description |
+|---|---|
+| `RENDER_API_KEY` | Render API key. Generate one in Render Dashboard → Account → API Keys. Required to enable all Render connector operations. |
+| `RENDER_SERVICE_ID` | ID of the specific Render service to manage (e.g. `srv-xxxxxxxxxxxxxxxx`). Find it in the Render dashboard URL when viewing a service, or via the Render Connector → All Services list in VIBA. Without this, VIBA can still verify the API key and list all services but cannot target deploy/env/log operations. |
+
+**Capabilities unlocked with both variables set:**
+- Service status and health
+- Deploy history (recent deploys with status and commit message)
+- Trigger new deploys (with admin approval)
+- Read environment variable key list (values never returned)
+- Merge-update environment variables (GET → merge → PUT — existing vars not in the update are preserved)
+- Service log streaming
+
+Access via the **Render** link in the VIBA navbar, or directly at `/render-connector`.
+
+---
+
 ## Railway MCP (Deployment Control Agent)
 
 Railway MCP lets the Railway agent adapter control Railway services directly — deploy, rollback, manage env vars, stream logs — using Railway's official MCP server at `https://railway.com/mcp`.
