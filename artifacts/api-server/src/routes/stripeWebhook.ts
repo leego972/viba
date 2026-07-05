@@ -86,8 +86,13 @@ export const webhookHandler: RequestHandler = async (req, res): Promise<void> =>
             // planKey comes from checkout session metadata (set by billing and annualBilling routes)
             const planKey = (meta["planKey"] as string | undefined) ?? VIBA_PLAN.key;
             await linkSubscription(userId, customerId, subscriptionId, sub.status, periodEnd, planKey);
-            // Grant initial credits — annual plan gets its full yearly allotment up front
-            const initialCredits = planKey === "viba_annual" ? 23400 : VIBA_PLAN.monthlyCredits;
+            // Grant initial credits based on plan
+            const INITIAL_CREDITS: Record<string, number> = {
+              basic_assessment: 750,
+              pro_repair: 4000,
+              viba_annual: 23400,
+            };
+            const initialCredits = INITIAL_CREDITS[planKey] ?? VIBA_PLAN.monthlyCredits;
             await grantCredits(userId, initialCredits, `new subscription — initial credit grant (${planKey})`);
             logger.info({ userId, subscriptionId, status: sub.status }, "Billing: subscription linked");
 
