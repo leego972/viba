@@ -1,0 +1,45 @@
+/* VIBA brand correction: cream-white application shell with readable ink text. */
+:root,
+.dark {
+  --background: 48 100% 98%;
+  --foreground: 222 47% 11%;
+  --border: 214 32% 82%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --card-border: 214 32% 82%;
+  --sidebar: 48 100% 98%;
+  --sidebar-foreground: 222 47% 14%;
+  --sidebar-border: 214 32% 82%;
+  --sidebar-primary: 239 84% 62%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 220 25% 94%;
+  --sidebar-accent-foreground: 222 47% 14%;
+  --sidebar-ring: 239 84% 62%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+  --popover-border: 214 32% 82%;
+  --primary: 239 84% 58%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 220 25% 94%;
+  --secondary-foreground: 222 47% 18%;
+  --muted: 220 25% 94%;
+  --muted-foreground: 217 19% 38%;
+  --accent: 262 72% 56%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 72% 48%;
+  --destructive-foreground: 0 0% 100%;
+  --input: 214 32% 82%;
+  --ring: 239 84% 58%;
+}
+
+html,
+body,
+#root {
+  max-width: 100%;
+  overflow-x: hidden;
+  background: hsl(var(--background));
+}
+
+.viba-logo-outline {
+  filter: drop-shadow(0 0 0.6px #000) drop-shadow(0.8px 0 #000) drop-shadow(-0.8px 0 #000) drop-shadow(0 0.8px #000) drop-shadow(0 -0.8px #000);
+}
