@@ -32,13 +32,13 @@ function fmt(cents: number) {
 }
 
 const FEATURES = [
-  "1,000 credits per month included",
-  "All 6 AI providers (ChatGPT, Claude, Gemini, Perplexity, Replit, Manus)",
-  "Unlimited collaborative sessions",
-  "Assign roles & orchestrate agents autonomously",
-  "Task routing, cost tracking & audit logs",
-  "Human-in-the-loop approval step for high-stakes actions",
-  "Full session history — data never deleted",
+  "1,000 diagnostic credits per month",
+  "Ranked findings — Critical → High → Warning → Informational",
+  "Evidence table with every check and its result",
+  "Owner approval required before any high-risk action",
+  "Browser, security, route, and code evidence checks",
+  "All 6 providers: ChatGPT, Claude, Gemini, Perplexity, Replit, Manus",
+  "Full session history — data never deleted, audit trail always intact",
 ];
 
 export default function Pricing() {
@@ -191,17 +191,26 @@ export default function Pricing() {
 
       <div className="max-w-5xl mx-auto px-6 py-16 space-y-20">
         {/* Hero */}
-        <div className="text-center space-y-4">
+        <div className="text-center space-y-5">
+          <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold border border-indigo-500/30 bg-indigo-500/10 text-indigo-300">
+            Evidence-backed AI technical operations
+          </div>
           <h1 className="text-4xl sm:text-5xl font-bold tracking-tight">
-            Orchestrate AI agents,{" "}
+            Professional technical diagnosis{" "}
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-violet-400">
-              together
+              without hiring a full engineering team.
             </span>
           </h1>
-          <p className="text-zinc-400 text-lg max-w-xl mx-auto">
-            Connect ChatGPT, Claude, Gemini, Perplexity and more in one session. Assign roles,
-            route tasks by capability, and collaborate autonomously.
+          <p className="text-zinc-400 text-lg max-w-2xl mx-auto">
+            Use VIBA to inspect, audit, repair-plan, and verify websites, repositories, and deployments — with evidence-backed reports your team can act on.
           </p>
+          <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-zinc-500 pt-1">
+            {["Cancel anytime", "Human approval before high-risk actions", "No hidden deletion of user data", "Evidence-backed reports"].map(r => (
+              <span key={r} className="flex items-center gap-1.5">
+                <Shield className="h-3.5 w-3.5 text-emerald-500" />{r}
+              </span>
+            ))}
+          </div>
         </div>
 
         {/* Plan cards — monthly and annual */}
@@ -227,7 +236,7 @@ export default function Pricing() {
                   </div>
                   <div className="p-8 space-y-6">
                     <div>
-                      <p className="text-sm font-medium text-zinc-400 uppercase tracking-widest mb-2">Monthly</p>
+                      <p className="text-sm font-medium text-zinc-400 uppercase tracking-widest mb-2">For active builders</p>
                       <div className="flex items-end gap-2">
                         <span className="text-5xl font-bold">{plan ? fmt(plan.unitAmount) : "$50"}</span>
                         <span className="text-zinc-400 mb-1">/month</span>
@@ -273,7 +282,7 @@ export default function Pricing() {
                   </div>
                   <div className="p-8 space-y-6">
                     <div>
-                      <p className="text-sm font-medium text-blue-400 uppercase tracking-widest mb-2">Annual</p>
+                      <p className="text-sm font-medium text-blue-400 uppercase tracking-widest mb-2">For serious operators</p>
                       <div className="flex items-end gap-2">
                         <span className="text-5xl font-bold">$600</span>
                         <span className="text-zinc-400 mb-1">/year</span>
@@ -357,6 +366,29 @@ export default function Pricing() {
 
           <p className="text-center text-xs text-zinc-600">
             Credit packs require an active VIBA membership. Credits never expire while your membership is active.
+          </p>
+        </div>
+
+        {/* Buyer reassurance */}
+        <div className="border border-white/8 rounded-2xl p-8 text-center space-y-6">
+          <h3 className="text-lg font-semibold text-zinc-200">Built for serious operators. Designed to be trusted.</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm text-zinc-400">
+            {[
+              { icon: Shield, text: "Cancel anytime — no lock-in" },
+              { icon: Shield, text: "Human approval before high-risk actions" },
+              { icon: Shield, text: "No hidden deletion of your data" },
+              { icon: Shield, text: "Evidence-backed reports, not guesses" },
+              { icon: Shield, text: "Defensive security only" },
+              { icon: Shield, text: "Owner-readable audit trail, always" },
+            ].map(({ icon: Icon, text }) => (
+              <div key={text} className="flex items-center gap-2 justify-center sm:justify-start">
+                <Icon className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                <span>{text}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-zinc-600 max-w-lg mx-auto">
+            VIBA is a BYOK (bring your own key) platform. Your API keys, session data, and reports stay within your account. No training on your data.
           </p>
         </div>
       </div>
