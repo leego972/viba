@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { createHmac, randomBytes } from "crypto";
 
 const router: IRouter = Router();
 
@@ -64,6 +65,8 @@ const CHANNELS: Channel[] = [
   { id: "uneed",               name: "Uneed",                       url: "https://www.uneed.best/submit",         category: "directory",   priority: "medium",   note: "Curated dev tool directory. Gets you on a weekly email blast. Free." },
   { id: "youtube_demo",        name: "YouTube Demo Video",          url: "https://studio.youtube.com",            category: "content",     priority: "high",     note: "A 3–5 min screen-recording demo. SEO-indexed by Google. Search: 'multi-agent AI tutorial'." },
   { id: "quora",               name: "Quora (AI Questions)",        url: "https://quora.com",                     category: "community",   priority: "medium",   note: "Answer questions like 'What is the best AI orchestration tool?' and 'How to use multiple AI agents together?' — mention VIBA naturally." },
+  { id: "mastodon",            name: "Mastodon",                    url: "https://mastodon.social",               category: "social",      priority: "medium",   note: "Growing tech/AI presence. Free API. Single toot up to 500 chars. Set MASTODON_ACCESS_TOKEN + MASTODON_INSTANCE." },
+  { id: "bluesky",             name: "Bluesky",                     url: "https://bsky.app",                      category: "social",      priority: "high",     note: "Fastest-growing tech social network. Free AT Protocol API. Set BLUESKY_HANDLE + BLUESKY_APP_PASSWORD." },
 ];
 
 // ─── Content generation templates ────────────────────────────────────────────
@@ -301,6 +304,37 @@ Tone: direct, confident, no buzzwords.
 
 Product context:\n${VIBA_CONTEXT}`,
   },
+
+  mastodon: {
+    label: "Mastodon toot",
+    system: "You write concise, engaging Mastodon toots for AI and tech audiences. Conversational, no hashtag spam — 2–3 max. Under 500 chars.",
+    userPrompt: `Write a Mastodon toot introducing VIBA.
+
+Rules:
+- Max 500 characters total (including link and hashtags)
+- Hook in the first sentence
+- 2–3 relevant hashtags: #AI #LLM #OpenSource
+- End with: viba.guru
+
+Tone: curious and community-minded, like a developer sharing something genuinely interesting.
+
+Product context:\n${VIBA_CONTEXT}`,
+  },
+
+  bluesky: {
+    label: "Bluesky post",
+    system: "You write punchy, engaging Bluesky posts for the tech/AI community. Direct, no marketing fluff. Under 300 chars.",
+    userPrompt: `Write a Bluesky post introducing VIBA.
+
+Rules:
+- Max 300 characters including the link
+- Strong opening hook (surprising fact or bold claim about multi-agent AI)
+- End with: viba.guru
+
+Tone: developer-to-developer, curious and direct.
+
+Product context:\n${VIBA_CONTEXT}`,
+  },
 };
 
 // ─── In-memory submission log (max 200 entries, cleared on restart) ───────────
@@ -472,17 +506,271 @@ async function submitReddit(channelId: string, content: string): Promise<SubmitR
   return { ok: true, url };
 }
 
+// ─── OAuth 1.0a helper (Twitter / X) ─────────────────────────────────────────
+
+function buildOAuth1Header(
+  method: string,
+  url: string,
+  keys: { consumerKey: string; consumerSecret: string; accessToken: string; tokenSecret: string },
+): string {
+  const nonce = randomBytes(16).toString("hex");
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const oauthParams: Record<string, string> = {
+    oauth_consumer_key:     keys.consumerKey,
+    oauth_nonce:            nonce,
+    oauth_signature_method: "HMAC-SHA1",
+    oauth_timestamp:        timestamp,
+    oauth_token:            keys.accessToken,
+    oauth_version:          "1.0",
+  };
+  // For X API v2 JSON body posts, only OAuth params go in the signature base
+  const paramStr = Object.keys(oauthParams).sort()
+    .map(k => `${encodeURIComponent(k)}=${encodeURIComponent(oauthParams[k]!)}`)
+    .join("&");
+  const sigBase = `${method.toUpperCase()}&${encodeURIComponent(url)}&${encodeURIComponent(paramStr)}`;
+  const sigKey = `${encodeURIComponent(keys.consumerSecret)}&${encodeURIComponent(keys.tokenSecret)}`;
+  const sig = createHmac("sha1", sigKey).update(sigBase).digest("base64");
+  return "OAuth " + Object.entries({ ...oauthParams, oauth_signature: sig })
+    .map(([k, v]) => `${encodeURIComponent(k)}="${encodeURIComponent(v)}"`)
+    .join(", ");
+}
+
+// ─── Twitter / X submitter (OAuth 1.0a, API v2) ───────────────────────────────
+
+async function submitTwitter(content: string): Promise<SubmitResult> {
+  const apiKey      = getCred("TWITTER_API_KEY",             "twitter_api_key");
+  const apiSecret   = getCred("TWITTER_API_SECRET",          "twitter_api_secret");
+  const accessToken = getCred("TWITTER_ACCESS_TOKEN",        "twitter_access_token");
+  const tokenSecret = getCred("TWITTER_ACCESS_TOKEN_SECRET", "twitter_access_token_secret");
+
+  if (!apiKey || !apiSecret || !accessToken || !tokenSecret) {
+    return {
+      ok: false,
+      reason: "missing_credential",
+      credential: "TWITTER_API_KEY, TWITTER_API_SECRET, TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET",
+      manualUrl: "https://x.com",
+    };
+  }
+
+  const url = "https://api.twitter.com/2/tweets";
+  const text = content.slice(0, 280);
+  const authHeader = buildOAuth1Header("POST", url, {
+    consumerKey: apiKey, consumerSecret: apiSecret, accessToken, tokenSecret,
+  });
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: authHeader, "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+    signal: AbortSignal.timeout(20_000),
+  });
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => String(res.status));
+    return { ok: false, reason: `X API error ${res.status}: ${err.slice(0, 300)}`, manualUrl: "https://x.com" };
+  }
+
+  const data = await res.json() as { data?: { id?: string } };
+  const tweetId = data.data?.id;
+  return { ok: true, url: tweetId ? `https://x.com/i/web/status/${tweetId}` : undefined };
+}
+
+// ─── LinkedIn submitter (UGC Posts API, Bearer token) ────────────────────────
+
+async function submitLinkedIn(content: string): Promise<SubmitResult> {
+  const accessToken = getCred("LINKEDIN_ACCESS_TOKEN", "linkedin_access_token");
+  const personUrn   = getCred("LINKEDIN_PERSON_URN",   "linkedin_person_urn");
+
+  if (!accessToken || !personUrn) {
+    return {
+      ok: false,
+      reason: "missing_credential",
+      credential: "LINKEDIN_ACCESS_TOKEN, LINKEDIN_PERSON_URN",
+      manualUrl: "https://www.linkedin.com/feed/",
+    };
+  }
+
+  const text = content.slice(0, 3000);
+
+  const res = await fetch("https://api.linkedin.com/v2/ugcPosts", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      "X-Restli-Protocol-Version": "2.0.0",
+    },
+    body: JSON.stringify({
+      author: personUrn,
+      lifecycleState: "PUBLISHED",
+      specificContent: {
+        "com.linkedin.ugc.ShareContent": {
+          shareCommentary: { text },
+          shareMediaCategory: "NONE",
+        },
+      },
+      visibility: { "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC" },
+    }),
+    signal: AbortSignal.timeout(20_000),
+  });
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => String(res.status));
+    return { ok: false, reason: `LinkedIn API error ${res.status}: ${err.slice(0, 300)}`, manualUrl: "https://www.linkedin.com/feed/" };
+  }
+
+  const data = await res.json() as { id?: string };
+  return { ok: true, url: data.id ? `https://www.linkedin.com/feed/update/${data.id}` : undefined };
+}
+
+// ─── Medium submitter (Integration Token API) ────────────────────────────────
+
+async function submitMedium(content: string): Promise<SubmitResult> {
+  const token = getCred("MEDIUM_INTEGRATION_TOKEN", "medium_integration_token");
+  if (!token) {
+    return { ok: false, reason: "missing_credential", credential: "MEDIUM_INTEGRATION_TOKEN", manualUrl: "https://medium.com/new-story" };
+  }
+
+  // Fetch author ID
+  const meRes = await fetch("https://api.medium.com/v1/me", {
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json" },
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!meRes.ok) {
+    return { ok: false, reason: `Medium auth failed: ${meRes.status}`, manualUrl: "https://medium.com/new-story" };
+  }
+  const meData = await meRes.json() as { data?: { id?: string } };
+  const authorId = meData.data?.id;
+  if (!authorId) {
+    return { ok: false, reason: "Medium: could not resolve author ID", manualUrl: "https://medium.com/new-story" };
+  }
+
+  const titleMatch = content.match(/^#+\s+(.+)$/m) ?? content.match(/^(.+)$/m);
+  const title = (titleMatch?.[1] ?? "VIBA — Multi-Agent AI Orchestration").replace(/[*_#`]/g, "").trim().slice(0, 100);
+
+  const res = await fetch(`https://api.medium.com/v1/users/${authorId}/posts`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({
+      title,
+      contentFormat: "markdown",
+      content,
+      tags: ["ai", "webdev", "llm", "machinelearning"],
+      publishStatus: "public",
+      notifyFollowers: true,
+    }),
+    signal: AbortSignal.timeout(30_000),
+  });
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => String(res.status));
+    return { ok: false, reason: `Medium API error ${res.status}: ${err.slice(0, 300)}`, manualUrl: "https://medium.com/new-story" };
+  }
+
+  const data = await res.json() as { data?: { url?: string } };
+  return { ok: true, url: data.data?.url };
+}
+
+// ─── Mastodon submitter (REST statuses API) ───────────────────────────────────
+
+async function submitMastodon(content: string): Promise<SubmitResult> {
+  const instance    = getCred("MASTODON_INSTANCE",     "mastodon_instance") ?? "mastodon.social";
+  const accessToken = getCred("MASTODON_ACCESS_TOKEN", "mastodon_access_token");
+
+  if (!accessToken) {
+    return {
+      ok: false,
+      reason: "missing_credential",
+      credential: "MASTODON_ACCESS_TOKEN (MASTODON_INSTANCE defaults to mastodon.social)",
+      manualUrl: `https://${instance}`,
+    };
+  }
+
+  const status = content.slice(0, 500);
+  const res = await fetch(`https://${instance}/api/v1/statuses`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ status, visibility: "public" }),
+    signal: AbortSignal.timeout(15_000),
+  });
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => String(res.status));
+    return { ok: false, reason: `Mastodon error ${res.status}: ${err.slice(0, 200)}`, manualUrl: `https://${instance}` };
+  }
+
+  const data = await res.json() as { url?: string };
+  return { ok: true, url: data.url };
+}
+
+// ─── Bluesky submitter (AT Protocol) ─────────────────────────────────────────
+
+async function submitBluesky(content: string): Promise<SubmitResult> {
+  const handle  = getCred("BLUESKY_HANDLE",       "bluesky_handle");
+  const appPass = getCred("BLUESKY_APP_PASSWORD",  "bluesky_app_password");
+
+  if (!handle || !appPass) {
+    return {
+      ok: false,
+      reason: "missing_credential",
+      credential: "BLUESKY_HANDLE, BLUESKY_APP_PASSWORD",
+      manualUrl: "https://bsky.app",
+    };
+  }
+
+  // Create session
+  const sessionRes = await fetch("https://bsky.social/xrpc/com.atproto.server.createSession", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ identifier: handle, password: appPass }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!sessionRes.ok) {
+    return { ok: false, reason: `Bluesky auth failed: ${sessionRes.status}`, manualUrl: "https://bsky.app" };
+  }
+  const session = await sessionRes.json() as { did?: string; accessJwt?: string };
+  if (!session.did || !session.accessJwt) {
+    return { ok: false, reason: "Bluesky: invalid session response", manualUrl: "https://bsky.app" };
+  }
+
+  // Create post record (300 char display limit on bsky)
+  const text = content.slice(0, 300);
+  const postRes = await fetch("https://bsky.social/xrpc/com.atproto.repo.createRecord", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${session.accessJwt}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      repo: session.did,
+      collection: "app.bsky.feed.post",
+      record: { $type: "app.bsky.feed.post", text, createdAt: new Date().toISOString() },
+    }),
+    signal: AbortSignal.timeout(15_000),
+  });
+
+  if (!postRes.ok) {
+    const err = await postRes.text().catch(() => String(postRes.status));
+    return { ok: false, reason: `Bluesky post error ${postRes.status}: ${err.slice(0, 200)}`, manualUrl: "https://bsky.app" };
+  }
+
+  const postData = await postRes.json() as { uri?: string };
+  const rkey = postData.uri?.split("/").pop();
+  return { ok: true, url: rkey ? `https://bsky.app/profile/${handle}/post/${rkey}` : undefined };
+}
+
 // ─── Channel dispatch table ───────────────────────────────────────────────────
 
 async function dispatchSubmit(entry: Submission): Promise<SubmitResult> {
   const { channelId, content } = entry;
   const channel = CHANNELS.find(c => c.id === channelId);
 
-  if (channelId === "devto")                            return submitDevTo(content);
-  if (channelId === "discord_communities")              return submitDiscord(content);
+  if (channelId === "devto")                               return submitDevTo(content);
+  if (channelId === "discord_communities")                 return submitDiscord(content);
   if (Object.keys(REDDIT_SUBREDDITS).includes(channelId)) return submitReddit(channelId, content);
+  if (channelId === "twitter_x")                           return submitTwitter(content);
+  if (channelId === "linkedin")                            return submitLinkedIn(content);
+  if (channelId === "medium")                              return submitMedium(content);
+  if (channelId === "mastodon")                            return submitMastodon(content);
+  if (channelId === "bluesky")                             return submitBluesky(content);
 
-  // All other channels require manual posting — return URL + content ready to paste
+  // Remaining channels require manual posting — return URL + content ready to paste
   return {
     ok: false,
     reason: "manual_required",
@@ -750,23 +1038,45 @@ router.post("/blast", async (req, res): Promise<void> => {
 
 router.get("/credentials", (_req, res): void => {
   res.json({
-    devto:   { configured: !!(getCred("DEV_TO_API_KEY", "devto_api_key")),      credential: "DEV_TO_API_KEY",       channel: "Dev.to" },
-    discord: { configured: !!(getCred("DISCORD_WEBHOOK_URL", "discord_webhook_url")), credential: "DISCORD_WEBHOOK_URL",  channel: "Discord" },
-    reddit:  {
+    devto:    { configured: !!(getCred("DEV_TO_API_KEY", "devto_api_key")),         credential: "DEV_TO_API_KEY",          channel: "Dev.to" },
+    discord:  { configured: !!(getCred("DISCORD_WEBHOOK_URL", "discord_webhook_url")), credential: "DISCORD_WEBHOOK_URL",   channel: "Discord" },
+    reddit: {
       configured: !!(getCred("REDDIT_CLIENT_ID","reddit_client_id") && getCred("REDDIT_CLIENT_SECRET","reddit_client_secret") && getCred("REDDIT_USERNAME","reddit_username") && getCred("REDDIT_PASSWORD","reddit_password")),
       credential: "REDDIT_CLIENT_ID + REDDIT_CLIENT_SECRET + REDDIT_USERNAME + REDDIT_PASSWORD",
       channel: "Reddit (r/MachineLearning, r/artificial, r/SideProject, r/LocalLLaMA)",
     },
+    twitter_x: {
+      configured: !!(getCred("TWITTER_API_KEY","twitter_api_key") && getCred("TWITTER_API_SECRET","twitter_api_secret") && getCred("TWITTER_ACCESS_TOKEN","twitter_access_token") && getCred("TWITTER_ACCESS_TOKEN_SECRET","twitter_access_token_secret")),
+      credential: "TWITTER_API_KEY + TWITTER_API_SECRET + TWITTER_ACCESS_TOKEN + TWITTER_ACCESS_TOKEN_SECRET",
+      channel: "Twitter / X",
+    },
+    linkedin: {
+      configured: !!(getCred("LINKEDIN_ACCESS_TOKEN","linkedin_access_token") && getCred("LINKEDIN_PERSON_URN","linkedin_person_urn")),
+      credential: "LINKEDIN_ACCESS_TOKEN + LINKEDIN_PERSON_URN",
+      channel: "LinkedIn",
+    },
+    medium: {
+      configured: !!(getCred("MEDIUM_INTEGRATION_TOKEN","medium_integration_token")),
+      credential: "MEDIUM_INTEGRATION_TOKEN",
+      channel: "Medium",
+    },
+    mastodon: {
+      configured: !!(getCred("MASTODON_ACCESS_TOKEN","mastodon_access_token")),
+      credential: "MASTODON_ACCESS_TOKEN (+ optional MASTODON_INSTANCE, defaults to mastodon.social)",
+      channel: "Mastodon",
+    },
+    bluesky: {
+      configured: !!(getCred("BLUESKY_HANDLE","bluesky_handle") && getCred("BLUESKY_APP_PASSWORD","bluesky_app_password")),
+      credential: "BLUESKY_HANDLE + BLUESKY_APP_PASSWORD",
+      channel: "Bluesky",
+    },
     manual_channels: [
-      { id: "product_hunt",   name: "Product Hunt",  url: "https://www.producthunt.com/posts/new",  reason: "OAuth required" },
-      { id: "hacker_news",    name: "Hacker News",   url: "https://news.ycombinator.com/submit",   reason: "No API" },
-      { id: "twitter_x",      name: "Twitter / X",   url: "https://x.com",                         reason: "OAuth required (paid tier)" },
-      { id: "linkedin",       name: "LinkedIn",      url: "https://linkedin.com/post/new",          reason: "OAuth required" },
-      { id: "medium",         name: "Medium",        url: "https://medium.com/new-story",           reason: "No public API" },
-      { id: "indiehackers",   name: "IndieHackers",  url: "https://www.indiehackers.com/post",      reason: "No API" },
-      { id: "tldr_ai",        name: "TLDR AI",       url: "https://tldr.tech/ai/submit",            reason: "Email/form only" },
-      { id: "bens_bites",     name: "Ben's Bites",   url: "https://bensbites.beehiiv.com/forms",    reason: "Email/form only" },
-      { id: "futurepedia",    name: "Futurepedia",   url: "https://www.futurepedia.io/submit-tool", reason: "Web form only" },
+      { id: "product_hunt",   name: "Product Hunt",  url: "https://www.producthunt.com/posts/new",      reason: "OAuth required" },
+      { id: "hacker_news",    name: "Hacker News",   url: "https://news.ycombinator.com/submit",        reason: "No API" },
+      { id: "indiehackers",   name: "IndieHackers",  url: "https://www.indiehackers.com/post",          reason: "No API" },
+      { id: "tldr_ai",        name: "TLDR AI",       url: "https://tldr.tech/ai/submit",                reason: "Email/form only" },
+      { id: "bens_bites",     name: "Ben's Bites",   url: "https://bensbites.beehiiv.com/forms",        reason: "Email/form only" },
+      { id: "futurepedia",    name: "Futurepedia",   url: "https://www.futurepedia.io/submit-tool",     reason: "Web form only" },
       { id: "taaft",          name: "TAAFT",         url: "https://theresanaiforthat.com/tool/submit/", reason: "Web form only" },
       { id: "github_awesome", name: "GitHub Awesome Lists", url: "https://github.com/search?q=awesome+llm", reason: "Manual PR to target repo" },
     ],
@@ -780,16 +1090,32 @@ router.get("/credentials", (_req, res): void => {
 router.get("/channel-config", (_req, res): void => {
   const mask = (key: string) => channelConfigs[key] ? "••••••••" : "";
   res.json({
-    devto_api_key:        mask("devto_api_key"),
-    discord_webhook_url:  mask("discord_webhook_url"),
-    reddit_client_id:     mask("reddit_client_id"),
-    reddit_client_secret: mask("reddit_client_secret"),
-    reddit_username:      channelConfigs["reddit_username"] ?? "",   // username is not secret
-    reddit_password:      mask("reddit_password"),
+    devto_api_key:                mask("devto_api_key"),
+    discord_webhook_url:          mask("discord_webhook_url"),
+    reddit_client_id:             mask("reddit_client_id"),
+    reddit_client_secret:         mask("reddit_client_secret"),
+    reddit_username:              channelConfigs["reddit_username"] ?? "",
+    reddit_password:              mask("reddit_password"),
+    twitter_api_key:              mask("twitter_api_key"),
+    twitter_api_secret:           mask("twitter_api_secret"),
+    twitter_access_token:         mask("twitter_access_token"),
+    twitter_access_token_secret:  mask("twitter_access_token_secret"),
+    linkedin_access_token:        mask("linkedin_access_token"),
+    linkedin_person_urn:          channelConfigs["linkedin_person_urn"] ?? "",
+    medium_integration_token:     mask("medium_integration_token"),
+    mastodon_access_token:        mask("mastodon_access_token"),
+    mastodon_instance:            channelConfigs["mastodon_instance"] ?? "",
+    bluesky_handle:               channelConfigs["bluesky_handle"] ?? "",
+    bluesky_app_password:         mask("bluesky_app_password"),
     configured: {
-      devto:   !!(getCred("DEV_TO_API_KEY", "devto_api_key")),
-      discord: !!(getCred("DISCORD_WEBHOOK_URL", "discord_webhook_url")),
-      reddit:  !!(getCred("REDDIT_CLIENT_ID","reddit_client_id") && getCred("REDDIT_CLIENT_SECRET","reddit_client_secret") && getCred("REDDIT_USERNAME","reddit_username") && getCred("REDDIT_PASSWORD","reddit_password")),
+      devto:     !!(getCred("DEV_TO_API_KEY", "devto_api_key")),
+      discord:   !!(getCred("DISCORD_WEBHOOK_URL", "discord_webhook_url")),
+      reddit:    !!(getCred("REDDIT_CLIENT_ID","reddit_client_id") && getCred("REDDIT_CLIENT_SECRET","reddit_client_secret") && getCred("REDDIT_USERNAME","reddit_username") && getCred("REDDIT_PASSWORD","reddit_password")),
+      twitter_x: !!(getCred("TWITTER_API_KEY","twitter_api_key") && getCred("TWITTER_API_SECRET","twitter_api_secret") && getCred("TWITTER_ACCESS_TOKEN","twitter_access_token") && getCred("TWITTER_ACCESS_TOKEN_SECRET","twitter_access_token_secret")),
+      linkedin:  !!(getCred("LINKEDIN_ACCESS_TOKEN","linkedin_access_token") && getCred("LINKEDIN_PERSON_URN","linkedin_person_urn")),
+      medium:    !!(getCred("MEDIUM_INTEGRATION_TOKEN","medium_integration_token")),
+      mastodon:  !!(getCred("MASTODON_ACCESS_TOKEN","mastodon_access_token")),
+      bluesky:   !!(getCred("BLUESKY_HANDLE","bluesky_handle") && getCred("BLUESKY_APP_PASSWORD","bluesky_app_password")),
     },
   });
 });
@@ -802,7 +1128,15 @@ router.get("/channel-config", (_req, res): void => {
 //          reddit_client_secret?, reddit_username?, reddit_password? }
 
 router.post("/channel-config", (req, res): void => {
-  const allowed = ["devto_api_key","discord_webhook_url","reddit_client_id","reddit_client_secret","reddit_username","reddit_password"];
+  const allowed = [
+    "devto_api_key", "discord_webhook_url",
+    "reddit_client_id", "reddit_client_secret", "reddit_username", "reddit_password",
+    "twitter_api_key", "twitter_api_secret", "twitter_access_token", "twitter_access_token_secret",
+    "linkedin_access_token", "linkedin_person_urn",
+    "medium_integration_token",
+    "mastodon_access_token", "mastodon_instance",
+    "bluesky_handle", "bluesky_app_password",
+  ];
   const body = req.body as Record<string, unknown>;
   let saved = 0;
   for (const key of allowed) {
@@ -820,9 +1154,14 @@ router.post("/channel-config", (req, res): void => {
     ok: true,
     saved,
     configured: {
-      devto:   !!(getCred("DEV_TO_API_KEY", "devto_api_key")),
-      discord: !!(getCred("DISCORD_WEBHOOK_URL", "discord_webhook_url")),
-      reddit:  !!(getCred("REDDIT_CLIENT_ID","reddit_client_id") && getCred("REDDIT_CLIENT_SECRET","reddit_client_secret") && getCred("REDDIT_USERNAME","reddit_username") && getCred("REDDIT_PASSWORD","reddit_password")),
+      devto:     !!(getCred("DEV_TO_API_KEY", "devto_api_key")),
+      discord:   !!(getCred("DISCORD_WEBHOOK_URL", "discord_webhook_url")),
+      reddit:    !!(getCred("REDDIT_CLIENT_ID","reddit_client_id") && getCred("REDDIT_CLIENT_SECRET","reddit_client_secret") && getCred("REDDIT_USERNAME","reddit_username") && getCred("REDDIT_PASSWORD","reddit_password")),
+      twitter_x: !!(getCred("TWITTER_API_KEY","twitter_api_key") && getCred("TWITTER_API_SECRET","twitter_api_secret") && getCred("TWITTER_ACCESS_TOKEN","twitter_access_token") && getCred("TWITTER_ACCESS_TOKEN_SECRET","twitter_access_token_secret")),
+      linkedin:  !!(getCred("LINKEDIN_ACCESS_TOKEN","linkedin_access_token") && getCred("LINKEDIN_PERSON_URN","linkedin_person_urn")),
+      medium:    !!(getCred("MEDIUM_INTEGRATION_TOKEN","medium_integration_token")),
+      mastodon:  !!(getCred("MASTODON_ACCESS_TOKEN","mastodon_access_token")),
+      bluesky:   !!(getCred("BLUESKY_HANDLE","bluesky_handle") && getCred("BLUESKY_APP_PASSWORD","bluesky_app_password")),
     },
   });
 });
