@@ -187,33 +187,34 @@ export async function deliverSystemArtifactToUser(input: DeliverArtifactInput) {
     },
   } as never).returning();
 
+  if (!message?.id) throw new Error("artifact message insert failed");
+
   const { rows } = await pool.query<AttachmentRow>(
     `INSERT INTO viba_attachments
       (session_id, user_id, message_id, file_name, mime_type, category, size_bytes, data, metadata)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING id, session_id, user_id, message_id, file_name, mime_type, category, size_bytes, created_at`,
-    [input.sessionId, input.userId ?? null, message?.id ?? null, fileName, mimeType, category, data.length, data, JSON.stringify({ generatedBySystem: true, artifactType: input.artifactType, ...(input.metadata ?? {}) })],
+    [input.sessionId, input.userId ?? null, message.id, fileName, mimeType, category, data.length, data, JSON.stringify({ generatedBySystem: true, artifactType: input.artifactType, ...(input.metadata ?? {}) })],
   );
 
   const attachment = rows[0];
-  const downloadUrl = `/api/sessions/${input.sessionId}/attachments/${attachment?.id}/download`;
+  if (!attachment?.id) throw new Error("artifact attachment insert failed");
+  const downloadUrl = `/api/sessions/${input.sessionId}/attachments/${attachment.id}/download`;
 
-  if (message?.id && attachment?.id) {
-    await db.update(messagesTable).set({
-      content: `${messageText}\n\n[Download ${fileName}](${downloadUrl})`,
-      metadata: {
-        generatedArtifact: true,
-        artifactType: input.artifactType,
-        fileName,
-        mimeType,
-        category,
-        sizeBytes: data.length,
-        delivery: "assistant_to_user_chatbox",
-        attachments: [{ id: attachment.id, fileName, mimeType, category, sizeBytes: data.length, downloadUrl }],
-        ...(input.metadata ?? {}),
-      },
-    } as never).where(eq(messagesTable.id, message.id));
-  }
+  await db.update(messagesTable).set({
+    content: `${messageText}\n\n[Download ${fileName}](${downloadUrl})`,
+    metadata: {
+      generatedArtifact: true,
+      artifactType: input.artifactType,
+      fileName,
+      mimeType,
+      category,
+      sizeBytes: data.length,
+      delivery: "assistant_to_user_chatbox",
+      attachments: [{ id: attachment.id, fileName, mimeType, category, sizeBytes: data.length, downloadUrl }],
+      ...(input.metadata ?? {}),
+    },
+  } as never).where(eq(messagesTable.id, message.id));
 
   await logVibaEvent({
     userId: input.userId ?? null,
@@ -222,13 +223,8 @@ export async function deliverSystemArtifactToUser(input: DeliverArtifactInput) {
     provider: "viba",
     status: "delivered",
     message: `VIBA delivered ${category}: ${fileName}`,
-    metadata: { attachmentId: attachment?.id, messageId: message?.id, fileName, mimeType, category, sizeBytes: data.length, downloadUrl },
+    metadata: { attachmentId: attachment.id, messageId: message.id, fileName, mimeType, category, sizeBytes: data.length, downloadUrl },
   });
 
-  return {
-    ok: true,
-    messageId: message?.id ?? null,
-    attachment: attachment ? { ...attachment, downloadUrl } : null,
-    rawValuesReturned: false,
-  };
+  return { ok: true, messageId: message.id, attachment: { ...attachment, downloadUrl }, rawValuesReturned: false };
 }
