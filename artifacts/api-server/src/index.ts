@@ -11,6 +11,7 @@ import { loadCircuitStateFromDb, validateCircuitBreakerEnv } from "./lib/adapter
 import { provisionStripeProducts } from "./lib/billing";
 import { startSeoScheduler } from "./engines/seoEngine";
 import { startAdvertisingScheduler } from "./engines/advertisingEngine";
+import { runAutonomousContentCycle } from "./engines/contentCreatorEngine";
 import bcrypt from "bcryptjs";
 
 // Fail fast if circuit breaker env vars are set to invalid values.
@@ -477,6 +478,20 @@ loadCircuitStateFromDb()
     // Start autonomous schedulers
     startSeoScheduler();
     startAdvertisingScheduler();
+
+    // Content autonomous cycle — runs every 8 hours, generates + auto-approves
+    // LinkedIn / X / Reddit / blog posts using Groq (free, no budget needed)
+    const CONTENT_CYCLE_MS = 8 * 60 * 60 * 1000;
+    const runContentCycle = () => {
+      runAutonomousContentCycle({ maxPiecesPerPlatform: 3, autoApproveThreshold: 70, autoSchedule: true })
+        .then(r => logger.info({ generated: r.generated }, "[Content] Autonomous cycle complete"))
+        .catch(err => logger.error({ err }, "[Content] Autonomous cycle error"));
+    };
+    // First run after a 2-minute warm-up delay (let DB migrations finish)
+    setTimeout(() => {
+      runContentCycle();
+      setInterval(runContentCycle, CONTENT_CYCLE_MS);
+    }, 2 * 60 * 1000);
 
     // Run retention cleaner immediately on start, then every 24h
     // Purges accounts past their 6-month post-deletion retention window
