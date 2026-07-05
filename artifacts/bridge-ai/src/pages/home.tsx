@@ -4,10 +4,10 @@ import { Zap, Shield, Blocks, ArrowRight, FileText, KeyRound, Wrench, CheckCircl
 
 export default function Home() {
   return (
-    <div className="flex flex-col min-h-screen" style={{ background: "#fff", color: "#111" }}>
+    <div className="flex flex-col min-h-screen" style={{ background: "#faf8f2", color: "#111" }}>
       {/* ─── Minimal top bar ─── */}
       <header className="px-6 h-14 flex items-center sticky top-0 z-50"
-        style={{ background: "rgba(255,255,255,0.9)", backdropFilter: "blur(12px)", borderBottom: "1px solid #e5e7eb" }}>
+        style={{ background: "rgba(250,248,242,0.92)", backdropFilter: "blur(12px)", borderBottom: "1px solid #dbd8cc" }}>
         <Link href="/" className="flex items-center justify-center">
           <img
             src="/viba-logo.png"
@@ -79,9 +79,9 @@ export default function Home() {
                 <Link href="/launch-readiness">
                   <button
                     className="flex items-center gap-2 h-12 px-8 rounded-xl text-base font-medium transition-all duration-200"
-                    style={{ border: "1px solid #d1d5db", background: "#f9fafb", color: "#374151" }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "#f3f4f6"; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "#f9fafb"; }}
+                    style={{ border: "1px solid #dbd8cc", background: "#f2f0e8", color: "#374151" }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "#ebe8de"; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "#f2f0e8"; }}
                   >
                     <CheckCircle2 className="h-4 w-4" />
                     View launch readiness
@@ -94,12 +94,12 @@ export default function Home() {
                 <span className="text-xs mr-2" style={{ color: "#9ca3af" }}>Works with</span>
                 {["ChatGPT", "Claude", "Gemini", "Perplexity", "Manus", "Replit", "Render"].map(name => (
                   <span key={name} className="text-xs font-medium rounded-full px-3 py-1"
-                    style={{ color: "#6b7280", border: "1px solid #e5e7eb", background: "#f9fafb" }}>
+                    style={{ color: "#6b7280", border: "1px solid #dbd8cc", background: "#f2f0e8" }}>
                     {name}
                   </span>
                 ))}
                 <span className="text-xs font-medium rounded-full px-3 py-1"
-                  style={{ color: "#6b7280", border: "1px solid #e5e7eb", background: "#f9fafb" }}>
+                  style={{ color: "#6b7280", border: "1px solid #dbd8cc", background: "#f2f0e8" }}>
                   and more
                 </span>
                 <span className="text-xs font-semibold rounded-full px-3 py-1 flex items-center gap-1.5"
@@ -113,7 +113,7 @@ export default function Home() {
         </section>
 
         {/* ─── Built for technical problem solving ─── */}
-        <section className="w-full py-16 md:py-24" style={{ borderTop: "1px solid #e5e7eb", background: "#f9fafb" }}>
+        <section className="w-full py-16 md:py-24" style={{ borderTop: "1px solid #dbd8cc", background: "#f2f0e8" }}>
           <div className="container px-4 md:px-6">
             <div className="mx-auto flex max-w-2xl flex-col items-center gap-3 text-center mb-12">
               <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl" style={{ color: "#111" }}>
