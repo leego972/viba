@@ -20,21 +20,38 @@ const ORGANIC_GROWTH_INTERVAL_MS = Math.max(6, ORGANIC_GROWTH_INTERVAL_HOURS) * 
 const SAFE_AUTONOMOUS_CHANNELS = ["seo_organic", "youtube_shorts", "linkedin_organic", "x_twitter_organic", "blog", "dev_to_blog", "reddit_communities", "email_nurture"];
 const BLOCKED_AUTONOMOUS_CHANNELS = ["tiktok", "snapchat", "paid_ads_without_owner_approval", "unrelated_project_content"];
 
+const VIBA_CONTENT_PILLARS = [
+  "UI testing",
+  "beta testing",
+  "repo testing",
+  "professional report generation",
+  "applied repairs",
+  "AI collaborative work",
+  "maximum efficiency on complex tasks",
+  "building complex systems using multiple AIs in one place",
+  "watching live AI task delegation and performance",
+];
+
 const VALUE_PROPOSITION = [
-  "VIBA checks websites through browser access like a real user, not just a static scanner.",
-  "VIBA detects broken buttons, missing pages, dead links, form issues, mobile layout problems and conversion blockers.",
-  "VIBA reviews code/repositories and produces a clear technical report ranked from critical to optional.",
-  "VIBA uses multi-agent AI collaboration so specialised agents can analyse UI, code, SEO, reliability and repair priorities together.",
-  "VIBA helps founders and businesses fix problems before wasting money on ads, rebuilds or developer guesswork.",
+  "VIBA performs UI testing through browser access to catch broken buttons, failed forms, dead links, missing pages, mobile layout problems and conversion blockers.",
+  "VIBA supports beta testing by checking user flows before public launch, so founders do not discover broken experiences after traffic arrives.",
+  "VIBA performs repo testing/code review and turns technical findings into a clear report ranked from critical to optional.",
+  "VIBA generates professional reports that business owners, developers and agencies can use to decide what must be fixed first.",
+  "VIBA supports applied repairs by turning audit findings into guided repair sessions and practical implementation priorities.",
+  "VIBA enables AI collaborative work by letting multiple specialised AIs work together in one place on complex builds, repairs and technical decisions.",
+  "VIBA increases efficiency on complex tasks by coordinating UI testing, repo testing, report generation, repair planning and multi-AI collaboration inside one workflow.",
+  "VIBA lets users watch live AI task delegation and performance so they can see which AI is doing what, why it was assigned, and how the task is progressing.",
+  "VIBA helps businesses avoid wasted ad spend, unclear developer work and failed launches by finding, ranking and repairing real website/code problems first.",
 ];
 
 const VIBA_ONLY_PROMPT_RULES = `
 STRICT CONTENT STANDARD:
-- Create professional industry-relevant content only for VIBA / Very Important Business Asset.
+- Create professional, industry-relevant content only for VIBA / Very Important Business Asset.
 - Every item must explain VIBA's value proposition, not generic AI hype.
 - Every item must mention VIBA by name.
-- Every item must include at least one concrete VIBA capability: browser-based website checks, broken button detection, missing/dead links, form testing, mobile layout checks, code/repo review, critical-to-optional reports, repair sessions, multi-agent AI orchestration, cost control, or launch readiness.
-- Every item must include a clear business outcome: fewer lost enquiries, better launch readiness, reduced wasted ad spend, faster technical diagnosis, clearer repair priorities, or better AI-assisted project delivery.
+- Every item must connect to the fixed VIBA service pillars: ${VIBA_CONTENT_PILLARS.join(", ")}.
+- Every item must include at least one concrete VIBA capability: browser-based website checks, broken button detection, form testing, dead-link/missing-page detection, mobile layout checks, beta-flow testing, repo/code testing, critical-to-optional reports, applied repair sessions, AI collaborative work, multi-AI system building, live AI task delegation/performance visibility, multi-agent AI orchestration, or maximum-efficiency handling of complex tasks.
+- Every item must include a clear business outcome: fewer lost enquiries, better beta readiness, reduced wasted ad spend, faster technical diagnosis, clearer repair priorities, faster applied fixes, faster complex system delivery, or better visibility over AI task performance.
 - Every visual, image prompt, video script or direction must include the VIBA logo/wordmark for brand recognition using ${VIBA_LOGO_PATH}.
 - Do not mention Virelle, film studios, fashion, tattoos, Peacemaker, Swappys, Zippyfixer, Titan, solar, casino, crypto, Snapchat or TikTok.
 - No paid spend. Free organic growth only unless the owner explicitly approves paid campaigns elsewhere.
@@ -43,13 +60,13 @@ STRICT CONTENT STANDARD:
 const FORBIDDEN_PATTERN = /virelle|film studio|fashion|tattoo|peacemaker|swappys|zippyfixer|archibald|titan|solar|casino|crypto|snapchat|tiktok/i;
 
 const CHANNEL_PROMPTS: Record<string, string> = {
-  linkedin: "a professional LinkedIn post for founders, CTOs, agencies and technical operators",
-  x_twitter: "a concise X/Twitter post or mini-thread for builders and founders",
-  youtube_shorts: "a 30-45 second YouTube Shorts script with visual directions",
-  reddit: "a value-first Reddit post for startup, SaaS, webdev or small business communities",
-  devto: "a developer-focused Dev.to article intro with practical technical value",
-  blog: "an SEO blog article intro for business owners and founders",
-  discord: "a concise Discord community update for builders and operators",
+  linkedin: "a professional LinkedIn post for founders, CTOs, agencies and technical operators about VIBA's UI testing, beta testing, repo testing, report generation, applied repairs, multi-AI collaboration and live task performance visibility",
+  x_twitter: "a concise X/Twitter post or mini-thread for builders about VIBA finding UI/repo issues and coordinating multiple AIs to repair complex systems efficiently",
+  youtube_shorts: "a 30-45 second YouTube Shorts script showing the VIBA logo, UI testing, beta testing, repo testing, report generation, applied repairs, multiple AIs working in one place and live task delegation/performance",
+  reddit: "a value-first Reddit post for startup, SaaS, webdev or small business communities explaining VIBA's test-report-repair workflow, multi-AI collaboration and live delegation visibility",
+  devto: "a developer-focused Dev.to article intro about VIBA repo testing, UI testing, multi-AI collaboration, live task delegation and applied repair reports",
+  blog: "an SEO blog article intro explaining why businesses should use VIBA for UI testing, beta testing, repo testing, complex AI collaboration, live task performance and applied repairs before buying ads or launching",
+  discord: "a concise Discord community update for builders/operators about VIBA's testing-to-repair workflow and multi-AI complex task engine",
 };
 
 type GeneratedPost = {
@@ -62,13 +79,13 @@ type GeneratedPost = {
 };
 
 export const GROWTH_STRATEGIES = [
-  { channel: "seo_organic", costPerMonth: 0, frequency: "continuous", expectedImpact: "high", automatable: true, description: "Professional VIBA SEO content around website audits, UI testing, code review and multi-agent AI workflows" },
-  { channel: "youtube_shorts", costPerMonth: 0, frequency: "weekly", expectedImpact: "high", automatable: true, description: "VIBA-branded short demo scripts showing concrete website checks and report outcomes" },
+  { channel: "seo_organic", costPerMonth: 0, frequency: "continuous", expectedImpact: "high", automatable: true, description: "Professional VIBA SEO content around UI testing, beta testing, repo testing, report generation, applied repairs, multi-AI complex work and live AI task performance" },
+  { channel: "youtube_shorts", costPerMonth: 0, frequency: "weekly", expectedImpact: "high", automatable: true, description: "VIBA-branded short demo scripts showing testing, reports, repairs, multiple AIs working in one place and live task delegation" },
   { channel: "linkedin_organic", costPerMonth: 0, frequency: "daily", expectedImpact: "high", automatable: true, description: "VIBA value-proposition posts for founders, developers, agencies and operators" },
-  { channel: "x_twitter_organic", costPerMonth: 0, frequency: "daily", expectedImpact: "medium", automatable: true, description: "Short VIBA-specific posts about technical issues, UI checks and repair priorities" },
-  { channel: "blog", costPerMonth: 0, frequency: "weekly", expectedImpact: "high", automatable: true, description: "Owned VIBA content hub for search and trust building" },
+  { channel: "x_twitter_organic", costPerMonth: 0, frequency: "daily", expectedImpact: "medium", automatable: true, description: "Short VIBA-specific posts about UI/repo testing, reports, repair priorities, multi-AI efficiency and live task performance" },
+  { channel: "blog", costPerMonth: 0, frequency: "weekly", expectedImpact: "high", automatable: true, description: "Owned VIBA content hub for testing, reports, applied repairs and complex multi-AI work" },
   { channel: "reddit_communities", costPerMonth: 0, frequency: "weekly", expectedImpact: "medium", automatable: false, description: "Value-first community content; queue generated content for careful manual use where required" },
-  { channel: "dev_to_blog", costPerMonth: 0, frequency: "weekly", expectedImpact: "medium", automatable: true, description: "Technical articles for developer audiences" },
+  { channel: "dev_to_blog", costPerMonth: 0, frequency: "weekly", expectedImpact: "medium", automatable: true, description: "Technical VIBA articles for developer audiences" },
   { channel: "email_nurture", costPerMonth: 0, frequency: "weekly", expectedImpact: "high", automatable: true, description: "VIBA onboarding and re-engagement copy" },
   { channel: "google_ads", costPerMonth: 0, frequency: "manual_only", expectedImpact: "high", automatable: false, description: "Not started automatically. Requires owner approval and budget cap." },
   { channel: "linkedin_ads", costPerMonth: 0, frequency: "manual_only", expectedImpact: "medium", automatable: false, description: "Not started automatically. Requires owner approval and budget cap." },
@@ -79,26 +96,26 @@ const _abTests: Record<string, { channel: string; variantA: string; variantB: st
 function hasVibaValue(post: Partial<GeneratedPost>) {
   const text = `${post.headline ?? ""} ${post.body ?? ""} ${post.callToAction ?? ""} ${post.imagePrompt ?? ""}`.toLowerCase();
   const hasViba = text.includes("viba");
-  const hasCapability = /website|browser|button|form|mobile|layout|dead link|missing page|code|repo|report|critical|optional|repair|multi-agent|orchestration/.test(text);
-  const hasOutcome = /enquir|lead|conversion|launch|wasted ad|repair|priority|diagnos|trust|customer|business/.test(text);
+  const hasCapability = /ui testing|ui test|beta testing|beta test|repo testing|repo test|repository|code review|report generation|report|applied repair|repair|browser|button|form|mobile|layout|dead link|missing page|critical|optional|multi-agent|multiple ais|multi-ai|ai collaboration|collaborative ai|complex system|complex task|delegation|performance|efficien/.test(text);
+  const hasOutcome = /enquir|lead|conversion|launch|wasted ad|repair|priority|diagnos|trust|customer|business|fix|technical debt|release|complex|efficient|faster|delivery|build|visibility|progress/.test(text);
   return hasViba && hasCapability && hasOutcome && !FORBIDDEN_PATTERN.test(text);
 }
 
 function fallbackPost(platform: string): GeneratedPost {
   const base = {
     platform,
-    headline: "VIBA finds the website issues that quietly cost businesses enquiries",
-    body: `VIBA checks a website through browser access, finds broken buttons, missing pages, dead links, form problems, mobile layout issues and conversion blockers, then turns the findings into a clear report ranked from critical to optional. The value is simple: fix what is blocking customers before wasting money on ads or rebuilds.`,
-    hashtags: ["#VIBA", "#WebsiteAudit", "#UITesting", "#WebDev", "#AITools"],
-    callToAction: `Run a VIBA Website Health Check → ${VIBA_SITE_URL}`,
-    imagePrompt: `Professional VIBA-branded visual using the VIBA logo/wordmark from ${VIBA_LOGO_PATH}. Show a clean website audit dashboard detecting broken buttons, form issues, mobile layout problems and a critical-to-optional report.`,
+    headline: "VIBA turns complex website and repo problems into clear repair priorities",
+    body: `VIBA is built for UI testing, beta testing, repo testing, professional report generation, applied repairs and AI collaborative work. It checks websites through browser access, finds broken buttons, failed forms, dead links, missing pages, mobile layout issues and repo/code risks, then uses multiple specialised AIs in one place to help analyse complex tasks efficiently. Users can watch live AI task delegation and performance, see which AI is doing what, and use the final report to move into applied repairs without guesswork.`,
+    hashtags: ["#VIBA", "#UITesting", "#BetaTesting", "#RepoTesting", "#AICollaboration", "#WebDev"],
+    callToAction: `Run VIBA on your website or repo → ${VIBA_SITE_URL}`,
+    imagePrompt: `Professional VIBA-branded visual using the VIBA logo/wordmark from ${VIBA_LOGO_PATH}. Show multiple AI agents collaborating in one VIBA workspace across UI testing, beta testing, repo testing, report generation, live task delegation/performance and applied repairs.`,
   };
 
   if (platform === "youtube_shorts") {
     return {
       ...base,
-      headline: "VIBA Website Health Check: find the blockers before customers leave",
-      body: `30-45 second script. Opening frame: show the VIBA logo/wordmark (${VIBA_LOGO_PATH}). Hook: "Your website can look fine and still lose customers." Show VIBA checking buttons, forms, mobile layout and missing pages. Cut to a report ranked critical-to-optional. Close: "Fix the blockers before you pay for more traffic. Run a VIBA Website Health Check."`,
+      headline: "VIBA: multiple AIs working together to test, report and repair",
+      body: `30-45 second script. Opening frame: show the VIBA logo/wordmark (${VIBA_LOGO_PATH}). Hook: "Complex builds fail when UI, repo and repair work are handled separately." Show VIBA running UI testing, beta-flow checks and repo testing. Cut to live AI task delegation: different AIs assigned to UI, repo, report and repairs. Show a performance/progress view, then a critical-to-optional report and applied repair priorities. Close: "Build and repair complex systems faster with VIBA."`,
     };
   }
 
@@ -121,7 +138,7 @@ function normalizePost(post: Partial<GeneratedPost>, platform: string): Generate
     ...safe,
     platform,
     headline: /viba/i.test(safe.headline) ? safe.headline : `VIBA: ${safe.headline}`,
-    callToAction: safe.callToAction || `Run a VIBA Website Health Check → ${VIBA_SITE_URL}`,
+    callToAction: safe.callToAction || `Run VIBA on your website or repo → ${VIBA_SITE_URL}`,
     hashtags,
     imagePrompt: /viba/i.test(safe.imagePrompt ?? "")
       ? safe.imagePrompt
@@ -158,9 +175,10 @@ export function getStrategyOverview() {
     freeChannelCount: freeChannels.length,
     paidChannelCount: paidChannels.length,
     budgetAllocation: paidChannels.map((s) => ({ channel: s.channel, amount: 0, mode: "manual approval required" })),
-    strategy: "100% free organic growth until paid campaigns are explicitly approved by the owner",
+    strategy: "100% free organic VIBA growth until paid campaigns are explicitly approved by the owner",
+    contentPillars: VIBA_CONTENT_PILLARS,
     valueProposition: VALUE_PROPOSITION,
-    topOpportunities: ["SEO content hub", "YouTube Shorts demos", "LinkedIn organic", "Developer/community content"],
+    topOpportunities: ["UI testing", "Beta testing", "Repo testing", "Report generation", "Applied repairs", "Multi-AI complex system building", "Live AI task delegation/performance"],
     safeAutonomousChannels: SAFE_AUTONOMOUS_CHANNELS,
     blockedAutonomousChannels: BLOCKED_AUTONOMOUS_CHANNELS,
   };
@@ -198,6 +216,8 @@ export async function runAdvertisingCycle() {
     const prompt = `${VIBA_ONLY_PROMPT_RULES}
 Generate one professional item for each platform: ${platforms.join(", ")}.
 Each item must include the VIBA value proposition in plain business language.
+Required pillars:
+- ${VIBA_CONTENT_PILLARS.join("\n- ")}
 Value proposition options:
 - ${VALUE_PROPOSITION.join("\n- ")}
 Return JSON array only: [{ "platform": "linkedin|x_twitter|youtube_shorts|blog|reddit|devto", "headline": "...", "body": "...", "hashtags": ["..."], "callToAction": "...", "imagePrompt": "include VIBA logo..." }]`;
@@ -214,7 +234,7 @@ Return JSON array only: [{ "platform": "linkedin|x_twitter|youtube_shorts|blog|r
 
     await db.insert(marketingActivityLog).values({
       action: "advertising_cycle",
-      description: `Generated ${results.length} professional VIBA-only value-proposition content pieces`,
+      description: `Generated ${results.length} professional VIBA-only content pieces across testing, reports, applied repairs, multi-AI complex work and live delegation visibility`,
       status: "success",
     } as never);
 
@@ -230,7 +250,7 @@ export async function runOrganicGrowthAutopilotCycle() {
   const seo = await runScheduledSeoOptimization().catch((err) => ({ ran: false, score: 0, error: String(err) }));
   const advertising = await runAdvertisingCycle();
   const content = await runAutonomousContentCycle({
-    maxPiecesPerPlatform: Number(process.env["VIBA_CONTENT_PIECES_PER_CYCLE"] ?? "4"),
+    maxPiecesPerPlatform: Number(process.env["VIBA_CONTENT_PIECES_PER_CYCLE"] ?? "1"),
     autoApproveThreshold: Number(process.env["VIBA_CONTENT_AUTO_APPROVE_THRESHOLD"] ?? "82"),
     autoSchedule: true,
   });
@@ -251,8 +271,7 @@ export function getChannelPerformanceReport() {
 
 export async function getCrossChannelAttribution(_days: number) {
   return GROWTH_STRATEGIES.slice(0, 8).map((s) => ({ channel: s.channel, attributedConversions: 0, assistedConversions: 0, revenue: 0, estimatedValue: "Free organic" }));
-}
-
+}\n
 export function getActiveABTests() {
   return Object.entries(_abTests).map(([id, t]) => ({ id, ...t }));
 }
@@ -317,6 +336,7 @@ export function getAdvertisingSchedulerStatus() {
     nextRun: _nextAutopilotRun?.toISOString() ?? null,
     currentlyRunning: _schedulerRunning,
     cycleCount: _autopilotCycleCount,
+    contentPillars: VIBA_CONTENT_PILLARS,
     valueProposition: VALUE_PROPOSITION,
     safeAutonomousChannels: SAFE_AUTONOMOUS_CHANNELS,
     blockedAutonomousChannels: BLOCKED_AUTONOMOUS_CHANNELS,
@@ -332,7 +352,7 @@ export async function generateBlastContent(channelIds?: string[]) {
     try {
       const prompt = `${VIBA_ONLY_PROMPT_RULES}
 Write ${CHANNEL_PROMPTS[channel] ?? "a professional VIBA growth post"}.
-Required value proposition: explain how VIBA finds real website/code issues and turns them into a ranked report so businesses know what to fix first.
+Required value proposition: explain how VIBA delivers UI testing, beta testing, repo testing, professional report generation, applied repairs, AI collaborative work, efficient complex task handling, complex multi-AI system building, and live AI task delegation/performance visibility.
 Return JSON: { "headline": "...", "body": "...", "hashtags": ["..."], "callToAction": "...", "imagePrompt": "include VIBA logo..." }`;
       const raw = await invokeLLM(prompt, "You are VIBA's senior industry content strategist. Return valid JSON only.");
       const content = safeJsonExtract(raw) as Partial<GeneratedPost> | null;
