@@ -170,7 +170,7 @@ export async function deliverSystemArtifactToUser(input: DeliverArtifactInput) {
     sessionId: input.sessionId,
     role: "assistant",
     provider: "viba",
-    content: `${messageText}\n\nDownload: ${fileName}`,
+    content: `${messageText}\n\nPreparing downloadable artifact: ${fileName}`,
     taskId: input.taskId ? Number(input.taskId) || null : null,
     agentName: input.agentName ?? "VIBA Artifact Generator",
     agentRole: input.agentRole ?? "System Artifact Delivery",
@@ -200,6 +200,7 @@ export async function deliverSystemArtifactToUser(input: DeliverArtifactInput) {
 
   if (message?.id && attachment?.id) {
     await db.update(messagesTable).set({
+      content: `${messageText}\n\n[Download ${fileName}](${downloadUrl})`,
       metadata: {
         generatedArtifact: true,
         artifactType: input.artifactType,
