@@ -1,5 +1,6 @@
 import type { RequestHandler } from "express";
 import crypto from "node:crypto";
+import { isAdminUserId } from "../lib/adminAccess";
 
 const ADMIN_TOKEN = process.env["ADMIN_TOKEN"]?.trim() || null;
 
@@ -14,29 +15,37 @@ function timingSafeEqual(a: string, b: string): boolean {
   return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }
 
+function tokenIsValid(rawAuthHeader: unknown): boolean {
+  if (!ADMIN_TOKEN) return false;
+  const auth = typeof rawAuthHeader === "string" ? rawAuthHeader : "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  return !!token && timingSafeEqual(token, ADMIN_TOKEN);
+}
+
 /**
- * Middleware: requires a valid ADMIN_TOKEN bearer token.
- * Returns 503 if ADMIN_TOKEN env var is not set (misconfigured server).
- * Returns 401 if token is missing or wrong.
+ * Middleware: allows either:
+ * - a valid ADMIN_TOKEN bearer token, or
+ * - a logged-in user whose email is in the VIBA admin email allowlist.
  *
  * TEST_BYPASS_ADMIN=1 lets integration tests call admin routes without a real
  * token. Only active when NODE_ENV=test.
  */
-export const requireAdmin: RequestHandler = (req, res, next) => {
+export const requireAdmin: RequestHandler = async (req, res, next): Promise<void> => {
   if (process.env.NODE_ENV === "test" && process.env.TEST_BYPASS_ADMIN === "1") { next(); return; }
+
+  if (tokenIsValid(req.headers["authorization"])) { next(); return; }
+
+  const sessionUserId = typeof req.session?.userId === "number" ? req.session.userId : null;
+  if (sessionUserId && await isAdminUserId(sessionUserId)) { next(); return; }
+
   if (!ADMIN_TOKEN) {
     res.status(503).json({
-      error: "Admin not configured — set ADMIN_TOKEN environment variable on the server",
+      error: "Admin not configured — set ADMIN_TOKEN or log in with an allowed admin email",
     });
     return;
   }
-  const auth = req.headers["authorization"] ?? "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-  if (!token || !timingSafeEqual(token, ADMIN_TOKEN)) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-  next();
+
+  res.status(401).json({ error: "Unauthorized" });
 };
 
 /**
