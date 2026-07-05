@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowRight, Bot, Target, ShieldCheck, Zap, AlertTriangle, FlaskConical, GitBranch, ChevronDown, Wrench, CheckCircle2, Loader2, Sparkles, Bookmark, BookMarked, Trash2 } from "lucide-react";
+import { UpgradePrompt } from "@/components/UpgradePrompt";
 
 const AVAILABLE_PROVIDERS = [
   { id: "openai",     name: "ChatGPT",    provider: "OpenAI",     defaultRole: "Strategist",    color: "bg-green-500",   apiKey: "OPENAI_API_KEY",     canUseTools: false },
@@ -223,6 +224,18 @@ export default function NewSession() {
     );
   }, []);
 
+  const [planKey, setPlanKey] = useState<string | null>(null);
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/billing/status", { credentials: "include" })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.planKey) setPlanKey(d.planKey as string); })
+      .catch(() => {});
+  }, []);
+
+  const isBasicPlan = planKey === "basic_assessment";
+
   const [selectedAgents, setSelectedAgents] = useState<Record<string, { selected: boolean; role: string; canUseTools: boolean }>>(() => {
     const initial: Record<string, { selected: boolean; role: string; canUseTools: boolean }> = {};
     AVAILABLE_PROVIDERS.forEach(p => {
@@ -260,6 +273,17 @@ export default function NewSession() {
   const hasRealExecution = repoUrl.trim() !== "" && selectedToolCapable.length > 0;
 
   const handleAgentToggle = (id: string) => {
+    // Basic plan: only 1 external provider allowed (Groq is always free/included)
+    const isExternalProvider = id !== "groq" && id !== "ollama";
+    if (isBasicPlan && isExternalProvider && !selectedAgents[id]!.selected) {
+      const currentExternalCount = AVAILABLE_PROVIDERS.filter(
+        p => p.id !== "groq" && p.id !== "ollama" && selectedAgents[p.id]!.selected
+      ).length;
+      if (currentExternalCount >= 1) {
+        setShowUpgradePrompt(true);
+        return;
+      }
+    }
     setSelectedAgents(prev => ({
       ...prev,
       [id]: { ...prev[id]!, selected: !prev[id]!.selected }
@@ -547,7 +571,10 @@ export default function NewSession() {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="flex items-center gap-2"><Bot className="h-5 w-5" /> Assemble Team</CardTitle>
-                  <CardDescription>Select agents and assign roles.</CardDescription>
+                  <CardDescription>
+                    Select agents and assign roles.
+                    {isBasicPlan && <span className="ml-1 text-indigo-400 font-medium">· Basic: 1 external provider</span>}
+                  </CardDescription>
                 </div>
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {savedTeams.length > 0 && (
@@ -602,17 +629,38 @@ export default function NewSession() {
               </div>
             </CardHeader>
             <CardContent>
+              {showUpgradePrompt && (
+                <div className="mb-3">
+                  <UpgradePrompt
+                    variant="banner"
+                    feature="multi-agent collaboration"
+                    onDismiss={() => setShowUpgradePrompt(false)}
+                  />
+                </div>
+              )}
               <div className="space-y-3">
                 {AVAILABLE_PROVIDERS.map(provider => {
                   const live = isLive(provider.id);
+                  const isExternalProvider = provider.id !== "groq" && provider.id !== "ollama";
+                  const currentExternalCount = AVAILABLE_PROVIDERS.filter(
+                    p => p.id !== "groq" && p.id !== "ollama" && selectedAgents[p.id]!.selected
+                  ).length;
+                  const lockedForBasic = isBasicPlan && isExternalProvider &&
+                    !selectedAgents[provider.id]!.selected && currentExternalCount >= 1;
                   return (
                     <div key={provider.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 p-2 rounded-md hover:bg-muted/50 transition-colors">
                       <div className="flex items-center gap-3 min-w-0 flex-1">
+                        {lockedForBasic ? (
+                          <div className="flex items-center h-4 w-4 justify-center">
+                            <span title="Upgrade to Pro for multi-agent collaboration" className="text-indigo-400/60 text-xs">🔒</span>
+                          </div>
+                        ) : (
                         <Checkbox 
                           id={`agent-${provider.id}`} 
                           checked={selectedAgents[provider.id]!.selected}
                           onCheckedChange={() => handleAgentToggle(provider.id)}
                         />
+                        )}
                         <Label htmlFor={`agent-${provider.id}`} className="cursor-pointer flex items-center gap-2 min-w-0">
                           <div className={`w-2 h-2 rounded-full flex-shrink-0 ${provider.color}`} />
                           <span className="font-medium truncate">{provider.name}</span>
