@@ -20,6 +20,7 @@ import { sendLowCreditsWarningIfNeeded } from "./lib/billingEmail";
 import { buildMockAdapter } from "./lib/agentFactory";
 import { isAdminUserId } from "./lib/adminAccess";
 import type { Agent } from "@workspace/db";
+import { generateLlmsTxt, generateLlmsFullTxt, getPublicPages, generateStructuredData } from "./engines/seoEngine";
 
 const PgStore = connectPgSimple(session);
 const app: Express = express();
@@ -164,6 +165,57 @@ app.post("/api/sessions/:id/safety-vote", apiLimiter, requireSession, async (req
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+// ── Public SEO / crawler routes (no auth required) ───────────────────────────
+
+const SITE_URL = process.env["PUBLIC_SITE_URL"] ?? "https://viba.guru";
+
+app.get("/robots.txt", (_req, res) => {
+  res.setHeader("Content-Type", "text/plain");
+  res.send([
+    "User-agent: *",
+    "Allow: /",
+    "Disallow: /api/",
+    "Disallow: /admin",
+    "",
+    `Sitemap: ${SITE_URL}/sitemap.xml`,
+  ].join("\n"));
+});
+
+app.get("/sitemap.xml", (_req, res) => {
+  const pages = getPublicPages();
+  const now = new Date().toISOString().split("T")[0];
+  const urls = [
+    { loc: SITE_URL, priority: "1.0", changefreq: "weekly" },
+    { loc: `${SITE_URL}/pricing`, priority: "0.9", changefreq: "monthly" },
+    { loc: `${SITE_URL}/signup`, priority: "0.8", changefreq: "monthly" },
+    { loc: `${SITE_URL}/login`, priority: "0.6", changefreq: "yearly" },
+    ...pages
+      .filter(p => !["/", "/pricing"].includes(p.path))
+      .map(p => ({ loc: `${SITE_URL}${p.path}`, priority: "0.7", changefreq: "weekly" })),
+  ];
+  const urlEntries = urls.map(u =>
+    `  <url>\n    <loc>${u.loc}</loc>\n    <lastmod>${now}</lastmod>\n    <changefreq>${u.changefreq}</changefreq>\n    <priority>${u.priority}</priority>\n  </url>`
+  ).join("\n");
+  res.setHeader("Content-Type", "application/xml");
+  res.send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urlEntries}\n</urlset>`);
+});
+
+app.get("/llms.txt", (_req, res) => {
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.send(generateLlmsTxt());
+});
+
+app.get("/llms-full.txt", (_req, res) => {
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.send(generateLlmsFullTxt());
+});
+
+app.get("/structured-data.json", (_req, res) => {
+  res.json(generateStructuredData());
+});
+
+// ── Auth-gated API routes ─────────────────────────────────────────────────────
 
 app.use("/api", apiLimiter, accessTokenMiddleware, requireSession, router);
 
