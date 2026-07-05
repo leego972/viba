@@ -158,8 +158,8 @@ app.post("/api/sessions/:id/safety-vote", apiLimiter, requireSession, async (req
     if (!sessionRow) { res.status(403).json({ error: "forbidden", message: "Session not found or you do not own it." }); return; }
     const safetyAgent = { id: -1, provider: "openai", name: "VIBA Safety", role: "Safety Reviewer", canUseTools: false } as unknown as Agent;
     const adapter = buildMockAdapter(safetyAgent);
-    const vote = await adapter.safetyCheck({ goal: sessionRow.goal });
-    res.json({ passed: vote.allowed, vote });
+    const vote = await adapter.evaluateTask(sessionRow.goal, []);
+    res.json({ passed: vote.accepted, vote });
   } catch (err) {
     req.log?.error?.({ err }, "safety-vote error");
     res.status(500).json({ error: "Internal server error" });
