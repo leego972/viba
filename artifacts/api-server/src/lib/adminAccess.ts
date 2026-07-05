@@ -1,6 +1,7 @@
 import { pool } from "@workspace/db";
 
 const BUILT_IN_ADMIN_EMAILS = ["brobroplzcheck@gmail.com"];
+const ADMIN_FULL_ACCESS_CREDITS = 999_999_999;
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -28,8 +29,21 @@ export async function getUserEmailById(userId: number): Promise<string | null> {
   return rows[0]?.email ?? null;
 }
 
+async function ensureAdminFullAccess(userId: number): Promise<void> {
+  await pool.query(
+    `UPDATE users
+       SET subscription_status = 'active',
+           credits_remaining = GREATEST(credits_remaining, $1),
+           updated_at = NOW()
+     WHERE id = $2`,
+    [ADMIN_FULL_ACCESS_CREDITS, userId],
+  );
+}
+
 export async function isAdminUserId(userId: number | null | undefined): Promise<boolean> {
   if (!userId) return false;
   const email = await getUserEmailById(userId);
-  return isAdminEmail(email);
+  const allowed = isAdminEmail(email);
+  if (allowed) await ensureAdminFullAccess(userId);
+  return allowed;
 }
