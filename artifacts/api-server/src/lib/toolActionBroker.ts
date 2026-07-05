@@ -12,6 +12,7 @@ import { evaluateToolPolicy, redactPayload, redactResult, type PolicyContext } f
 import { listVibaCredentials } from "./vibaVault";
 import { deliverSystemArtifactToUser, type DeliverArtifactInput } from "./systemArtifactDelivery";
 import { canExecuteWebsiteSecurityTool, executeWebsiteSecurityTool } from "./websiteSecurityToolHandlers";
+import { deductCredits } from "./billing";
 
 export type BrokerStatus =
   | "ready"
@@ -65,6 +66,40 @@ const SYSTEM_ARTIFACT_TOOL: ToolDefinition = {
   outputsSecretValues: false,
 };
 
+const TOOL_CREDIT_COSTS: Record<string, number> = {
+  "website.crawl.map": 2,
+  "website.link_check": 2,
+  "website.ui_smoke_test": 4,
+  "website.form_flow_test": 4,
+  "website.responsive_visual_check": 4,
+  "website.console_network_audit": 4,
+  "website.download_safety.review": 2,
+  "quality.lighthouse.audit": 8,
+  "quality.core_web_vitals.audit": 4,
+  "quality.accessibility.axe_audit": 6,
+  "quality.keyboard_navigation.audit": 4,
+  "quality.seo_technical.audit": 3,
+  "security.passive_baseline.audit": 4,
+  "security.tls_certificate.audit": 2,
+  "security.http_headers.audit": 2,
+  "security.cookie_flags.audit": 2,
+  "security.csp.audit": 2,
+  "security.cors.audit": 2,
+  "security.redirect_mixed_content.audit": 2,
+  "security.sensitive_data_exposure.audit": 3,
+  "security.sitemap_robots.review": 2,
+  "api.contract.audit": 3,
+  "api.authz_matrix.audit": 3,
+  "api.rate_limit.audit": 2,
+  "supply.sbom.generate": 2,
+  "supply.dependency_vuln.audit": 3,
+  "supply.license.review": 2,
+  "deployment.config_security.review": 2,
+  "report.owasp_asvs.generate": 1,
+  "report.owasp_wstg.generate": 1,
+  "report.website_qa.generate": 1,
+};
+
 function getBrokerToolById(toolId: string): ToolDefinition | undefined {
   if (toolId === SYSTEM_ARTIFACT_TOOL.toolId) return SYSTEM_ARTIFACT_TOOL;
   return getSecurityHardeningToolById(toolId) ?? getToolById(toolId);
@@ -72,6 +107,16 @@ function getBrokerToolById(toolId: string): ToolDefinition | undefined {
 
 function allBrokerTools(): ToolDefinition[] {
   return [...getAllTools(), ...SECURITY_HARDENING_TOOLS, SYSTEM_ARTIFACT_TOOL];
+}
+
+function creditCostForTool(toolId: string): number {
+  return TOOL_CREDIT_COSTS[toolId] ?? (canExecuteWebsiteSecurityTool(toolId) ? 2 : 0);
+}
+
+function sessionIdFromPayload(payload: Record<string, unknown> | undefined): number | undefined {
+  const raw = payload?.["sessionId"] ?? payload?.["session_id"];
+  const value = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : undefined;
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.trunc(value) : undefined;
 }
 
 async function ensureInvocationsTable(): Promise<void> {
@@ -172,6 +217,7 @@ export async function getAvailableTools(userId: number): Promise<Array<{
   toolId: string; label: string; category: string; riskLevel: string;
   requiresApproval: boolean; supportsDryRun: boolean; requiresSafeBuild: boolean;
   credentialStatus: "configured" | "missing" | "not_required";
+  creditCost: number;
   rawValuesReturned: false;
 }>> {
   await ensureInvocationsTable();
@@ -192,6 +238,7 @@ export async function getAvailableTools(userId: number): Promise<Array<{
         supportsDryRun: tool.supportsDryRun,
         requiresSafeBuild: tool.requiresSafeBuild,
         credentialStatus,
+        creditCost: creditCostForTool(tool.toolId),
         rawValuesReturned: false as const,
       };
     }),
@@ -233,7 +280,7 @@ export async function planToolAction(input: BrokerInput): Promise<BrokerResult> 
     message = `${tool.label} is ready to execute.`;
   }
 
-  const id = await logInvocation({ userId: input.userId, taskId: String(input.taskId ?? ""), toolId: tool.toolId, agentName: input.requestedByAgent ?? null, riskLevel: tool.riskLevel, status, dryRun: false, approvalRequired: policy.requiresApproval, approvedAt: null, payloadRedacted: redactPayload(input.payload), resultRedacted: {}, error: null });
+  const id = await logInvocation({ userId: input.userId, taskId: String(input.taskId ?? ""), toolId: tool.toolId, agentName: input.requestedByAgent ?? null, riskLevel: tool.riskLevel, status, dryRun: false, approvalRequired: policy.requiresApproval, approvedAt: null, payloadRedacted: redactPayload(input.payload), resultRedacted: { creditCost: creditCostForTool(tool.toolId) }, error: null });
   return { status, toolId: tool.toolId, label: tool.label, riskLevel: tool.riskLevel, message, requiresDryRun: policy.requiresDryRun, requiresApproval: policy.requiresApproval, requiresSafeBuild: policy.requiresSafeBuild, warnings: policy.warnings, invocationId: id ?? undefined, rawValuesReturned: false };
 }
 
@@ -250,9 +297,10 @@ export async function dryRunToolAction(input: BrokerInput): Promise<BrokerResult
     tool: tool.toolId,
     action: input.action,
     payloadKeys: Object.keys(input.payload ?? {}),
+    creditCost: creditCostForTool(tool.toolId),
     simulatedOutcome: tool.toolId === "artifact.deliver"
       ? "VIBA would create an assistant chat message and attach a downloadable document/file/ZIP for the user. No file was stored in dry-run mode."
-      : `${tool.label} would execute with action '${input.action}'. No mutations performed.`,
+      : `${tool.label} would execute with action '${input.action}'. No mutations performed and no credits deducted in dry-run mode.`,
     note: "This is a simulation. No external systems were called. No secrets were used.",
   };
   const id = await logInvocation({ userId: input.userId, taskId: String(input.taskId ?? ""), toolId: tool.toolId, agentName: input.requestedByAgent ?? null, riskLevel: tool.riskLevel, status: "executed", dryRun: true, approvalRequired: tool.requiresApproval, approvedAt: null, payloadRedacted: redactPayload(input.payload), resultRedacted: simulatedResult, error: null });
@@ -292,6 +340,19 @@ export async function executeToolAction(input: BrokerInput): Promise<BrokerResul
   }
 
   const tool = getBrokerToolById(input.toolId)!;
+  const creditCost = creditCostForTool(tool.toolId);
+  if (creditCost > 0) {
+    if (!Number.isFinite(input.userId) || input.userId <= 0) {
+      const id = await logInvocation({ userId: input.userId, taskId: String(input.taskId ?? ""), toolId: tool.toolId, agentName: input.requestedByAgent ?? null, riskLevel: tool.riskLevel, status: "blocked", dryRun: false, approvalRequired: tool.requiresApproval, approvedAt: null, payloadRedacted: redactPayload(input.payload), resultRedacted: { creditCost }, error: "Authenticated user required for credit deduction" });
+      return { status: "blocked", toolId: tool.toolId, label: tool.label, riskLevel: tool.riskLevel, message: "Authenticated user required before metered tool execution.", requiresDryRun: false, requiresApproval: false, requiresSafeBuild: false, warnings: plan.warnings, invocationId: id ?? undefined, rawValuesReturned: false };
+    }
+    const deducted = await deductCredits(input.userId, creditCost, sessionIdFromPayload(input.payload));
+    if (!deducted) {
+      const id = await logInvocation({ userId: input.userId, taskId: String(input.taskId ?? ""), toolId: tool.toolId, agentName: input.requestedByAgent ?? null, riskLevel: tool.riskLevel, status: "blocked", dryRun: false, approvalRequired: tool.requiresApproval, approvedAt: null, payloadRedacted: redactPayload(input.payload), resultRedacted: { creditCost }, error: "Insufficient credits" });
+      return { status: "blocked", toolId: tool.toolId, label: tool.label, riskLevel: tool.riskLevel, message: `Insufficient credits. ${tool.label} costs ${creditCost} credit${creditCost === 1 ? "" : "s"}.`, requiresDryRun: false, requiresApproval: false, requiresSafeBuild: false, warnings: plan.warnings, invocationId: id ?? undefined, rawValuesReturned: false };
+    }
+  }
+
   try {
     if (tool.toolId === "artifact.deliver") {
       const result = await deliverSystemArtifactToUser(artifactPayload(input));
@@ -303,10 +364,11 @@ export async function executeToolAction(input: BrokerInput): Promise<BrokerResul
       ? await executeWebsiteSecurityTool(tool, input)
       : { executed: true, toolId: tool.toolId, action: input.action, note: `${tool.label} execution stub. Wire tool adapter for live integration.`, rawValuesReturned: false };
 
-    const id = await logInvocation({ userId: input.userId, taskId: String(input.taskId ?? ""), toolId: tool.toolId, agentName: input.requestedByAgent ?? null, riskLevel: tool.riskLevel, status: "executed", dryRun: false, approvalRequired: tool.requiresApproval, approvedAt: input.approvalToken ? new Date() : null, payloadRedacted: redactPayload(input.payload), resultRedacted: redactResult(executionResult), error: null });
-    return { status: "executed", toolId: tool.toolId, label: tool.label, riskLevel: tool.riskLevel, message: `${tool.label} executed successfully.`, result: executionResult, requiresDryRun: false, requiresApproval: false, requiresSafeBuild: false, warnings: plan.warnings, invocationId: id ?? undefined, rawValuesReturned: false };
+    const meteredResult = creditCost > 0 ? { ...executionResult, creditCostDeducted: creditCost } : executionResult;
+    const id = await logInvocation({ userId: input.userId, taskId: String(input.taskId ?? ""), toolId: tool.toolId, agentName: input.requestedByAgent ?? null, riskLevel: tool.riskLevel, status: "executed", dryRun: false, approvalRequired: tool.requiresApproval, approvedAt: input.approvalToken ? new Date() : null, payloadRedacted: redactPayload(input.payload), resultRedacted: redactResult(meteredResult), error: null });
+    return { status: "executed", toolId: tool.toolId, label: tool.label, riskLevel: tool.riskLevel, message: `${tool.label} executed successfully.`, result: meteredResult, requiresDryRun: false, requiresApproval: false, requiresSafeBuild: false, warnings: plan.warnings, invocationId: id ?? undefined, rawValuesReturned: false };
   } catch (err) {
-    const id = await logInvocation({ userId: input.userId, taskId: String(input.taskId ?? ""), toolId: tool.toolId, agentName: input.requestedByAgent ?? null, riskLevel: tool.riskLevel, status: "failed", dryRun: false, approvalRequired: tool.requiresApproval, approvedAt: null, payloadRedacted: redactPayload(input.payload), resultRedacted: {}, error: String(err) });
+    const id = await logInvocation({ userId: input.userId, taskId: String(input.taskId ?? ""), toolId: tool.toolId, agentName: input.requestedByAgent ?? null, riskLevel: tool.riskLevel, status: "failed", dryRun: false, approvalRequired: tool.requiresApproval, approvedAt: null, payloadRedacted: redactPayload(input.payload), resultRedacted: creditCost > 0 ? { creditCostDeducted: creditCost } : {}, error: String(err) });
     return { status: "failed", toolId: tool.toolId, label: tool.label, riskLevel: tool.riskLevel, message: String(err), requiresDryRun: false, requiresApproval: false, requiresSafeBuild: false, warnings: plan.warnings, invocationId: id ?? undefined, rawValuesReturned: false };
   }
 }
