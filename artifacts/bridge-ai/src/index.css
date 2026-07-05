@@ -520,3 +520,44 @@ img[alt="VIBA"] {
 .viba-secondary-button:hover {
   background: hsl(var(--muted));
 }
+
+/* ─── SUBTLE MOTION (Task 18) ─────────────────────── */
+
+/* Card hover lift */
+.viba-card,
+.viba-card-premium {
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+.viba-card:hover,
+.viba-card-premium:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.07);
+}
+
+/* Section fade-in on first paint */
+@keyframes viba-fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.viba-section {
+  animation: viba-fade-up 0.5s ease both;
+}
+
+/* Status dot pulse — only for genuine live indicators */
+.viba-pulse-live {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Smooth button transitions */
+.viba-primary-button,
+.viba-secondary-button {
+  transition: all 0.18s ease;
+}
+
+/* Dashboard command summary card micro-lift */
+.command-card {
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.command-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
