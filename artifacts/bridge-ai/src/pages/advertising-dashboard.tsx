@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Activity, CheckCircle2, Clock, Loader2, Megaphone, Power, PowerOff, RefreshCw, XCircle } from "lucide-react";
+import { Activity, CheckCircle2, Clock, Loader2, Megaphone, Power, PowerOff, XCircle } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -61,7 +61,7 @@ export default function AdvertisingDashboard() {
     try {
       const result = await api("/api/advertising/scheduler/start", { method: "POST" });
       setStatus(result.status ?? result);
-      toast({ title: "VIBA growth system started", description: "The system will generate VIBA-only SEO and organic content automatically." });
+      toast({ title: "VIBA growth system started", description: "VIBA will generate professional VIBA-only organic content automatically." });
       await load();
     } catch (err) {
       toast({ title: "Start failed", description: String(err), variant: "destructive" });
@@ -113,9 +113,6 @@ export default function AdvertisingDashboard() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={load} disabled={busy}>
-              <RefreshCw className="mr-1 h-4 w-4" /> Refresh
-            </Button>
             <Button size="sm" onClick={startSystem} disabled={busy || isActive} className="bg-green-500 text-black hover:bg-green-600">
               {busy ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Power className="mr-1 h-4 w-4" />}
               Start System
@@ -132,7 +129,7 @@ export default function AdvertisingDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="text-base">System Status</CardTitle>
-                <CardDescription>Only Start and Stop controls are exposed here. The system handles the rest automatically.</CardDescription>
+                <CardDescription>Only Start and Stop controls are exposed here. The system handles generation automatically.</CardDescription>
               </div>
               <StatusBadge active={isActive} />
             </div>
@@ -175,10 +172,10 @@ export default function AdvertisingDashboard() {
         <Card className="border-border/50 bg-card/80">
           <CardHeader>
             <CardTitle className="text-base">VIBA-Only Content Guard</CardTitle>
-            <CardDescription>The growth system must create content only about VIBA.</CardDescription>
+            <CardDescription>The growth system must create professional content only about VIBA.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-muted-foreground">
-            <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-green-400" />Allowed: VIBA, multi-agent AI orchestration, website UI checks, code/repo review, AI collaboration, reports, cost control and developer workflows.</p>
+            <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-green-400" />Allowed: UI testing, beta testing, repo testing, report generation, applied repairs, collaborative AI work, complex systems using multiple AIs in one place, live AI task delegation and performance visibility.</p>
             <p className="flex items-center gap-2"><XCircle className="h-4 w-4 text-red-400" />Blocked: unrelated projects, film studio content, fashion, tattoo, unrelated apps, Snapchat, TikTok and paid ads without owner approval.</p>
           </CardContent>
         </Card>
