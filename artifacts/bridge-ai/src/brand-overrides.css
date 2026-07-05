@@ -1,34 +1,41 @@
-/* VIBA brand correction: cream-white application shell with readable ink text. */
+/* VIBA cream brand system: full-site cream shell with readable ink text. */
 :root,
 .dark {
-  --background: 48 100% 98%;
+  --viba-cream: #fff7e6;
+  --viba-cream-soft: #fffaf0;
+  --viba-cream-panel: #fff1cf;
+  --viba-cream-border: #e8c986;
+  --viba-ink: #111827;
+  --viba-muted-ink: #5f5a50;
+
+  --background: 39 100% 95%;
   --foreground: 222 47% 11%;
-  --border: 214 32% 82%;
-  --card: 0 0% 100%;
+  --border: 39 45% 68%;
+  --card: 41 100% 97%;
   --card-foreground: 222 47% 11%;
-  --card-border: 214 32% 82%;
-  --sidebar: 48 100% 98%;
+  --card-border: 39 45% 68%;
+  --sidebar: 39 100% 95%;
   --sidebar-foreground: 222 47% 14%;
-  --sidebar-border: 214 32% 82%;
-  --sidebar-primary: 239 84% 62%;
+  --sidebar-border: 39 45% 68%;
+  --sidebar-primary: 239 84% 58%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 220 25% 94%;
+  --sidebar-accent: 40 100% 91%;
   --sidebar-accent-foreground: 222 47% 14%;
-  --sidebar-ring: 239 84% 62%;
-  --popover: 0 0% 100%;
+  --sidebar-ring: 239 84% 58%;
+  --popover: 41 100% 97%;
   --popover-foreground: 222 47% 11%;
-  --popover-border: 214 32% 82%;
+  --popover-border: 39 45% 68%;
   --primary: 239 84% 58%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 220 25% 94%;
+  --secondary: 40 100% 91%;
   --secondary-foreground: 222 47% 18%;
-  --muted: 220 25% 94%;
-  --muted-foreground: 217 19% 38%;
+  --muted: 40 100% 91%;
+  --muted-foreground: 35 12% 34%;
   --accent: 262 72% 56%;
   --accent-foreground: 0 0% 100%;
   --destructive: 0 72% 48%;
   --destructive-foreground: 0 0% 100%;
-  --input: 214 32% 82%;
+  --input: 39 45% 68%;
   --ring: 239 84% 58%;
 }
 
@@ -37,7 +44,60 @@ body,
 #root {
   max-width: 100%;
   overflow-x: hidden;
-  background: hsl(var(--background));
+  background: var(--viba-cream) !important;
+  color: var(--viba-ink);
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, rgba(232, 201, 134, 0.28), transparent 34rem),
+    linear-gradient(180deg, var(--viba-cream) 0%, var(--viba-cream-soft) 100%) !important;
+}
+
+/* Convert old dark/public-page utility classes to the cream system. */
+[class*="bg-[#0a0e1a]"],
+[class*="via-[#0a0e1a]"],
+[class*="from-blue-950"],
+[class*="to-indigo-950"],
+[class*="bg-gradient-to-br"] {
+  background: var(--viba-cream) !important;
+}
+
+[class*="bg-white/5"],
+[class*="bg-white/10"],
+[class*="bg-white/[0.02]"],
+[class*="bg-white/[0.03]"],
+[class*="bg-white/[0.05]"],
+[class*="bg-white/[0.015]"] {
+  background: var(--viba-cream-soft) !important;
+}
+
+[class*="border-white/10"],
+[class*="border-white/[0.06]"],
+[class*="border-white/[0.07]"],
+[class*="border-white/[0.08]"] {
+  border-color: rgba(184, 134, 11, 0.28) !important;
+}
+
+.text-white,
+[class*="text-white"] {
+  color: var(--viba-ink) !important;
+}
+
+.text-gray-300,
+.text-gray-400,
+.text-gray-500,
+[class*="text-gray-300"],
+[class*="text-gray-400"],
+[class*="text-gray-500"] {
+  color: var(--viba-muted-ink) !important;
+}
+
+input,
+textarea,
+select {
+  background-color: var(--viba-cream-soft) !important;
+  color: var(--viba-ink) !important;
 }
 
 .viba-logo-outline {
