@@ -5,6 +5,7 @@
  * before any tool action is planned, dry-run, or executed.
  */
 import type { ToolDefinition, RiskLevel } from "./toolRegistry";
+import { isToolAllowedForPlan, UPGRADE_MESSAGE, type PlanKey } from "./planLimits";
 
 export interface PolicyDecision {
   allowed: boolean;
@@ -181,10 +182,26 @@ export interface PolicyContext {
   hasSafeBuildPassed?: boolean;
   hasByokCredential?: boolean;
   hasVaultCredential?: boolean;
+  /** Current user plan — used for entitlement gating */
+  planKey?: string;
 }
 
 export function evaluateToolPolicy(tool: ToolDefinition, context: PolicyContext = {}): PolicyDecision {
-  const { hasSafeBuildPassed = false, hasByokCredential = false, hasVaultCredential = false } = context;
+  const { hasSafeBuildPassed = false, hasByokCredential = false, hasVaultCredential = false, planKey } = context;
+
+  // ── Plan entitlement gate (checked first, before credential / category gates) ─
+  if (planKey) {
+    if (!isToolAllowedForPlan(tool.toolId, planKey as PlanKey)) {
+      return {
+        allowed: false,
+        requiresDryRun: false,
+        requiresApproval: false,
+        requiresSafeBuild: false,
+        blockedReason: UPGRADE_MESSAGE,
+        warnings: [`This tool (${tool.toolId}) requires the Pro Repair plan.`],
+      };
+    }
+  }
 
   // Vault credential gate
   if (tool.permissionsRequired.includes("vault_required") && !hasVaultCredential) {
