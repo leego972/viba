@@ -26,6 +26,7 @@ import doctorRouter from "./doctor";
 import marketCompletionRouter from "./marketCompletion";
 import assistedBrowserRouter from "./assistedBrowser";
 import railwayConnectorRouter from "./railwayConnector";
+import renderConnectorRouter from "./renderConnector";
 import customAiCredentialsRouter from "./customAiCredentials";
 import businessSecurityRouter from "./businessSecurity";
 import agentCommsConsoleRouter from "./agentCommsConsole";
@@ -52,7 +53,6 @@ import marketingRouter from "./marketing";
 import advertisingRouter from "./advertising";
 import contentCreatorRouter from "./contentCreator";
 import userBrowserRouter from "./userBrowserRouter";
-import appStoreDeploymentRouter from "./appStoreDeployment";
 
 const router: IRouter = Router();
 
@@ -84,6 +84,7 @@ router.use(doctorRouter);
 router.use(marketCompletionRouter);
 router.use(assistedBrowserRouter);
 router.use(railwayConnectorRouter);
+router.use(renderConnectorRouter);
 router.use(customAiCredentialsRouter);
 router.use(businessSecurityRouter);
 router.use(agentCommsConsoleRouter);
@@ -110,6 +111,5 @@ router.use(marketingRouter);
 router.use(advertisingRouter);
 router.use(contentCreatorRouter);
 router.use(userBrowserRouter);
-router.use(appStoreDeploymentRouter);
 
 export default router;
