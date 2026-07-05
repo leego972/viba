@@ -46,7 +46,7 @@ export default function Pricing() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [plans, setPlans] = useState<PlansData | null>(null);
   const [plansLoading, setPlansLoading] = useState(true);
-  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [annualCheckoutLoading, setAnnualCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
   const [packLoading, setPackLoading] = useState<string | null>(null);
@@ -59,19 +59,20 @@ export default function Pricing() {
       .finally(() => setPlansLoading(false));
   }, []);
 
-  async function handleSubscribe() {
+  async function handleSubscribe(planKey: string = "pro_repair") {
     if (!isAuthenticated) {
-      setLocation("/signup?next=/pricing");
+      setLocation(`/signup?next=/pricing`);
       return;
     }
 
-    setCheckoutLoading(true);
+    setCheckoutLoading(planKey);
     setCheckoutError("");
     try {
       const res = await fetch("/api/billing/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
+        body: JSON.stringify({ planKey }),
       });
       const data = (await res.json()) as { url?: string; error?: string };
       if (res.status === 409) {
@@ -86,7 +87,7 @@ export default function Pricing() {
     } catch {
       setCheckoutError("Network error — please check your connection.");
     } finally {
-      setCheckoutLoading(false);
+      setCheckoutLoading(null);
     }
   }
 
@@ -226,38 +227,38 @@ export default function Pricing() {
                 <p className="text-sm text-red-400 text-center mb-4">{checkoutError}</p>
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                {/* Monthly */}
-                <div className="relative rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
+                {/* Basic Assessment */}
+                <div className="relative rounded-2xl border border-white/10 bg-white/5 overflow-hidden flex flex-col">
                   <div className="absolute top-0 right-0 m-4">
                     <span className="flex items-center gap-1.5 bg-emerald-500 text-white text-xs font-semibold px-3 py-1.5 rounded-full">
                       <Star className="w-3 h-3" />
                       7-day free trial
                     </span>
                   </div>
-                  <div className="p-8 space-y-6">
+                  <div className="p-8 space-y-6 flex flex-col flex-1">
                     <div>
-                      <p className="text-sm font-medium text-zinc-400 uppercase tracking-widest mb-2">For active builders</p>
+                      <p className="text-sm font-medium text-zinc-400 uppercase tracking-widest mb-2">Basic Assessment</p>
                       <div className="flex items-end gap-2">
-                        <span className="text-5xl font-bold">{plan ? fmt(plan.unitAmount) : "$50"}</span>
+                        <span className="text-5xl font-bold">$25</span>
                         <span className="text-zinc-400 mb-1">/month</span>
                       </div>
-                      <p className="text-zinc-500 text-sm mt-1">1,000 credits per month</p>
+                      <p className="text-zinc-500 text-sm mt-1">750 credits per month</p>
                     </div>
-                    <ul className="space-y-3">
-                      {FEATURES.map((f) => (
+                    <ul className="space-y-2.5 flex-1">
+                      {["750 credits per month", "Website & code quality scans", "Lighthouse, Axe, SEO technical audit", "Passive security baseline audit", "QA report generation", "1 imported provider (+ Groq free)", "No repair actions"].map((f) => (
                         <li key={f} className="flex items-start gap-3 text-sm text-zinc-300">
-                          <Check className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
+                          <Check className="w-4 h-4 text-zinc-500 mt-0.5 shrink-0" />
                           {f}
                         </li>
                       ))}
                     </ul>
                     <div className="space-y-3">
                       <button
-                        onClick={handleSubscribe}
-                        disabled={checkoutLoading || authLoading}
+                        onClick={() => handleSubscribe("basic_assessment")}
+                        disabled={checkoutLoading !== null || authLoading}
                         className="w-full py-3.5 rounded-xl font-semibold text-white bg-white/10 hover:bg-white/20 border border-white/10 disabled:opacity-60 transition-all"
                       >
-                        {checkoutLoading ? "Redirecting…" : authLoading ? "Loading…" : isAuthenticated ? "Start Free Trial" : "Sign up & Start Free Trial"}
+                        {checkoutLoading === "basic_assessment" ? "Redirecting…" : authLoading ? "Loading…" : isAuthenticated ? "Start Basic Trial" : "Sign up & Start Free Trial"}
                       </button>
                       <p className="text-center text-xs text-zinc-500 flex items-center justify-center gap-1.5">
                         <Shield className="w-3 h-3" />
@@ -267,11 +268,11 @@ export default function Pricing() {
                   </div>
                 </div>
 
-                {/* Annual — best value */}
-                <div className="relative rounded-2xl border border-blue-500/40 bg-gradient-to-b from-blue-950/50 to-zinc-900/60 overflow-hidden shadow-2xl shadow-blue-900/20">
+                {/* Pro Repair — recommended */}
+                <div className="relative rounded-2xl border border-indigo-500/50 bg-gradient-to-b from-indigo-950/50 to-zinc-900/60 overflow-hidden shadow-2xl shadow-indigo-900/20 flex flex-col">
                   <div className="absolute top-0 left-0 m-4">
-                    <span className="bg-amber-500 text-black text-xs font-bold px-3 py-1.5 rounded-full">
-                      BEST VALUE
+                    <span className="bg-indigo-500 text-white text-xs font-bold px-3 py-1.5 rounded-full">
+                      RECOMMENDED
                     </span>
                   </div>
                   <div className="absolute top-0 right-0 m-4">
@@ -280,30 +281,30 @@ export default function Pricing() {
                       7-day free trial
                     </span>
                   </div>
-                  <div className="p-8 space-y-6">
+                  <div className="p-8 space-y-6 flex flex-col flex-1">
                     <div>
-                      <p className="text-sm font-medium text-blue-400 uppercase tracking-widest mb-2">For serious operators</p>
+                      <p className="text-sm font-medium text-indigo-400 uppercase tracking-widest mb-2">Pro Repair</p>
                       <div className="flex items-end gap-2">
-                        <span className="text-5xl font-bold">$600</span>
-                        <span className="text-zinc-400 mb-1">/year</span>
+                        <span className="text-5xl font-bold">$89</span>
+                        <span className="text-zinc-400 mb-1">/month</span>
                       </div>
-                      <p className="text-emerald-400 text-sm font-medium mt-1">23,400 credits — 95% more than monthly</p>
+                      <p className="text-emerald-400 text-sm font-medium mt-1">4,000 credits — 5× more than Basic</p>
                     </div>
-                    <ul className="space-y-3">
+                    <ul className="space-y-2.5 flex-1">
                       {FEATURES.map((f) => (
                         <li key={f} className="flex items-start gap-3 text-sm text-zinc-300">
                           <Check className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
-                          {f.replace("1,000 credits per month", "23,400 credits per year")}
+                          {f}
                         </li>
                       ))}
                     </ul>
                     <div className="space-y-3">
                       <button
-                        onClick={handleSubscribeAnnual}
-                        disabled={annualCheckoutLoading || authLoading}
-                        className="w-full py-3.5 rounded-xl font-semibold text-white bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 disabled:opacity-60 transition-all shadow-lg shadow-blue-900/40"
+                        onClick={() => handleSubscribe("pro_repair")}
+                        disabled={checkoutLoading !== null || authLoading}
+                        className="w-full py-3.5 rounded-xl font-semibold text-white bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 disabled:opacity-60 transition-all shadow-lg shadow-indigo-900/40"
                       >
-                        {annualCheckoutLoading ? "Redirecting…" : authLoading ? "Loading…" : isAuthenticated ? "Start Annual Trial" : "Sign up & Start Annual Trial"}
+                        {checkoutLoading === "pro_repair" ? "Redirecting…" : authLoading ? "Loading…" : isAuthenticated ? "Start Pro Trial" : "Sign up & Start Free Trial"}
                       </button>
                       <p className="text-center text-xs text-zinc-500 flex items-center justify-center gap-1.5">
                         <Shield className="w-3 h-3" />
