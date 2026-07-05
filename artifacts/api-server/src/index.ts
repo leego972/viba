@@ -395,6 +395,13 @@ async function runStartupMigrations(): Promise<void> {
     END $$
   `);
 
+  // ── deploy engine: Render-backed columns ────────────────────────────────────
+  await pool.query(`ALTER TABLE viba_deploy_projects ADD COLUMN IF NOT EXISTS render_service_id TEXT`);
+  await pool.query(`ALTER TABLE viba_deploy_projects ADD COLUMN IF NOT EXISTS render_region TEXT NOT NULL DEFAULT 'oregon'`);
+  await pool.query(`ALTER TABLE viba_deploy_projects ADD COLUMN IF NOT EXISTS render_plan TEXT NOT NULL DEFAULT 'starter'`);
+  await pool.query(`ALTER TABLE viba_deployments ADD COLUMN IF NOT EXISTS render_deploy_id TEXT`);
+  await pool.query(`ALTER TABLE viba_deploy_addons ADD COLUMN IF NOT EXISTS render_resource_id TEXT`);
+
   logger.info("Startup migrations complete");
 }
 
