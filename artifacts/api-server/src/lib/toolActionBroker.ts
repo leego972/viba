@@ -13,6 +13,7 @@ import { listVibaCredentials } from "./vibaVault";
 import { deliverSystemArtifactToUser, type DeliverArtifactInput } from "./systemArtifactDelivery";
 import { canExecuteWebsiteSecurityTool, executeWebsiteSecurityTool, validateWebsiteSecurityToolInput } from "./websiteSecurityToolHandlers";
 import { deductCredits, grantCredits } from "./billing";
+import { isAdminUserId } from "./adminAccess";
 
 export type BrokerStatus =
   | "ready"
@@ -109,8 +110,13 @@ function allBrokerTools(): ToolDefinition[] {
   return [...getAllTools(), ...SECURITY_HARDENING_TOOLS, SYSTEM_ARTIFACT_TOOL];
 }
 
-function creditCostForTool(toolId: string): number {
+function baseCreditCostForTool(toolId: string): number {
   return TOOL_CREDIT_COSTS[toolId] ?? (canExecuteWebsiteSecurityTool(toolId) ? 2 : 0);
+}
+
+async function creditCostForUser(toolId: string, userId: number): Promise<number> {
+  if (userId > 0 && await isAdminUserId(userId)) return 0;
+  return baseCreditCostForTool(toolId);
 }
 
 function sessionIdFromPayload(payload: Record<string, unknown> | undefined): number | undefined {
@@ -150,7 +156,7 @@ async function ensureInvocationsTable(): Promise<void> {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_viba_tool_invoc_user ON viba_tool_invocations (user_id, created_at DESC)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_viba_tool_invoc_task ON viba_tool_invocations (task_id, created_at DESC)`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_viba_tool_invoc_tool ON viba_tool_invocations (tool_id, created_at DESC)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_viba_tool_invoc_tool ON viba_tool_invocations (tool_id)`);
 }
 
 async function logInvocation(input: {
@@ -231,6 +237,7 @@ export async function getAvailableTools(userId: number): Promise<Array<{
 }>> {
   await ensureInvocationsTable();
   const tools = allBrokerTools();
+  const adminUser = userId > 0 ? await isAdminUserId(userId) : false;
   const results = await Promise.all(
     tools.map(async (tool) => {
       let credentialStatus: "configured" | "missing" | "not_required" = "not_required";
@@ -247,7 +254,7 @@ export async function getAvailableTools(userId: number): Promise<Array<{
         supportsDryRun: tool.supportsDryRun,
         requiresSafeBuild: tool.requiresSafeBuild,
         credentialStatus,
-        creditCost: creditCostForTool(tool.toolId),
+        creditCost: adminUser ? 0 : baseCreditCostForTool(tool.toolId),
         rawValuesReturned: false as const,
       };
     }),
@@ -289,7 +296,8 @@ export async function planToolAction(input: BrokerInput): Promise<BrokerResult> 
     message = `${tool.label} is ready to execute.`;
   }
 
-  const id = await logInvocation({ userId: input.userId, taskId: String(input.taskId ?? ""), toolId: tool.toolId, agentName: input.requestedByAgent ?? null, riskLevel: tool.riskLevel, status, dryRun: false, approvalRequired: policy.requiresApproval, approvedAt: null, payloadRedacted: redactPayload(input.payload), resultRedacted: { creditCost: creditCostForTool(tool.toolId) }, error: null });
+  const creditCost = await creditCostForUser(tool.toolId, input.userId);
+  const id = await logInvocation({ userId: input.userId, taskId: String(input.taskId ?? ""), toolId: tool.toolId, agentName: input.requestedByAgent ?? null, riskLevel: tool.riskLevel, status, dryRun: false, approvalRequired: policy.requiresApproval, approvedAt: null, payloadRedacted: redactPayload(input.payload), resultRedacted: { creditCost }, error: null });
   return { status, toolId: tool.toolId, label: tool.label, riskLevel: tool.riskLevel, message, requiresDryRun: policy.requiresDryRun, requiresApproval: policy.requiresApproval, requiresSafeBuild: policy.requiresSafeBuild, warnings: policy.warnings, invocationId: id ?? undefined, rawValuesReturned: false };
 }
 
@@ -301,16 +309,17 @@ export async function dryRunToolAction(input: BrokerInput): Promise<BrokerResult
     return { status: "blocked", toolId: tool.toolId, label: tool.label, riskLevel: tool.riskLevel, message: `${tool.label} does not support dry-run mode.`, requiresDryRun: false, requiresApproval: tool.requiresApproval, requiresSafeBuild: tool.requiresSafeBuild, warnings: [], invocationId: id ?? undefined, rawValuesReturned: false };
   }
 
+  const creditCost = await creditCostForUser(tool.toolId, input.userId);
   const simulatedResult = {
     mode: "dry_run",
     tool: tool.toolId,
     action: input.action,
     payloadKeys: Object.keys(input.payload ?? {}),
-    creditCost: creditCostForTool(tool.toolId),
+    creditCost,
     simulatedOutcome: tool.toolId === "artifact.deliver"
       ? "VIBA would create an assistant chat message and attach a downloadable document/file/ZIP for the user. No file was stored in dry-run mode."
       : `${tool.label} would execute with action '${input.action}'. No mutations performed and no credits deducted in dry-run mode.`,
-    note: "This is a simulation. No external systems were called. No secrets were used.",
+    note: creditCost === 0 ? "Admin/unmetered user: live execution is not charged credits." : "This is a simulation. No external systems were called. No secrets were used.",
   };
   const id = await logInvocation({ userId: input.userId, taskId: String(input.taskId ?? ""), toolId: tool.toolId, agentName: input.requestedByAgent ?? null, riskLevel: tool.riskLevel, status: "executed", dryRun: true, approvalRequired: tool.requiresApproval, approvedAt: null, payloadRedacted: redactPayload(input.payload), resultRedacted: simulatedResult, error: null });
 
@@ -349,7 +358,7 @@ export async function executeToolAction(input: BrokerInput): Promise<BrokerResul
   }
 
   const tool = getBrokerToolById(input.toolId)!;
-  const creditCost = creditCostForTool(tool.toolId);
+  const creditCost = await creditCostForUser(tool.toolId, input.userId);
 
   if (canExecuteWebsiteSecurityTool(tool.toolId)) {
     const validation = validateWebsiteSecurityToolInput(tool.toolId, input.payload);
@@ -388,7 +397,7 @@ export async function executeToolAction(input: BrokerInput): Promise<BrokerResul
       return { status: "failed", toolId: tool.toolId, label: tool.label, riskLevel: tool.riskLevel, message: String(executionResult["error"] ?? "Tool execution failed"), result: executionResult, requiresDryRun: false, requiresApproval: false, requiresSafeBuild: false, warnings: plan.warnings, invocationId: id ?? undefined, rawValuesReturned: false };
     }
 
-    const meteredResult = creditCost > 0 ? { ...executionResult, creditCostDeducted: creditCost } : executionResult;
+    const meteredResult = creditCost > 0 ? { ...executionResult, creditCostDeducted: creditCost } : { ...executionResult, creditCostDeducted: 0, billingMode: "admin_unmetered" };
     const id = await logInvocation({ userId: input.userId, taskId: String(input.taskId ?? ""), toolId: tool.toolId, agentName: input.requestedByAgent ?? null, riskLevel: tool.riskLevel, status: "executed", dryRun: false, approvalRequired: tool.requiresApproval, approvedAt: input.approvalToken ? new Date() : null, payloadRedacted: redactPayload(input.payload), resultRedacted: redactResult(meteredResult), error: null });
     return { status: "executed", toolId: tool.toolId, label: tool.label, riskLevel: tool.riskLevel, message: `${tool.label} executed successfully.`, result: meteredResult, requiresDryRun: false, requiresApproval: false, requiresSafeBuild: false, warnings: plan.warnings, invocationId: id ?? undefined, rawValuesReturned: false };
   } catch (err) {
