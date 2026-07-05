@@ -29,8 +29,9 @@ export function isStripeConfigured(): boolean {
   return !!process.env["STRIPE_SECRET_KEY"];
 }
 
-// ─── Plan definition ──────────────────────────────────────────────────────────
+// ─── Plan definitions ─────────────────────────────────────────────────────────
 
+/** Legacy plan — kept for backward compat */
 export const VIBA_PLAN = {
   key: "viba_monthly",
   priceEnvKey: "STRIPE_BILLING_SUBSCRIPTION_PRICE_ID",
@@ -42,6 +43,47 @@ export const VIBA_PLAN = {
   monthlyCredits: 1000,
   trialDays: 7,
 } as const;
+
+export const BASIC_PLAN = {
+  key: "basic_assessment",
+  priceEnvKey: "STRIPE_BILLING_BASIC_PRICE_ID",
+  productName: "VIBA Basic Assessment",
+  description:
+    "Automated website and code quality assessment. 750 credits/month. Scans, audits, and QA reports. 7-day free trial — card required.",
+  unitAmount: 2500, // $25.00 USD
+  currency: "usd",
+  monthlyCredits: 750,
+  trialDays: 7,
+} as const;
+
+export const PRO_PLAN = {
+  key: "pro_repair",
+  priceEnvKey: "STRIPE_BILLING_PRO_PRICE_ID",
+  productName: "VIBA Pro Repair",
+  description:
+    "Full repair, multi-agent collaboration, deep security, and client proof reports. 4,000 credits/month. 7-day free trial — card required.",
+  unitAmount: 8900, // $89.00 USD
+  currency: "usd",
+  monthlyCredits: 4000,
+  trialDays: 7,
+} as const;
+
+/** All subscription plans — keyed for lookup */
+export const ALL_PLANS = {
+  viba_monthly: VIBA_PLAN,
+  basic_assessment: BASIC_PLAN,
+  pro_repair: PRO_PLAN,
+} as const;
+
+export type SubscriptionPlanKey = keyof typeof ALL_PLANS;
+
+export function getPlanByKey(key: string) {
+  return ALL_PLANS[key as SubscriptionPlanKey] ?? null;
+}
+
+export function getMonthlyCreditsForPlan(planKey: string): number {
+  return getPlanByKey(planKey)?.monthlyCredits ?? VIBA_PLAN.monthlyCredits;
+}
 
 // ─── Credit pack definitions ──────────────────────────────────────────────────
 
@@ -108,27 +150,30 @@ export async function provisionStripeProducts(): Promise<void> {
 
   const stripe = getStripe();
 
-  // ── Membership subscription price ────────────────────────────────────────
-  const subsEnvVal = process.env[VIBA_PLAN.priceEnvKey];
-  if (subsEnvVal) {
-    _priceCache[VIBA_PLAN.key] = subsEnvVal;
-    logger.info({ priceId: subsEnvVal }, "Billing: membership price from env");
-  } else {
+  // ── Membership subscription prices ────────────────────────────────────────
+  for (const plan of [VIBA_PLAN, BASIC_PLAN, PRO_PLAN]) {
+    const envVal = process.env[plan.priceEnvKey];
+    if (envVal) {
+      _priceCache[plan.key] = envVal;
+      logger.info({ key: plan.key, priceId: envVal }, "Billing: plan price from env");
+      continue;
+    }
     const priceId = await findOrCreatePrice({
       stripe,
-      productName: VIBA_PLAN.productName,
-      productDesc: VIBA_PLAN.description,
-      unitAmount: VIBA_PLAN.unitAmount,
-      currency: VIBA_PLAN.currency,
+      productName: plan.productName,
+      productDesc: plan.description,
+      unitAmount: plan.unitAmount,
+      currency: plan.currency,
       recurring: { interval: "month" },
       metadata: {
         system: "viba_billing",
         type: "subscription",
-        credits: String(VIBA_PLAN.monthlyCredits),
+        credits: String(plan.monthlyCredits),
+        planKey: plan.key,
       },
     });
-    _priceCache[VIBA_PLAN.key] = priceId;
-    logger.info({ priceId }, "Billing: membership price ready");
+    _priceCache[plan.key] = priceId;
+    logger.info({ key: plan.key, priceId }, "Billing: plan price ready");
   }
 
   // ── Credit pack prices ────────────────────────────────────────────────────
@@ -300,7 +345,9 @@ export async function linkSubscription(
 export async function refreshMonthlyCredits(
   userId: number,
   periodEnd: Date | null,
+  planKey?: string,
 ): Promise<void> {
+  const credits = getMonthlyCreditsForPlan(planKey ?? "viba_monthly");
   await pool.query(
     `UPDATE users SET
        credits_remaining  = $1,
@@ -308,9 +355,9 @@ export async function refreshMonthlyCredits(
        subscription_status = 'active',
        updated_at          = NOW()
      WHERE id = $3`,
-    [VIBA_PLAN.monthlyCredits, periodEnd, userId],
+    [credits, periodEnd, userId],
   );
-  logger.info({ userId, credits: VIBA_PLAN.monthlyCredits }, "Billing: monthly credits refreshed");
+  logger.info({ userId, credits, planKey }, "Billing: monthly credits refreshed");
 }
 
 export async function updateSubscriptionStatus(
