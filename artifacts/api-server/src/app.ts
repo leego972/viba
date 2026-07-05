@@ -21,6 +21,8 @@ import { buildMockAdapter } from "./lib/agentFactory";
 import { isAdminUserId } from "./lib/adminAccess";
 import type { Agent } from "@workspace/db";
 import { generateLlmsTxt, generateLlmsFullTxt, getPublicPages, generateStructuredData } from "./engines/seoEngine";
+import { deployRoutes } from "./modules/deploy/deploy.routes";
+import { githubDeployRoutes } from "./modules/deploy/github.routes";
 
 const PgStore = connectPgSimple(session);
 const app: Express = express();
@@ -80,12 +82,22 @@ app.use(pinoHttp({
   },
 }));
 
-app.use(express.json({ limit: "512kb" }));
+app.use(
+  express.json({
+    limit: "512kb",
+    verify: (req, _res, buf) => {
+      (req as unknown as Record<string, unknown>).rawBody = buf;
+    },
+  }),
+);
 app.use(express.urlencoded({ limit: "512kb", extended: true }));
 
 app.post("/api/sessions/:id/run-next", agentLimiter);
 app.post("/api/sessions/:id/run-full", agentLimiter);
 app.use("/api/admin", apiLimiter, requireAdmin, adminRouter);
+
+app.use("/api/deploy/github", apiLimiter, githubDeployRoutes);
+app.use("/api/deploy", apiLimiter, accessTokenMiddleware, deployRoutes);
 
 app.use(["/api/sessions/:id/run-next", "/api/sessions/:id/run-full"], async (req, res, next): Promise<void> => {
   if (req.session?.bypass) { next(); return; }
