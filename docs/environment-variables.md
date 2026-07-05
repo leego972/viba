@@ -32,7 +32,7 @@ Transactional emails (welcome, password reset, email verification, billing alert
 |---|---|
 | `SMTP_HOST` | SMTP server hostname (e.g. `smtp.sendgrid.net`, `smtp.mailgun.org`). |
 | `SMTP_USER` | SMTP authentication username (often the sending email address). |
-| `SMTP_PASS` | SMTP authentication password or API key. Store as a Railway secret. |
+| `SMTP_PASS` | SMTP authentication password or API key. Store as a Render secret. |
 | `SMTP_FROM` | "From" address for outbound emails (e.g. `noreply@viba.guru`). Defaults to `SMTP_USER` if not set. |
 | `SMTP_PORT` | SMTP port (default: `587`). Use `465` for SSL; the server will enable `secure: true` automatically when port is 465. |
 
@@ -237,6 +237,7 @@ Posts via `POST /2/tweets` (X API v2, Free tier — 1 500 tweets/month). Require
 
 ## Deployment Notes
 
-- Set all secrets as Railway environment variables, not in `.env` files committed to source control.
+- Set all secrets as **Render environment variables** (Render Dashboard → your service → Environment), not in `.env` files committed to source control.
 - After changing `REPLIT_AGENT_URL` or `MANUS_WORKSPACE_API_KEY`, restart the API server — they are read at adapter call time, not at startup.
-- `VITE_BRIDGE_AI_URL` must be set in the **frontend** environment (Archibald Titan AI on Railway) pointing to `https://viba.guru/`. It is not an API server variable.
+- Growth channel credentials (`LINKEDIN_ACCESS_TOKEN`, `TWITTER_API_KEY`, etc.) can also be saved at runtime via `POST /api/admin/growth/channel-config` without a redeploy — runtime values take precedence over env vars.
+- `VITE_BRIDGE_AI_URL` must be set in the **frontend** environment (Archibald Titan AI) pointing to `https://viba.guru/`. It is not an API server variable.
