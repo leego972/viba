@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import healthRouter from "./health";
 import sessionsRouter from "./sessions";
 import settingsRouter from "./settings";
@@ -57,6 +57,11 @@ import userBrowserRouter from "./userBrowserRouter";
 
 const router: IRouter = Router();
 
+function contentCreatorCompatibilityMount(req: Request, res: Response, next: NextFunction): void {
+  req.url = `/api/content-creator${req.url}`;
+  contentCreatorRouter(req, res, next);
+}
+
 // auth routes are registered first and bypass the ACCESS_TOKEN gate in app.ts
 router.use(authRouter);
 router.use(healthRouter);
@@ -110,6 +115,7 @@ router.use(accountRouter);
 router.use(seoRouter);
 router.use(marketingRouter);
 router.use(advertisingRouter);
+router.use("/content-creator", contentCreatorCompatibilityMount);
 router.use(contentCreatorRouter);
 router.use(growthAutopilotRouter);
 router.use(userBrowserRouter);
