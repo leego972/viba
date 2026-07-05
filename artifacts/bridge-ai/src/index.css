@@ -390,13 +390,9 @@
   .border.active-elevate-2:not(.no-active-interaction-elevate)::after { inset: -1px; }
 }
 
-/* ─── VIBA LOGO OUTLINE (auto-applies to every logo instance site-wide) ── */
+/* ─── VIBA LOGO ───────────────────────────────────── */
 img[alt="VIBA"] {
-  filter:
-    drop-shadow( 1px  0px 0 rgba(0,0,0,0.55))
-    drop-shadow(-1px  0px 0 rgba(0,0,0,0.55))
-    drop-shadow( 0px  1px 0 rgba(0,0,0,0.55))
-    drop-shadow( 0px -1px 0 rgba(0,0,0,0.55));
+  /* new logo already has its own styling — no filter needed */
 }
 
 /* ─── ANIMATIONS ────────────────────────────────── */
