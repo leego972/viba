@@ -1,0 +1,3 @@
+{
+  "ignoreCommand": "echo 'VIBA deployment is handled by Render. Vercel Git builds are intentionally disabled.' && exit 0"
+}
