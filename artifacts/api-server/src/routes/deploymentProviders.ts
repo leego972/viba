@@ -315,16 +315,45 @@ router.post("/api/deployment-providers/:providerId/execute", async (req, res): P
     return;
   }
 
-  // Railway is the only implemented provider — delegate to existing Railway connector
-  // All other providers should never reach here (blocked by Gate 1)
+  // Route implemented providers to their dedicated connector endpoints
+  const connectorPaths: Record<string, { base: string; label: string }> = {
+    railway: { base: "/api/railway-connector", label: "Railway Connector" },
+    render:  { base: "/api/render-connector",  label: "Render Connector"  },
+  };
+  const connector = connectorPaths[pid];
+
+  if (!connector) {
+    // Should never reach here — Gate 1 blocks non-implemented providers
+    res.status(400).json({
+      ok: false,
+      blocked: true,
+      blockedReason: "adapter_placeholder",
+      message: `Provider '${provider.label}' has no active connector. This is a bug — contact support.`,
+      rawValuesReturned: false,
+    });
+    return;
+  }
+
+  const actionRoutes: Record<string, string> = {
+    deploy:       `${connector.base}/deploy`,
+    env_write:    `${connector.base}/env-vars/apply`,
+    env_read:     `${connector.base}/env-vars`,
+    status:       `${connector.base}/status`,
+    logs:         `${connector.base}/logs`,
+    domain_check: `${connector.base}/status`,
+  };
+
   res.json({
     ok: true,
     providerId: pid,
     providerLabel: provider.label,
     action: action ?? "deploy",
     status: "accepted",
-    message: `Deployment action accepted for ${provider.label}. Use the Railway connector for execution.`,
-    note: "Execution is delegated to the Railway Tool Broker. No raw credentials returned.",
+    connectorLabel: connector.label,
+    connectorBase: connector.base,
+    actionEndpoint: actionRoutes[action ?? "deploy"] ?? `${connector.base}/status`,
+    message: `Action '${action ?? "deploy"}' accepted for ${provider.label}. Delegate to ${connector.label} at ${connector.base}.`,
+    note: "Destructive actions (deploy, env_write) require ADMIN_TOKEN + X-Admin-Confirm: true header at the connector endpoint. No raw credentials are returned.",
     rawValuesReturned: false,
   });
 });
