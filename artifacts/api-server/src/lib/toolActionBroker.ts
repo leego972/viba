@@ -11,8 +11,8 @@ import { SECURITY_HARDENING_TOOLS, getSecurityHardeningToolById } from "./securi
 import { evaluateToolPolicy, redactPayload, redactResult, type PolicyContext } from "./toolPolicies";
 import { listVibaCredentials } from "./vibaVault";
 import { deliverSystemArtifactToUser, type DeliverArtifactInput } from "./systemArtifactDelivery";
-import { canExecuteWebsiteSecurityTool, executeWebsiteSecurityTool } from "./websiteSecurityToolHandlers";
-import { deductCredits } from "./billing";
+import { canExecuteWebsiteSecurityTool, executeWebsiteSecurityTool, validateWebsiteSecurityToolInput } from "./websiteSecurityToolHandlers";
+import { deductCredits, grantCredits } from "./billing";
 
 export type BrokerStatus =
   | "ready"
@@ -117,6 +117,15 @@ function sessionIdFromPayload(payload: Record<string, unknown> | undefined): num
   const raw = payload?.["sessionId"] ?? payload?.["session_id"];
   const value = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : undefined;
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.trunc(value) : undefined;
+}
+
+async function refundToolCredits(userId: number, amount: number, toolId: string): Promise<void> {
+  if (amount <= 0 || userId <= 0) return;
+  try {
+    await grantCredits(userId, amount, `tool_refund:${toolId}`);
+  } catch {
+    // Refund failure must not expose internals to the user. It is logged by billing/logger where available.
+  }
 }
 
 async function ensureInvocationsTable(): Promise<void> {
@@ -341,6 +350,15 @@ export async function executeToolAction(input: BrokerInput): Promise<BrokerResul
 
   const tool = getBrokerToolById(input.toolId)!;
   const creditCost = creditCostForTool(tool.toolId);
+
+  if (canExecuteWebsiteSecurityTool(tool.toolId)) {
+    const validation = validateWebsiteSecurityToolInput(tool.toolId, input.payload);
+    if (!validation.ok) {
+      const id = await logInvocation({ userId: input.userId, taskId: String(input.taskId ?? ""), toolId: tool.toolId, agentName: input.requestedByAgent ?? null, riskLevel: tool.riskLevel, status: "blocked", dryRun: false, approvalRequired: tool.requiresApproval, approvedAt: null, payloadRedacted: redactPayload(input.payload), resultRedacted: { creditCost }, error: validation.error });
+      return { status: "blocked", toolId: tool.toolId, label: tool.label, riskLevel: tool.riskLevel, message: validation.error, requiresDryRun: false, requiresApproval: false, requiresSafeBuild: false, warnings: plan.warnings, invocationId: id ?? undefined, rawValuesReturned: false };
+    }
+  }
+
   if (creditCost > 0) {
     if (!Number.isFinite(input.userId) || input.userId <= 0) {
       const id = await logInvocation({ userId: input.userId, taskId: String(input.taskId ?? ""), toolId: tool.toolId, agentName: input.requestedByAgent ?? null, riskLevel: tool.riskLevel, status: "blocked", dryRun: false, approvalRequired: tool.requiresApproval, approvedAt: null, payloadRedacted: redactPayload(input.payload), resultRedacted: { creditCost }, error: "Authenticated user required for credit deduction" });
@@ -364,11 +382,18 @@ export async function executeToolAction(input: BrokerInput): Promise<BrokerResul
       ? await executeWebsiteSecurityTool(tool, input)
       : { executed: true, toolId: tool.toolId, action: input.action, note: `${tool.label} execution stub. Wire tool adapter for live integration.`, rawValuesReturned: false };
 
+    if (executionResult["executed"] === false) {
+      await refundToolCredits(input.userId, creditCost, tool.toolId);
+      const id = await logInvocation({ userId: input.userId, taskId: String(input.taskId ?? ""), toolId: tool.toolId, agentName: input.requestedByAgent ?? null, riskLevel: tool.riskLevel, status: "failed", dryRun: false, approvalRequired: tool.requiresApproval, approvedAt: null, payloadRedacted: redactPayload(input.payload), resultRedacted: redactResult(executionResult), error: String(executionResult["error"] ?? "Tool execution failed") });
+      return { status: "failed", toolId: tool.toolId, label: tool.label, riskLevel: tool.riskLevel, message: String(executionResult["error"] ?? "Tool execution failed"), result: executionResult, requiresDryRun: false, requiresApproval: false, requiresSafeBuild: false, warnings: plan.warnings, invocationId: id ?? undefined, rawValuesReturned: false };
+    }
+
     const meteredResult = creditCost > 0 ? { ...executionResult, creditCostDeducted: creditCost } : executionResult;
     const id = await logInvocation({ userId: input.userId, taskId: String(input.taskId ?? ""), toolId: tool.toolId, agentName: input.requestedByAgent ?? null, riskLevel: tool.riskLevel, status: "executed", dryRun: false, approvalRequired: tool.requiresApproval, approvedAt: input.approvalToken ? new Date() : null, payloadRedacted: redactPayload(input.payload), resultRedacted: redactResult(meteredResult), error: null });
     return { status: "executed", toolId: tool.toolId, label: tool.label, riskLevel: tool.riskLevel, message: `${tool.label} executed successfully.`, result: meteredResult, requiresDryRun: false, requiresApproval: false, requiresSafeBuild: false, warnings: plan.warnings, invocationId: id ?? undefined, rawValuesReturned: false };
   } catch (err) {
-    const id = await logInvocation({ userId: input.userId, taskId: String(input.taskId ?? ""), toolId: tool.toolId, agentName: input.requestedByAgent ?? null, riskLevel: tool.riskLevel, status: "failed", dryRun: false, approvalRequired: tool.requiresApproval, approvedAt: null, payloadRedacted: redactPayload(input.payload), resultRedacted: creditCost > 0 ? { creditCostDeducted: creditCost } : {}, error: String(err) });
+    await refundToolCredits(input.userId, creditCost, tool.toolId);
+    const id = await logInvocation({ userId: input.userId, taskId: String(input.taskId ?? ""), toolId: tool.toolId, agentName: input.requestedByAgent ?? null, riskLevel: tool.riskLevel, status: "failed", dryRun: false, approvalRequired: tool.requiresApproval, approvedAt: null, payloadRedacted: redactPayload(input.payload), resultRedacted: creditCost > 0 ? { creditCostRefunded: creditCost } : {}, error: String(err) });
     return { status: "failed", toolId: tool.toolId, label: tool.label, riskLevel: tool.riskLevel, message: String(err), requiresDryRun: false, requiresApproval: false, requiresSafeBuild: false, warnings: plan.warnings, invocationId: id ?? undefined, rawValuesReturned: false };
   }
 }
