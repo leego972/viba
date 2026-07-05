@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AlertTriangle, CheckCircle2, Clock, XCircle, Zap, RefreshCw, ExternalLink, TrendingDown, TrendingUp, History, ToggleLeft, ToggleRight } from "lucide-react";
+import { PlanBadge } from "@/components/PlanBadge";
 
 interface AutoTopupConfig { enabled: boolean; threshold: number; packKey: string; }
 
@@ -193,8 +194,13 @@ export default function Billing() {
   const isPastDue = status?.subscriptionStatus === "past_due";
   const isActive = status?.subscriptionStatus === "active" || status?.subscriptionStatus === "trialing";
   const periodEnd = status?.creditsPeriodEnd ? new Date(status.creditsPeriodEnd) : null;
-  const isAnnual = status?.planKey === "viba_annual";
-  const totalCredits = isAnnual ? 23400 : 1000;
+  const PLAN_CREDITS: Record<string, number> = {
+    basic_assessment: 750,
+    pro_repair: 4000,
+    viba_monthly: 1000,
+    viba_annual: 23400,
+  };
+  const totalCredits = PLAN_CREDITS[status?.planKey ?? "basic_assessment"] ?? 750;
   const creditPct = status ? Math.min(100, (status.creditsRemaining / totalCredits) * 100) : 0;
 
   return (
@@ -203,7 +209,10 @@ export default function Billing() {
 
         {/* Header */}
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Billing & Credits</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold">Billing & Credits</h1>
+            {status?.planKey && <PlanBadge planKey={status.planKey} />}
+          </div>
           <button
             onClick={handleRefresh}
             disabled={refreshing}
@@ -238,36 +247,35 @@ export default function Billing() {
               <p className="text-muted-foreground text-sm">7-day free trial — no charge until day 8.</p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* Monthly */}
+              {/* Basic */}
               <div className="rounded-xl border border-border bg-card p-5 space-y-3">
                 <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-1">Monthly</p>
-                  <p className="text-2xl font-bold">$50<span className="text-sm font-normal text-muted-foreground">/mo</span></p>
-                  <p className="text-xs text-muted-foreground mt-1">1,000 credits per month</p>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-1">Basic Assessment</p>
+                  <p className="text-2xl font-bold">$25<span className="text-sm font-normal text-muted-foreground">/mo</span></p>
+                  <p className="text-xs text-muted-foreground mt-1">750 credits per month · scans & reports</p>
                 </div>
                 <button
                   onClick={() => setLocation("/pricing")}
                   className="w-full py-2 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-sm font-medium transition-colors"
                 >
-                  Start Monthly Trial
+                  Start Basic Trial
                 </button>
               </div>
-              {/* Annual */}
-              <div className="relative rounded-xl border border-primary/40 bg-primary/5 p-5 space-y-3">
-                <span className="absolute -top-2.5 left-4 bg-amber-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full">
-                  BEST VALUE
+              {/* Pro Repair */}
+              <div className="relative rounded-xl border border-indigo-500/40 bg-indigo-500/5 p-5 space-y-3">
+                <span className="absolute -top-2.5 left-4 bg-indigo-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                  RECOMMENDED
                 </span>
                 <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-1">Annual</p>
-                  <p className="text-2xl font-bold">$600<span className="text-sm font-normal text-muted-foreground">/yr</span></p>
-                  <p className="text-xs text-emerald-400 font-medium mt-1">23,400 credits — 95% more than monthly</p>
+                  <p className="text-xs text-indigo-400 uppercase tracking-wider font-medium mb-1">Pro Repair</p>
+                  <p className="text-2xl font-bold">$89<span className="text-sm font-normal text-muted-foreground">/mo</span></p>
+                  <p className="text-xs text-emerald-400 font-medium mt-1">4,000 credits · repairs · multi-agent</p>
                 </div>
                 <button
-                  onClick={handleSubscribeAnnual}
-                  disabled={annualLoading}
-                  className="w-full py-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-semibold transition-colors disabled:opacity-60"
+                  onClick={() => setLocation("/pricing")}
+                  className="w-full py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold transition-colors"
                 >
-                  {annualLoading ? "Redirecting…" : "Start Annual Trial"}
+                  Start Pro Trial
                 </button>
               </div>
             </div>
@@ -322,9 +330,13 @@ export default function Billing() {
                 </p>
               )}
               <p className="text-xs text-muted-foreground">
-                {isAnnual
-                  ? "VIBA Member — Annual · $600/year · 23,400 credits per year"
-                  : "VIBA Member — Monthly · $50/month · 1,000 credits per month"}
+                {status?.planKey === "viba_annual"
+                  ? "VIBA Pro — Annual · $600/year · 23,400 credits per year"
+                  : status?.planKey === "pro_repair"
+                  ? "VIBA Pro Repair · $89/month · 4,000 credits per month"
+                  : status?.planKey === "basic_assessment"
+                  ? "VIBA Basic Assessment · $25/month · 750 credits per month"
+                  : "VIBA Member · 1,000 credits per month"}
               </p>
             </div>
 
