@@ -67,14 +67,7 @@ const CHANNEL_PROMPTS: Record<string, string> = {
   discord: "a concise Discord community update for builders/operators about VIBA's testing-to-repair workflow and multi-AI complex task engine",
 };
 
-type GeneratedPost = {
-  platform: string;
-  headline: string;
-  body: string;
-  hashtags: string[];
-  callToAction: string;
-  imagePrompt?: string;
-};
+type GeneratedPost = { platform: string; headline: string; body: string; hashtags: string[]; callToAction: string; imagePrompt?: string };
 
 export const GROWTH_STRATEGIES = [
   { channel: "seo_organic", costPerMonth: 0, frequency: "continuous", expectedImpact: "high", automatable: true, description: "Professional VIBA SEO content around UI testing, beta testing, repo testing, report generation, applied repairs, multi-AI complex work and live AI task performance" },
@@ -108,7 +101,6 @@ function fallbackPost(platform: string): GeneratedPost {
     callToAction: `Run VIBA on your website or repo → ${VIBA_SITE_URL}`,
     imagePrompt: `Professional VIBA-branded visual using the VIBA logo/wordmark from ${VIBA_LOGO_PATH}. Show multiple AI agents collaborating in one VIBA workspace across UI testing, beta testing, repo testing, report generation, live task delegation/performance and applied repairs.`,
   };
-
   if (platform === "youtube_shorts") {
     return {
       ...base,
@@ -116,7 +108,6 @@ function fallbackPost(platform: string): GeneratedPost {
       body: `30-45 second script. Opening frame: show the VIBA logo/wordmark (${VIBA_LOGO_PATH}). Hook: "Complex builds fail when UI, repo and repair work are handled separately." Show VIBA running UI testing, beta-flow checks and repo testing. Cut to live AI task delegation: different AIs assigned to UI, repo, report and repairs. Show a performance/progress view, then a critical-to-optional report and applied repair priorities. Close: "Build and repair complex systems faster with VIBA."`,
     };
   }
-
   return base;
 }
 
@@ -148,35 +139,14 @@ function contentTypeFor(platform: string) {
 }
 
 async function insertPost(post: GeneratedPost, status: "draft" | "approved" = "approved") {
-  const [inserted] = await db.insert(marketingContent).values({
-    platform: post.platform,
-    type: contentTypeFor(post.platform),
-    headline: post.headline,
-    body: post.body,
-    hashtags: post.hashtags,
-    callToAction: post.callToAction,
-    imagePrompt: post.imagePrompt,
-    status,
-  } as never).returning({ id: marketingContent.id });
+  const [inserted] = await db.insert(marketingContent).values({ platform: post.platform, type: contentTypeFor(post.platform), headline: post.headline, body: post.body, hashtags: post.hashtags, callToAction: post.callToAction, imagePrompt: post.imagePrompt, status } as never).returning({ id: marketingContent.id });
   return inserted?.id;
 }
 
 export function getStrategyOverview() {
   const freeChannels = GROWTH_STRATEGIES.filter((s) => s.costPerMonth === 0 && s.frequency !== "manual_only");
   const paidChannels = GROWTH_STRATEGIES.filter((s) => s.frequency === "manual_only");
-  return {
-    monthlyBudget: 0,
-    currency: "USD",
-    freeChannelCount: freeChannels.length,
-    paidChannelCount: paidChannels.length,
-    budgetAllocation: paidChannels.map((s) => ({ channel: s.channel, amount: 0, mode: "manual approval required" })),
-    strategy: "100% free organic VIBA growth until paid campaigns are explicitly approved by the owner",
-    contentPillars: VIBA_CONTENT_PILLARS,
-    valueProposition: VALUE_PROPOSITION,
-    topOpportunities: ["UI testing", "Beta testing", "Repo testing", "Report generation", "Applied repairs", "Multi-AI complex system building", "Live AI task delegation/performance"],
-    safeAutonomousChannels: SAFE_AUTONOMOUS_CHANNELS,
-    blockedAutonomousChannels: BLOCKED_AUTONOMOUS_CHANNELS,
-  };
+  return { monthlyBudget: 0, currency: "USD", freeChannelCount: freeChannels.length, paidChannelCount: paidChannels.length, budgetAllocation: paidChannels.map((s) => ({ channel: s.channel, amount: 0, mode: "manual approval required" })), strategy: "100% free organic VIBA growth until paid campaigns are explicitly approved by the owner", contentPillars: VIBA_CONTENT_PILLARS, valueProposition: VALUE_PROPOSITION, topOpportunities: ["UI testing", "Beta testing", "Repo testing", "Report generation", "Applied repairs", "Multi-AI complex system building", "Live AI task delegation/performance"], safeAutonomousChannels: SAFE_AUTONOMOUS_CHANNELS, blockedAutonomousChannels: BLOCKED_AUTONOMOUS_CHANNELS };
 }
 
 export async function getPerformanceMetrics(days: number) {
@@ -190,11 +160,8 @@ export async function getPerformanceMetrics(days: number) {
 }
 
 export async function getRecentActivity(limit: number) {
-  try {
-    return await db.select().from(marketingActivityLog).orderBy(desc(marketingActivityLog.createdAt)).limit(limit);
-  } catch {
-    return [];
-  }
+  try { return await db.select().from(marketingActivityLog).orderBy(desc(marketingActivityLog.createdAt)).limit(limit); }
+  catch { return []; }
 }
 
 export async function runAdvertisingCycle() {
@@ -227,7 +194,7 @@ Return JSON array only: [{ "platform": "linkedin|x_twitter|youtube_shorts|blog|r
 }
 
 export async function runOrganicGrowthAutopilotCycle() {
-  log.info("[AdvertisingEngine] Running VIBA organic growth autopilot cycle");
+  log.info("[AdvertisingEngine] Running VIBA organic growth compatibility cycle");
   const seo = await runScheduledSeoOptimization().catch((err) => ({ ran: false, score: 0, error: String(err) }));
   const advertising = await runAdvertisingCycle();
   const content = await runAutonomousContentCycle({ maxPiecesPerPlatform: Number(process.env["VIBA_CONTENT_PIECES_PER_CYCLE"] ?? "1"), autoApproveThreshold: Number(process.env["VIBA_CONTENT_AUTO_APPROVE_THRESHOLD"] ?? "82"), autoSchedule: true });
@@ -244,62 +211,43 @@ export async function getCrossChannelAttribution(_days: number) {
   return GROWTH_STRATEGIES.slice(0, 8).map((s) => ({ channel: s.channel, attributedConversions: 0, assistedConversions: 0, revenue: 0, estimatedValue: "Free organic" }));
 }
 
-export function getActiveABTests() {
-  return Object.entries(_abTests).map(([id, t]) => ({ id, ...t }));
-}
+export function getActiveABTests() { return Object.entries(_abTests).map(([id, t]) => ({ id, ...t })); }
+export function createABTest(channel: string, variantADesc: string, variantBDesc: string) { const id = `ab_${Date.now()}`; _abTests[id] = { channel, variantA: variantADesc, variantB: variantBDesc, aWins: 0, bWins: 0, createdAt: new Date() }; return { id, channel, variantA: variantADesc, variantB: variantBDesc }; }
+export function recordABTestResult(testId: string, variant: "A" | "B", success: boolean) { if (!_abTests[testId]) return; if (success) variant === "A" ? _abTests[testId].aWins++ : _abTests[testId].bWins++; }
 
-export function createABTest(channel: string, variantADesc: string, variantBDesc: string) {
-  const id = `ab_${Date.now()}`;
-  _abTests[id] = { channel, variantA: variantADesc, variantB: variantBDesc, aWins: 0, bWins: 0, createdAt: new Date() };
-  return { id, channel, variantA: variantADesc, variantB: variantBDesc };
-}
-
-export function recordABTestResult(testId: string, variant: "A" | "B", success: boolean) {
-  if (!_abTests[testId]) return;
-  if (success) variant === "A" ? _abTests[testId].aWins++ : _abTests[testId].bWins++;
-}
-
-let _schedulerInterval: ReturnType<typeof setInterval> | null = null;
 let _schedulerRunning = false;
 let _lastAutopilotRun: Date | null = null;
 let _nextAutopilotRun: Date | null = null;
 let _autopilotCycleCount = 0;
-
-async function runScheduledAutopilotCycle() {
-  if (_schedulerRunning) return;
-  _schedulerRunning = true;
-  try {
-    await runOrganicGrowthAutopilotCycle();
-    _lastAutopilotRun = new Date();
-    _nextAutopilotRun = new Date(Date.now() + ORGANIC_GROWTH_INTERVAL_MS);
-    _autopilotCycleCount++;
-    log.info(`[AdvertisingEngine] Organic growth autopilot cycle #${_autopilotCycleCount} complete. Next: ${_nextAutopilotRun.toISOString()}`);
-  } catch (err) {
-    log.error(`[AdvertisingEngine] Organic growth autopilot scheduled cycle error: ${String(err)}`);
-  } finally {
-    _schedulerRunning = false;
-  }
-}
+let _delegatedSchedulerActive = false;
 
 export function startAdvertisingScheduler() {
-  if (_schedulerInterval) return;
-  runScheduledAutopilotCycle().catch((err) => log.error(`[AdvertisingEngine] Initial autopilot cycle error: ${String(err)}`));
-  _nextAutopilotRun = new Date(Date.now() + ORGANIC_GROWTH_INTERVAL_MS);
-  _schedulerInterval = setInterval(() => { runScheduledAutopilotCycle().catch((err) => log.error(`[AdvertisingEngine] Scheduled cycle error: ${String(err)}`)); }, ORGANIC_GROWTH_INTERVAL_MS);
-  log.info(`[AdvertisingEngine] Organic growth autopilot scheduler started (${ORGANIC_GROWTH_INTERVAL_MS / (60 * 60 * 1000)}h interval)`);
+  if (_delegatedSchedulerActive) return;
+  _delegatedSchedulerActive = true;
+  import("./autonomousGrowthEngine")
+    .then(({ startAutonomousGrowthScheduler }) => startAutonomousGrowthScheduler())
+    .then(() => {
+      _lastAutopilotRun = new Date();
+      _nextAutopilotRun = new Date(Date.now() + ORGANIC_GROWTH_INTERVAL_MS);
+      _autopilotCycleCount++;
+      log.info("[AdvertisingEngine] Delegated startup scheduler to autonomousGrowthEngine");
+    })
+    .catch((err) => {
+      _delegatedSchedulerActive = false;
+      log.error({ err }, "[AdvertisingEngine] Failed to start delegated autonomous growth scheduler");
+    });
 }
 
 export function stopAdvertisingScheduler() {
-  if (_schedulerInterval) {
-    clearInterval(_schedulerInterval);
-    _schedulerInterval = null;
-  }
+  _delegatedSchedulerActive = false;
+  import("./autonomousGrowthEngine")
+    .then(({ stopAutonomousGrowthScheduler }) => stopAutonomousGrowthScheduler())
+    .catch((err) => log.error({ err }, "[AdvertisingEngine] Failed to stop delegated autonomous growth scheduler"));
   _nextAutopilotRun = null;
-  log.info("[AdvertisingEngine] Scheduler stopped");
 }
 
 export function getAdvertisingSchedulerStatus() {
-  return { active: _schedulerInterval !== null, intervalHours: ORGANIC_GROWTH_INTERVAL_MS / (60 * 60 * 1000), lastRun: _lastAutopilotRun?.toISOString() ?? null, nextRun: _nextAutopilotRun?.toISOString() ?? null, currentlyRunning: _schedulerRunning, cycleCount: _autopilotCycleCount, contentPillars: VIBA_CONTENT_PILLARS, valueProposition: VALUE_PROPOSITION, safeAutonomousChannels: SAFE_AUTONOMOUS_CHANNELS, blockedAutonomousChannels: BLOCKED_AUTONOMOUS_CHANNELS, spendMode: "free_organic_only" };
+  return { active: _delegatedSchedulerActive, intervalHours: ORGANIC_GROWTH_INTERVAL_MS / (60 * 60 * 1000), lastRun: _lastAutopilotRun?.toISOString() ?? null, nextRun: _nextAutopilotRun?.toISOString() ?? null, currentlyRunning: _schedulerRunning, cycleCount: _autopilotCycleCount, contentPillars: VIBA_CONTENT_PILLARS, valueProposition: VALUE_PROPOSITION, safeAutonomousChannels: SAFE_AUTONOMOUS_CHANNELS, blockedAutonomousChannels: BLOCKED_AUTONOMOUS_CHANNELS, spendMode: "free_organic_only", delegatedTo: "autonomousGrowthEngine" };
 }
 
 export async function generateBlastContent(channelIds?: string[]) {
