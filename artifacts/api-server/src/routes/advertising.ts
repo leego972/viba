@@ -1,23 +1,14 @@
 import { Router, type IRouter } from "express";
 import { requireAdmin } from "../middlewares/adminAuth";
 import { db } from "@workspace/db";
-import {
-  marketingContent,
-  marketingPerformance,
-  marketingCampaigns,
-  marketingActivityLog,
-} from "@workspace/db";
+import { marketingContent, marketingPerformance } from "@workspace/db";
 import { eq, desc, count } from "drizzle-orm";
 import {
   runAdvertisingCycle,
-  runOrganicGrowthAutopilotCycle,
   getStrategyOverview,
   getRecentActivity,
   getPerformanceMetrics,
   GROWTH_STRATEGIES,
-  startAdvertisingScheduler,
-  stopAdvertisingScheduler,
-  getAdvertisingSchedulerStatus,
   getChannelPerformanceReport,
   getCrossChannelAttribution,
   getActiveABTests,
@@ -26,6 +17,15 @@ import {
   generateBlastContent,
 } from "../engines/advertisingEngine";
 import { getAllChannelStatuses } from "../engines/marketingEngine";
+import {
+  getAutonomousGrowthStatus,
+  getFreeChannelConnectionStatus,
+  publishApprovedFreeContent,
+  restartAutonomousGrowthScheduler,
+  runAutonomousGrowthCycle,
+  stopAutonomousGrowthScheduler,
+  updateAutonomousGrowthSettings,
+} from "../engines/autonomousGrowthEngine";
 
 const router: IRouter = Router();
 
@@ -45,10 +45,6 @@ router.get("/api/advertising/activity", requireAdmin, async (req, res): Promise<
 
 router.post("/api/advertising/cycle", requireAdmin, async (_req, res): Promise<void> => {
   res.json(await runAdvertisingCycle());
-});
-
-router.post("/api/advertising/autopilot-cycle", requireAdmin, async (_req, res): Promise<void> => {
-  res.json(await runOrganicGrowthAutopilotCycle());
 });
 
 router.get("/api/advertising/strategies", requireAdmin, async (_req, res): Promise<void> => {
@@ -83,13 +79,14 @@ router.get("/api/advertising/content/:id", requireAdmin, async (req, res): Promi
 });
 
 router.get("/api/advertising/dashboard", requireAdmin, async (_req, res): Promise<void> => {
-  const [performance, recentActivity] = await Promise.all([
+  const [performance, recentActivity, growth] = await Promise.all([
     getPerformanceMetrics(30),
     getRecentActivity(10),
+    getAutonomousGrowthStatus(),
   ]);
   const contentCounts = await db.select({ status: marketingContent.status, count: count() })
     .from(marketingContent).groupBy(marketingContent.status);
-  const contentQueue: Record<string, number> = { draft: 0, approved: 0, published: 0, rejected: 0 };
+  const contentQueue: Record<string, number> = { draft: 0, approved: 0, queued: 0, published: 0, rejected: 0 };
   for (const c of contentCounts) {
     if (c.status && c.status in contentQueue) contentQueue[c.status] = Number(c.count);
   }
@@ -98,13 +95,24 @@ router.get("/api/advertising/dashboard", requireAdmin, async (_req, res): Promis
     performance,
     recentActivity,
     contentQueue,
-    scheduler: getAdvertisingSchedulerStatus(),
+    growth,
+    scheduler: growth,
   });
 });
 
 router.get("/api/advertising/channels", requireAdmin, async (_req, res): Promise<void> => {
   const core = getAllChannelStatuses();
-  res.json({ core, summary: { coreConnected: core.filter(c => c.connected).length, coreTotal: core.length } });
+  const free = getFreeChannelConnectionStatus();
+  res.json({
+    core,
+    free,
+    summary: {
+      coreConnected: core.filter(c => c.connected).length,
+      coreTotal: core.length,
+      freeConnected: free.filter(c => c.connected).length,
+      freeTotal: free.length,
+    },
+  });
 });
 
 router.get("/api/advertising/channel-performance", requireAdmin, async (_req, res): Promise<void> => {
@@ -113,7 +121,6 @@ router.get("/api/advertising/channel-performance", requireAdmin, async (_req, re
 
 router.get("/api/advertising/budget", requireAdmin, async (_req, res): Promise<void> => {
   const overview = getStrategyOverview();
-  const performance = await getPerformanceMetrics(30);
   res.json({
     monthlyBudget: overview.monthlyBudget,
     currency: overview.currency,
@@ -150,26 +157,60 @@ router.post("/api/advertising/ab-tests/:id/result", requireAdmin, async (req, re
   res.json({ success: true });
 });
 
+router.get("/api/advertising/scheduler/status", requireAdmin, async (_req, res): Promise<void> => {
+  res.json(await getAutonomousGrowthStatus());
+});
+
 router.post("/api/advertising/scheduler/start", requireAdmin, async (_req, res): Promise<void> => {
-  startAdvertisingScheduler();
-  res.json({ success: true, message: "VIBA organic growth autopilot scheduler started", status: getAdvertisingSchedulerStatus() });
+  res.json({ success: true, message: "VIBA autonomous growth system started", status: await restartAutonomousGrowthScheduler() });
 });
 
 router.post("/api/advertising/scheduler/stop", requireAdmin, async (_req, res): Promise<void> => {
-  stopAdvertisingScheduler();
-  res.json({ success: true, message: "VIBA organic growth autopilot scheduler stopped", status: getAdvertisingSchedulerStatus() });
+  res.json({ success: true, message: "VIBA autonomous growth system stopped", status: await stopAutonomousGrowthScheduler() });
 });
 
-router.get("/api/advertising/scheduler/status", requireAdmin, async (_req, res): Promise<void> => {
-  res.json(getAdvertisingSchedulerStatus());
+router.get("/api/advertising/growth/status", requireAdmin, async (_req, res): Promise<void> => {
+  res.json(await getAutonomousGrowthStatus());
 });
 
-router.get("/api/advertising/blog-posts", requireAdmin, async (req, res): Promise<void> => {
-  const { limit = "20", offset = "0" } = req.query as Record<string, string>;
-  res.json({ items: [], total: 0 });
+router.post("/api/advertising/growth/start", requireAdmin, async (_req, res): Promise<void> => {
+  res.json({ success: true, message: "VIBA autonomous growth system started", status: await restartAutonomousGrowthScheduler() });
 });
 
-router.get("/api/advertising/campaign-performance", requireAdmin, async (req, res): Promise<void> => {
+router.post("/api/advertising/growth/stop", requireAdmin, async (_req, res): Promise<void> => {
+  res.json({ success: true, message: "VIBA autonomous growth system stopped", status: await stopAutonomousGrowthScheduler() });
+});
+
+router.put("/api/advertising/growth/settings", requireAdmin, async (req, res): Promise<void> => {
+  const body = req.body as Record<string, unknown>;
+  res.json(await updateAutonomousGrowthSettings({
+    enabled: body["enabled"] === undefined ? undefined : Boolean(body["enabled"]),
+    intervalMinutes: body["intervalMinutes"] === undefined ? undefined : Number(body["intervalMinutes"]),
+    freeChannels: Array.isArray(body["freeChannels"]) ? body["freeChannels"].map(String) : undefined,
+    autoPublishChannels: Array.isArray(body["autoPublishChannels"]) ? body["autoPublishChannels"].map(String) : undefined,
+    maxPiecesPerCycle: body["maxPiecesPerCycle"] === undefined ? undefined : Number(body["maxPiecesPerCycle"]),
+    autoApproveThreshold: body["autoApproveThreshold"] === undefined ? undefined : Number(body["autoApproveThreshold"]),
+  }));
+});
+
+router.post("/api/advertising/growth/cycle", requireAdmin, async (_req, res): Promise<void> => {
+  res.json(await runAutonomousGrowthCycle("admin-api"));
+});
+
+router.post("/api/advertising/growth/publish-approved", requireAdmin, async (req, res): Promise<void> => {
+  const { limit = 20, autoPublishChannels } = req.body as { limit?: number; autoPublishChannels?: string[] };
+  res.json(await publishApprovedFreeContent(limit, autoPublishChannels));
+});
+
+router.get("/api/advertising/blog-posts", requireAdmin, async (_req, res): Promise<void> => {
+  const rows = await db.select().from(marketingContent)
+    .where(eq(marketingContent.platform, "blog"))
+    .orderBy(desc(marketingContent.createdAt))
+    .limit(20);
+  res.json({ items: rows, total: rows.length });
+});
+
+router.get("/api/advertising/campaign-performance", requireAdmin, async (_req, res): Promise<void> => {
   const rows = await db.select().from(marketingPerformance).orderBy(desc(marketingPerformance.createdAt)).limit(100);
   res.json(rows);
 });
