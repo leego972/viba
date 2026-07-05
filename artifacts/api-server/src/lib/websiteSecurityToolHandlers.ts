@@ -14,35 +14,17 @@ export interface WebsiteToolInput {
 }
 
 type HeaderMap = Record<string, string>;
+type FetchMeta = { url: string; finalUrl: string; status: number; ok: boolean; redirected: boolean; contentType: string | null; headers: HeaderMap; bodySample: string; elapsedMs: number };
+type HtmlSignalCounts = { buttons: number; forms: number; inputs: number; images: number; links: number };
+type HtmlSignals = { title: string | null; counts: HtmlSignalCounts; metaDescription: boolean; canonical: boolean; viewport: boolean; missingAltCandidates: number; links: string[] };
+type BrowserLike = { close: () => Promise<void>; newPage: (opts: Record<string, unknown>) => Promise<unknown> };
 
-type FetchMeta = {
-  url: string;
-  finalUrl: string;
-  status: number;
-  ok: boolean;
-  redirected: boolean;
-  contentType: string | null;
-  headers: HeaderMap;
-  bodySample: string;
-  elapsedMs: number;
-};
-
-type HtmlSignalCounts = {
-  buttons: number;
-  forms: number;
-  inputs: number;
-  images: number;
-  links: number;
-};
-
-type HtmlSignals = {
-  title: string | null;
-  counts: HtmlSignalCounts;
-  metaDescription: boolean;
-  canonical: boolean;
-  viewport: boolean;
-  missingAltCandidates: number;
-  links: string[];
+type PageLike = {
+  on: (event: string, cb: (...args: unknown[]) => void) => void;
+  goto: (target: string, opts: Record<string, unknown>) => Promise<{ status?: () => number } | null>;
+  waitForTimeout: (ms: number) => Promise<void>;
+  evaluate: (script: string) => Promise<unknown>;
+  setViewportSize: (viewport: { width: number; height: number }) => Promise<void>;
 };
 
 const MAX_BODY_SAMPLE = 250_000;
@@ -83,19 +65,7 @@ const WEBSITE_SECURITY_TOOL_IDS = new Set([
   "report.owasp_wstg.generate",
   "report.website_qa.generate",
 ]);
-
-const SECURITY_HEADER_KEYS = [
-  "content-security-policy",
-  "strict-transport-security",
-  "x-content-type-options",
-  "referrer-policy",
-  "permissions-policy",
-  "x-frame-options",
-  "cross-origin-resource-policy",
-  "cross-origin-opener-policy",
-  "cross-origin-embedder-policy",
-] as const;
-
+const SECURITY_HEADER_KEYS = ["content-security-policy", "strict-transport-security", "x-content-type-options", "referrer-policy", "permissions-policy", "x-frame-options", "cross-origin-resource-policy", "cross-origin-opener-policy", "cross-origin-embedder-policy"] as const;
 const dynamicImport = new Function("specifier", "return import(specifier)") as (specifier: string) => Promise<Record<string, unknown>>;
 
 export function canExecuteWebsiteSecurityTool(toolId: string): boolean {
@@ -137,11 +107,7 @@ function blockedHost(hostname: string): string | null {
 function safeTargetUrl(raw: string | null): { ok: true; url: URL } | { ok: false; error: string } {
   if (!raw) return { ok: false, error: "Missing target URL. Provide payload.url, payload.targetUrl, payload.websiteUrl, or payload.baseUrl." };
   let parsed: URL;
-  try {
-    parsed = new URL(raw);
-  } catch {
-    return { ok: false, error: "Invalid URL." };
-  }
+  try { parsed = new URL(raw); } catch { return { ok: false, error: "Invalid URL." }; }
   if (!["http:", "https:"].includes(parsed.protocol)) return { ok: false, error: "Only http and https URLs are supported." };
   const blocked = blockedHost(parsed.hostname);
   if (blocked) return { ok: false, error: `URL blocked by safe target policy: ${blocked}.` };
@@ -157,14 +123,8 @@ export function validateWebsiteSecurityToolInput(toolId: string, payload: Record
 
 function headersToObject(headers: Headers): HeaderMap {
   const out: HeaderMap = {};
-  headers.forEach((value, key) => {
-    out[key.toLowerCase()] = value.slice(0, 2_000);
-  });
+  headers.forEach((value, key) => { out[key.toLowerCase()] = value.slice(0, 2_000); });
   return out;
-}
-
-function trimBody(value: string): string {
-  return value.slice(0, 10_000);
 }
 
 async function fetchMeta(url: URL, method: "GET" | "HEAD" = "GET"): Promise<FetchMeta> {
@@ -172,29 +132,10 @@ async function fetchMeta(url: URL, method: "GET" | "HEAD" = "GET"): Promise<Fetc
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
   try {
-    const response = await fetch(url.href, {
-      method,
-      redirect: "follow",
-      headers: { "User-Agent": USER_AGENT, Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" },
-      signal: controller.signal,
-    });
+    const response = await fetch(url.href, { method, redirect: "follow", headers: { "User-Agent": USER_AGENT, Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" }, signal: controller.signal });
     const contentType = response.headers.get("content-type");
-    let bodySample = "";
-    if (method === "GET") {
-      const text = await response.text().catch(() => "");
-      bodySample = trimBody(text.slice(0, MAX_BODY_SAMPLE));
-    }
-    return {
-      url: url.href,
-      finalUrl: response.url,
-      status: response.status,
-      ok: response.ok,
-      redirected: response.redirected,
-      contentType,
-      headers: headersToObject(response.headers),
-      bodySample,
-      elapsedMs: Date.now() - started,
-    };
+    const bodySample = method === "GET" ? (await response.text().catch(() => "")).slice(0, MAX_BODY_SAMPLE).slice(0, 10_000) : "";
+    return { url: url.href, finalUrl: response.url, status: response.status, ok: response.ok, redirected: response.redirected, contentType, headers: headersToObject(response.headers), bodySample, elapsedMs: Date.now() - started };
   } finally {
     clearTimeout(timer);
   }
@@ -217,9 +158,7 @@ function extractLinks(base: URL, html: string): string[] {
       if (!["http:", "https:"].includes(u.protocol)) continue;
       u.hash = "";
       links.add(u.href);
-    } catch {
-      // ignore malformed links
-    }
+    } catch { /* ignore malformed links */ }
   }
   return [...links].slice(0, 250);
 }
@@ -266,17 +205,22 @@ function cookieAudit(headers: HeaderMap): Record<string, unknown> {
 
 function htmlSignals(meta: FetchMeta): HtmlSignals {
   const html = meta.bodySample;
-  const buttons = (html.match(/<button\b/gi) ?? []).length;
-  const forms = (html.match(/<form\b/gi) ?? []).length;
-  const inputs = (html.match(/<input\b/gi) ?? []).length;
-  const images = (html.match(/<img\b/gi) ?? []).length;
   const links = extractLinks(new URL(meta.finalUrl), html);
-  const title = extractTitle(html);
-  const metaDescription = /<meta[^>]+name=['"]description['"][^>]*content=['"][^'"]+/i.test(html);
-  const canonical = /<link[^>]+rel=['"]canonical['"]/i.test(html);
-  const viewport = /<meta[^>]+name=['"]viewport['"]/i.test(html);
-  const missingAltCandidates = (html.match(/<img\b(?![^>]*\balt=)[^>]*>/gi) ?? []).length;
-  return { title, counts: { buttons, forms, inputs, images, links: links.length }, metaDescription, canonical, viewport, missingAltCandidates, links: links.slice(0, 50) };
+  return {
+    title: extractTitle(html),
+    counts: {
+      buttons: (html.match(/<button\b/gi) ?? []).length,
+      forms: (html.match(/<form\b/gi) ?? []).length,
+      inputs: (html.match(/<input\b/gi) ?? []).length,
+      images: (html.match(/<img\b/gi) ?? []).length,
+      links: links.length,
+    },
+    metaDescription: /<meta[^>]+name=['"]description['"][^>]*content=['"][^'"]+/i.test(html),
+    canonical: /<link[^>]+rel=['"]canonical['"]/i.test(html),
+    viewport: /<meta[^>]+name=['"]viewport['"]/i.test(html),
+    missingAltCandidates: (html.match(/<img\b(?![^>]*\balt=)[^>]*>/gi) ?? []).length,
+    links: links.slice(0, 50),
+  };
 }
 
 async function crawl(originUrl: URL, limit = DEFAULT_CRAWL_LIMIT): Promise<Array<Record<string, unknown>>> {
@@ -288,10 +232,7 @@ async function crawl(originUrl: URL, limit = DEFAULT_CRAWL_LIMIT): Promise<Array
     if (seen.has(next.href)) continue;
     seen.add(next.href);
     const meta = await fetchMeta(next).catch((err) => ({ error: String(err), url: next.href }));
-    if ("error" in meta) {
-      pages.push(meta);
-      continue;
-    }
+    if ("error" in meta) { pages.push(meta); continue; }
     const signals = htmlSignals(meta);
     pages.push({ url: next.href, finalUrl: meta.finalUrl, status: meta.status, elapsedMs: meta.elapsedMs, title: signals.title, contentType: meta.contentType });
     for (const href of extractLinks(new URL(meta.finalUrl), meta.bodySample)) {
@@ -322,17 +263,7 @@ async function tlsAudit(url: URL): Promise<Record<string, unknown>> {
       const cert = socket.getPeerCertificate();
       const proto = socket.getProtocol();
       socket.end();
-      resolve({
-        applicable: true,
-        authorized: socket.authorized,
-        authorizationError: socket.authorizationError ? String(socket.authorizationError) : null,
-        protocol: proto,
-        subject: cert.subject ?? null,
-        issuer: cert.issuer ?? null,
-        validFrom: cert.valid_from,
-        validTo: cert.valid_to,
-        daysUntilExpiry: cert.valid_to ? Math.round((new Date(cert.valid_to).getTime() - Date.now()) / 86_400_000) : null,
-      });
+      resolve({ applicable: true, authorized: socket.authorized, authorizationError: socket.authorizationError ? String(socket.authorizationError) : null, protocol: proto, subject: cert.subject ?? null, issuer: cert.issuer ?? null, validFrom: cert.valid_from, validTo: cert.valid_to, daysUntilExpiry: cert.valid_to ? Math.round((new Date(cert.valid_to).getTime() - Date.now()) / 86_400_000) : null });
     });
     socket.on("timeout", () => { socket.destroy(); resolve({ applicable: true, error: "TLS check timed out" }); });
     socket.on("error", (err) => resolve({ applicable: true, error: String(err) }));
@@ -340,33 +271,20 @@ async function tlsAudit(url: URL): Promise<Record<string, unknown>> {
 }
 
 async function optionalPlaywrightAudit(url: URL): Promise<Record<string, unknown>> {
-  let browser: { close: () => Promise<void> } | null = null;
+  let browser: BrowserLike | null = null;
   try {
     const mod = await dynamicImport("playwright");
     const chromium = (mod as { chromium?: { launch: (opts: Record<string, unknown>) => Promise<unknown> } }).chromium;
     if (!chromium) throw new Error("playwright chromium unavailable");
-    browser = await chromium.launch({ headless: true }) as { close: () => Promise<void>; newPage: (opts: Record<string, unknown>) => Promise<unknown> };
-    const page = await browser.newPage({ viewport: { width: 1366, height: 768 }, userAgent: USER_AGENT });
-    const p = page as {
-      on: (event: string, cb: (...args: unknown[]) => void) => void;
-      goto: (target: string, opts: Record<string, unknown>) => Promise<{ status?: () => number } | null>;
-      waitForTimeout: (ms: number) => Promise<void>;
-      evaluate: (script: string) => Promise<unknown>;
-      setViewportSize: (viewport: { width: number; height: number }) => Promise<void>;
-    };
+    browser = await chromium.launch({ headless: true }) as BrowserLike;
+    const page = await browser.newPage({ viewport: { width: 1366, height: 768 }, userAgent: USER_AGENT }) as PageLike;
     const consoleErrors: string[] = [];
     const failedRequests: string[] = [];
-    p.on("console", (msg: unknown) => {
-      const m = msg as { type?: () => string; text?: () => string };
-      if (m.type?.() === "error") consoleErrors.push((m.text?.() ?? "").slice(0, 500));
-    });
-    p.on("requestfailed", (req: unknown) => {
-      const r = req as { url?: () => string };
-      failedRequests.push((r.url?.() ?? "").slice(0, 500));
-    });
-    const response = await p.goto(url.href, { waitUntil: "domcontentloaded", timeout: DEFAULT_TIMEOUT_MS });
-    await p.waitForTimeout(500).catch(() => {});
-    const metrics = await p.evaluate(`(() => {
+    page.on("console", (msg: unknown) => { const m = msg as { type?: () => string; text?: () => string }; if (m.type?.() === "error") consoleErrors.push((m.text?.() ?? "").slice(0, 500)); });
+    page.on("requestfailed", (req: unknown) => { const r = req as { url?: () => string }; failedRequests.push((r.url?.() ?? "").slice(0, 500)); });
+    const response = await page.goto(url.href, { waitUntil: "domcontentloaded", timeout: DEFAULT_TIMEOUT_MS });
+    await page.waitForTimeout(500).catch(() => {});
+    const metrics = await page.evaluate(`(() => {
       const buttons = document.querySelectorAll("button").length;
       const links = document.querySelectorAll("a[href]").length;
       const forms = document.querySelectorAll("form").length;
@@ -379,8 +297,8 @@ async function optionalPlaywrightAudit(url: URL): Promise<Record<string, unknown
     })()`);
     const viewports: Array<Record<string, unknown>> = [];
     for (const viewport of [{ width: 390, height: 844 }, { width: 768, height: 1024 }, { width: 1440, height: 900 }]) {
-      await p.setViewportSize(viewport);
-      const overflow = await p.evaluate("(() => document.documentElement.scrollWidth > window.innerWidth + 2)()");
+      await page.setViewportSize(viewport);
+      const overflow = await page.evaluate("(() => document.documentElement.scrollWidth > window.innerWidth + 2)()");
       viewports.push({ ...viewport, horizontalOverflow: overflow });
     }
     return { engine: "playwright", available: true, status: response?.status?.() ?? null, metrics, consoleErrors: consoleErrors.slice(0, 20), failedRequests: failedRequests.slice(0, 20), viewports };
@@ -392,25 +310,18 @@ async function optionalPlaywrightAudit(url: URL): Promise<Record<string, unknown
 }
 
 async function optionalAxeAudit(url: URL): Promise<Record<string, unknown>> {
-  let browser: { close: () => Promise<void> } | null = null;
+  let browser: BrowserLike | null = null;
   try {
     const playwright = await dynamicImport("playwright");
     const axe = await dynamicImport("@axe-core/playwright");
     const chromium = (playwright as { chromium?: { launch: (opts: Record<string, unknown>) => Promise<unknown> } }).chromium;
     const AxeBuilder = (axe as { AxeBuilder?: new (opts: { page: unknown }) => { analyze: () => Promise<{ violations: Array<Record<string, unknown> & { nodes?: unknown[] }>; incomplete: unknown[]; passes: unknown[] }> } }).AxeBuilder;
     if (!chromium || !AxeBuilder) throw new Error("axe/playwright unavailable");
-    browser = await chromium.launch({ headless: true }) as { close: () => Promise<void>; newPage: (opts: Record<string, unknown>) => Promise<unknown> };
+    browser = await chromium.launch({ headless: true }) as BrowserLike;
     const page = await browser.newPage({ userAgent: USER_AGENT });
     await (page as { goto: (target: string, opts: Record<string, unknown>) => Promise<unknown> }).goto(url.href, { waitUntil: "domcontentloaded", timeout: DEFAULT_TIMEOUT_MS });
     const results = await new AxeBuilder({ page }).analyze();
-    return {
-      engine: "axe-core/playwright",
-      available: true,
-      violations: results.violations.slice(0, 40).map((v) => ({ id: v["id"], impact: v["impact"], description: v["description"], nodeCount: v.nodes?.length ?? 0 })),
-      violationCount: results.violations.length,
-      incompleteCount: results.incomplete.length,
-      passesCount: results.passes.length,
-    };
+    return { engine: "axe-core/playwright", available: true, violations: results.violations.slice(0, 40).map((v) => ({ id: v["id"], impact: v["impact"], description: v["description"], nodeCount: v.nodes?.length ?? 0 })), violationCount: results.violations.length, incompleteCount: results.incomplete.length, passesCount: results.passes.length };
   } catch (err) {
     return { engine: "axe-core/playwright", available: false, fallbackUsed: true, error: String(err).slice(0, 500) };
   } finally {
@@ -429,13 +340,7 @@ async function optionalLighthouseAudit(url: URL): Promise<Record<string, unknown
     try {
       const result = await runner(url.href, { port: chrome.port, output: "json", logLevel: "error" }, { extends: "lighthouse:default" });
       const categories = result?.lhr.categories ?? {};
-      return {
-        engine: "lighthouse",
-        available: true,
-        scores: Object.fromEntries(Object.entries(categories).map(([key, value]) => [key, Math.round(((value as { score: number | null }).score ?? 0) * 100)])),
-        finalUrl: result?.lhr.finalDisplayedUrl ?? url.href,
-        fetchTime: result?.lhr.fetchTime,
-      };
+      return { engine: "lighthouse", available: true, scores: Object.fromEntries(Object.entries(categories).map(([key, value]) => [key, Math.round((value.score ?? 0) * 100)])), finalUrl: result?.lhr.finalDisplayedUrl ?? url.href, fetchTime: result?.lhr.fetchTime };
     } finally {
       await chrome.kill().catch(() => {});
     }
@@ -460,31 +365,11 @@ function staticQuality(meta: FetchMeta): Record<string, unknown> {
 }
 
 function reportResult(tool: ToolDefinition, input: WebsiteToolInput): Record<string, unknown> {
-  return {
-    executed: true,
-    toolId: tool.toolId,
-    reportType: tool.toolId,
-    generatedAt: new Date().toISOString(),
-    scope: asString(input.payload?.["scope"]) ?? "website QA and defensive security",
-    sections: ["Executive summary", "Scope and authorization", "Critical findings", "High/medium/low findings", "Evidence table", "Recommended fixes", "Regression test checklist", "Retest notes"],
-    rawValuesReturned: false,
-  };
+  return { executed: true, toolId: tool.toolId, reportType: tool.toolId, generatedAt: new Date().toISOString(), scope: asString(input.payload?.["scope"]) ?? "website QA and defensive security", sections: ["Executive summary", "Scope and authorization", "Critical findings", "High/medium/low findings", "Evidence table", "Recommended fixes", "Regression test checklist", "Retest notes"], rawValuesReturned: false };
 }
 
 async function noUrlRepoReview(tool: ToolDefinition, input: WebsiteToolInput): Promise<Record<string, unknown>> {
-  return {
-    executed: true,
-    toolId: tool.toolId,
-    mode: "repository_or_policy_review",
-    focus: asString(input.payload?.["focus"]) ?? tool.label,
-    checks: [
-      "Review manifests, lockfiles, build commands, and deployment configuration.",
-      "Confirm secrets are stored in the vault/environment and never returned to agents or frontend.",
-      "Confirm mutating actions require dry-run, owner approval, and safe-build where applicable.",
-      "Confirm 401/403/200 route tests exist for object ownership and admin boundaries.",
-    ],
-    rawValuesReturned: false,
-  };
+  return { executed: true, toolId: tool.toolId, mode: "repository_or_policy_review", focus: asString(input.payload?.["focus"]) ?? tool.label, checks: ["Review manifests, lockfiles, build commands, and deployment configuration.", "Confirm secrets are stored in the vault/environment and never returned to agents or frontend.", "Confirm mutating actions require dry-run, owner approval, and safe-build where applicable.", "Confirm 401/403/200 route tests exist for object ownership and admin boundaries."], rawValuesReturned: false };
 }
 
 export async function executeWebsiteSecurityTool(tool: ToolDefinition, input: WebsiteToolInput): Promise<Record<string, unknown>> {
@@ -508,17 +393,7 @@ export async function executeWebsiteSecurityTool(tool: ToolDefinition, input: We
   const cookies = cookieAudit(meta.headers);
   const quality = staticQuality(meta);
   const signals = htmlSignals(meta);
-
-  const base = {
-    executed: true,
-    toolId: tool.toolId,
-    target: url.href,
-    finalUrl: meta.finalUrl,
-    status: meta.status,
-    elapsedMs: meta.elapsedMs,
-    contentType: meta.contentType,
-    rawValuesReturned: false,
-  };
+  const base = { executed: true, toolId: tool.toolId, target: url.href, finalUrl: meta.finalUrl, status: meta.status, elapsedMs: meta.elapsedMs, contentType: meta.contentType, rawValuesReturned: false };
 
   switch (tool.toolId) {
     case "security.http_headers.audit":
