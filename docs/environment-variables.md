@@ -151,6 +151,73 @@ These variables unlock real code and git execution for Replit and Manus adapters
 
 ---
 
+## Growth & Advertising — Auto-Post Channels
+
+Credentials for the growth autopilot's auto-submit pipeline (`/api/admin/growth/channel-config`). All are optional — if unset, the channel falls back to a manual-post URL. Values can be set as env vars or saved at runtime via the admin panel (runtime values take precedence).
+
+### Dev.to
+
+| Variable | Description |
+|---|---|
+| `DEV_TO_API_KEY` | Dev.to API key from `dev.to/settings/extensions`. Enables fully automated article publishing. |
+
+### Discord
+
+| Variable | Description |
+|---|---|
+| `DISCORD_WEBHOOK_URL` | Incoming webhook URL from a Discord server channel. Messages posted on each autopilot cycle. |
+
+### Reddit (script-app password grant — all four required)
+
+| Variable | Description |
+|---|---|
+| `REDDIT_CLIENT_ID` | Reddit "script" app client ID from `reddit.com/prefs/apps`. |
+| `REDDIT_CLIENT_SECRET` | Reddit app client secret. |
+| `REDDIT_USERNAME` | Reddit account username (the account that owns the script app). |
+| `REDDIT_PASSWORD` | Reddit account password. |
+
+Posts to r/MachineLearning, r/artificial, r/SideProject, and r/LocalLLaMA.
+
+### Twitter / X (OAuth 1.0a — all four required)
+
+| Variable | Description |
+|---|---|
+| `TWITTER_API_KEY` | X Developer Portal → App → Consumer Key. |
+| `TWITTER_API_SECRET` | X Developer Portal → App → Consumer Secret. |
+| `TWITTER_ACCESS_TOKEN` | User access token (from "Keys and Tokens" tab, generated for your account). |
+| `TWITTER_ACCESS_TOKEN_SECRET` | User access token secret. |
+
+Posts via `POST /2/tweets` (X API v2, Free tier — 1 500 tweets/month). Requires "Read and Write" permissions on the developer app.
+
+### LinkedIn (UGC Posts API)
+
+| Variable | Description |
+|---|---|
+| `LINKEDIN_ACCESS_TOKEN` | OAuth 2.0 bearer token with `w_member_social` scope. Obtain via LinkedIn Developer portal → OAuth 2.0 flow. |
+| `LINKEDIN_PERSON_URN` | Your LinkedIn member URN, e.g. `urn:li:person:XXXXXXXXX`. Visible in the `/v2/me` response. |
+
+### Medium (Integration Token)
+
+| Variable | Description |
+|---|---|
+| `MEDIUM_INTEGRATION_TOKEN` | Medium integration token from `medium.com/me/applications`. Enables posting full markdown articles as published stories. |
+
+### Mastodon
+
+| Variable | Description |
+|---|---|
+| `MASTODON_ACCESS_TOKEN` | Access token from your Mastodon instance (Preferences → Development → New Application). Requires `write:statuses` scope. |
+| `MASTODON_INSTANCE` | Instance hostname, e.g. `mastodon.social` or `fosstodon.org`. Defaults to `mastodon.social` if unset. |
+
+### Bluesky (AT Protocol)
+
+| Variable | Description |
+|---|---|
+| `BLUESKY_HANDLE` | Your Bluesky handle, e.g. `yourname.bsky.social`. |
+| `BLUESKY_APP_PASSWORD` | Bluesky app password (Settings → Privacy and Security → App Passwords). Do **not** use your account password. |
+
+---
+
 ## Circuit Breaker
 
 | Variable | Description |
