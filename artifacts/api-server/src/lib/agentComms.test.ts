@@ -1,33 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("@workspace/db", () => {
-  // Default select chain supports BOTH `await ...where(...)` (thenable) and
-  // `...where(...).orderBy(...)` — mirrors drizzle's fluent/awaitable builder.
-  const makeWhereResult = () => {
-    const whereResult: Record<string, unknown> = {
-      orderBy: vi.fn().mockResolvedValue([]),
-      then: (resolve: (v: unknown[]) => unknown) => Promise.resolve([]).then(resolve),
-    };
-    return whereResult;
-  };
-  return {
-    db: {
-      select: vi.fn().mockImplementation(() => ({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockImplementation(() => makeWhereResult()),
-        }),
-      })),
-      insert: vi.fn().mockReturnValue({
-        values: vi.fn().mockReturnValue({
-          returning: vi.fn().mockResolvedValue([]),
+vi.mock("@workspace/db", () => ({
+  db: {
+    select: vi.fn().mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnValue({
+          orderBy: vi.fn().mockResolvedValue([]),
         }),
       }),
-    },
-    messagesTable: { id: {}, sessionId: {}, messageType: {}, toAgentId: {}, taskId: {} },
-    agentsTable: {},
-    tasksTable: { id: {}, sessionId: {}, assignedAgentId: {}, status: {} },
-  };
-});
+    }),
+    insert: vi.fn().mockReturnValue({
+      values: vi.fn().mockReturnValue({
+        returning: vi.fn().mockResolvedValue([]),
+      }),
+    }),
+  },
+  messagesTable: {},
+  agentsTable: {},
+  tasksTable: {},
+}));
 
 const mockAgent = (id: number, name: string, provider = "openai") => ({
   id,
@@ -261,7 +252,10 @@ describe("persistOutboundQuestions", () => {
     expect(result).toHaveLength(3);
   });
 
-  it("falls back to sender's taskId when recipient has no active task", async () => {
+  it("binds to sender taskId (never null) when recipient has no active task", async () => {
+    // When the recipient has no assigned task, the question MUST NOT be stored with
+    // taskId=null.  Instead it is bound to the sender's taskId so the message is always
+    // task-scoped.  This prevents floating-inbox cross-task leakage.
     const { db } = await import("@workspace/db");
     let capturedValues: Record<string, unknown> | null = null;
     const savedMsg = { id: 20, content: "q", sessionId: 1, messageType: "question", createdAt: new Date().toISOString() };
@@ -278,7 +272,14 @@ describe("persistOutboundQuestions", () => {
     const agents = [from, mockAgent(2, "Claude")];
 
     await persistOutboundQuestions(1, from as never, [{ toAgentName: "Claude", question: "Q?" }], 42, agents as never);
-    expect(capturedValues).toMatchObject({ taskId: 42, metadata: { senderTaskId: 42, questionTaskId: 42 } });
+    // Must be bound to sender's taskId (42), never null
+    expect(capturedValues).not.toBeNull();
+    expect(capturedValues!.taskId).toBe(42);
+    expect(capturedValues!.taskId).not.toBeNull();
+    expect(capturedValues).toMatchObject({
+      taskId: 42,
+      metadata: { senderTaskId: 42, questionTaskId: 42, boundToSenderTask: true },
+    });
   });
 
   it("stores question under recipient's active task ID for cross-task delivery", async () => {
