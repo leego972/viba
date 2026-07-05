@@ -36,7 +36,7 @@ import {
   Wifi, WifiOff, AlertTriangle, TrendingDown, Search, Trash2,
   ShieldCheck, ShieldAlert, ShieldOff, RefreshCw, DatabaseZap,
   Bell, Mail, Webhook, Settings2, HelpCircle, User, ExternalLink,
-  Brain, ChevronRight, GitBranch, Github, Lock, CheckCircle2,
+  Brain, ChevronRight, GitBranch, Github, Lock, CheckCircle2, FileText,
 } from "lucide-react";
 import { format, subDays } from "date-fns";
 import {
@@ -423,16 +423,86 @@ export default function Dashboard() {
         {/* ── Header ── */}
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-            <p className="text-muted-foreground">Your operational control center</p>
+            <h1 className="text-3xl font-bold tracking-tight">Command Centre</h1>
+            <p className="text-muted-foreground">Diagnose. Repair. Verify. — evidence-backed AI operations</p>
           </div>
           <Link href="/sessions/new">
             <Button className="gap-2">
               <Plus className="h-4 w-4" />
-              New Session
+              Run Diagnostic Session
             </Button>
           </Link>
         </div>
+
+        {/* ── Command Summary Strip (Task 7) ── */}
+        {(() => {
+          const activeSessions = (sessions ?? []).filter(s => s.status === "active").length;
+          const pendingApprovals = (sessions ?? []).filter(s => s.status === "paused").length;
+          const openCircuits = circuitEntries.filter(e => e.state === "open").length;
+          const totalReports = stats?.totalSessions ?? 0;
+
+          const cards = [
+            {
+              label: "System Readiness",
+              value: systemStatus === "error" ? "BLOCKED" : systemStatus === "warning" ? "WARNINGS" : "READY",
+              sub: hasOpenCircuits ? `${openCircuits} circuit${openCircuits !== 1 ? "s" : ""} open` : hasHalfOpenCircuits ? "Circuits probing" : "All providers clear",
+              color: systemStatus === "error" ? "#ef4444" : systemStatus === "warning" ? "#f59e0b" : "#22c55e",
+              border: systemStatus === "error" ? "border-red-500/30 bg-red-500/5" : systemStatus === "warning" ? "border-amber-500/30 bg-amber-500/5" : "border-emerald-500/20 bg-emerald-500/5",
+            },
+            {
+              label: "Active Work",
+              value: String(activeSessions),
+              sub: `${pendingApprovals} awaiting approval`,
+              color: activeSessions > 0 ? "#60a5fa" : undefined,
+              border: "border-border bg-card",
+            },
+            {
+              label: "Critical Issues",
+              value: openCircuits > 0 ? String(openCircuits) : (sessions ?? []).length === 0 ? "—" : "0",
+              sub: openCircuits > 0 ? "Open circuit breakers" : hasAnyAlert ? "Provider alerts active" : "No critical issues",
+              color: openCircuits > 0 ? "#ef4444" : hasAnyAlert ? "#f59e0b" : "#22c55e",
+              border: openCircuits > 0 ? "border-red-500/30 bg-red-500/5" : hasAnyAlert ? "border-amber-500/30 bg-amber-500/5" : "border-border bg-card",
+            },
+            {
+              label: "Evidence Produced",
+              value: String(totalReports),
+              sub: `session${totalReports !== 1 ? "s" : ""} with audit trail`,
+              color: undefined,
+              border: "border-border bg-card",
+            },
+            {
+              label: "Next Best Action",
+              value: null,
+              sub: hasOpenCircuits ? "Reset circuit breakers" : activeSessions > 0 ? "Review active session" : "Run a diagnostic session",
+              href: hasOpenCircuits ? "#provider-health" : activeSessions > 0 ? `/sessions/${(sessions ?? []).find(s => s.status === "active")?.id}` : "/sessions/new",
+              color: undefined,
+              border: "border-primary/20 bg-primary/5",
+            },
+          ] as Array<{ label: string; value: string | null; sub: string; color?: string; border: string; href?: string }>;
+
+          return (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              {cards.map(({ label, value, sub, color, border, href }) => (
+                <div key={label} className={`rounded-xl border p-4 flex flex-col gap-1 transition-all hover:shadow-sm ${border}`}>
+                  <div className="text-[10px] font-semibold tracking-widest text-muted-foreground uppercase">{label}</div>
+                  {value !== null ? (
+                    <div className="text-2xl font-bold tracking-tight" style={{ color: color ?? "inherit" }}>{value}</div>
+                  ) : href ? (
+                    <Link href={href}>
+                      <button className="mt-1 text-xs font-semibold text-primary flex items-center gap-1 hover:gap-2 transition-all">
+                        <ChevronRight className="h-3.5 w-3.5" />
+                        {sub}
+                      </button>
+                    </Link>
+                  ) : null}
+                  {value !== null && (
+                    <div className="text-[11px] text-muted-foreground">{sub}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          );
+        })()}
 
         {/* ── System status bar ── */}
         <div className={`flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border px-5 py-3 ${
@@ -482,14 +552,21 @@ export default function Dashboard() {
         </div>
 
         {/* ── Primary Actions ── */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {[
             {
               href: "/sessions/new",
               icon: Plus,
-              label: "Start a VIBA session",
-              sub: "Set a goal, assign agents, and run",
+              label: "New session",
+              sub: "Set a goal, assign agents, run",
               primary: true,
+            },
+            {
+              href: "/doctor",
+              icon: Activity,
+              label: "Project Doctor",
+              sub: "Diagnose a GitHub repo",
+              primary: false,
             },
             {
               href: "/launch-readiness",
@@ -499,10 +576,10 @@ export default function Dashboard() {
               primary: false,
             },
             {
-              href: "/doctor",
-              icon: Activity,
-              label: "Project Doctor",
-              sub: "Diagnose a GitHub repo",
+              href: "/proof-report",
+              icon: FileText,
+              label: "Proof report",
+              sub: "Evidence report for last session",
               primary: false,
             },
           ].map(({ href, icon: Icon, label, sub, primary }) => (
@@ -759,20 +836,29 @@ export default function Dashboard() {
 
             {/* Empty state — shown when loaded but no sessions exist */}
             {!isLoading && !isError && (sessions ?? []).length === 0 && (
-              <Card>
-                <CardContent className="pt-10 pb-10 flex flex-col items-center gap-3 text-center">
-                  <div className="h-10 w-10 rounded-xl border bg-muted flex items-center justify-center">
-                    <Activity className="h-5 w-5 text-muted-foreground" />
+              <Card className="border-dashed">
+                <CardContent className="pt-12 pb-12 flex flex-col items-center gap-4 text-center max-w-sm mx-auto">
+                  <div className="h-14 w-14 rounded-2xl border-2 border-dashed border-primary/30 bg-primary/5 flex items-center justify-center">
+                    <Activity className="h-6 w-6 text-primary/60" />
                   </div>
-                  <div>
-                    <p className="text-sm font-medium">No sessions yet</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Start your first session to orchestrate AI agents</p>
+                  <div className="space-y-1.5">
+                    <p className="text-base font-semibold">No proof reports yet</p>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      Run your first diagnostic session to generate ranked findings, evidence, and a retest checklist.
+                    </p>
                   </div>
-                  <Link href="/sessions/new">
-                    <Button size="sm" className="mt-1 gap-1.5">
-                      <Plus className="h-3.5 w-3.5" /> Start First Session
-                    </Button>
-                  </Link>
+                  <div className="flex flex-col sm:flex-row gap-2 mt-1">
+                    <Link href="/sessions/new">
+                      <Button size="sm" className="gap-1.5">
+                        <Plus className="h-3.5 w-3.5" /> Run Diagnostic Session
+                      </Button>
+                    </Link>
+                    <Link href="/demo/proof-report">
+                      <Button size="sm" variant="outline" className="gap-1.5">
+                        <FileText className="h-3.5 w-3.5" /> View Sample Report
+                      </Button>
+                    </Link>
+                  </div>
                 </CardContent>
               </Card>
             )}
