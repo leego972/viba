@@ -10,12 +10,14 @@ import {
 import { eq, desc, count } from "drizzle-orm";
 import {
   runAdvertisingCycle,
+  runOrganicGrowthAutopilotCycle,
   getStrategyOverview,
   getRecentActivity,
   getPerformanceMetrics,
   GROWTH_STRATEGIES,
   startAdvertisingScheduler,
   stopAdvertisingScheduler,
+  getAdvertisingSchedulerStatus,
   getChannelPerformanceReport,
   getCrossChannelAttribution,
   getActiveABTests,
@@ -43,6 +45,10 @@ router.get("/api/advertising/activity", requireAdmin, async (req, res): Promise<
 
 router.post("/api/advertising/cycle", requireAdmin, async (_req, res): Promise<void> => {
   res.json(await runAdvertisingCycle());
+});
+
+router.post("/api/advertising/autopilot-cycle", requireAdmin, async (_req, res): Promise<void> => {
+  res.json(await runOrganicGrowthAutopilotCycle());
 });
 
 router.get("/api/advertising/strategies", requireAdmin, async (_req, res): Promise<void> => {
@@ -92,6 +98,7 @@ router.get("/api/advertising/dashboard", requireAdmin, async (_req, res): Promis
     performance,
     recentActivity,
     contentQueue,
+    scheduler: getAdvertisingSchedulerStatus(),
   });
 });
 
@@ -145,12 +152,16 @@ router.post("/api/advertising/ab-tests/:id/result", requireAdmin, async (req, re
 
 router.post("/api/advertising/scheduler/start", requireAdmin, async (_req, res): Promise<void> => {
   startAdvertisingScheduler();
-  res.json({ success: true, message: "VIBA advertising scheduler started" });
+  res.json({ success: true, message: "VIBA organic growth autopilot scheduler started", status: getAdvertisingSchedulerStatus() });
 });
 
 router.post("/api/advertising/scheduler/stop", requireAdmin, async (_req, res): Promise<void> => {
   stopAdvertisingScheduler();
-  res.json({ success: true, message: "VIBA advertising scheduler stopped" });
+  res.json({ success: true, message: "VIBA organic growth autopilot scheduler stopped", status: getAdvertisingSchedulerStatus() });
+});
+
+router.get("/api/advertising/scheduler/status", requireAdmin, async (_req, res): Promise<void> => {
+  res.json(getAdvertisingSchedulerStatus());
 });
 
 router.get("/api/advertising/blog-posts", requireAdmin, async (req, res): Promise<void> => {
