@@ -58,8 +58,12 @@ import userBrowserRouter from "./userBrowserRouter";
 const router: IRouter = Router();
 
 function contentCreatorCompatibilityMount(req: Request, res: Response, next: NextFunction): void {
+  const originalUrl = req.url;
   req.url = `/api/content-creator${req.url}`;
-  contentCreatorRouter(req, res, next);
+  contentCreatorRouter(req, res, (err?: unknown) => {
+    req.url = originalUrl;
+    next(err);
+  });
 }
 
 // auth routes are registered first and bypass the ACCESS_TOKEN gate in app.ts
