@@ -1,6 +1,7 @@
 /**
  * VIBA Tool Broker API Routes
  *
+ * Mounted by app.ts under /api.
  * GET  /api/tools                 — list all tools with credential status
  * GET  /api/tools/:toolId         — single tool definition
  * POST /api/tools/plan            — plan a tool action (no mutation)
@@ -54,13 +55,13 @@ const ToolActionSchema = z.object({
   approvalToken: z.string().optional().nullable(),
 });
 
-router.get("/api/tools", async (req, res): Promise<void> => {
+router.get("/tools", async (req, res): Promise<void> => {
   const uid = userId(req);
   const tools = await getAvailableTools(uid);
   res.json({ tools, rawValuesReturned: false });
 });
 
-router.get("/api/tools/invocations", async (req, res): Promise<void> => {
+router.get("/tools/invocations", async (req, res): Promise<void> => {
   const uid = userId(req);
   const limit = Math.min(Number(req.query["limit"] ?? 50), 200);
   const taskId = req.query["task_id"] as string | undefined;
@@ -94,7 +95,7 @@ router.get("/api/tools/invocations", async (req, res): Promise<void> => {
   }
 });
 
-router.get("/api/tools/invocations/:id", async (req, res): Promise<void> => {
+router.get("/tools/invocations/:id", async (req, res): Promise<void> => {
   const uid = userId(req);
   const id = Number(req.params["id"]);
   if (isNaN(id)) {
@@ -119,7 +120,7 @@ router.get("/api/tools/invocations/:id", async (req, res): Promise<void> => {
   }
 });
 
-router.get("/api/tools/:toolId", (req, res): void => {
+router.get("/tools/:toolId", (req, res): void => {
   const toolId = req.params["toolId"] as string;
   const tool = brokerToolById(toolId);
   if (!tool) {
@@ -129,7 +130,7 @@ router.get("/api/tools/:toolId", (req, res): void => {
   res.json({ tool, rawValuesReturned: false });
 });
 
-router.post("/api/tools/plan", async (req, res): Promise<void> => {
+router.post("/tools/plan", async (req, res): Promise<void> => {
   const uid = userId(req);
   const parsed = ToolActionSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -140,7 +141,7 @@ router.post("/api/tools/plan", async (req, res): Promise<void> => {
   res.json(result);
 });
 
-router.post("/api/tools/dry-run", async (req, res): Promise<void> => {
+router.post("/tools/dry-run", async (req, res): Promise<void> => {
   const uid = userId(req);
   const parsed = ToolActionSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -151,7 +152,7 @@ router.post("/api/tools/dry-run", async (req, res): Promise<void> => {
   res.json(result);
 });
 
-router.post("/api/tools/execute", async (req, res): Promise<void> => {
+router.post("/tools/execute", async (req, res): Promise<void> => {
   const uid = userId(req);
   const parsed = ToolActionSchema.safeParse(req.body);
   if (!parsed.success) {
