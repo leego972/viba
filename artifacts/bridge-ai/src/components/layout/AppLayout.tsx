@@ -6,9 +6,9 @@ interface AppLayoutProps {
 
 export function AppLayout({ children }: AppLayoutProps) {
   return (
-    <div className="relative flex min-h-screen flex-col bg-background overflow-x-clip">
+    <div className="relative flex min-h-screen min-w-0 flex-col overflow-x-hidden bg-background text-foreground">
       <Navbar />
-      <main className="flex-1 w-full max-w-screen-2xl mx-auto container px-4 py-6 md:px-6 md:py-8 pb-16 animate-fade-in">
+      <main className="mx-auto w-full max-w-screen-2xl min-w-0 flex-1 px-4 py-5 pb-20 sm:px-5 md:px-6 md:py-8 animate-fade-in">
         {children}
       </main>
     </div>
