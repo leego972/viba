@@ -29,29 +29,29 @@ import {
 
 const router: IRouter = Router();
 
-router.get("/api/advertising/strategy", requireAdmin, async (_req, res): Promise<void> => {
+router.get("/advertising/strategy", requireAdmin, async (_req, res): Promise<void> => {
   res.json(getStrategyOverview());
 });
 
-router.get("/api/advertising/performance", requireAdmin, async (req, res): Promise<void> => {
+router.get("/advertising/performance", requireAdmin, async (req, res): Promise<void> => {
   const days = parseInt(String(req.query["days"] ?? "30"), 10);
   res.json(await getPerformanceMetrics(days));
 });
 
-router.get("/api/advertising/activity", requireAdmin, async (req, res): Promise<void> => {
+router.get("/advertising/activity", requireAdmin, async (req, res): Promise<void> => {
   const limit = parseInt(String(req.query["limit"] ?? "50"), 10);
   res.json(await getRecentActivity(limit));
 });
 
-router.post("/api/advertising/cycle", requireAdmin, async (_req, res): Promise<void> => {
+router.post("/advertising/cycle", requireAdmin, async (_req, res): Promise<void> => {
   res.json(await runAdvertisingCycle());
 });
 
-router.get("/api/advertising/strategies", requireAdmin, async (_req, res): Promise<void> => {
+router.get("/advertising/strategies", requireAdmin, async (_req, res): Promise<void> => {
   res.json(GROWTH_STRATEGIES);
 });
 
-router.get("/api/advertising/content", requireAdmin, async (req, res): Promise<void> => {
+router.get("/advertising/content", requireAdmin, async (req, res): Promise<void> => {
   const { status = "all", limit = "50", offset = "0" } = req.query as Record<string, string>;
   let query = db.select().from(marketingContent).orderBy(desc(marketingContent.createdAt))
     .limit(parseInt(limit, 10)).offset(parseInt(offset, 10));
@@ -61,7 +61,7 @@ router.get("/api/advertising/content", requireAdmin, async (req, res): Promise<v
   res.json({ items, total: Number(totalRow?.count ?? 0) });
 });
 
-router.patch("/api/advertising/content/:id/status", requireAdmin, async (req, res): Promise<void> => {
+router.patch("/advertising/content/:id/status", requireAdmin, async (req, res): Promise<void> => {
   const id = parseInt(String(req.params["id"] ?? "0"), 10);
   const { status, publishedUrl } = req.body as { status: string; publishedUrl?: string };
   await db.update(marketingContent).set({
@@ -72,13 +72,13 @@ router.patch("/api/advertising/content/:id/status", requireAdmin, async (req, re
   res.json({ success: true });
 });
 
-router.get("/api/advertising/content/:id", requireAdmin, async (req, res): Promise<void> => {
+router.get("/advertising/content/:id", requireAdmin, async (req, res): Promise<void> => {
   const id = parseInt(String(req.params["id"] ?? "0"), 10);
   const [row] = await db.select().from(marketingContent).where(eq(marketingContent.id, id)).limit(1);
   res.json(row ?? null);
 });
 
-router.get("/api/advertising/dashboard", requireAdmin, async (_req, res): Promise<void> => {
+router.get("/advertising/dashboard", requireAdmin, async (_req, res): Promise<void> => {
   const [performance, recentActivity, growth] = await Promise.all([
     getPerformanceMetrics(30),
     getRecentActivity(10),
@@ -90,17 +90,10 @@ router.get("/api/advertising/dashboard", requireAdmin, async (_req, res): Promis
   for (const c of contentCounts) {
     if (c.status && c.status in contentQueue) contentQueue[c.status] = Number(c.count);
   }
-  res.json({
-    strategy: getStrategyOverview(),
-    performance,
-    recentActivity,
-    contentQueue,
-    growth,
-    scheduler: growth,
-  });
+  res.json({ strategy: getStrategyOverview(), performance, recentActivity, contentQueue, growth, scheduler: growth });
 });
 
-router.get("/api/advertising/channels", requireAdmin, async (_req, res): Promise<void> => {
+router.get("/advertising/channels", requireAdmin, async (_req, res): Promise<void> => {
   const core = getAllChannelStatuses();
   const free = getFreeChannelConnectionStatus();
   res.json({
@@ -115,11 +108,11 @@ router.get("/api/advertising/channels", requireAdmin, async (_req, res): Promise
   });
 });
 
-router.get("/api/advertising/channel-performance", requireAdmin, async (_req, res): Promise<void> => {
+router.get("/advertising/channel-performance", requireAdmin, async (_req, res): Promise<void> => {
   res.json(getChannelPerformanceReport());
 });
 
-router.get("/api/advertising/budget", requireAdmin, async (_req, res): Promise<void> => {
+router.get("/advertising/budget", requireAdmin, async (_req, res): Promise<void> => {
   const overview = getStrategyOverview();
   res.json({
     monthlyBudget: overview.monthlyBudget,
@@ -137,51 +130,51 @@ router.get("/api/advertising/budget", requireAdmin, async (_req, res): Promise<v
   });
 });
 
-router.get("/api/advertising/attribution", requireAdmin, async (req, res): Promise<void> => {
+router.get("/advertising/attribution", requireAdmin, async (req, res): Promise<void> => {
   const days = parseInt(String(req.query["days"] ?? "30"), 10);
   res.json(await getCrossChannelAttribution(days));
 });
 
-router.get("/api/advertising/ab-tests", requireAdmin, async (_req, res): Promise<void> => {
+router.get("/advertising/ab-tests", requireAdmin, async (_req, res): Promise<void> => {
   res.json(getActiveABTests());
 });
 
-router.post("/api/advertising/ab-tests", requireAdmin, async (req, res): Promise<void> => {
+router.post("/advertising/ab-tests", requireAdmin, async (req, res): Promise<void> => {
   const { channel, variantADesc, variantBDesc } = req.body as { channel: string; variantADesc: string; variantBDesc: string };
   res.json(createABTest(channel, variantADesc, variantBDesc));
 });
 
-router.post("/api/advertising/ab-tests/:id/result", requireAdmin, async (req, res): Promise<void> => {
+router.post("/advertising/ab-tests/:id/result", requireAdmin, async (req, res): Promise<void> => {
   const { variant, success } = req.body as { variant: "A" | "B"; success: boolean };
   recordABTestResult(String(req.params["id"] ?? ""), variant, success);
   res.json({ success: true });
 });
 
-router.get("/api/advertising/scheduler/status", requireAdmin, async (_req, res): Promise<void> => {
+router.get("/advertising/scheduler/status", requireAdmin, async (_req, res): Promise<void> => {
   res.json(await getAutonomousGrowthStatus());
 });
 
-router.post("/api/advertising/scheduler/start", requireAdmin, async (_req, res): Promise<void> => {
+router.post("/advertising/scheduler/start", requireAdmin, async (_req, res): Promise<void> => {
   res.json({ success: true, message: "VIBA autonomous growth system started", status: await restartAutonomousGrowthScheduler() });
 });
 
-router.post("/api/advertising/scheduler/stop", requireAdmin, async (_req, res): Promise<void> => {
+router.post("/advertising/scheduler/stop", requireAdmin, async (_req, res): Promise<void> => {
   res.json({ success: true, message: "VIBA autonomous growth system stopped", status: await stopAutonomousGrowthScheduler() });
 });
 
-router.get("/api/advertising/growth/status", requireAdmin, async (_req, res): Promise<void> => {
+router.get("/advertising/growth/status", requireAdmin, async (_req, res): Promise<void> => {
   res.json(await getAutonomousGrowthStatus());
 });
 
-router.post("/api/advertising/growth/start", requireAdmin, async (_req, res): Promise<void> => {
+router.post("/advertising/growth/start", requireAdmin, async (_req, res): Promise<void> => {
   res.json({ success: true, message: "VIBA autonomous growth system started", status: await restartAutonomousGrowthScheduler() });
 });
 
-router.post("/api/advertising/growth/stop", requireAdmin, async (_req, res): Promise<void> => {
+router.post("/advertising/growth/stop", requireAdmin, async (_req, res): Promise<void> => {
   res.json({ success: true, message: "VIBA autonomous growth system stopped", status: await stopAutonomousGrowthScheduler() });
 });
 
-router.put("/api/advertising/growth/settings", requireAdmin, async (req, res): Promise<void> => {
+router.put("/advertising/growth/settings", requireAdmin, async (req, res): Promise<void> => {
   const body = req.body as Record<string, unknown>;
   res.json(await updateAutonomousGrowthSettings({
     enabled: body["enabled"] === undefined ? undefined : Boolean(body["enabled"]),
@@ -193,16 +186,16 @@ router.put("/api/advertising/growth/settings", requireAdmin, async (req, res): P
   }));
 });
 
-router.post("/api/advertising/growth/cycle", requireAdmin, async (_req, res): Promise<void> => {
+router.post("/advertising/growth/cycle", requireAdmin, async (_req, res): Promise<void> => {
   res.json(await runAutonomousGrowthCycle("admin-api"));
 });
 
-router.post("/api/advertising/growth/publish-approved", requireAdmin, async (req, res): Promise<void> => {
+router.post("/advertising/growth/publish-approved", requireAdmin, async (req, res): Promise<void> => {
   const { limit = 20, autoPublishChannels } = req.body as { limit?: number; autoPublishChannels?: string[] };
   res.json(await publishApprovedFreeContent(limit, autoPublishChannels));
 });
 
-router.get("/api/advertising/blog-posts", requireAdmin, async (_req, res): Promise<void> => {
+router.get("/advertising/blog-posts", requireAdmin, async (_req, res): Promise<void> => {
   const rows = await db.select().from(marketingContent)
     .where(eq(marketingContent.platform, "blog"))
     .orderBy(desc(marketingContent.createdAt))
@@ -210,23 +203,23 @@ router.get("/api/advertising/blog-posts", requireAdmin, async (_req, res): Promi
   res.json({ items: rows, total: rows.length });
 });
 
-router.get("/api/advertising/campaign-performance", requireAdmin, async (_req, res): Promise<void> => {
+router.get("/advertising/campaign-performance", requireAdmin, async (_req, res): Promise<void> => {
   const rows = await db.select().from(marketingPerformance).orderBy(desc(marketingPerformance.createdAt)).limit(100);
   res.json(rows);
 });
 
-router.post("/api/advertising/blast", requireAdmin, async (req, res): Promise<void> => {
+router.post("/advertising/blast", requireAdmin, async (req, res): Promise<void> => {
   const { channelIds } = req.body as { channelIds?: string[] };
   res.json(await generateBlastContent(channelIds));
 });
 
-router.post("/api/advertising/content/auto-approve", requireAdmin, async (req, res): Promise<void> => {
+router.post("/advertising/content/auto-approve", requireAdmin, async (req, res): Promise<void> => {
   const { threshold = 75 } = req.body as { threshold?: number };
   const { autoApproveHighQualityContent } = await import("../engines/contentCreatorEngine");
   res.json(await autoApproveHighQualityContent(threshold));
 });
 
-router.post("/api/advertising/content/autonomous-cycle", requireAdmin, async (req, res): Promise<void> => {
+router.post("/advertising/content/autonomous-cycle", requireAdmin, async (req, res): Promise<void> => {
   const { maxPiecesPerPlatform = 2, autoApproveThreshold = 75, autoSchedule = true } = req.body as Record<string, number | boolean>;
   const { runAutonomousContentCycle } = await import("../engines/contentCreatorEngine");
   res.json(await runAutonomousContentCycle({
