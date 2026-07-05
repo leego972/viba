@@ -52,6 +52,7 @@ import seoRouter from "./seo";
 import marketingRouter from "./marketing";
 import advertisingRouter from "./advertising";
 import contentCreatorRouter from "./contentCreator";
+import growthAutopilotRouter from "./growthAutopilot";
 import userBrowserRouter from "./userBrowserRouter";
 
 const router: IRouter = Router();
@@ -110,6 +111,7 @@ router.use(seoRouter);
 router.use(marketingRouter);
 router.use(advertisingRouter);
 router.use(contentCreatorRouter);
+router.use(growthAutopilotRouter);
 router.use(userBrowserRouter);
 
 export default router;
