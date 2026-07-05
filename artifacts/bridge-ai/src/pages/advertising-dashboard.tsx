@@ -4,12 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Activity, CheckCircle2, Clock, Loader2, Megaphone, Power, PowerOff, XCircle } from "lucide-react";
+import { Clock, Loader2, Megaphone, Power, PowerOff } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 function getAdminToken() {
-  return localStorage.getItem("viba_admin_token") ?? "";
+  return sessionStorage.getItem("viba_admin_token") ?? localStorage.getItem("viba_admin_token") ?? "";
 }
 
 async function api(path: string, opts?: RequestInit) {
@@ -18,8 +18,9 @@ async function api(path: string, opts?: RequestInit) {
     headers: {
       Authorization: `Bearer ${getAdminToken()}`,
       "Content-Type": "application/json",
-      ...opts?.headers,
+      ...(opts?.headers ?? {}),
     },
+    credentials: "include",
   });
   if (!res.ok) throw new Error(`API error ${res.status}`);
   return res.json();
@@ -36,19 +37,14 @@ function StatusBadge({ active }: { active: boolean }) {
 export default function AdvertisingDashboard() {
   const { toast } = useToast();
   const [status, setStatus] = useState<any>(null);
-  const [dashboard, setDashboard] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
   async function load() {
     setLoading(true);
     try {
-      const [schedulerStatus, dash] = await Promise.all([
-        api("/api/advertising/scheduler/status"),
-        api("/api/advertising/dashboard"),
-      ]);
+      const schedulerStatus = await api("/api/advertising/scheduler/status");
       setStatus(schedulerStatus);
-      setDashboard(dash);
     } catch (err) {
       toast({ title: "Load failed", description: String(err), variant: "destructive" });
     } finally {
@@ -61,7 +57,7 @@ export default function AdvertisingDashboard() {
     try {
       const result = await api("/api/advertising/scheduler/start", { method: "POST" });
       setStatus(result.status ?? result);
-      toast({ title: "VIBA growth system started", description: "VIBA will generate professional VIBA-only organic content automatically." });
+      toast({ title: "VIBA Growth Autopilot started" });
       await load();
     } catch (err) {
       toast({ title: "Start failed", description: String(err), variant: "destructive" });
@@ -75,7 +71,7 @@ export default function AdvertisingDashboard() {
     try {
       const result = await api("/api/advertising/scheduler/stop", { method: "POST" });
       setStatus(result.status ?? result);
-      toast({ title: "VIBA growth system stopped" });
+      toast({ title: "VIBA Growth Autopilot stopped" });
       await load();
     } catch (err) {
       toast({ title: "Stop failed", description: String(err), variant: "destructive" });
@@ -96,87 +92,57 @@ export default function AdvertisingDashboard() {
     );
   }
 
-  const isActive = Boolean(status?.active ?? status?.schedulerActive ?? dashboard?.growth?.schedulerActive);
-  const queue = dashboard?.contentQueue ?? {};
+  const isActive = Boolean(status?.active ?? status?.schedulerActive);
 
   return (
     <AppLayout>
-      <div className="space-y-6 p-6">
+      <div className="mx-auto max-w-3xl space-y-6 p-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="flex items-center gap-2 text-2xl font-bold">
               <Megaphone className="h-6 w-6 text-amber-400" />
-              VIBA Growth System
+              VIBA Growth Autopilot
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Autonomous VIBA-only SEO, content creation and organic growth pipeline.
+              One admin control: start or stop VIBA's autonomous VIBA-only organic growth system.
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Button size="sm" onClick={startSystem} disabled={busy || isActive} className="bg-green-500 text-black hover:bg-green-600">
-              {busy ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Power className="mr-1 h-4 w-4" />}
-              Start System
-            </Button>
-            <Button size="sm" variant="destructive" onClick={stopSystem} disabled={busy || !isActive}>
-              {busy ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <PowerOff className="mr-1 h-4 w-4" />}
-              Stop System
-            </Button>
-          </div>
+          <StatusBadge active={isActive} />
         </div>
 
         <Card className="border-border/50 bg-card/80">
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-base">System Status</CardTitle>
-                <CardDescription>Only Start and Stop controls are exposed here. The system handles generation automatically.</CardDescription>
-              </div>
-              <StatusBadge active={isActive} />
-            </div>
+            <CardTitle className="text-base">System Control</CardTitle>
+            <CardDescription>
+              When running, the system generates professional VIBA-specific content about UI testing, beta testing, repo testing, reports, applied repairs, multi-AI collaboration, complex system building, live task delegation, performance visibility and user-facing outputs.
+            </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-4">
-            <div className="rounded-lg border border-border/50 p-4">
-              <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground"><Activity className="h-3 w-3" />Cycles</div>
-              <p className="text-2xl font-bold">{status?.cycleCount ?? dashboard?.growth?.cycleCount ?? 0}</p>
+          <CardContent className="space-y-5">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Button onClick={startSystem} disabled={busy || isActive} className="h-12 bg-green-500 text-black hover:bg-green-600">
+                {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Power className="mr-2 h-4 w-4" />}
+                Start System
+              </Button>
+              <Button variant="destructive" onClick={stopSystem} disabled={busy || !isActive} className="h-12">
+                {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PowerOff className="mr-2 h-4 w-4" />}
+                Stop System
+              </Button>
             </div>
-            <div className="rounded-lg border border-border/50 p-4">
-              <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground"><Clock className="h-3 w-3" />Last Run</div>
-              <p className="text-sm font-medium">{status?.lastRun ? new Date(status.lastRun).toLocaleString() : "Not yet"}</p>
-            </div>
-            <div className="rounded-lg border border-border/50 p-4">
-              <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground"><Clock className="h-3 w-3" />Next Run</div>
-              <p className="text-sm font-medium">{status?.nextRun ? new Date(status.nextRun).toLocaleString() : "Not scheduled"}</p>
-            </div>
-            <div className="rounded-lg border border-border/50 p-4">
-              <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground"><CheckCircle2 className="h-3 w-3" />Spend Mode</div>
-              <p className="text-sm font-medium text-green-400">Free organic only</p>
-            </div>
-          </CardContent>
-        </Card>
 
-        <Card className="border-border/50 bg-card/80">
-          <CardHeader>
-            <CardTitle className="text-base">Content Queue</CardTitle>
-            <CardDescription>Read-only overview. The autonomous system decides what to generate and process.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            {Object.entries({ draft: 0, approved: 0, published: 0, rejected: 0, ...queue }).map(([key, value]) => (
-              <div key={key} className="rounded-lg border border-border/50 p-4 text-center">
-                <p className="text-2xl font-bold">{Number(value ?? 0)}</p>
-                <p className="text-xs capitalize text-muted-foreground">{key}</p>
+            <div className="grid gap-3 border-t border-border/60 pt-4 sm:grid-cols-3">
+              <div className="rounded-lg border border-border/50 p-4">
+                <p className="text-xs text-muted-foreground">Status</p>
+                <p className="mt-1 font-semibold">{isActive ? "Running" : "Stopped"}</p>
               </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/50 bg-card/80">
-          <CardHeader>
-            <CardTitle className="text-base">VIBA-Only Content Guard</CardTitle>
-            <CardDescription>The growth system must create professional content only about VIBA.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm text-muted-foreground">
-            <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-green-400" />Allowed: UI testing, beta testing, repo testing, report generation, applied repairs, collaborative AI work, complex systems using multiple AIs in one place, live AI task delegation and performance visibility.</p>
-            <p className="flex items-center gap-2"><XCircle className="h-4 w-4 text-red-400" />Blocked: unrelated projects, film studio content, fashion, tattoo, unrelated apps, Snapchat, TikTok and paid ads without owner approval.</p>
+              <div className="rounded-lg border border-border/50 p-4">
+                <p className="flex items-center gap-1 text-xs text-muted-foreground"><Clock className="h-3 w-3" />Last Run</p>
+                <p className="mt-1 text-sm font-medium">{status?.lastRun ? new Date(status.lastRun).toLocaleString() : "Not yet"}</p>
+              </div>
+              <div className="rounded-lg border border-border/50 p-4">
+                <p className="flex items-center gap-1 text-xs text-muted-foreground"><Clock className="h-3 w-3" />Next Run</p>
+                <p className="mt-1 text-sm font-medium">{status?.nextRun ? new Date(status.nextRun).toLocaleString() : "Not scheduled"}</p>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
