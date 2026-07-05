@@ -11,17 +11,14 @@ import {
   VIBA_PLAN,
   CREDIT_PACKS,
 } from "../lib/billing";
+import { isAdminUserId } from "../lib/adminAccess";
 
 const router: IRouter = Router();
 
 function origin(req: import("express").Request): string {
-  return (
-    (req.headers["origin"] as string | undefined) ??
-    `${req.protocol}://${req.get("host")}`
-  );
+  return (req.headers["origin"] as string | undefined) ?? `${req.protocol}://${req.get("host")}`;
 }
 
-// GET /api/billing/plans — public: returns plan + credit pack metadata for the pricing page
 router.get("/billing/plans", (_req, res): void => {
   res.json({
     plan: {
@@ -44,58 +41,53 @@ router.get("/billing/plans", (_req, res): void => {
   });
 });
 
-// GET /api/billing/status — requires session
 router.get("/billing/status", async (req, res): Promise<void> => {
   const userId = req.session?.userId as number | undefined;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
-
+  if (await isAdminUserId(userId)) {
+    res.json({
+      subscriptionStatus: "active",
+      creditsRemaining: 999999999,
+      creditsPeriodEnd: null,
+      stripeCustomerId: null,
+      stripeSubscriptionId: null,
+      planKey: "admin_full_access",
+      isAdmin: true,
+      billingMode: "admin_unmetered",
+    });
+    return;
+  }
   const status = await getBillingStatus(userId);
   res.json(status);
 });
 
-// POST /api/billing/checkout — create Stripe subscription checkout (requires session)
 router.post("/billing/checkout", async (req, res): Promise<void> => {
   const userId = req.session?.userId as number | undefined;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
-
-  if (!isStripeConfigured()) {
-    res.status(503).json({ error: "Stripe is not configured on this deployment" });
-    return;
-  }
+  if (await isAdminUserId(userId)) { res.status(409).json({ error: "Admin users already have full access" }); return; }
+  if (!isStripeConfigured()) { res.status(503).json({ error: "Stripe is not configured on this deployment" }); return; }
 
   const priceId = getBillingPriceId(VIBA_PLAN.key);
-  if (!priceId) {
-    res.status(503).json({ error: "Membership price not provisioned yet — try again in a moment" });
-    return;
-  }
+  if (!priceId) { res.status(503).json({ error: "Membership price not provisioned yet — try again in a moment" }); return; }
 
-  // Check if user already has an active subscription
   const current = await getBillingStatus(userId);
-  if (current.subscriptionStatus === "active" || current.subscriptionStatus === "trialing") {
-    res.status(409).json({ error: "You already have an active subscription" });
-    return;
-  }
+  if (current.subscriptionStatus === "active" || current.subscriptionStatus === "trialing") { res.status(409).json({ error: "You already have an active subscription" }); return; }
 
   try {
     const stripe = getStripe();
     const base = origin(req);
-
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       payment_method_types: ["card"],
       ...(current.stripeCustomerId ? { customer: current.stripeCustomerId } : {}),
       line_items: [{ price: priceId, quantity: 1 }],
-      subscription_data: {
-        trial_period_days: VIBA_PLAN.trialDays,
-        metadata: { system: "viba_billing", userId: String(userId) },
-      },
+      subscription_data: { trial_period_days: VIBA_PLAN.trialDays, metadata: { system: "viba_billing", userId: String(userId) } },
       payment_method_collection: "always",
       client_reference_id: String(userId),
       metadata: { system: "viba_billing", type: "subscription", userId: String(userId), planKey: VIBA_PLAN.key },
       success_url: `${base}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${base}/pricing`,
     });
-
     res.json({ url: session.url });
   } catch (err) {
     req.log.error({ err }, "billing checkout error");
@@ -103,17 +95,13 @@ router.post("/billing/checkout", async (req, res): Promise<void> => {
   }
 });
 
-// POST /api/billing/credits/checkout — buy a one-time credit pack (requires session)
 const CreditPackBody = z.object({ packKey: z.string().min(1) });
 
 router.post("/billing/credits/checkout", async (req, res): Promise<void> => {
   const userId = req.session?.userId as number | undefined;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
-
-  if (!isStripeConfigured()) {
-    res.status(503).json({ error: "Stripe is not configured" });
-    return;
-  }
+  if (await isAdminUserId(userId)) { res.status(409).json({ error: "Admin users already have unmetered credits" }); return; }
+  if (!isStripeConfigured()) { res.status(503).json({ error: "Stripe is not configured" }); return; }
 
   const parsed = CreditPackBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "packKey is required" }); return; }
@@ -122,38 +110,23 @@ router.post("/billing/credits/checkout", async (req, res): Promise<void> => {
   if (!pack) { res.status(400).json({ error: "Unknown credit pack" }); return; }
 
   const priceId = getBillingPriceId(pack.key);
-  if (!priceId) {
-    res.status(503).json({ error: "Credit pack not provisioned yet — try again in a moment" });
-    return;
-  }
+  if (!priceId) { res.status(503).json({ error: "Credit pack not provisioned yet — try again in a moment" }); return; }
 
   const current = await getBillingStatus(userId);
-
   try {
     const stripe = getStripe();
     const base = origin(req);
-
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       payment_method_types: ["card"],
       ...(current.stripeCustomerId ? { customer: current.stripeCustomerId } : {}),
       line_items: [{ price: priceId, quantity: 1 }],
-      // Save the PM for future off-session use (auto top-up).
-      // The checkout.session.completed webhook also sets the customer's
-      // invoice_settings.default_payment_method so triggerAutoTopupIfNeeded can find it.
       payment_intent_data: { setup_future_usage: "off_session" },
       client_reference_id: String(userId),
-      metadata: {
-        system: "viba_billing",
-        type: "credit_pack",
-        userId: String(userId),
-        credits: String(pack.credits),
-        packKey: pack.key,
-      },
+      metadata: { system: "viba_billing", type: "credit_pack", userId: String(userId), credits: String(pack.credits), packKey: pack.key },
       success_url: `${base}/billing?credits_added=${pack.credits}`,
       cancel_url: `${base}/billing`,
     });
-
     res.json({ url: session.url });
   } catch (err) {
     req.log.error({ err }, "billing credits checkout error");
@@ -161,31 +134,19 @@ router.post("/billing/credits/checkout", async (req, res): Promise<void> => {
   }
 });
 
-// POST /api/billing/portal — open Stripe customer portal (requires active subscription)
 router.post("/billing/portal", async (req, res): Promise<void> => {
   const userId = req.session?.userId as number | undefined;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
-
-  if (!isStripeConfigured()) {
-    res.status(503).json({ error: "Stripe is not configured" });
-    return;
-  }
+  if (await isAdminUserId(userId)) { res.status(409).json({ error: "Admin users do not need Stripe portal access" }); return; }
+  if (!isStripeConfigured()) { res.status(503).json({ error: "Stripe is not configured" }); return; }
 
   const { stripeCustomerId } = await getBillingStatus(userId);
-  if (!stripeCustomerId) {
-    res.status(404).json({ error: "No billing account found — subscribe first" });
-    return;
-  }
+  if (!stripeCustomerId) { res.status(404).json({ error: "No billing account found — subscribe first" }); return; }
 
   try {
     const stripe = getStripe();
     const base = origin(req);
-
-    const session = await stripe.billingPortal.sessions.create({
-      customer: stripeCustomerId,
-      return_url: `${base}/billing`,
-    });
-
+    const session = await stripe.billingPortal.sessions.create({ customer: stripeCustomerId, return_url: `${base}/billing` });
     res.json({ url: session.url });
   } catch (err) {
     req.log.error({ err }, "billing portal error");
@@ -193,7 +154,6 @@ router.post("/billing/portal", async (req, res): Promise<void> => {
   }
 });
 
-// GET /api/billing/auto-topup — load saved auto top-up config (requires session)
 router.get("/billing/auto-topup", async (req, res): Promise<void> => {
   const userId = req.session?.userId as number | undefined;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
@@ -201,36 +161,22 @@ router.get("/billing/auto-topup", async (req, res): Promise<void> => {
   res.json(config);
 });
 
-// POST /api/billing/auto-topup — save auto top-up config (requires session)
-const AutoTopupBody = z.object({
-  enabled: z.boolean(),
-  threshold: z.number().int().min(0).max(5000),
-  packKey: z.string(),
-});
+const AutoTopupBody = z.object({ enabled: z.boolean(), threshold: z.number().int().min(0).max(5000), packKey: z.string() });
 
 router.post("/billing/auto-topup", async (req, res): Promise<void> => {
   const userId = req.session?.userId as number | undefined;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
-
   const parsed = AutoTopupBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid body", detail: parsed.error.issues }); return; }
-
   const { enabled, threshold, packKey } = parsed.data;
-
-  // Validate the packKey if provided
-  if (packKey && !CREDIT_PACKS.find((p) => p.key === packKey)) {
-    res.status(400).json({ error: "Unknown packKey" }); return;
-  }
-
+  if (packKey && !CREDIT_PACKS.find((p) => p.key === packKey)) { res.status(400).json({ error: "Unknown packKey" }); return; }
   await setAutoTopupConfig(userId, { enabled, threshold, packKey });
   res.json({ ok: true });
 });
 
-// GET /api/billing/transactions — credit usage history for the current user
 router.get("/billing/transactions", async (req, res): Promise<void> => {
   const userId = req.session?.userId as number | undefined;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
-
   const limitParam = Number(req.query["limit"]);
   const limit = Number.isFinite(limitParam) && limitParam > 0 && limitParam <= 200 ? limitParam : 50;
   const txns = await getCreditTransactions(userId, limit);
