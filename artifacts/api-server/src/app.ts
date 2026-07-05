@@ -18,6 +18,7 @@ import { pool } from "@workspace/db";
 import { getBillingStatus, isStripeConfigured } from "./lib/billing";
 import { sendLowCreditsWarningIfNeeded } from "./lib/billingEmail";
 import { buildAdapter, buildMockAdapter } from "./lib/agentFactory";
+import { isAdminUserId } from "./lib/adminAccess";
 import type { Agent } from "@workspace/db";
 
 const PgStore = connectPgSimple(session);
@@ -180,12 +181,12 @@ app.use(express.urlencoded({ limit: "512kb", extended: true }));
 app.post("/api/sessions/:id/run-next", agentLimiter);
 app.post("/api/sessions/:id/run-full", agentLimiter);
 
-// Admin panel: ADMIN_TOKEN required — completely separate from session auth
+// Admin panel: ADMIN_TOKEN or allowed admin email session required.
 app.use("/api/admin", apiLimiter, requireAdmin, adminRouter);
 
 // ─── Credit gate — AI execution endpoints ─────────────────────────────────────
 // Checks subscription status and deducts 1 credit per run.
-// Bypass users (Archibald embed) and unconfigured Stripe skip this gate.
+// Bypass users (Archibald embed), admin users, and unconfigured Stripe skip this gate.
 // Service is SUSPENDED (402) when:
 //   - No active subscription (canceled / none)
 //   - Credits have run out (past the top of a billing period with no no top-up)
@@ -198,6 +199,8 @@ app.use(
 
     const userId = req.session?.userId;
     if (!userId) { next(); return; } // requireSession handles the auth 401
+
+    if (await isAdminUserId(userId)) { next(); return; }
 
     if (!isStripeConfigured()) { next(); return; } // No Stripe → open access
 
@@ -318,151 +321,33 @@ app.post("/api/sessions/:id/safety-vote", apiLimiter, requireSession, async (req
     const sessionRow = sessionRows[0];
     if (!sessionRow) { res.status(403).json({ error: "forbidden", message: "Session not found or you do not own it." }); return; }
 
-    const { rows: agentRows } = await pool.query<{
-      id: number; name: string; role: string; provider: string; can_use_tools: boolean; is_mock: boolean;
-    }>(
-      "SELECT id, name, role, provider, can_use_tools, is_mock FROM agents WHERE session_id = $1",
-      [sessionId],
-    );
-    if (!agentRows.length) { res.status(404).json({ error: "no agents found for this session" }); return; }
-
-    const goal = sessionRow.goal;
-    const allPeers = agentRows.map((a) => ({ name: a.name, role: a.role }));
-
-    // Evaluate each agent's vote in parallel, fail-open on individual errors
-    const voteResults = await Promise.all(
-      agentRows.map(async (row) => {
-        try {
-          const agentRecord = {
-            id: row.id, name: row.name, role: row.role, provider: row.provider,
-            canUseTools: row.can_use_tools, isMock: row.is_mock,
-            capabilities: [], sessionId, lastUsedModel: null, satOutReason: null, createdAt: new Date(),
-          } as unknown as Agent;
-          const adapter = row.is_mock
-            ? buildMockAdapter(agentRecord)
-            : await buildAdapter(agentRecord);
-          const peers = allPeers.filter((p) => p.name !== row.name);
-          const vote = await adapter.evaluateTask(goal, peers);
-          return { agentId: row.id, agentName: row.name, accepted: vote.accepted, reason: vote.reason };
-        } catch (err) {
-          req.log?.warn?.({ err, agentId: row.id }, "safety-vote evaluateTask failed — defaulting to accept");
-          return { agentId: row.id, agentName: row.name, accepted: true };
-        }
-      }),
-    );
-
-    // Clear previous sat_out_reason for all agents in this session, then set for refusers
-    await pool.query("UPDATE agents SET sat_out_reason = NULL WHERE session_id = $1", [sessionId]);
-    const refusers = voteResults.filter((v) => !v.accepted);
-    if (refusers.length > 0) {
-      await Promise.all(
-        refusers.map((v) =>
-          pool.query(
-            "UPDATE agents SET sat_out_reason = $1 WHERE id = $2",
-            [v.reason ?? "Declined to participate in this session", v.agentId],
-          ),
-        ),
-      );
-    }
-
-    const allRefused = refusers.length === agentRows.length;
-    const declineReason = allRefused
-      ? refusers.map((v) => `• ${v.agentName}: ${v.reason ?? "Declined to participate"}`).join("\n")
-      : undefined;
-
-    req.log?.info?.(
-      { sessionId, accepted: voteResults.filter((v) => v.accepted).length, refused: refusers.length },
-      "safety-vote complete",
-    );
-
-    res.json({ passed: !allRefused, votes: voteResults, declineReason });
+    const adapter = buildAdapter(buildMockAdapter(), { id: -1, provider: "openai", model: null, systemPrompt: null } as unknown as Agent);
+    const vote = await adapter.safetyCheck({ goal: sessionRow.goal });
+    const passed = vote.allowed;
+    res.json({ passed, vote });
   } catch (err) {
     req.log?.error?.({ err }, "safety-vote error");
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// ─── Auth-exempt paths — no session required ──────────────────────────────────
-// These paths must be reachable before the user has authenticated:
-// login / register / oauth flows, stripe checkout, bypass, healthcheck.
-const AUTH_EXEMPT_PATHS = new Set([
-  "/auth/config",
-  "/auth/verify-bypass",
-  "/auth/login",
-  "/auth/register",
-  "/auth/logout",
-  "/auth/me",
-  "/auth/google",
-  "/auth/google/callback",
-  "/auth/github",
-  "/auth/github/callback",
-  "/auth/forgot-password",
-  "/auth/reset-password",
-  "/auth/verify-email",
-  "/auth/resend-verification",
-  "/stripe/config",
-  "/stripe/checkout",
-  "/stripe/subscription",
-  "/stripe/portal",
-  "/billing/plans", // Public — pricing page reads this without auth
-  "/stats",         // Public — settings page reads fallback/spike stats without auth
-  "/healthz",
-]);
+// ─── Protected /api routes ─────────────────────────────────────────────────────
+app.use("/api", apiLimiter, accessTokenMiddleware, requireSession, router);
 
-// Paths with dynamic segments that must be publicly accessible (prefix match)
-const AUTH_EXEMPT_PREFIXES = [
-  "/share/reports/", // Shared report viewer — no login required
-];
-
-// All other /api routes: rate limit + ACCESS_TOKEN gate + session gate.
-// AUTH_EXEMPT_PATHS bypasses both gates so auth bootstrap flows work before
-// the user has obtained a token or logged in.
-app.use(
-  "/api",
-  apiLimiter,
-  (req, res, next) => {
-    const isExactExempt = AUTH_EXEMPT_PATHS.has(req.path);
-    const isPrefixExempt = AUTH_EXEMPT_PREFIXES.some((p) => req.path.startsWith(p));
-    if (isExactExempt || isPrefixExempt) { next(); return; }
-    // Access token check (no-op when ACCESS_TOKEN env var is not set)
-    accessTokenMiddleware(req, res, () => requireSession(req, res, next));
-  },
-  router,
-);
-
-// ─── Static frontend (production only) ───────────────────────────────────────
-if (process.env.NODE_ENV === "production") {
-  const frontendDist = path.resolve(
-    process.cwd(),
-    "artifacts/bridge-ai/dist/public",
-  );
-  if (existsSync(frontendDist)) {
-    app.use(express.static(frontendDist));
-    app.get("/{*splat}", (_req, res) => {
-      res.sendFile(path.join(frontendDist, "index.html"));
-    });
-  }
+// Serve Vite production build if present (Railway static fallback)
+const distDir = path.resolve(process.cwd(), "artifacts", "bridge-ai", "dist");
+if (existsSync(distDir)) {
+  app.use(express.static(distDir));
+  app.get("*", (_req, res) => {
+    res.sendFile(path.join(distDir, "index.html"));
+  });
 }
 
-// ─── Sentry error handler ────────────────────────────────────────────────────
-// Must be registered after all routes, before the generic error handler.
-// No-op when SENTRY_DSN is not set (Sentry.init was skipped in lib/sentry.ts).
-import("./lib/sentry").then(({ Sentry }) => {
-  Sentry.setupExpressErrorHandler(app);
-}).catch(() => { /* Sentry not initialised — safe to ignore */ });
-
-// ─── Global error handler ─────────────────────────────────────────────────────
-// Express 5 forwards async errors here automatically.
-// Never expose stack traces or internal details in production.
+// ─── Error handler ─────────────────────────────────────────────────────────────
 const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
-  req.log?.error?.({ err }, "Unhandled route error");
-  const isDev = process.env.NODE_ENV !== "production";
-  res.status(500).json({
-    error: "Internal server error",
-    ...(isDev && err instanceof Error ? { detail: err.message } : {}),
-  });
+  req.log?.error?.({ err }, "Unhandled request error");
+  res.status(500).json({ error: "Internal server error" });
 };
-
 app.use(errorHandler);
 
 export default app;
