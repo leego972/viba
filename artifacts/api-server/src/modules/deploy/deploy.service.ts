@@ -17,6 +17,19 @@ import { encryptSecret, decryptSecret, maskValue, maskSecrets, generateSecurePas
 import { containerName, imageTag, buildImage, runContainer, stopContainer, runHealthCheck, ensureNetwork, isDockerAvailable } from "./docker.adapter";
 import { upsertCaddyRoute } from "./caddy.adapter";
 import { diagnoseFailure } from "./diagnosis.service";
+import {
+  isRenderConfigured,
+  createWebService,
+  triggerDeploy as renderTriggerDeploy,
+  pollDeployUntilDone,
+  updateEnvVars as renderUpdateEnvVars,
+  createPostgresDatabase,
+  createRedisInstance,
+  addCustomDomain as renderAddCustomDomain,
+  deleteService as renderDeleteService,
+  getServiceInfo,
+} from "./render.adapter";
+import { getInstallationToken, buildCloneUrl } from "./github.adapter";
 import type {
   CreateProjectInput,
   ConnectRepositoryInput,
@@ -212,19 +225,25 @@ export async function runDeploymentPipeline(deploymentId: string): Promise<void>
   await updateDeploymentStatus(deploymentId, "BUILDING");
   log("Pipeline started");
 
-  if (!isDockerAvailable()) {
-    log("Docker is not available in this environment. Deployment pipeline cannot run.", "warn");
-    log("To run deployments, deploy VIBA on a VPS with Docker installed.", "warn");
-    await updateDeploymentStatus(deploymentId, "FAILED", {
-      errorCategory: "docker_unavailable",
-      errorSummary: "Docker runtime not available. Deploy VIBA on a VPS with Docker.",
-    });
-    return;
-  }
-
   const project = await getProject(deployment.projectId);
   if (!project) {
     await updateDeploymentStatus(deploymentId, "FAILED", { errorSummary: "Project not found" });
+    return;
+  }
+
+  // ── Render-backed pipeline (runs on Render, no Docker needed) ───────────────
+  if (isRenderConfigured() && !isDockerAvailable()) {
+    await runRenderPipeline(deploymentId, deployment, project, log);
+    return;
+  }
+
+  // ── Docker-backed pipeline (VPS with Docker installed) ────────────────────
+  if (!isDockerAvailable()) {
+    log("Neither Docker nor Render API is configured. Cannot run deployment.", "error");
+    await updateDeploymentStatus(deploymentId, "FAILED", {
+      errorCategory: "no_runtime",
+      errorSummary: "Set RENDER_API_KEY to deploy via Render, or run on a VPS with Docker.",
+    });
     return;
   }
 
@@ -321,6 +340,144 @@ export async function runDeploymentPipeline(deploymentId: string): Promise<void>
   }
 }
 
+async function runRenderPipeline(
+  deploymentId: string,
+  deployment: { projectId: string; commitSha: string | null; commitMessage: string | null },
+  project: DeployProject,
+  log: (msg: string, level?: string) => void,
+): Promise<void> {
+  try {
+    // Get GitHub connection to find repo details
+    const [conn] = await db
+      .select()
+      .from(projectGithubConnections)
+      .where(eq(projectGithubConnections.projectId, project.id))
+      .limit(1);
+
+    const [ghInst] = conn
+      ? await db
+          .select()
+          .from(githubInstallations)
+          .where(eq(githubInstallations.id, conn.installationId))
+          .limit(1)
+      : [];
+
+    const [ghRepo] = conn
+      ? await db
+          .select()
+          .from(githubRepositories)
+          .where(eq(githubRepositories.id, conn.repositoryId))
+          .limit(1)
+      : [];
+
+    // Decrypt env vars
+    const envVarRows = await db
+      .select()
+      .from(vibaDeployEnvVars)
+      .where(eq(vibaDeployEnvVars.projectId, project.id));
+
+    const envVars: Record<string, string> = {};
+    for (const row of envVarRows) {
+      try {
+        envVars[row.key] = decryptSecret(row.encryptedValue);
+      } catch {
+        log(`Warning: could not decrypt env var ${row.key}`, "warn");
+      }
+    }
+
+    let renderServiceId = (project as DeployProject & { renderServiceId?: string | null }).renderServiceId;
+
+    // Create Render service if first deploy
+    if (!renderServiceId) {
+      log("Creating Render service...");
+
+      const repoUrl = ghRepo
+        ? `https://github.com/${ghRepo.fullName}`
+        : null;
+
+      if (!repoUrl) {
+        await updateDeploymentStatus(deploymentId, "FAILED", {
+          errorSummary: "No GitHub repo connected. Connect a repository first.",
+        });
+        log("No GitHub repo connected to this project.", "error");
+        return;
+      }
+
+      const branch = conn?.deployBranch ?? ghRepo?.defaultBranch ?? "main";
+      const buildCmd = project.buildCommand ?? "npm run build";
+      const startCmd = project.startCommand ?? "npm start";
+
+      const svc = await createWebService({
+        name: `viba-${project.slug}`,
+        repoUrl,
+        branch,
+        buildCommand: buildCmd,
+        startCommand: startCmd,
+        envVars,
+        plan: (project as DeployProject & { renderPlan?: string | null }).renderPlan ?? "starter",
+        region: (project as DeployProject & { renderRegion?: string | null }).renderRegion ?? "oregon",
+      });
+
+      renderServiceId = svc.id;
+
+      // Persist renderServiceId on the project
+      await db
+        .update(vibaDeployProjects)
+        .set({ renderServiceId, liveUrl: svc.serviceUrl, updatedAt: new Date() })
+        .where(eq(vibaDeployProjects.id, project.id));
+
+      log(`Render service created: ${svc.id} — ${svc.dashboardUrl}`);
+    } else {
+      // Push latest env vars to existing service
+      if (Object.keys(envVars).length > 0) {
+        await renderUpdateEnvVars(renderServiceId, envVars);
+        log("Env vars synced to Render service");
+      }
+    }
+
+    log("Triggering Render deploy...");
+    await updateDeploymentStatus(deploymentId, "DEPLOYING");
+
+    const { deployId: renderDeployId } = await renderTriggerDeploy(renderServiceId, false);
+
+    // Persist Render deploy ID
+    await db
+      .update(vibaDeployments)
+      .set({ renderDeployId, updatedAt: new Date() } as Record<string, unknown>)
+      .where(eq(vibaDeployments.id, deploymentId));
+
+    log(`Render deploy queued: ${renderDeployId}. Polling for completion...`);
+
+    const result = await pollDeployUntilDone(
+      renderServiceId,
+      renderDeployId,
+      (msg) => log(msg),
+      600_000,
+    );
+
+    if (result === "live") {
+      const svcInfo = await getServiceInfo(renderServiceId);
+      await db
+        .update(vibaDeployProjects)
+        .set({ status: "active", liveUrl: svcInfo.serviceUrl, updatedAt: new Date() })
+        .where(eq(vibaDeployProjects.id, project.id));
+
+      await updateDeploymentStatus(deploymentId, "LIVE");
+      log(`Deployment LIVE at: ${svcInfo.serviceUrl ?? "see Render dashboard"}`);
+    } else {
+      await updateDeploymentStatus(deploymentId, "FAILED", {
+        errorCategory: "render_build_failed",
+        errorSummary: `Render deploy finished with status: ${result}`,
+      });
+      log(`Render deploy finished with status: ${result}`, "error");
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log(`Render pipeline error: ${msg}`, "error");
+    await updateDeploymentStatus(deploymentId, "FAILED", { errorSummary: msg });
+  }
+}
+
 export async function rollback(input: RollbackInput): Promise<Deployment> {
   const [target] = await db
     .select()
@@ -386,8 +543,10 @@ export async function createAddon(input: CreateAddonInput): Promise<DeployAddon>
 
   if (isDockerAvailable()) {
     void provisionAddonContainer(row as DeployAddon, password);
+  } else if (isRenderConfigured()) {
+    void provisionRenderAddon(row as DeployAddon, input.projectId);
   } else {
-    logger.warn("Docker not available — add-on container provisioning skipped");
+    logger.warn("No runtime available — add-on not provisioned. Set RENDER_API_KEY.");
     await db
       .update(vibaDeployAddons)
       .set({ status: "STOPPED" })
@@ -395,6 +554,63 @@ export async function createAddon(input: CreateAddonInput): Promise<DeployAddon>
   }
 
   return row as DeployAddon;
+}
+
+async function provisionRenderAddon(addon: DeployAddon, projectId: string): Promise<void> {
+  try {
+    const project = await getProject(projectId);
+    const baseName = `viba-${project?.slug ?? projectId.slice(0, 8)}`;
+
+    if (addon.type === "POSTGRES") {
+      const pg = await createPostgresDatabase({
+        name: `${baseName}-postgres`,
+        plan: "starter",
+      });
+
+      const connUrl = pg.connectionString;
+      const encrypted = encryptSecret(connUrl);
+
+      await db
+        .update(vibaDeployAddons)
+        .set({
+          status: "RUNNING",
+          renderResourceId: pg.id,
+          encryptedConnectionUrl: encrypted,
+          updatedAt: new Date(),
+        })
+        .where(eq(vibaDeployAddons.id, addon.id));
+
+      await setEnvVar({ projectId, key: "DATABASE_URL", value: connUrl, managed: true });
+      logger.info({ addonId: addon.id, pgId: pg.id }, "Render Postgres provisioned");
+    } else {
+      const redis = await createRedisInstance({
+        name: `${baseName}-redis`,
+        plan: "starter",
+      });
+
+      const redisUrl = redis.redisUrl;
+      const encrypted = encryptSecret(redisUrl);
+
+      await db
+        .update(vibaDeployAddons)
+        .set({
+          status: "RUNNING",
+          renderResourceId: redis.id,
+          encryptedConnectionUrl: encrypted,
+          updatedAt: new Date(),
+        })
+        .where(eq(vibaDeployAddons.id, addon.id));
+
+      await setEnvVar({ projectId, key: "REDIS_URL", value: redisUrl, managed: true });
+      logger.info({ addonId: addon.id, redisId: redis.id }, "Render Redis provisioned");
+    }
+  } catch (err) {
+    logger.error({ err, addonId: addon.id }, "Render add-on provisioning failed");
+    await db
+      .update(vibaDeployAddons)
+      .set({ status: "FAILED" })
+      .where(eq(vibaDeployAddons.id, addon.id));
+  }
 }
 
 async function provisionAddonContainer(addon: DeployAddon, password: string): Promise<void> {

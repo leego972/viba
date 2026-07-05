@@ -99,6 +99,9 @@ export interface DeployProject {
   envPort: string | null;
   cpuLimit: string | null;
   memoryLimit: string | null;
+  renderServiceId: string | null;
+  renderRegion: string | null;
+  renderPlan: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -110,9 +113,14 @@ export interface Deployment {
   status: DeploymentStatus;
   commitSha: string | null;
   commitMessage: string | null;
+  renderDeployId: string | null;
+  previousDeploymentId: string | null;
+  errorCategory: string | null;
+  errorSummary: string | null;
   startedAt: Date | null;
   finishedAt: Date | null;
   createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface DeploymentLog {
