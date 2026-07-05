@@ -7,6 +7,7 @@
  */
 import { pool } from "@workspace/db";
 import { getToolById, getAllTools, type ToolDefinition } from "./toolRegistry";
+import { SECURITY_HARDENING_TOOLS, getSecurityHardeningToolById } from "./securityToolPack";
 import { evaluateToolPolicy, redactPayload, redactResult, type PolicyContext } from "./toolPolicies";
 import { listVibaCredentials } from "./vibaVault";
 import { deliverSystemArtifactToUser, type DeliverArtifactInput } from "./systemArtifactDelivery";
@@ -65,11 +66,11 @@ const SYSTEM_ARTIFACT_TOOL: ToolDefinition = {
 
 function getBrokerToolById(toolId: string): ToolDefinition | undefined {
   if (toolId === SYSTEM_ARTIFACT_TOOL.toolId) return SYSTEM_ARTIFACT_TOOL;
-  return getToolById(toolId);
+  return getSecurityHardeningToolById(toolId) ?? getToolById(toolId);
 }
 
 function allBrokerTools(): ToolDefinition[] {
-  return [...getAllTools(), SYSTEM_ARTIFACT_TOOL];
+  return [...getAllTools(), ...SECURITY_HARDENING_TOOLS, SYSTEM_ARTIFACT_TOOL];
 }
 
 async function ensureInvocationsTable(): Promise<void> {
@@ -277,6 +278,24 @@ function artifactPayload(input: BrokerInput): DeliverArtifactInput {
   };
 }
 
+function securityReviewResult(tool: ToolDefinition, input: BrokerInput): Record<string, unknown> {
+  const focus = String(input.payload?.["focus"] ?? input.action ?? "general security review");
+  return {
+    executed: true,
+    toolId: tool.toolId,
+    mode: "defensive_security_review",
+    focus,
+    recommendedChecks: [
+      "Confirm every authenticated object route checks owner identity server-side.",
+      "Confirm every mutation route is scoped by user_id, admin token, or explicit owner approval.",
+      "Confirm logs, events, exports, and broker results redact credential-like values.",
+      "Confirm deployment and patch actions require dry-run, approval, and safe-build where applicable.",
+      "Confirm regression tests cover 401 unauthenticated, 403 wrong-owner, and allowed-owner cases.",
+    ],
+    rawValuesReturned: false,
+  };
+}
+
 export async function executeToolAction(input: BrokerInput): Promise<BrokerResult> {
   const plan = await planToolAction({ ...input, dryRun: false });
   if (["blocked", "missing_credential", "scope_denied"].includes(plan.status)) return plan;
@@ -297,7 +316,9 @@ export async function executeToolAction(input: BrokerInput): Promise<BrokerResul
       return { status: "executed", toolId: tool.toolId, label: tool.label, riskLevel: tool.riskLevel, message: "Artifact delivered to the user chat as a downloadable attachment.", result: result as unknown as Record<string, unknown>, requiresDryRun: false, requiresApproval: false, requiresSafeBuild: false, warnings: [], invocationId: id ?? undefined, rawValuesReturned: false };
     }
 
-    const executionResult = { executed: true, toolId: tool.toolId, action: input.action, note: `${tool.label} execution stub. Wire tool adapter for live integration.`, rawValuesReturned: false };
+    const executionResult = tool.category === "security"
+      ? securityReviewResult(tool, input)
+      : { executed: true, toolId: tool.toolId, action: input.action, note: `${tool.label} execution stub. Wire tool adapter for live integration.`, rawValuesReturned: false };
     const id = await logInvocation({ userId: input.userId, taskId: String(input.taskId ?? ""), toolId: tool.toolId, agentName: input.requestedByAgent ?? null, riskLevel: tool.riskLevel, status: "executed", dryRun: false, approvalRequired: tool.requiresApproval, approvedAt: input.approvalToken ? new Date() : null, payloadRedacted: redactPayload(input.payload), resultRedacted: redactResult(executionResult), error: null });
     return { status: "executed", toolId: tool.toolId, label: tool.label, riskLevel: tool.riskLevel, message: `${tool.label} executed successfully.`, result: executionResult, requiresDryRun: false, requiresApproval: false, requiresSafeBuild: false, warnings: plan.warnings, invocationId: id ?? undefined, rawValuesReturned: false };
   } catch (err) {
