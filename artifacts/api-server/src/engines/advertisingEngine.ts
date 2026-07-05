@@ -34,14 +34,12 @@ const VIBA_CONTENT_PILLARS = [
 
 const VALUE_PROPOSITION = [
   "VIBA performs UI testing through browser access to catch broken buttons, failed forms, dead links, missing pages, mobile layout problems and conversion blockers.",
-  "VIBA supports beta testing by checking user flows before public launch, so founders do not discover broken experiences after traffic arrives.",
-  "VIBA performs repo testing/code review and turns technical findings into a clear report ranked from critical to optional.",
-  "VIBA generates professional reports that business owners, developers and agencies can use to decide what must be fixed first.",
+  "VIBA supports beta testing by checking user flows before public launch.",
+  "VIBA performs repo testing/code review and turns findings into a clear report ranked from critical to optional.",
   "VIBA supports applied repairs by turning audit findings into guided repair sessions and practical implementation priorities.",
-  "VIBA enables AI collaborative work by letting multiple specialised AIs work together in one place on complex builds, repairs and technical decisions.",
-  "VIBA increases efficiency on complex tasks by coordinating UI testing, repo testing, report generation, repair planning and multi-AI collaboration inside one workflow.",
-  "VIBA lets users watch live AI task delegation and performance so they can see which AI is doing what, why it was assigned, and how the task is progressing.",
-  "VIBA helps businesses avoid wasted ad spend, unclear developer work and failed launches by finding, ranking and repairing real website/code problems first.",
+  "VIBA lets multiple specialised AIs work together in one place on complex builds, repairs and technical decisions.",
+  "VIBA lets users watch live AI task delegation and performance so they can see which AI is doing what and how the task is progressing.",
+  "VIBA helps avoid wasted ad spend, unclear developer work and failed launches by finding, ranking and repairing real website/code problems first.",
 ];
 
 const VIBA_ONLY_PROMPT_RULES = `
@@ -49,7 +47,7 @@ STRICT CONTENT STANDARD:
 - Create professional, industry-relevant content only for VIBA / Very Important Business Asset.
 - Every item must explain VIBA's value proposition, not generic AI hype.
 - Every item must mention VIBA by name.
-- Every item must connect to the fixed VIBA service pillars: ${VIBA_CONTENT_PILLARS.join(", ")}.
+- Every item must connect to these VIBA pillars: ${VIBA_CONTENT_PILLARS.join(", ")}.
 - Every item must include at least one concrete VIBA capability: browser-based website checks, broken button detection, form testing, dead-link/missing-page detection, mobile layout checks, beta-flow testing, repo/code testing, critical-to-optional reports, applied repair sessions, AI collaborative work, multi-AI system building, live AI task delegation/performance visibility, multi-agent AI orchestration, or maximum-efficiency handling of complex tasks.
 - Every item must include a clear business outcome: fewer lost enquiries, better beta readiness, reduced wasted ad spend, faster technical diagnosis, clearer repair priorities, faster applied fixes, faster complex system delivery, or better visibility over AI task performance.
 - Every visual, image prompt, video script or direction must include the VIBA logo/wordmark for brand recognition using ${VIBA_LOGO_PATH}.
@@ -60,12 +58,12 @@ STRICT CONTENT STANDARD:
 const FORBIDDEN_PATTERN = /virelle|film studio|fashion|tattoo|peacemaker|swappys|zippyfixer|archibald|titan|solar|casino|crypto|snapchat|tiktok/i;
 
 const CHANNEL_PROMPTS: Record<string, string> = {
-  linkedin: "a professional LinkedIn post for founders, CTOs, agencies and technical operators about VIBA's UI testing, beta testing, repo testing, report generation, applied repairs, multi-AI collaboration and live task performance visibility",
+  linkedin: "a professional LinkedIn post for founders, CTOs, agencies and technical operators about VIBA's testing, reports, applied repairs, multi-AI collaboration and live task performance visibility",
   x_twitter: "a concise X/Twitter post or mini-thread for builders about VIBA finding UI/repo issues and coordinating multiple AIs to repair complex systems efficiently",
   youtube_shorts: "a 30-45 second YouTube Shorts script showing the VIBA logo, UI testing, beta testing, repo testing, report generation, applied repairs, multiple AIs working in one place and live task delegation/performance",
   reddit: "a value-first Reddit post for startup, SaaS, webdev or small business communities explaining VIBA's test-report-repair workflow, multi-AI collaboration and live delegation visibility",
   devto: "a developer-focused Dev.to article intro about VIBA repo testing, UI testing, multi-AI collaboration, live task delegation and applied repair reports",
-  blog: "an SEO blog article intro explaining why businesses should use VIBA for UI testing, beta testing, repo testing, complex AI collaboration, live task performance and applied repairs before buying ads or launching",
+  blog: "an SEO blog article intro explaining why businesses should use VIBA for testing, complex AI collaboration, live task performance and applied repairs before buying ads or launching",
   discord: "a concise Discord community update for builders/operators about VIBA's testing-to-repair workflow and multi-AI complex task engine",
 };
 
@@ -131,7 +129,6 @@ function normalizePost(post: Partial<GeneratedPost>, platform: string): Generate
     callToAction: String(post.callToAction ?? ""),
     imagePrompt: String(post.imagePrompt ?? ""),
   };
-
   const safe = hasVibaValue(candidate) ? candidate : fallbackPost(platform);
   const hashtags = Array.from(new Set(["#VIBA", ...safe.hashtags.filter((tag) => !FORBIDDEN_PATTERN.test(tag))])).slice(0, 8);
   return {
@@ -140,9 +137,7 @@ function normalizePost(post: Partial<GeneratedPost>, platform: string): Generate
     headline: /viba/i.test(safe.headline) ? safe.headline : `VIBA: ${safe.headline}`,
     callToAction: safe.callToAction || `Run VIBA on your website or repo → ${VIBA_SITE_URL}`,
     hashtags,
-    imagePrompt: /viba/i.test(safe.imagePrompt ?? "")
-      ? safe.imagePrompt
-      : `${safe.imagePrompt ?? ""} Include the VIBA logo/wordmark from ${VIBA_LOGO_PATH} clearly for brand recognition.`,
+    imagePrompt: /viba/i.test(safe.imagePrompt ?? "") ? safe.imagePrompt : `${safe.imagePrompt ?? ""} Include the VIBA logo/wordmark from ${VIBA_LOGO_PATH} clearly for brand recognition.`,
   };
 }
 
@@ -187,12 +182,7 @@ export function getStrategyOverview() {
 export async function getPerformanceMetrics(days: number) {
   try {
     const rows = await db.select().from(marketingPerformance).orderBy(desc(marketingPerformance.createdAt)).limit(days);
-    const totals = rows.reduce((acc, r) => ({
-      impressions: acc.impressions + Number(r.impressions ?? 0),
-      clicks: acc.clicks + Number(r.clicks ?? 0),
-      conversions: acc.conversions + Number(r.conversions ?? 0),
-      spend: acc.spend + parseFloat(String(r.spend ?? 0)),
-    }), { impressions: 0, clicks: 0, conversions: 0, spend: 0 });
+    const totals = rows.reduce((acc, r) => ({ impressions: acc.impressions + Number(r.impressions ?? 0), clicks: acc.clicks + Number(r.clicks ?? 0), conversions: acc.conversions + Number(r.conversions ?? 0), spend: acc.spend + parseFloat(String(r.spend ?? 0)) }), { impressions: 0, clicks: 0, conversions: 0, spend: 0 });
     return { ...totals, ctr: totals.impressions > 0 ? totals.clicks / totals.impressions : 0, cpc: totals.clicks > 0 ? totals.spend / totals.clicks : 0, daysAnalyzed: days, budgetUtilization: 0 };
   } catch {
     return { impressions: 0, clicks: 0, conversions: 0, spend: 0, ctr: 0, cpc: 0, daysAnalyzed: days, budgetUtilization: 0 };
@@ -211,7 +201,6 @@ export async function runAdvertisingCycle() {
   log.info("[AdvertisingEngine] Running professional VIBA organic content cycle");
   const platforms = ["linkedin", "x_twitter", "youtube_shorts", "blog", "reddit", "devto"];
   const results: string[] = [];
-
   try {
     const prompt = `${VIBA_ONLY_PROMPT_RULES}
 Generate one professional item for each platform: ${platforms.join(", ")}.
@@ -221,23 +210,15 @@ Required pillars:
 Value proposition options:
 - ${VALUE_PROPOSITION.join("\n- ")}
 Return JSON array only: [{ "platform": "linkedin|x_twitter|youtube_shorts|blog|reddit|devto", "headline": "...", "body": "...", "hashtags": ["..."], "callToAction": "...", "imagePrompt": "include VIBA logo..." }]`;
-
     const raw = await invokeLLM(prompt, "You are VIBA's senior B2B SaaS growth strategist. Write professional, specific, industry-relevant content. Return valid JSON only.");
     const posts = safeJsonExtract(raw) as Partial<GeneratedPost>[] | null;
     const usablePosts = Array.isArray(posts) ? posts : platforms.map((platform) => fallbackPost(platform));
-
     for (const platform of platforms) {
       const post = normalizePost(usablePosts.find((p) => p.platform === platform) ?? fallbackPost(platform), platform);
       await insertPost(post, "approved");
       results.push(`Generated approved VIBA ${platform} content`);
     }
-
-    await db.insert(marketingActivityLog).values({
-      action: "advertising_cycle",
-      description: `Generated ${results.length} professional VIBA-only content pieces across testing, reports, applied repairs, multi-AI complex work and live delegation visibility`,
-      status: "success",
-    } as never);
-
+    await db.insert(marketingActivityLog).values({ action: "advertising_cycle", description: `Generated ${results.length} professional VIBA-only content pieces across testing, reports, applied repairs, multi-AI complex work and live delegation visibility`, status: "success" } as never);
     return { success: true, postsGenerated: results.length, results };
   } catch (err) {
     log.error("[AdvertisingEngine] Cycle failed");
@@ -249,19 +230,9 @@ export async function runOrganicGrowthAutopilotCycle() {
   log.info("[AdvertisingEngine] Running VIBA organic growth autopilot cycle");
   const seo = await runScheduledSeoOptimization().catch((err) => ({ ran: false, score: 0, error: String(err) }));
   const advertising = await runAdvertisingCycle();
-  const content = await runAutonomousContentCycle({
-    maxPiecesPerPlatform: Number(process.env["VIBA_CONTENT_PIECES_PER_CYCLE"] ?? "1"),
-    autoApproveThreshold: Number(process.env["VIBA_CONTENT_AUTO_APPROVE_THRESHOLD"] ?? "82"),
-    autoSchedule: true,
-  });
+  const content = await runAutonomousContentCycle({ maxPiecesPerPlatform: Number(process.env["VIBA_CONTENT_PIECES_PER_CYCLE"] ?? "1"), autoApproveThreshold: Number(process.env["VIBA_CONTENT_AUTO_APPROVE_THRESHOLD"] ?? "82"), autoSchedule: true });
   const schedules = await processDueSchedules().catch((err) => ({ processed: 0, total: 0, error: String(err) }));
-
-  await db.insert(marketingActivityLog).values({
-    action: "organic_growth_autopilot_cycle",
-    description: `SEO: ${"ran" in seo ? seo.ran : false}; approved growth pieces: ${advertising.postsGenerated}; creator pieces: ${content.generated}; schedules processed: ${schedules.processed}`,
-    status: advertising.success && content.success ? "success" : "partial",
-  } as never);
-
+  await db.insert(marketingActivityLog).values({ action: "organic_growth_autopilot_cycle", description: `SEO: ${"ran" in seo ? seo.ran : false}; approved growth pieces: ${advertising.postsGenerated}; creator pieces: ${content.generated}; schedules processed: ${schedules.processed}`, status: advertising.success && content.success ? "success" : "partial" } as never);
   return { success: advertising.success && content.success, seo, advertising, content, schedules };
 }
 
@@ -271,7 +242,8 @@ export function getChannelPerformanceReport() {
 
 export async function getCrossChannelAttribution(_days: number) {
   return GROWTH_STRATEGIES.slice(0, 8).map((s) => ({ channel: s.channel, attributedConversions: 0, assistedConversions: 0, revenue: 0, estimatedValue: "Free organic" }));
-}\n
+}
+
 export function getActiveABTests() {
   return Object.entries(_abTests).map(([id, t]) => ({ id, ...t }));
 }
@@ -313,9 +285,7 @@ export function startAdvertisingScheduler() {
   if (_schedulerInterval) return;
   runScheduledAutopilotCycle().catch((err) => log.error(`[AdvertisingEngine] Initial autopilot cycle error: ${String(err)}`));
   _nextAutopilotRun = new Date(Date.now() + ORGANIC_GROWTH_INTERVAL_MS);
-  _schedulerInterval = setInterval(() => {
-    runScheduledAutopilotCycle().catch((err) => log.error(`[AdvertisingEngine] Scheduled cycle error: ${String(err)}`));
-  }, ORGANIC_GROWTH_INTERVAL_MS);
+  _schedulerInterval = setInterval(() => { runScheduledAutopilotCycle().catch((err) => log.error(`[AdvertisingEngine] Scheduled cycle error: ${String(err)}`)); }, ORGANIC_GROWTH_INTERVAL_MS);
   log.info(`[AdvertisingEngine] Organic growth autopilot scheduler started (${ORGANIC_GROWTH_INTERVAL_MS / (60 * 60 * 1000)}h interval)`);
 }
 
@@ -329,25 +299,12 @@ export function stopAdvertisingScheduler() {
 }
 
 export function getAdvertisingSchedulerStatus() {
-  return {
-    active: _schedulerInterval !== null,
-    intervalHours: ORGANIC_GROWTH_INTERVAL_MS / (60 * 60 * 1000),
-    lastRun: _lastAutopilotRun?.toISOString() ?? null,
-    nextRun: _nextAutopilotRun?.toISOString() ?? null,
-    currentlyRunning: _schedulerRunning,
-    cycleCount: _autopilotCycleCount,
-    contentPillars: VIBA_CONTENT_PILLARS,
-    valueProposition: VALUE_PROPOSITION,
-    safeAutonomousChannels: SAFE_AUTONOMOUS_CHANNELS,
-    blockedAutonomousChannels: BLOCKED_AUTONOMOUS_CHANNELS,
-    spendMode: "free_organic_only",
-  };
+  return { active: _schedulerInterval !== null, intervalHours: ORGANIC_GROWTH_INTERVAL_MS / (60 * 60 * 1000), lastRun: _lastAutopilotRun?.toISOString() ?? null, nextRun: _nextAutopilotRun?.toISOString() ?? null, currentlyRunning: _schedulerRunning, cycleCount: _autopilotCycleCount, contentPillars: VIBA_CONTENT_PILLARS, valueProposition: VALUE_PROPOSITION, safeAutonomousChannels: SAFE_AUTONOMOUS_CHANNELS, blockedAutonomousChannels: BLOCKED_AUTONOMOUS_CHANNELS, spendMode: "free_organic_only" };
 }
 
 export async function generateBlastContent(channelIds?: string[]) {
   const channels = ["linkedin", "x_twitter", "youtube_shorts", "reddit", "devto", "blog", "discord"].filter((id) => !channelIds || channelIds.includes(id));
   const results: { channel: string; success: boolean; contentId?: number; error?: string }[] = [];
-
   for (const channel of channels) {
     try {
       const prompt = `${VIBA_ONLY_PROMPT_RULES}
@@ -363,6 +320,5 @@ Return JSON: { "headline": "...", "body": "...", "hashtags": ["..."], "callToAct
       results.push({ channel, success: false, error: String(err) });
     }
   }
-
   return { results, total: results.length, succeeded: results.filter((r) => r.success).length };
 }
