@@ -13,8 +13,17 @@ import {
 
 const ONBOARDING_KEY = "viba_onboarded_v2";
 
-type Step = "welcome" | "connect" | "goal" | "ready";
-const STEPS: Step[] = ["welcome", "connect", "goal", "ready"];
+type Step = "welcome" | "intent" | "connect" | "goal" | "ready";
+const STEPS: Step[] = ["welcome", "intent", "connect", "goal", "ready"];
+
+type IntentKey = "assess" | "repo" | "repair" | "security" | "collaborate";
+const INTENTS: Array<{ key: IntentKey; emoji: string; label: string; sub: string; requiresPro: boolean }> = [
+  { key: "assess",      emoji: "🔍", label: "Assess my website",           sub: "Scans, Lighthouse, SEO, accessibility", requiresPro: false },
+  { key: "repo",        emoji: "📦", label: "Check my repository",         sub: "Code quality, dependency audit",        requiresPro: false },
+  { key: "repair",      emoji: "🔧", label: "Repair build / UI issues",    sub: "AI-assisted fix, PR creation",          requiresPro: true  },
+  { key: "security",    emoji: "🛡️", label: "Run a security audit",        sub: "OWASP, TLS, headers, deep scan",        requiresPro: true  },
+  { key: "collaborate", emoji: "🤝", label: "Coordinate multiple AIs",     sub: "Specialist roles, multi-agent session", requiresPro: true  },
+];
 
 interface ProviderCard {
   id: string;
@@ -102,8 +111,11 @@ export function OnboardingModal({ onClose }: OnboardingModalProps) {
   const [savingKey, setSavingKey] = useState(false);
   const [goal, setGoal] = useState("");
   const [repoUrl, setRepoUrl] = useState("");
+  const [selectedIntent, setSelectedIntent] = useState<IntentKey | null>(null);
   const [, navigate] = useLocation();
   const { toast } = useToast();
+
+  const intentNeedsPro = selectedIntent ? INTENTS.find(i => i.key === selectedIntent)?.requiresPro ?? false : false;
 
   const stepIdx = STEPS.indexOf(step);
   const provider = PROVIDERS.find(p => p.id === selectedProvider)!;
@@ -218,6 +230,48 @@ export function OnboardingModal({ onClose }: OnboardingModalProps) {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* ── STEP: intent ── */}
+          {step === "intent" && (
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-xl font-semibold">What do you want to do?</h2>
+                <p className="text-sm text-muted-foreground mt-0.5">We'll recommend the right plan and setup for you.</p>
+              </div>
+              <div className="space-y-2">
+                {INTENTS.map(({ key, emoji, label, sub, requiresPro }) => {
+                  const isSelected = selectedIntent === key;
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => setSelectedIntent(key)}
+                      className={`w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all duration-150 ${
+                        isSelected
+                          ? "border-primary/50 bg-primary/10 ring-1 ring-primary/20"
+                          : "border-white/[0.07] bg-white/[0.02] hover:border-white/[0.15]"
+                      }`}
+                    >
+                      <span className="text-xl shrink-0">{emoji}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">{label}</p>
+                        <p className="text-xs text-muted-foreground">{sub}</p>
+                      </div>
+                      {requiresPro && (
+                        <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded border border-indigo-500/40 bg-indigo-500/15 text-indigo-400">
+                          PRO
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              {intentNeedsPro && (
+                <div className="rounded-xl border border-indigo-500/25 bg-indigo-500/8 px-4 py-3 text-sm text-zinc-400">
+                  <span className="font-medium text-indigo-300">Pro plan recommended</span> — {selectedIntent === "collaborate" ? "Multi-agent collaboration" : selectedIntent === "security" ? "Deep security audits" : "Repair actions"} require VIBA Pro Repair ($89/mo). You can start with a 7-day free trial.
+                </div>
+              )}
             </div>
           )}
 
