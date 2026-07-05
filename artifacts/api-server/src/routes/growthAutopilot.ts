@@ -10,7 +10,7 @@ import { getStrategyOverview } from "../engines/advertisingEngine";
 
 const router: IRouter = Router();
 
-router.get("/api/growth-autopilot/status", requireAdmin, async (_req, res): Promise<void> => {
+router.get("/growth-autopilot/status", requireAdmin, async (_req, res): Promise<void> => {
   res.json({
     success: true,
     scheduler: await getAutonomousGrowthStatus(),
@@ -18,7 +18,7 @@ router.get("/api/growth-autopilot/status", requireAdmin, async (_req, res): Prom
   });
 });
 
-router.post("/api/growth-autopilot/start", requireAdmin, async (_req, res): Promise<void> => {
+router.post("/growth-autopilot/start", requireAdmin, async (_req, res): Promise<void> => {
   res.json({
     success: true,
     message: "VIBA Growth Autopilot started",
@@ -26,7 +26,7 @@ router.post("/api/growth-autopilot/start", requireAdmin, async (_req, res): Prom
   });
 });
 
-router.post("/api/growth-autopilot/stop", requireAdmin, async (_req, res): Promise<void> => {
+router.post("/growth-autopilot/stop", requireAdmin, async (_req, res): Promise<void> => {
   res.json({
     success: true,
     message: "VIBA Growth Autopilot stopped",
@@ -34,7 +34,7 @@ router.post("/api/growth-autopilot/stop", requireAdmin, async (_req, res): Promi
   });
 });
 
-router.post("/api/growth-autopilot/run-now", requireAdmin, async (_req, res): Promise<void> => {
+router.post("/growth-autopilot/run-now", requireAdmin, async (_req, res): Promise<void> => {
   res.json(await runAutonomousGrowthCycle("growth-autopilot-api"));
 });
 
