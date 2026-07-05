@@ -18,15 +18,32 @@ import {
   dryRunToolAction,
   executeToolAction,
 } from "../lib/toolActionBroker";
-import { getToolById } from "../lib/toolRegistry";
+import { getToolById, type ToolDefinition } from "../lib/toolRegistry";
 
 const router = Router();
+
+const ARTIFACT_DELIVERY_TOOL: ToolDefinition = {
+  toolId: "artifact.deliver",
+  label: "Artifacts: Deliver Document/File/ZIP to User",
+  category: "storage",
+  description: "Create a system-generated document, file, or ZIP bundle and attach it to an assistant chat message for the user to download. This is assistant-to-user delivery, not user upload.",
+  riskLevel: "low",
+  permissionsRequired: ["login_required"],
+  credentialProvider: null,
+  credentialKind: null,
+  supportsDryRun: true,
+  requiresApproval: false,
+  requiresSafeBuild: false,
+  outputsSecretValues: false,
+};
+
+function brokerToolById(toolId: string): ToolDefinition | undefined {
+  return toolId === ARTIFACT_DELIVERY_TOOL.toolId ? ARTIFACT_DELIVERY_TOOL : getToolById(toolId);
+}
 
 function userId(req: { session?: { userId?: number } }): number {
   return typeof req.session?.userId === "number" ? req.session.userId : 0;
 }
-
-// ─── Validation schemas ───────────────────────────────────────────────────────
 
 const ToolActionSchema = z.object({
   toolId: z.string().min(1),
@@ -37,16 +54,11 @@ const ToolActionSchema = z.object({
   approvalToken: z.string().optional().nullable(),
 });
 
-// ─── GET /api/tools ───────────────────────────────────────────────────────────
-
 router.get("/api/tools", async (req, res): Promise<void> => {
   const uid = userId(req);
   const tools = await getAvailableTools(uid);
   res.json({ tools, rawValuesReturned: false });
 });
-
-// ─── GET /api/tools/invocations ───────────────────────────────────────────────
-// (must be before /api/tools/:toolId to avoid "invocations" being parsed as toolId)
 
 router.get("/api/tools/invocations", async (req, res): Promise<void> => {
   const uid = userId(req);
@@ -56,7 +68,6 @@ router.get("/api/tools/invocations", async (req, res): Promise<void> => {
   try {
     let queryText: string;
     let params: unknown[];
-
     if (taskId) {
       queryText = `SELECT id, tool_id, agent_name, risk_level, status, dry_run, approval_required, approved_at, result_redacted, error, created_at
                    FROM viba_tool_invocations
@@ -74,7 +85,7 @@ router.get("/api/tools/invocations", async (req, res): Promise<void> => {
     const { rows } = await pool.query<Record<string, unknown>>(queryText, params);
     const invocations = rows.map((row) => ({
       ...row,
-      toolLabel: getToolById(String(row["tool_id"] ?? ""))?.label ?? row["tool_id"],
+      toolLabel: brokerToolById(String(row["tool_id"] ?? ""))?.label ?? row["tool_id"],
       rawValuesReturned: false,
     }));
     res.json({ invocations, rawValuesReturned: false });
@@ -82,8 +93,6 @@ router.get("/api/tools/invocations", async (req, res): Promise<void> => {
     res.json({ invocations: [], rawValuesReturned: false });
   }
 });
-
-// ─── GET /api/tools/invocations/:id ──────────────────────────────────────────
 
 router.get("/api/tools/invocations/:id", async (req, res): Promise<void> => {
   const uid = userId(req);
@@ -104,31 +113,21 @@ router.get("/api/tools/invocations/:id", async (req, res): Promise<void> => {
       return;
     }
     const row = rows[0];
-    res.json({
-      invocation: {
-        ...row,
-        toolLabel: getToolById(String(row["tool_id"] ?? ""))?.label ?? row["tool_id"],
-        rawValuesReturned: false,
-      },
-    });
+    res.json({ invocation: { ...row, toolLabel: brokerToolById(String(row["tool_id"] ?? ""))?.label ?? row["tool_id"], rawValuesReturned: false } });
   } catch {
     res.status(500).json({ error: "Failed to fetch invocation" });
   }
 });
 
-// ─── GET /api/tools/:toolId ───────────────────────────────────────────────────
-
 router.get("/api/tools/:toolId", (req, res): void => {
   const toolId = req.params["toolId"] as string;
-  const tool = getToolById(toolId);
+  const tool = brokerToolById(toolId);
   if (!tool) {
     res.status(404).json({ error: `Tool '${toolId}' not found in registry` });
     return;
   }
   res.json({ tool, rawValuesReturned: false });
 });
-
-// ─── POST /api/tools/plan ─────────────────────────────────────────────────────
 
 router.post("/api/tools/plan", async (req, res): Promise<void> => {
   const uid = userId(req);
@@ -141,8 +140,6 @@ router.post("/api/tools/plan", async (req, res): Promise<void> => {
   res.json(result);
 });
 
-// ─── POST /api/tools/dry-run ──────────────────────────────────────────────────
-
 router.post("/api/tools/dry-run", async (req, res): Promise<void> => {
   const uid = userId(req);
   const parsed = ToolActionSchema.safeParse(req.body);
@@ -153,8 +150,6 @@ router.post("/api/tools/dry-run", async (req, res): Promise<void> => {
   const result = await dryRunToolAction({ userId: uid, dryRun: true, ...parsed.data });
   res.json(result);
 });
-
-// ─── POST /api/tools/execute ──────────────────────────────────────────────────
 
 router.post("/api/tools/execute", async (req, res): Promise<void> => {
   const uid = userId(req);
