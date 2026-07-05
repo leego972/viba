@@ -1,4 +1,5 @@
 import { db, messagesTable, pool } from "@workspace/db";
+import { eq } from "drizzle-orm";
 import { logVibaEvent } from "./vibaVault";
 
 const MAX_SYSTEM_ARTIFACT_BYTES = Number(process.env["VIBA_MAX_SYSTEM_ARTIFACT_BYTES"] ?? 25 * 1024 * 1024);
@@ -86,8 +87,6 @@ async function ensureAttachmentTable(): Promise<void> {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_viba_attachments_message ON viba_attachments (message_id)`);
 }
 
-// ─── Minimal ZIP writer, STORE/no compression ───────────────────────────────
-// Avoids adding a dependency. Good enough for generated text/code/report bundles.
 const CRC_TABLE = (() => {
   const table = new Uint32Array(256);
   for (let i = 0; i < 256; i++) {
@@ -124,13 +123,11 @@ function createZip(files: ArtifactFileInput[]): Buffer {
     const name = Buffer.from(safeFileName(input.fileName), "utf8");
     const data = bufferFromInput(input.content, input.encoding ?? "utf8");
     const crc = crc32(data);
-
     const localHeader = Buffer.concat([
       u32(0x04034b50), u16(20), u16(0), u16(0), u16(now.dosTime), u16(now.dosDate),
       u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0), name,
     ]);
     localParts.push(localHeader, data);
-
     const centralHeader = Buffer.concat([
       u32(0x02014b50), u16(20), u16(20), u16(0), u16(0), u16(now.dosTime), u16(now.dosDate),
       u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0), u16(0),
@@ -195,17 +192,7 @@ export async function deliverSystemArtifactToUser(input: DeliverArtifactInput) {
       (session_id, user_id, message_id, file_name, mime_type, category, size_bytes, data, metadata)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING id, session_id, user_id, message_id, file_name, mime_type, category, size_bytes, created_at`,
-    [
-      input.sessionId,
-      input.userId ?? null,
-      message?.id ?? null,
-      fileName,
-      mimeType,
-      category,
-      data.length,
-      data,
-      JSON.stringify({ generatedBySystem: true, artifactType: input.artifactType, ...(input.metadata ?? {}) }),
-    ],
+    [input.sessionId, input.userId ?? null, message?.id ?? null, fileName, mimeType, category, data.length, data, JSON.stringify({ generatedBySystem: true, artifactType: input.artifactType, ...(input.metadata ?? {}) })],
   );
 
   const attachment = rows[0];
@@ -224,7 +211,7 @@ export async function deliverSystemArtifactToUser(input: DeliverArtifactInput) {
         attachments: [{ id: attachment.id, fileName, mimeType, category, sizeBytes: data.length, downloadUrl }],
         ...(input.metadata ?? {}),
       },
-    } as never).where((messagesTable.id as unknown) as never);
+    } as never).where(eq(messagesTable.id, message.id));
   }
 
   await logVibaEvent({
