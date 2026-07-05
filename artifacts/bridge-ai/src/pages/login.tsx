@@ -66,7 +66,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-[100dvh] flex" style={{ background: "#f0f4f8" }}>
+    <div className="min-h-[100dvh] flex" style={{ background: "#faf8f2" }}>
       <div className="flex flex-col items-center justify-center w-full p-4">
 
         {/* Logo */}
@@ -75,7 +75,6 @@ export default function LoginPage() {
             src="/viba-logo.png"
             alt="VIBA"
             className="h-28 w-auto object-contain rounded-xl"
-            style={{ backgroundColor: "white" }}
           />
           <span
             className="text-xs font-semibold tracking-[0.2em] uppercase"
@@ -87,8 +86,8 @@ export default function LoginPage() {
 
         {/* Card */}
         <div
-          className="w-full max-w-sm bg-white p-8 space-y-6"
-          style={{ border: "1px solid #d1d9e0", borderRadius: "4px", boxShadow: "0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)" }}
+          className="w-full max-w-sm p-8 space-y-6"
+          style={{ background: "#fefcf7", border: "1px solid #dbd8cc", borderRadius: "4px", boxShadow: "0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)" }}
         >
           <div className="space-y-0.5">
             <h1 className="text-lg font-semibold tracking-tight" style={{ color: "#0f172a" }}>
@@ -106,7 +105,7 @@ export default function LoginPage() {
               <div className="w-full" style={{ borderTop: "1px solid #e2e8f0" }} />
             </div>
             <div className="relative flex justify-center">
-              <span className="bg-white px-3 text-xs font-medium tracking-wider uppercase" style={{ color: "#94a3b8" }}>
+              <span className="px-3 text-xs font-medium tracking-wider uppercase" style={{ background: "#fefcf7", color: "#94a3b8" }}>
                 or
               </span>
             </div>
