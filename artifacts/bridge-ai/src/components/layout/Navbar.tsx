@@ -1,120 +1,226 @@
+import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Settings, FlaskConical, CreditCard, Zap, LayoutDashboard, Radio, Plus, Rocket, Bot, ShieldCheck, Terminal, Wrench, ClipboardCheck, FolderInput, Activity, ShieldAlert, Globe, Sun, Moon, Plug, Search, Megaphone, PenTool, Building2, Server } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
+import {
+  LayoutDashboard, Plus, Zap, CreditCard, Settings, Sun, Moon,
+  ChevronDown, FlaskConical, Terminal, Wrench, Radio, Bot, ClipboardCheck,
+  Rocket, ShieldAlert, Activity, ShieldCheck, Globe, FolderInput, Server,
+  Plug, FileText, Search, Megaphone, PenTool, Building2,
+  AlertTriangle, BarChart3,
+} from "lucide-react";
 
-interface NavLink {
-  href: string;
-  label: string;
-  icon: React.ElementType;
-  match: (l: string) => boolean;
-  desktopOnly?: boolean;
-}
+interface DropItem { href: string; label: string; icon: React.ElementType }
+interface NavGroup { label: string; icon: React.ElementType; items: DropItem[]; matchPaths: string[] }
 
-const NAV_LINKS: NavLink[] = [
-  { href: "/dashboard",        label: "Dashboard",    icon: LayoutDashboard, match: (l) => l.startsWith("/dashboard") || l.startsWith("/sessions") },
-  { href: "/workbench",        label: "Workbench",    icon: FlaskConical,    match: (l) => l.startsWith("/workbench") },
-  { href: "/connections",      label: "Connections",  icon: Plug,            match: (l) => l.startsWith("/connections") || l.startsWith("/providers") || l.startsWith("/credentials") },
-  { href: "/ui-audit",         label: "UI Tester",    icon: ClipboardCheck,  match: (l) => l.startsWith("/ui-audit") },
-  { href: "/agent-console",    label: "Agent Console",icon: Terminal,        match: (l) => l.startsWith("/agent-console") },
-  { href: "/tool-console",     label: "Tools",        icon: Wrench,          match: (l) => l.startsWith("/tool-console"), desktopOnly: true },
-  { href: "/credentials",      label: "Vault",        icon: ShieldCheck,     match: (l) => l.startsWith("/credentials"), desktopOnly: true },
-  { href: "/bridge",           label: "Bridge",       icon: Radio,           match: (l) => l.startsWith("/bridge") },
-  { href: "/billing",          label: "Billing",      icon: CreditCard,      match: (l) => l.startsWith("/billing") || l.startsWith("/pricing") },
-  { href: "/settings",         label: "Settings",     icon: Settings,        match: (l) => l === "/settings" },
-  { href: "/market-readiness", label: "Launch",       icon: Rocket,          match: (l) => l.startsWith("/market-readiness"), desktopOnly: true },
-  { href: "/assisted-browser", label: "Browser",      icon: Bot,             match: (l) => l.startsWith("/assisted-browser"), desktopOnly: true },
-  { href: "/qa-release-gate",  label: "QA Gate",      icon: ClipboardCheck,  match: (l) => l.startsWith("/qa-release-gate"), desktopOnly: true },
-  { href: "/project-import",   label: "Project Import", icon: FolderInput,   match: (l) => l.startsWith("/project-import"), desktopOnly: true },
-  { href: "/production-ops",   label: "Production Ops", icon: Activity,      match: (l) => l.startsWith("/production-ops"), desktopOnly: true },
-  { href: "/security-center",  label: "Security Center", icon: ShieldAlert,  match: (l) => l.startsWith("/security-center"), desktopOnly: true },
-  { href: "/domain-setup",     label: "Domain Setup", icon: Globe,           match: (l) => l.startsWith("/domain-setup"), desktopOnly: true },
-  { href: "/launch-readiness", label: "Launch Readiness", icon: Rocket,      match: (l) => l.startsWith("/launch-readiness"), desktopOnly: true },
-  { href: "/seo",              label: "SEO",          icon: Search,          match: (l) => l.startsWith("/seo"), desktopOnly: true },
-  { href: "/advertising",      label: "Growth Autopilot", icon: Megaphone,   match: (l) => l.startsWith("/advertising"), desktopOnly: true },
-  { href: "/content-creator",  label: "Content Creator", icon: PenTool,      match: (l) => l.startsWith("/content-creator"), desktopOnly: true },
-  { href: "/brand-outreach",   label: "Brand Outreach", icon: Building2,     match: (l) => l.startsWith("/brand-outreach"), desktopOnly: true },
-  { href: "/render-connector", label: "Render",       icon: Server,          match: (l) => l.startsWith("/render-connector"), desktopOnly: true },
+const GROUPS: NavGroup[] = [
+  {
+    label: "Diagnostics", icon: AlertTriangle,
+    matchPaths: ["/ui-audit", "/doctor", "/launch-readiness", "/security-center", "/production-ops", "/qa-release-gate", "/market-readiness", "/launch-readiness"],
+    items: [
+      { href: "/doctor",           label: "Doctor",            icon: Wrench },
+      { href: "/launch-readiness", label: "Launch Readiness",  icon: Rocket },
+      { href: "/security-center",  label: "Security Center",   icon: ShieldAlert },
+      { href: "/production-ops",   label: "Production Ops",    icon: Activity },
+      { href: "/qa-release-gate",  label: "QA Gate",           icon: ClipboardCheck },
+      { href: "/market-readiness", label: "Market Readiness",  icon: BarChart3 },
+    ],
+  },
+  {
+    label: "Command", icon: Terminal,
+    matchPaths: ["/workbench", "/agent-console", "/tool-console", "/bridge", "/assisted-browser"],
+    items: [
+      { href: "/workbench",        label: "Workbench",         icon: FlaskConical },
+      { href: "/agent-console",    label: "Agent Console",     icon: Terminal },
+      { href: "/tool-console",     label: "Tool Console",      icon: Wrench },
+      { href: "/bridge",           label: "Bridge",            icon: Radio },
+      { href: "/assisted-browser", label: "Assisted Browser",  icon: Bot },
+    ],
+  },
+  {
+    label: "Reports", icon: FileText,
+    matchPaths: ["/proof-report", "/demo", "/sessions"],
+    items: [
+      { href: "/sessions",              label: "Session History",   icon: BarChart3 },
+      { href: "/demo/proof-report",     label: "Sample Proof Report", icon: FileText },
+      { href: "/demo/doctor-report",    label: "Sample Doctor Report", icon: FileText },
+    ],
+  },
+  {
+    label: "Connections", icon: Plug,
+    matchPaths: ["/connections", "/providers", "/credentials", "/render-connector", "/domain-setup", "/project-import"],
+    items: [
+      { href: "/connections",      label: "Providers & Vault",  icon: Plug },
+      { href: "/credentials",      label: "Secure Vault",       icon: ShieldCheck },
+      { href: "/render-connector", label: "Render",             icon: Server },
+      { href: "/domain-setup",     label: "Domain Setup",       icon: Globe },
+      { href: "/project-import",   label: "Project Import",     icon: FolderInput },
+    ],
+  },
+  {
+    label: "Growth", icon: Search,
+    matchPaths: ["/seo", "/advertising", "/content-creator", "/brand-outreach"],
+    items: [
+      { href: "/seo",              label: "SEO",                icon: Search },
+      { href: "/advertising",      label: "Advertising",        icon: Megaphone },
+      { href: "/content-creator",  label: "Content Creator",    icon: PenTool },
+      { href: "/brand-outreach",   label: "Brand Outreach",     icon: Building2 },
+    ],
+  },
 ];
+
+function DropMenu({ group, location }: { group: NavGroup; location: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const active = group.matchPaths.some(p => location.startsWith(p));
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className={`relative flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm font-medium transition-all duration-150 select-none ${
+          active
+            ? "text-foreground bg-primary/10 border border-primary/25"
+            : "text-foreground/55 hover:text-foreground/90 hover:bg-white/[0.05] border border-transparent"
+        }`}
+      >
+        <group.icon className={`h-3.5 w-3.5 shrink-0 ${active ? "text-primary" : ""}`} />
+        {group.label}
+        <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
+        {active && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-[1px] h-[2px] w-5 rounded-full bg-primary/70" />}
+      </button>
+
+      {open && (
+        <div className="absolute top-full left-0 mt-1.5 z-50 min-w-[190px] rounded-xl border border-border/60 bg-card shadow-lg overflow-hidden py-1">
+          {group.items.map(({ href, label, icon: Icon }) => {
+            const itemActive = location.startsWith(href);
+            return (
+              <Link key={href} href={href} onClick={() => setOpen(false)}>
+                <div className={`flex items-center gap-2.5 px-3.5 py-2.5 text-sm transition-colors cursor-pointer ${
+                  itemActive ? "bg-primary/8 text-primary" : "text-foreground/70 hover:bg-accent/40 hover:text-foreground"
+                }`}>
+                  <Icon className={`h-3.5 w-3.5 shrink-0 ${itemActive ? "text-primary" : "text-muted-foreground"}`} />
+                  {label}
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function Navbar() {
   const [location] = useLocation();
   const { theme, toggleTheme } = useTheme();
-  const mobileLinks = NAV_LINKS.filter((l) => !l.desktopOnly).slice(0, 5);
+
+  const isDashboard = location.startsWith("/dashboard") || location.startsWith("/sessions");
+  const isBilling   = location.startsWith("/billing") || location.startsWith("/pricing");
+  const isSettings  = location === "/settings";
 
   return (
-    <header className="sticky top-0 z-50 w-full overflow-hidden border-b border-border/70 bg-background/95 backdrop-blur-xl">
+    <header className="sticky top-0 z-50 w-full border-b border-white/[0.06] bg-background/90 backdrop-blur-xl">
       <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
 
-      <div className="mx-auto flex h-[58px] w-full max-w-screen-2xl min-w-0 items-center gap-2 px-3 sm:px-4 md:h-[64px] md:gap-4 md:px-6">
-        <Link href="/" className="group flex shrink-0 items-center gap-2">
-          <div className="relative rounded-xl bg-[#fffdf4]/95 px-1.5 py-1 shadow-sm ring-1 ring-black/20">
-            <div className="absolute inset-0 rounded-xl bg-primary/10 blur-md opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-            <img
-              src="/viba-logo.png"
-              alt="VIBA"
-              className="viba-logo-outline relative h-9 w-auto object-contain sm:h-10 md:h-12"
-            />
-          </div>
+      <div className="container flex h-[60px] max-w-screen-2xl items-center gap-3">
+        {/* Logo */}
+        <Link href="/" className="flex items-center shrink-0">
+          <img src="/viba-logo.png" alt="VIBA" className="h-14 w-auto object-contain" />
         </Link>
 
-        <div className="hidden h-5 w-px shrink-0 bg-border/60 md:block" />
+        <div className="hidden md:block h-5 w-px bg-border/50 shrink-0" />
 
-        <nav className="hidden min-w-0 flex-1 items-center gap-0.5 overflow-x-auto md:flex">
-          {NAV_LINKS.map(({ href, label, icon: Icon, match }) => {
-            const active = match(location);
-            return (
-              <Link
-                key={href}
-                href={href}
-                className={`relative flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-all duration-150 ${
-                  active
-                    ? "border-primary/25 bg-primary/10 text-foreground shadow-[0_0_12px_rgba(99,102,241,0.15)]"
-                    : "border-transparent text-foreground/60 hover:bg-black/[0.04] hover:text-foreground dark:hover:bg-white/[0.05]"
-                }`}
-              >
-                <Icon className={`h-3.5 w-3.5 shrink-0 ${active ? "text-primary" : ""}`} />
-                {label}
-                {active && <span className="absolute bottom-0 left-1/2 h-[2px] w-6 -translate-x-1/2 translate-y-[1px] rounded-full bg-primary/70" />}
-              </Link>
-            );
-          })}
+        {/* Desktop nav */}
+        <nav className="hidden md:flex items-center gap-0.5 flex-1 min-w-0">
+          {/* Dashboard */}
+          <Link href="/dashboard">
+            <button className={`relative flex items-center gap-1.5 h-9 px-3.5 rounded-lg text-sm font-medium transition-all duration-150 ${
+              isDashboard
+                ? "text-foreground bg-primary/10 border border-primary/25 shadow-[0_0_12px_rgba(99,102,241,0.15)]"
+                : "text-foreground/55 hover:text-foreground/90 hover:bg-white/[0.05] border border-transparent"
+            }`}>
+              <LayoutDashboard className={`h-3.5 w-3.5 shrink-0 ${isDashboard ? "text-primary" : ""}`} />
+              Dashboard
+              {isDashboard && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-[1px] h-[2px] w-5 rounded-full bg-primary/70" />}
+            </button>
+          </Link>
+
+          {/* Dropdown groups */}
+          {GROUPS.map(g => <DropMenu key={g.label} group={g} location={location} />)}
+
+          {/* Billing */}
+          <Link href="/billing">
+            <button className={`relative flex items-center gap-1.5 h-9 px-3.5 rounded-lg text-sm font-medium transition-all duration-150 ${
+              isBilling
+                ? "text-foreground bg-primary/10 border border-primary/25"
+                : "text-foreground/55 hover:text-foreground/90 hover:bg-white/[0.05] border border-transparent"
+            }`}>
+              <CreditCard className={`h-3.5 w-3.5 shrink-0 ${isBilling ? "text-primary" : ""}`} />
+              Billing
+              {isBilling && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-[1px] h-[2px] w-5 rounded-full bg-primary/70" />}
+            </button>
+          </Link>
+
+          {/* Settings */}
+          <Link href="/settings">
+            <button className={`relative flex items-center gap-1.5 h-9 px-3.5 rounded-lg text-sm font-medium transition-all duration-150 ${
+              isSettings
+                ? "text-foreground bg-primary/10 border border-primary/25"
+                : "text-foreground/55 hover:text-foreground/90 hover:bg-white/[0.05] border border-transparent"
+            }`}>
+              <Settings className={`h-3.5 w-3.5 shrink-0 ${isSettings ? "text-primary" : ""}`} />
+              Settings
+              {isSettings && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-[1px] h-[2px] w-5 rounded-full bg-primary/70" />}
+            </button>
+          </Link>
         </nav>
 
-        <nav className="flex min-w-0 flex-1 items-center justify-around gap-1 md:hidden">
-          {mobileLinks.map(({ href, icon: Icon, match }) => {
-            const active = match(location);
-            return (
-              <Link key={href} href={href} className="shrink-0">
-                <button
-                  className={`flex h-10 w-10 items-center justify-center rounded-xl border transition-all ${
-                    active
-                      ? "border-primary/35 bg-primary/10 text-primary shadow-[0_0_10px_rgba(99,102,241,0.18)]"
-                      : "border-transparent text-foreground/55 hover:border-border/50 hover:text-foreground/85"
-                  }`}
-                  aria-label={href.replace("/", "") || "home"}
-                >
-                  <Icon className="h-4.5 w-4.5 shrink-0" />
-                </button>
-              </Link>
-            );
-          })}
+        {/* Mobile nav — 5 core actions only */}
+        <nav className="flex md:hidden items-center gap-1 flex-1">
+          {[
+            { href: "/dashboard", icon: LayoutDashboard, match: isDashboard },
+            { href: "/connections", icon: Plug, match: location.startsWith("/connections") },
+            { href: "/billing", icon: CreditCard, match: isBilling },
+            { href: "/settings", icon: Settings, match: isSettings },
+          ].map(({ href, icon: Icon, match }) => (
+            <Link key={href} href={href}>
+              <button className={`flex h-9 w-9 items-center justify-center rounded-lg border transition-all ${
+                match
+                  ? "border-primary/30 bg-primary/10 text-primary"
+                  : "border-transparent text-foreground/50 hover:border-border/50 hover:text-foreground/80"
+              }`}>
+                <Icon className="h-4 w-4 shrink-0" />
+              </button>
+            </Link>
+          ))}
         </nav>
 
+        {/* Theme toggle */}
         <button
           onClick={toggleTheme}
-          className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/60 text-foreground/65 transition-all duration-150 hover:bg-black/[0.04] hover:text-foreground dark:hover:bg-white/[0.06] md:flex"
+          className="shrink-0 flex items-center justify-center h-9 w-9 rounded-lg border border-border/50 text-foreground/60 hover:text-foreground hover:bg-white/[0.06] transition-all duration-150"
           title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
         >
           {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>
 
-        <Link href="/sessions/new" className="hidden shrink-0 md:block">
+        {/* New Session CTA */}
+        <Link href="/sessions/new" className="shrink-0">
           <button
-            className="relative flex h-9 items-center gap-1.5 overflow-hidden rounded-lg border border-primary/40 px-4 text-sm font-semibold text-white shadow-[0_0_20px_rgba(99,102,241,0.25)] transition-all duration-200 hover:scale-[1.02] hover:shadow-[0_0_28px_rgba(99,102,241,0.4)] active:scale-[0.98]"
+            className="relative flex items-center gap-1.5 h-9 px-4 rounded-lg text-sm font-semibold text-white overflow-hidden transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] border border-primary/40 shadow-[0_0_20px_rgba(99,102,241,0.25)] hover:shadow-[0_0_28px_rgba(99,102,241,0.4)]"
             style={{ background: "linear-gradient(135deg, hsl(239,84%,62%) 0%, hsl(262,72%,58%) 100%)" }}
           >
             <Plus className="h-4 w-4 shrink-0" />
-            <span>New Session</span>
+            <span className="hidden sm:inline">New Session</span>
+            <span className="sm:hidden"><Zap className="h-3.5 w-3.5" /></span>
           </button>
         </Link>
       </div>
