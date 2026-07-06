@@ -661,9 +661,10 @@ loadCircuitStateFromDb()
       logger.info({ url: selfPingUrl, intervalMin: 10 }, "Keep-alive pinging enabled");
     }
 
-    // Start autonomous schedulers
-    startSeoScheduler();
-    startAdvertisingScheduler();
+    // Start autonomous schedulers — staggered to avoid Groq 429 rate limits on startup
+    // SEO fires immediately on start; delay it so it doesn't slam Groq at boot
+    setTimeout(() => startSeoScheduler(), 5 * 60 * 1000);        // +5 min
+    setTimeout(() => startAdvertisingScheduler(), 12 * 60 * 1000); // +12 min
 
     // Content autonomous cycle — runs every 8 hours, generates + auto-approves
     // LinkedIn / X / Reddit / blog posts using Groq (free, no budget needed)
@@ -673,11 +674,11 @@ loadCircuitStateFromDb()
         .then(r => logger.info({ generated: r.generated }, "[Content] Autonomous cycle complete"))
         .catch(err => logger.error({ err }, "[Content] Autonomous cycle error"));
     };
-    // First run after a 2-minute warm-up delay (let DB migrations finish)
+    // First run after 20 min to avoid startup rate-limit burst
     setTimeout(() => {
       runContentCycle();
       setInterval(runContentCycle, CONTENT_CYCLE_MS);
-    }, 2 * 60 * 1000);
+    }, 20 * 60 * 1000);
 
     // Run retention cleaner immediately on start, then every 24h
     // Purges accounts past their 6-month post-deletion retention window
