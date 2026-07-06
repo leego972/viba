@@ -1297,16 +1297,16 @@ export default function Dashboard() {
                     </div>
                   ))}
                 </div>
-                <div className="flex items-center justify-center gap-3">
+                <div className="flex items-center justify-center gap-2">
                   <Link href="/sessions/new">
-                    <Button size="lg" className="gap-2">
-                      <Plus className="h-4 w-4" />
+                    <Button size="sm" className="gap-1.5 h-8 text-xs">
+                      <Plus className="h-3.5 w-3.5" />
                       Start a Session
                     </Button>
                   </Link>
                   <Link href="/connections">
-                    <Button variant="outline" size="lg" className="gap-2">
-                      <Lock className="h-4 w-4" />
+                    <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs">
+                      <Lock className="h-3.5 w-3.5" />
                       Connect AI
                     </Button>
                   </Link>
