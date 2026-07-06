@@ -17,3 +17,4 @@ export * from "./clients";
 export * from "./clientReports";
 export * from "./marketing";
 export * from "./contentCreator";
+export * from "./deploy";
