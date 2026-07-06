@@ -578,17 +578,17 @@ export default function Home() {
 
       {/* ── Footer ── */}
       <footer className="w-full" style={{ borderTop: `1px solid ${BORDER}`, background: CREAM_ALT }}>
-        <div className="container flex flex-col sm:flex-row items-center justify-between gap-3 py-6 md:h-16">
+        <div className="container flex flex-col items-center gap-4 py-6 sm:flex-row sm:justify-between">
           <div className="flex items-center gap-3">
-            <img src="/viba-logo.png" alt="VIBA" className="h-9 w-auto object-contain" />
+            <img src="/viba-logo.png" alt="VIBA" className="h-9 w-auto object-contain shrink-0" />
             <p className="text-sm" style={{ color: TEXT_FAINT }}>Evidence-backed AI diagnostic platform.</p>
           </div>
-          <div className="flex items-center gap-4 text-xs" style={{ color: TEXT_FAINT }}>
+          <div className="flex flex-wrap justify-center sm:justify-end items-center gap-x-4 gap-y-2 text-xs" style={{ color: TEXT_FAINT }}>
             <Link href="/pricing" className="hover:text-gray-600 transition-colors">Pricing</Link>
             <Link href="/demo/proof-report" className="hover:text-gray-600 transition-colors">Sample Report</Link>
             <Link href="/launch-readiness" className="hover:text-gray-600 transition-colors">Launch Readiness</Link>
             <Link href="/dashboard" className="hover:text-gray-600 transition-colors">Dashboard</Link>
-            <span style={{ color: "#d1d5db" }}>|</span>
+            <span className="hidden sm:inline" style={{ color: "#d1d5db" }}>|</span>
             <a href="https://leego.dev" target="_blank" rel="noopener noreferrer"
               className="flex items-center gap-1.5 transition-opacity hover:opacity-80" style={{ opacity: 0.5 }}>
               <span>by</span>
