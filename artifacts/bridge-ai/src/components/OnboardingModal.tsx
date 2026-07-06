@@ -168,64 +168,62 @@ export function OnboardingModal({ onClose }: OnboardingModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-lg rounded-2xl border border-white/[0.1] bg-[hsl(var(--background))] shadow-2xl shadow-black/50 overflow-hidden">
+      <div className="relative w-full max-w-md rounded-2xl border border-white/[0.1] bg-[hsl(var(--background))] shadow-2xl shadow-black/50 overflow-hidden max-h-[88vh] flex flex-col">
 
         {/* Top gradient bar */}
-        <div className="h-[3px] w-full bg-gradient-to-r from-primary/60 via-violet-500/80 to-primary/60" />
+        <div className="h-[3px] w-full bg-gradient-to-r from-primary/60 via-violet-500/80 to-primary/60 shrink-0" />
 
-        {/* Close */}
-        <button
-          onClick={onClose}
-          className="absolute right-4 top-4 z-10 flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-white/[0.08] transition-all"
-        >
-          <X className="h-4 w-4" />
-        </button>
-
-        {/* Progress dots */}
-        <div className="flex items-center justify-center gap-2 pt-5 pb-1">
-          {STEPS.map((s, i) => (
-            <div
-              key={s}
-              className={`rounded-full transition-all duration-300 ${
-                i === stepIdx
-                  ? "h-2 w-6 bg-primary"
-                  : i < stepIdx
-                  ? "h-2 w-2 bg-primary/50"
-                  : "h-2 w-2 bg-muted/40"
-              }`}
-            />
-          ))}
+        {/* Header row: progress + close */}
+        <div className="flex items-center justify-between px-5 pt-4 pb-1 shrink-0">
+          <div className="flex items-center gap-1.5">
+            {STEPS.map((s, i) => (
+              <div
+                key={s}
+                className={`rounded-full transition-all duration-300 ${
+                  i === stepIdx
+                    ? "h-2 w-5 bg-primary"
+                    : i < stepIdx
+                    ? "h-1.5 w-1.5 bg-primary/50"
+                    : "h-1.5 w-1.5 bg-muted/40"
+                }`}
+              />
+            ))}
+          </div>
+          <button
+            onClick={onClose}
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-border/60 bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"
+            title="Close"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
         </div>
 
-        <div className="px-7 py-6 space-y-5">
+        <div className="px-5 py-4 space-y-4 overflow-y-auto flex-1">
 
           {/* ── STEP: welcome ── */}
           {step === "welcome" && (
-            <div className="space-y-5">
+            <div className="space-y-4">
               <div className="flex items-center gap-3">
-                <div className="h-11 w-11 rounded-xl bg-primary/15 border border-primary/25 flex items-center justify-center shrink-0">
-                  <Sparkles className="h-5 w-5 text-primary" />
+                <div className="h-9 w-9 rounded-xl bg-primary/15 border border-primary/25 flex items-center justify-center shrink-0">
+                  <Sparkles className="h-4 w-4 text-primary" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-semibold">Welcome to VIBA</h2>
-                  <p className="text-sm text-muted-foreground">Multi-agent AI collaboration — in minutes</p>
+                  <h2 className="text-lg font-semibold">Welcome to VIBA</h2>
+                  <p className="text-xs text-muted-foreground">Multi-agent AI collaboration — in minutes</p>
                 </div>
               </div>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                VIBA lets you assign roles to multiple AI agents — ChatGPT, Claude, Gemini, and more — and watch them collaborate autonomously on your project goals.
-              </p>
-              <div className="grid grid-cols-1 gap-2.5">
+              <div className="grid grid-cols-2 gap-2">
                 {[
-                  { icon: Bot, label: "Assign roles to AI agents", sub: "Planner, coder, reviewer, deployer" },
-                  { icon: Zap, label: "Groq included free", sub: "No API key needed to get started" },
-                  { icon: Shield, label: "Human-in-the-loop approval", sub: "You approve before any destructive action" },
-                  { icon: Cpu, label: "BYOK for full control", sub: "Bring your own OpenAI, Claude, or Gemini keys" },
+                  { icon: Bot, label: "Assign AI roles", sub: "Planner, coder, reviewer" },
+                  { icon: Zap, label: "Groq free", sub: "No key needed to start" },
+                  { icon: Shield, label: "Human-in-loop", sub: "Approve before any action" },
+                  { icon: Cpu, label: "BYOK", sub: "OpenAI, Claude, Gemini" },
                 ].map(({ icon: Icon, label, sub }) => (
-                  <div key={label} className="flex items-center gap-3 rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2.5">
-                    <Icon className="h-4 w-4 text-primary shrink-0" />
+                  <div key={label} className="flex items-start gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-2">
+                    <Icon className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-sm font-medium">{label}</p>
-                      <p className="text-xs text-muted-foreground">{sub}</p>
+                      <p className="text-xs font-medium leading-tight">{label}</p>
+                      <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">{sub}</p>
                     </div>
                   </div>
                 ))}
@@ -448,7 +446,7 @@ export function OnboardingModal({ onClose }: OnboardingModalProps) {
 
         {/* Navigation footer */}
         {step !== "ready" && (
-          <div className="flex items-center justify-between px-7 py-4 border-t border-white/[0.06]">
+          <div className="flex items-center justify-between px-5 py-3 border-t border-white/[0.06] shrink-0">
             <Button
               variant="ghost"
               size="sm"
