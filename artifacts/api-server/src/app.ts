@@ -231,7 +231,7 @@ app.get("/structured-data.json", (_req, res) => {
 
 app.use("/api", apiLimiter, accessTokenMiddleware, requireSession, router);
 
-const distDir = path.resolve(process.cwd(), "artifacts", "bridge-ai", "dist");
+const distDir = path.resolve(process.cwd(), "artifacts", "bridge-ai", "dist", "public");
 if (existsSync(distDir)) {
   app.use(express.static(distDir));
   app.get("/{*path}", (_req, res) => { res.sendFile(path.join(distDir, "index.html")); });
