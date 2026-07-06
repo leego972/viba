@@ -1,322 +1,446 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState, useCallback } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { AlertTriangle, CheckCircle2, Eye, EyeOff, Key, Plus, RefreshCw, Save, Shield, Trash2, XCircle } from "lucide-react";
+import {
+  Shield, RefreshCw, Trash2, RotateCcw, CheckCircle2, XCircle, Clock,
+  AlertTriangle, Eye, EyeOff, ChevronDown, ChevronUp, Key, Activity,
+} from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-const PROVIDERS = [
-  { id: "github", label: "GitHub", defaultKind: "token", help: "GitHub token for repo access." },
-  { id: "railway", label: "Railway", defaultKind: "token", help: "Railway API token." },
-  { id: "render", label: "Render", defaultKind: "token", help: "Render API key. Save service ID separately if needed." },
-  { id: "openai", label: "OpenAI", defaultKind: "api_key", help: "OpenAI API key." },
-  { id: "anthropic", label: "Anthropic", defaultKind: "api_key", help: "Claude/Anthropic API key." },
-  { id: "gemini", label: "Gemini", defaultKind: "api_key", help: "Google Gemini API key." },
-  { id: "groq", label: "Groq", defaultKind: "api_key", help: "Groq API key." },
-  { id: "perplexity", label: "Perplexity", defaultKind: "api_key", help: "Perplexity API key." },
-  { id: "replit", label: "Replit", defaultKind: "api_key", help: "Replit API key or agent token." },
-  { id: "manus", label: "Manus", defaultKind: "api_key", help: "Manus workspace/API key." },
-  { id: "railway_mcp", label: "Railway MCP", defaultKind: "url", help: "Railway MCP URL." },
-];
-
-type CredentialRow = {
+interface Credential {
   provider: string;
   kind: string;
   label: string;
-  scope?: string | null;
-  status?: string | null;
-  configured?: boolean;
-  expires_at?: string | null;
-  last_used_at?: string | null;
-  last_validated_at?: string | null;
-  last_error?: string | null;
-  updated_at?: string | null;
-};
-
-function providerLabel(id: string): string {
-  return PROVIDERS.find((p) => p.id === id)?.label ?? id;
+  scope: string;
+  status: string;
+  configured: boolean;
+  expires_at: string | null;
+  last_used_at: string | null;
+  last_validated_at: string | null;
+  last_error: string | null;
+  updated_at: string | null;
+  rawValueReturned: false;
 }
 
-function statusBadge(status?: string | null) {
-  if (status === "valid") {
-    return <Badge className="gap-1 bg-emerald-500/15 text-emerald-400 border-emerald-500/30"><CheckCircle2 className="h-3 w-3" />Valid</Badge>;
-  }
-  if (status === "invalid") {
-    return <Badge className="gap-1 bg-red-500/15 text-red-400 border-red-500/30"><XCircle className="h-3 w-3" />Invalid</Badge>;
-  }
-  return <Badge variant="outline" className="gap-1 text-muted-foreground"><Key className="h-3 w-3" />Saved</Badge>;
+interface AccessLog {
+  provider: string;
+  kind: string;
+  label: string;
+  purpose: string | null;
+  job_id: string | null;
+  scope: string | null;
+  source: string;
+  status: string;
+  created_at: string;
 }
 
-export default function VaultPage() {
-  const { toast } = useToast();
-  const [credentials, setCredentials] = useState<CredentialRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
+function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? "—" : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+function isExpired(iso: string | null | undefined): boolean {
+  if (!iso) return false;
+  return new Date(iso) < new Date();
+}
+
+function StatusBadge({ status, expired }: { status: string; expired?: boolean }) {
+  if (expired) return <Badge variant="destructive" className="text-xs gap-1"><AlertTriangle className="h-3 w-3" />Expired</Badge>;
+  if (status === "valid") return <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30 text-xs gap-1"><CheckCircle2 className="h-3 w-3" />Valid</Badge>;
+  if (status === "invalid") return <Badge variant="destructive" className="text-xs gap-1"><XCircle className="h-3 w-3" />Invalid</Badge>;
+  return <Badge variant="secondary" className="text-xs gap-1"><Clock className="h-3 w-3" />Saved</Badge>;
+}
+
+function ProviderLabel({ provider, kind }: { provider: string; kind: string }) {
+  const name = provider.startsWith("custom_ai__")
+    ? provider.replace(/^custom_ai__/, "").replace(/_/g, " ")
+    : provider;
+  return (
+    <div>
+      <p className="font-medium text-sm capitalize">{name}</p>
+      <p className="text-xs text-muted-foreground">{kind}</p>
+    </div>
+  );
+}
+
+function RotateDialog({
+  cred,
+  onClose,
+  onDone,
+}: {
+  cred: Credential;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [newValue, setNewValue] = useState("");
+  const [showValue, setShowValue] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [validatingKey, setValidatingKey] = useState<string | null>(null);
-  const [deletingKey, setDeletingKey] = useState<string | null>(null);
-  const [showSecret, setShowSecret] = useState(false);
+  const { toast } = useToast();
 
-  const [provider, setProvider] = useState("github");
-  const [kind, setKind] = useState("token");
-  const [label, setLabel] = useState("default");
-  const [value, setValue] = useState("");
-
-  const selectedProvider = useMemo(() => PROVIDERS.find((p) => p.id === provider), [provider]);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("action") === "add") setShowForm(true);
-  }, []);
-
-  async function loadVault() {
-    setLoading(true);
-    try {
-      const res = await fetch(`${BASE}/api/credentials/vault-list`, { credentials: "include" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json() as { credentials?: CredentialRow[] };
-      setCredentials(data.credentials ?? []);
-    } catch {
-      toast({ title: "Failed to load vault", variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => { void loadVault(); }, []);
-
-  function resetForm() {
-    setProvider("github");
-    setKind("token");
-    setLabel("default");
-    setValue("");
-    setShowSecret(false);
-  }
-
-  async function saveCredential() {
-    if (!provider || !kind.trim() || !label.trim() || !value.trim()) {
-      toast({ title: "Missing credential details", description: "Provider, kind, label, and secret value are required.", variant: "destructive" });
-      return;
-    }
-
+  async function handleSave() {
+    if (!newValue.trim()) { toast({ title: "Value required", variant: "destructive" }); return; }
     setSaving(true);
     try {
-      const res = await fetch(`${BASE}/api/credentials/save`, {
+      const r = await fetch(`${BASE}/api/credentials/save`, {
         method: "POST",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider, kind: kind.trim(), label: label.trim(), value: value.trim() }),
+        credentials: "include",
+        body: JSON.stringify({ provider: cred.provider, kind: cred.kind, label: cred.label, value: newValue.trim() }),
       });
-      const data = await res.json().catch(() => ({})) as { error?: string; message?: string };
-      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
-      toast({ title: "Credential saved", description: data.message ?? "Encrypted credential saved. Raw value will not be shown again." });
-      resetForm();
-      setShowForm(false);
-      await loadVault();
+      const d = await r.json() as { ok?: boolean; error?: string };
+      if (!r.ok || !d.ok) throw new Error(d.error ?? "Save failed");
+      setNewValue("");
+      toast({ title: "Credential replaced", description: "The encrypted vault value was overwritten. The old value cannot be recovered." });
+      onDone();
     } catch (err) {
-      toast({ title: "Save failed", description: err instanceof Error ? err.message : "Credential could not be saved.", variant: "destructive" });
+      toast({ title: "Failed to save", description: String(err), variant: "destructive" });
     } finally {
       setSaving(false);
     }
   }
 
-  async function validateCredential(row: CredentialRow) {
-    const key = `${row.provider}:${row.kind}:${row.label}`;
-    setValidatingKey(key);
-    try {
-      const res = await fetch(`${BASE}/api/credentials/validate`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: row.provider, kind: row.kind, label: row.label }),
-      });
-      const data = await res.json().catch(() => ({})) as { message?: string; error?: string };
-      if (!res.ok) throw new Error(data.message ?? data.error ?? `HTTP ${res.status}`);
-      toast({ title: "Credential valid", description: data.message ?? "Validation passed." });
-      await loadVault();
-    } catch (err) {
-      toast({ title: "Validation failed", description: err instanceof Error ? err.message : "Credential validation failed.", variant: "destructive" });
-      await loadVault();
-    } finally {
-      setValidatingKey(null);
-    }
-  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl space-y-4">
+        <div>
+          <p className="text-sm font-semibold text-amber-400 flex items-center gap-1.5"><RotateCcw className="h-4 w-4" />Replace credential</p>
+          <p className="text-xs text-zinc-400 mt-1">Replacing this credential overwrites the encrypted vault value. The old value cannot be recovered.</p>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-zinc-300">New value</Label>
+          <div className="relative">
+            <Input
+              type={showValue ? "text" : "password"}
+              value={newValue}
+              onChange={(e) => setNewValue(e.target.value)}
+              placeholder="Paste new secret value…"
+              className="pr-10 bg-zinc-800 border-zinc-700 text-sm font-mono"
+              autoFocus
+            />
+            <button
+              type="button"
+              onClick={() => setShowValue((v) => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+            >
+              {showValue ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+        </div>
+        <p className="text-xs text-zinc-500">•••••••• saved — raw value never shown after saving.</p>
+        <div className="flex gap-3 pt-1">
+          <Button variant="outline" className="flex-1 border-zinc-700 text-zinc-300" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button className="flex-1" onClick={handleSave} disabled={saving || !newValue.trim()}>
+            {saving ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : null}
+            Save securely
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-  async function deleteCredential(row: CredentialRow) {
-    const key = `${row.provider}:${row.kind}:${row.label}`;
-    setDeletingKey(key);
+function DeleteDialog({ cred, onClose, onDone }: { cred: Credential; onClose: () => void; onDone: () => void }) {
+  const [deleting, setDeleting] = useState(false);
+  const { toast } = useToast();
+
+  async function handleDelete() {
+    setDeleting(true);
     try {
-      const res = await fetch(`${BASE}/api/credentials`, {
+      const r = await fetch(`${BASE}/api/credentials`, {
         method: "DELETE",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: row.provider, kind: row.kind, label: row.label }),
+        credentials: "include",
+        body: JSON.stringify({ provider: cred.provider, kind: cred.kind, label: cred.label }),
       });
-      const data = await res.json().catch(() => ({})) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
-      toast({ title: "Credential deleted" });
-      await loadVault();
+      const d = await r.json() as { ok?: boolean; error?: string };
+      if (!r.ok || !d.ok) throw new Error(d.error ?? "Delete failed");
+      toast({ title: "Credential deleted", description: "Deleting this credential stops VIBA from using it for future tasks. Existing provider accounts are not deleted." });
+      onDone();
     } catch (err) {
-      toast({ title: "Delete failed", description: err instanceof Error ? err.message : "Credential could not be deleted.", variant: "destructive" });
+      toast({ title: "Failed to delete", description: String(err), variant: "destructive" });
     } finally {
-      setDeletingKey(null);
+      setDeleting(false);
     }
-  }
-
-  function handleProviderChange(nextProvider: string) {
-    setProvider(nextProvider);
-    const p = PROVIDERS.find((item) => item.id === nextProvider);
-    if (p) setKind(p.defaultKind);
   }
 
   return (
-    <AppLayout>
-      <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2.5">
-              <div className="h-9 w-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-                <Shield className="h-4 w-4 text-primary" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="w-full max-w-sm rounded-xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl space-y-4">
+        <p className="text-sm font-semibold text-red-400 flex items-center gap-1.5"><Trash2 className="h-4 w-4" />Delete credential</p>
+        <p className="text-sm text-zinc-300">Deleting this credential will stop VIBA from using it for future tasks. Existing provider accounts are not deleted.</p>
+        <p className="text-xs text-zinc-500"><span className="font-mono text-zinc-400">{cred.provider}</span> · {cred.kind} · {cred.label}</p>
+        <div className="flex gap-3 pt-1">
+          <Button variant="outline" className="flex-1 border-zinc-700 text-zinc-300" onClick={onClose} disabled={deleting}>Cancel</Button>
+          <Button variant="destructive" className="flex-1" onClick={handleDelete} disabled={deleting}>
+            {deleting ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : null}
+            Delete
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LogsDrawer({ cred, onClose }: { cred: Credential; onClose: () => void }) {
+  const [logs, setLogs] = useState<AccessLog[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useState(() => {
+    fetch(`${BASE}/api/credentials/access-logs?provider=${encodeURIComponent(cred.provider)}&limit=50`, { credentials: "include" })
+      .then((r) => r.json())
+      .then((d: { logs?: AccessLog[] }) => setLogs(d.logs ?? []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="w-full max-w-2xl max-h-[80vh] rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
+          <p className="text-sm font-semibold text-zinc-200 flex items-center gap-1.5">
+            <Activity className="h-4 w-4 text-primary" />
+            Usage log — <span className="font-mono text-zinc-400 ml-1">{cred.provider}</span>
+          </p>
+          <Button variant="ghost" size="sm" onClick={onClose}>Close</Button>
+        </div>
+        <div className="overflow-y-auto flex-1 p-4 space-y-2">
+          {loading && <p className="text-sm text-zinc-500 text-center py-8">Loading…</p>}
+          {!loading && logs.length === 0 && (
+            <p className="text-sm text-zinc-500 text-center py-8">No access log entries yet.</p>
+          )}
+          {logs.map((l, i) => (
+            <div key={i} className="flex items-start gap-3 rounded-lg border border-zinc-800 bg-zinc-800/40 p-3 text-xs">
+              <span className={`mt-0.5 shrink-0 h-2 w-2 rounded-full ${l.status === "granted" ? "bg-emerald-500" : "bg-red-500"}`} />
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-zinc-300">
+                  <span className="font-medium">{l.status}</span>
+                  <span className="text-zinc-500">·</span>
+                  <span>source: <span className="text-zinc-300">{l.source}</span></span>
+                  {l.scope && <span>scope: <span className="text-zinc-300">{l.scope}</span></span>}
+                  {l.purpose && <span>purpose: <span className="text-zinc-300">{l.purpose}</span></span>}
+                </div>
+                <p className="text-zinc-500 mt-0.5">{fmtDate(l.created_at)}</p>
               </div>
-              <h1 className="text-2xl font-semibold tracking-tight">Secure Vault</h1>
             </div>
-            <p className="text-sm text-muted-foreground pl-12">
-              Add, validate, and delete encrypted API keys and deployment tokens. Secret values are never shown after saving.
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CredentialRow({
+  cred,
+  onRefresh,
+}: {
+  cred: Credential;
+  onRefresh: () => void;
+}) {
+  const [validating, setValidating] = useState(false);
+  const [showRotate, setShowRotate] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
+  const [showLogs, setShowLogs] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const { toast } = useToast();
+
+  const expired = isExpired(cred.expires_at);
+
+  async function handleValidate() {
+    setValidating(true);
+    try {
+      const r = await fetch(`${BASE}/api/credentials/validate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ provider: cred.provider, kind: cred.kind, label: cred.label }),
+      });
+      const d = await r.json() as { ok?: boolean; message?: string };
+      if (d.ok) {
+        toast({ title: "Valid", description: d.message ?? "Credential is valid." });
+      } else {
+        toast({ title: "Invalid", description: d.message ?? "Credential failed validation.", variant: "destructive" });
+      }
+      onRefresh();
+    } catch {
+      toast({ title: "Validate failed", variant: "destructive" });
+    } finally {
+      setValidating(false);
+    }
+  }
+
+  return (
+    <>
+      {showRotate && <RotateDialog cred={cred} onClose={() => setShowRotate(false)} onDone={() => { setShowRotate(false); onRefresh(); }} />}
+      {showDelete && <DeleteDialog cred={cred} onClose={() => setShowDelete(false)} onDone={() => { setShowDelete(false); onRefresh(); }} />}
+      {showLogs && <LogsDrawer cred={cred} onClose={() => setShowLogs(false)} />}
+
+      <div className={`border-b border-zinc-800/60 last:border-b-0 ${expanded ? "bg-zinc-800/20" : ""}`}>
+        <div className="grid grid-cols-[1fr_auto] gap-2 items-center px-4 py-3">
+          <div className="grid grid-cols-[1.5fr_1fr_1fr_1fr] gap-3 items-center min-w-0">
+            <ProviderLabel provider={cred.provider} kind={cred.kind} />
+            <div className="hidden sm:block">
+              <p className="text-xs text-zinc-400">{cred.scope ?? "all"}</p>
+              <p className="text-xs text-zinc-600">{cred.label}</p>
+            </div>
+            <StatusBadge status={cred.status} expired={expired} />
+            <div className="hidden md:block text-xs text-zinc-500">{fmtDate(cred.last_used_at)}</div>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-zinc-400 hover:text-zinc-200" onClick={handleValidate} disabled={validating} title="Validate">
+              {validating ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-zinc-400 hover:text-amber-400" onClick={() => setShowRotate(true)} title="Rotate / Replace">
+              <RotateCcw className="h-3.5 w-3.5" />
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-zinc-400 hover:text-red-400" onClick={() => setShowDelete(true)} title="Delete">
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-zinc-400 hover:text-primary" onClick={() => setShowLogs(true)} title="View usage log">
+              <Activity className="h-3.5 w-3.5" />
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 w-7 px-0 text-zinc-500 hover:text-zinc-300" onClick={() => setExpanded((v) => !v)}>
+              {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            </Button>
+          </div>
+        </div>
+
+        {expanded && (
+          <div className="px-4 pb-3 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1.5 text-xs border-t border-zinc-800/40 pt-3">
+            <div><span className="text-zinc-500">Provider</span> <span className="text-zinc-300 font-mono ml-1">{cred.provider}</span></div>
+            <div><span className="text-zinc-500">Kind</span> <span className="text-zinc-300 ml-1">{cred.kind}</span></div>
+            <div><span className="text-zinc-500">Label</span> <span className="text-zinc-300 ml-1">{cred.label}</span></div>
+            <div><span className="text-zinc-500">Scope</span> <span className="text-zinc-300 ml-1">{cred.scope ?? "all"}</span></div>
+            <div><span className="text-zinc-500">Updated</span> <span className="text-zinc-300 ml-1">{fmtDate(cred.updated_at)}</span></div>
+            <div><span className="text-zinc-500">Expires</span> <span className={`ml-1 ${expired ? "text-red-400" : "text-zinc-300"}`}>{fmtDate(cred.expires_at)}</span></div>
+            <div><span className="text-zinc-500">Last validated</span> <span className="text-zinc-300 ml-1">{fmtDate(cred.last_validated_at)}</span></div>
+            <div><span className="text-zinc-500">Last used</span> <span className="text-zinc-300 ml-1">{fmtDate(cred.last_used_at)}</span></div>
+            {cred.last_error && (
+              <div className="col-span-2 sm:col-span-3">
+                <span className="text-zinc-500">Last error</span>
+                <span className="text-red-400 ml-1">{cred.last_error}</span>
+              </div>
+            )}
+            <div className="col-span-2 sm:col-span-3 mt-0.5 text-zinc-600 italic">
+              •••••••• saved — credentials are encrypted in your secure vault and never shown after saving.
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+export default function VaultPage() {
+  const [credentials, setCredentials] = useState<Credential[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await fetch(`${BASE}/api/credentials/vault-list`, { credentials: "include" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json() as { credentials?: Credential[]; rawValueReturned?: false };
+      if (d.rawValueReturned !== false) {
+        toast({ title: "Security warning", description: "Server returned unexpected raw values — refresh aborted.", variant: "destructive" });
+        return;
+      }
+      setCredentials(d.credentials ?? []);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  useState(() => { void load(); });
+
+  const groups = credentials.reduce<Record<string, Credential[]>>((acc, c) => {
+    const g = c.provider.startsWith("custom_ai__") ? "Custom AI" : c.provider;
+    (acc[g] ??= []).push(c);
+    return acc;
+  }, {});
+
+  return (
+    <AppLayout>
+      <div className="container max-w-4xl py-8 space-y-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold flex items-center gap-2.5">
+              <Shield className="h-6 w-6 text-primary" />
+              Secure Vault
+            </h1>
+            <p className="text-muted-foreground text-sm mt-1 max-w-xl">
+              Credentials are encrypted in your secure vault. VIBA can use them server-side only for your authorized tasks. Raw values are never shown after saving.
             </p>
           </div>
-          <Button className="gap-1.5" onClick={() => setShowForm((v) => !v)}>
-            <Plus className="h-4 w-4" />
-            {showForm ? "Close form" : "Add credential"}
+          <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 mr-1.5 ${loading ? "animate-spin" : ""}`} />
+            Refresh
           </Button>
         </div>
 
-        <div className="rounded-xl border border-amber-500/25 bg-amber-500/8 px-4 py-3 flex gap-3">
-          <AlertTriangle className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
-          <p className="text-sm text-amber-200/80">
-            Save credentials only for accounts you own or are authorised to use. VIBA stores encrypted metadata and never returns raw secret values to the browser.
-          </p>
-        </div>
+        {error && (
+          <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-400">
+            Failed to load vault: {error}
+          </div>
+        )}
 
-        {showForm && (
-          <Card className="border-primary/25 bg-primary/5">
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2"><Key className="h-4 w-4" />Add Credential</CardTitle>
-              <CardDescription>Choose the provider, label the credential, paste the secret, then save.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid md:grid-cols-3 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Provider</Label>
-                  <Select value={provider} onValueChange={handleProviderChange}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PROVIDERS.map((p) => <SelectItem key={p.id} value={p.id}>{p.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Kind</Label>
-                  <Input value={kind} onChange={(e) => setKind(e.target.value)} placeholder="token / api_key / url / service_id" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Label</Label>
-                  <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="default / production / personal" />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs">Secret value</Label>
-                <div className="relative">
-                  <Input
-                    type={showSecret ? "text" : "password"}
-                    value={value}
-                    onChange={(e) => setValue(e.target.value)}
-                    placeholder="Paste API key, token, URL, or credential value…"
-                    className="font-mono pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowSecret((v) => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    {showSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-                <p className="text-xs text-muted-foreground">{selectedProvider?.help}</p>
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => { resetForm(); setShowForm(false); }} disabled={saving}>Cancel</Button>
-                <Button onClick={saveCredential} disabled={saving} className="gap-1.5">
-                  {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  Save encrypted credential
-                </Button>
-              </div>
+        {!loading && !error && credentials.length === 0 && (
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center justify-center py-12 text-center gap-3">
+              <Key className="h-10 w-10 text-muted-foreground/30" />
+              <p className="text-sm font-medium text-muted-foreground">No credentials saved yet</p>
+              <p className="text-xs text-muted-foreground/60 max-w-xs">
+                Add your AI provider keys on the <a href="/providers" className="underline underline-offset-2 text-primary/70 hover:text-primary">AI Providers</a> page. They'll appear here as a secure encrypted inventory.
+              </p>
             </CardContent>
           </Card>
         )}
 
-        <Card className="border-white/[0.07] bg-white/[0.01]">
-          <CardHeader>
-            <CardTitle className="text-base">Saved Credentials</CardTitle>
-            <CardDescription>Metadata only. Raw secret values are not displayed.</CardDescription>
+        {Object.entries(groups).map(([group, items]) => (
+          <Card key={group} className="overflow-hidden">
+            <CardHeader className="py-3 px-4 bg-zinc-900/50 border-b border-zinc-800/60">
+              <CardTitle className="text-sm font-medium capitalize flex items-center gap-2">
+                <Key className="h-3.5 w-3.5 text-primary" />
+                {group.replace(/_/g, " ")}
+                <span className="ml-auto text-xs font-normal text-muted-foreground">{items.length} credential{items.length !== 1 ? "s" : ""}</span>
+              </CardTitle>
+            </CardHeader>
+
+            <div className="hidden sm:grid grid-cols-[1.5fr_1fr_1fr_1fr_auto] gap-3 px-4 py-2 border-b border-zinc-800/30 bg-zinc-900/20">
+              {["Provider / Type", "Scope", "Status", "Last used", "Actions"].map((h) => (
+                <span key={h} className="text-[11px] font-medium text-zinc-500 uppercase tracking-wide">{h}</span>
+              ))}
+            </div>
+
+            {items.map((cred) => (
+              <CredentialRow
+                key={`${cred.provider}::${cred.kind}::${cred.label}`}
+                cred={cred}
+                onRefresh={load}
+              />
+            ))}
+          </Card>
+        ))}
+
+        <Card className="border-zinc-800/40 bg-zinc-950/40">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-zinc-400 font-medium flex items-center gap-1.5"><Shield className="h-4 w-4" />Security note</CardTitle>
           </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="h-24 flex items-center justify-center text-muted-foreground">
-                <RefreshCw className="h-5 w-5 animate-spin" />
-              </div>
-            ) : credentials.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-white/[0.12] p-8 text-center space-y-3">
-                <Key className="h-8 w-8 mx-auto text-muted-foreground" />
-                <div>
-                  <p className="font-medium">No credentials saved yet</p>
-                  <p className="text-sm text-muted-foreground">Click Add credential to store your first API key or deployment token.</p>
-                </div>
-                <Button onClick={() => setShowForm(true)} className="gap-1.5"><Plus className="h-4 w-4" />Add credential</Button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {credentials.map((row) => {
-                  const key = `${row.provider}:${row.kind}:${row.label}`;
-                  return (
-                    <div key={key} className="rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                      <div className="min-w-0 space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-medium">{providerLabel(row.provider)}</p>
-                          {statusBadge(row.status)}
-                          <Badge variant="outline" className="text-[11px]">{row.kind}</Badge>
-                          <Badge variant="secondary" className="text-[11px]">{row.label}</Badge>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Updated: {row.updated_at ? new Date(row.updated_at).toLocaleString() : "unknown"}
-                          {row.last_validated_at ? ` · Validated: ${new Date(row.last_validated_at).toLocaleString()}` : ""}
-                        </p>
-                        {row.last_error && <p className="text-xs text-red-300">{row.last_error}</p>}
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <Button variant="outline" size="sm" onClick={() => validateCredential(row)} disabled={validatingKey === key} className="gap-1.5 text-xs">
-                          {validatingKey === key ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                          Validate
-                        </Button>
-                        <Button variant="destructive" size="sm" onClick={() => deleteCredential(row)} disabled={deletingKey === key} className="gap-1.5 text-xs">
-                          {deletingKey === key ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                          Delete
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+          <CardContent className="text-xs text-zinc-500 space-y-1.5">
+            <p>Your saved credentials are encrypted at rest using AES-256-GCM. VIBA can use them server-side for authorized tasks only.</p>
+            <p>Raw API keys, tokens, passwords, secrets, and webhook secrets are never returned to the frontend after saving.</p>
+            <p>Access is logged per use. You can view the usage log for any credential using the activity icon.</p>
           </CardContent>
         </Card>
       </div>

@@ -1,35 +1,8 @@
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Cpu, ArrowLeft } from "lucide-react";
-import CompletionPage, { CollaborationMapPage, DemoDoctorReport, DemoPage, DemoProofReport, SessionTimelinePage, ShareReportPage } from "@/pages/market-completion";
-
-const COMPLETION_PATHS = new Set([
-  "/providers",
-  "/connectors",
-  "/self-audit",
-  "/crews",
-  "/production-smoke-test",
-  "/mobile-readiness",
-  "/team",
-  "/usage",
-  "/recovery",
-  "/doctor/trends",
-  "/clients",
-  "/security-evidence",
-  "/reports/compare",
-  "/market-readiness",
-]);
 
 export default function NotFound() {
-  const [location] = useLocation();
-  if (location === "/demo") return <DemoPage />;
-  if (location === "/demo/doctor-report") return <DemoDoctorReport />;
-  if (location === "/demo/proof-report") return <DemoProofReport />;
-  if (location.startsWith("/share/reports/")) return <ShareReportPage />;
-  if (location.match(/^\/sessions\/[^/]+\/timeline$/)) return <SessionTimelinePage />;
-  if (location.match(/^\/sessions\/[^/]+\/map$/)) return <CollaborationMapPage />;
-  if (COMPLETION_PATHS.has(location)) return <CompletionPage />;
-
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center bg-background px-4">
       <div className="flex flex-col items-center text-center max-w-md gap-6">

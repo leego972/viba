@@ -53,7 +53,7 @@ export default function ResetPasswordPage() {
       <div className="fixed inset-0 bg-gradient-to-br from-blue-950/60 via-[#0a0e1a] to-indigo-950/40 pointer-events-none" />
       <div className="relative z-10 w-full max-w-sm">
         <div className="flex flex-col items-center mb-8 gap-3">
-          <img src="/viba-logo.png" alt="VIBA" className="h-14 w-auto" style={{ filter: 'drop-shadow(1px 0 0 rgba(0,0,0,0.75)) drop-shadow(-1px 0 0 rgba(0,0,0,0.75)) drop-shadow(0 1px 0 rgba(0,0,0,0.75)) drop-shadow(0 -1px 0 rgba(0,0,0,0.75))' }} />
+          <img src="/viba-logo.png" alt="VIBA" className="h-24 w-auto rounded-xl" style={{ backgroundColor: "white" }} />
         </div>
 
         <div className="rounded-2xl border border-border/50 bg-card/80 backdrop-blur-sm p-8 shadow-2xl">
