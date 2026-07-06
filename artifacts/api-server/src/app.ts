@@ -7,6 +7,7 @@ import connectPgSimple from "connect-pg-simple";
 import path from "path";
 import { existsSync } from "fs";
 import router from "./routes";
+import authRouter from "./routes/auth";
 import { logger } from "./lib/logger";
 import { createRateLimiter } from "./middlewares/rateLimiter";
 import { requireSession } from "./middlewares/requireSession";
@@ -228,6 +229,9 @@ app.get("/llms-full.txt", (_req, res) => {
 app.get("/structured-data.json", (_req, res) => {
   res.json(generateStructuredData());
 });
+
+// ── Auth routes (exempt from ACCESS_TOKEN gate — login/register must always work) ──
+app.use("/api", apiLimiter, authRouter);
 
 // ── Auth-gated API routes ─────────────────────────────────────────────────────
 
