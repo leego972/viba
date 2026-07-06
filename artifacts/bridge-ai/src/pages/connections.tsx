@@ -744,10 +744,10 @@ export default function ConnectionsPage() {
         </div>
 
         {/* Warning */}
-        <div className="flex items-start gap-3 rounded-xl border border-amber-500/25 bg-amber-500/8 px-4 py-3">
-          <AlertTriangle className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
-          <p className="text-sm text-amber-200/80">
-            <span className="font-medium text-amber-300">Live execution is off by default.</span>{" "}
+        <div className="flex items-start gap-3 rounded-xl border border-orange-400/50 bg-orange-400/12 px-4 py-3">
+          <AlertTriangle className="h-4 w-4 text-orange-500 mt-0.5 shrink-0" />
+          <p className="text-sm text-orange-700 dark:text-orange-300">
+            <span className="font-semibold text-orange-600 dark:text-orange-400">Live execution is off by default.</span>{" "}
             Connecting a provider makes it available for sessions — each session still requires explicit budget approval before any paid call is made.
           </p>
         </div>
