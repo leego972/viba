@@ -130,10 +130,10 @@ export function Navbar() {
     <header className="sticky top-0 z-50 w-full border-b border-white/[0.06] bg-background/90 backdrop-blur-xl">
       <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
 
-      <div className="container flex h-[60px] max-w-screen-2xl items-center gap-3">
+      <div className="container flex h-[60px] max-w-screen-2xl items-center gap-1.5 sm:gap-3 px-3 sm:px-4">
         {/* Logo */}
         <Link href="/" className="flex items-center shrink-0">
-          <img src="/viba-logo.png" alt="VIBA" className="h-14 w-auto object-contain" />
+          <img src="/viba-logo.png" alt="VIBA" className="h-10 sm:h-14 w-auto object-contain" />
         </Link>
 
         <div className="hidden md:block h-5 w-px bg-border/50 shrink-0" />
@@ -183,8 +183,8 @@ export function Navbar() {
           </Link>
         </nav>
 
-        {/* Mobile nav — 5 core actions only */}
-        <nav className="flex md:hidden items-center gap-1 flex-1">
+        {/* Mobile nav — 4 core actions only */}
+        <nav className="flex md:hidden items-center gap-0.5 flex-1">
           {[
             { href: "/dashboard", icon: LayoutDashboard, match: isDashboard },
             { href: "/connections", icon: Plug, match: location.startsWith("/connections") },
@@ -192,7 +192,7 @@ export function Navbar() {
             { href: "/settings", icon: Settings, match: isSettings },
           ].map(({ href, icon: Icon, match }) => (
             <Link key={href} href={href}>
-              <button className={`flex h-9 w-9 items-center justify-center rounded-lg border transition-all ${
+              <button className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-all ${
                 match
                   ? "border-primary/30 bg-primary/10 text-primary"
                   : "border-transparent text-foreground/50 hover:border-border/50 hover:text-foreground/80"
