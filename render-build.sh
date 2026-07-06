@@ -26,7 +26,7 @@
   "
 
   echo "[build] installing dependencies..."
-  pnpm install --frozen-lockfile --prod=false 2>&1
+  pnpm install --no-frozen-lockfile --prod=false 2>&1
   echo "[build] install done"
 
   echo "[build] building bridge-ai..."
