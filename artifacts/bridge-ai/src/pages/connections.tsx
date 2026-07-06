@@ -168,40 +168,40 @@ function ProviderSection() {
 
     return (
       <div key={provider.id} className="rounded-xl border border-white/[0.08] bg-white/[0.02] overflow-hidden">
-        <div className="flex items-center justify-between gap-3 px-4 py-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${
-              provider.status === "configured" ? "bg-emerald-500/15 border border-emerald-500/25" : "bg-muted/30 border border-border/50"
-            }`}>
-              <Cpu className={`h-4 w-4 ${provider.status === "configured" ? "text-emerald-400" : "text-muted-foreground"}`} />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm font-medium">{provider.label}</span>
-                <StatusBadge status={provider.status} />
-              </div>
-              <p className="text-xs text-muted-foreground truncate">{provider.description}</p>
-            </div>
+        <div className="flex items-center gap-3 px-4 py-3">
+          {/* Icon */}
+          <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${
+            provider.status === "configured" ? "bg-emerald-500/15 border border-emerald-500/25" : "bg-muted/30 border border-border/50"
+          }`}>
+            <Cpu className={`h-4 w-4 ${provider.status === "configured" ? "text-emerald-400" : "text-muted-foreground"}`} />
           </div>
-          <div className="flex items-center gap-3 shrink-0">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-muted-foreground hidden sm:inline">{ls.enabled ? "On" : "Off"}</span>
-              <Switch
-                checked={ls.enabled}
-                onCheckedChange={(v) => updateLocal(provider.id, { enabled: v })}
-              />
+
+          {/* Name + badge — fills remaining space, truncates cleanly */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium leading-tight truncate">{provider.label}</span>
+              <StatusBadge status={provider.status} />
             </div>
+            <p className="text-xs text-muted-foreground truncate mt-0.5">{provider.description}</p>
+          </div>
+
+          {/* Controls — fixed width, never shrinks, never overlaps */}
+          <div className="flex items-center gap-2 shrink-0">
+            <Switch
+              checked={ls.enabled}
+              onCheckedChange={(v) => updateLocal(provider.id, { enabled: v })}
+            />
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
+              className="h-7 px-2.5 text-xs text-muted-foreground hover:text-foreground whitespace-nowrap"
               onClick={() => {
                 const opening = !(expanded[provider.id] ?? false);
                 setExpanded(prev => ({ ...prev, [provider.id]: opening }));
                 if (opening) void fetchProviderKeys(provider.id);
               }}
             >
-              {isExpanded ? "Collapse" : (provider.status === "not_configured" ? "Connect" : "Edit")}
+              {isExpanded ? "Close" : (provider.status === "not_configured" ? "Connect" : "Edit")}
             </Button>
           </div>
         </div>
