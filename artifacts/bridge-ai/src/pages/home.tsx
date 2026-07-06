@@ -1,8 +1,9 @@
+import { useState } from "react";
 import { Link } from "wouter";
 import {
   Zap, Shield, ArrowRight, FileText, KeyRound, Wrench, CheckCircle2,
   AlertTriangle, Terminal, Lock, Activity, ShieldCheck, Users,
-  Eye, Fingerprint, Bug, Monitor, ChevronRight, BarChart3,
+  Eye, Fingerprint, Bug, Monitor, ChevronRight, BarChart3, X,
 } from "lucide-react";
 
 const CREAM = "#faf8f2";
@@ -16,8 +17,31 @@ const INDIGO = "#4f46e5";
 const VIOLET = "#7c3aed";
 
 export default function Home() {
+  const [leegoBig, setLeegoBig] = useState(false);
+
   return (
     <div className="flex flex-col min-h-screen" style={{ background: CREAM, color: TEXT }}>
+
+      {/* ── Leego logo lightbox ── */}
+      {leegoBig && (
+        <div
+          className="fixed inset-0 z-[999] flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)" }}
+          onClick={() => setLeegoBig(false)}
+        >
+          <div className="relative rounded-2xl p-8 shadow-2xl" style={{ background: CREAM_CARD, border: `1px solid ${BORDER}` }}>
+            <button
+              onClick={() => setLeegoBig(false)}
+              className="absolute top-3 right-3 flex items-center justify-center h-8 w-8 rounded-full transition-colors hover:bg-black/[0.06]"
+              style={{ color: TEXT_MUT }}
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <img src="/leego-logo-transparent.png" alt="Leego" className="h-24 w-auto object-contain mx-auto" />
+            <p className="text-center text-sm mt-4 font-medium" style={{ color: TEXT_MUT }}>Built by Leego</p>
+          </div>
+        </div>
+      )}
 
       {/* ── Top bar ── */}
       <header className="px-4 sm:px-6 h-14 flex items-center sticky top-0 z-50"
@@ -589,11 +613,14 @@ export default function Home() {
             <Link href="/launch-readiness" className="hover:text-gray-600 transition-colors">Launch Readiness</Link>
             <Link href="/dashboard" className="hover:text-gray-600 transition-colors">Dashboard</Link>
             <span className="hidden sm:inline" style={{ color: "#d1d5db" }}>|</span>
-            <a href="https://leego.dev" target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1.5 transition-opacity hover:opacity-80" style={{ opacity: 0.5 }}>
+            <button
+              onClick={() => setLeegoBig(true)}
+              className="flex items-center gap-1.5 transition-all hover:opacity-100 active:scale-95"
+              style={{ opacity: 0.6 }}
+            >
               <span>by</span>
-              <img src="/leego-logo-transparent.png" alt="Leego" className="h-4 w-auto object-contain" />
-            </a>
+              <img src="/leego-logo-transparent.png" alt="Leego" className="h-6 w-auto object-contain" />
+            </button>
           </div>
         </div>
       </footer>
