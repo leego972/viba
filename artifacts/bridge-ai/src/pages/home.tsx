@@ -20,25 +20,46 @@ export default function Home() {
     <div className="flex flex-col min-h-screen" style={{ background: CREAM, color: TEXT }}>
 
       {/* ── Top bar ── */}
-      <header className="px-6 h-14 flex items-center sticky top-0 z-50"
+      <header className="px-4 sm:px-6 h-14 flex items-center sticky top-0 z-50"
         style={{ background: "rgba(250,248,242,0.92)", backdropFilter: "blur(12px)", borderBottom: `1px solid ${BORDER}` }}>
-        <Link href="/" className="flex items-center">
+        <Link href="/" className="flex items-center shrink-0">
           <img src="/viba-logo.png" alt="VIBA" className="h-12 w-auto object-contain" />
         </Link>
-        <nav className="ml-auto flex items-center gap-2">
-          <Link href="/pricing">
-            <button className="text-sm px-4 h-9 rounded-lg transition-colors hover:bg-black/[0.04]" style={{ color: TEXT_MUT }}>Pricing</button>
+        <nav className="ml-auto flex items-center gap-1.5 sm:gap-2">
+          {/* Hidden on mobile — only show on sm+ */}
+          <Link href="/pricing" className="hidden sm:block">
+            <button className="text-sm px-3.5 h-9 rounded-lg font-medium transition-colors hover:bg-black/[0.05]"
+              style={{ color: TEXT_MUT }}>
+              Pricing
+            </button>
           </Link>
-          <Link href="/demo/proof-report">
-            <button className="text-sm px-4 h-9 rounded-lg transition-colors hover:bg-black/[0.04]" style={{ color: TEXT_MUT }}>Sample Report</button>
+          <Link href="/demo/proof-report" className="hidden sm:block">
+            <button className="text-sm px-3.5 h-9 rounded-lg font-medium transition-colors hover:bg-black/[0.05]"
+              style={{ color: TEXT_MUT }}>
+              Sample Report
+            </button>
           </Link>
+
+          {/* Sign in — always visible, pill style */}
           <Link href="/login">
-            <button className="text-sm px-4 h-9 rounded-lg border transition-colors" style={{ borderColor: BORDER, color: TEXT }}>Sign in</button>
+            <button
+              className="text-sm px-4 h-9 rounded-full font-medium border transition-all hover:bg-black/[0.04] active:scale-[0.97]"
+              style={{ borderColor: BORDER, color: TEXT, background: "transparent" }}>
+              Sign in
+            </button>
           </Link>
+
+          {/* Open Dashboard CTA — always visible */}
           <Link href="/dashboard">
-            <button className="text-sm px-5 h-9 rounded-lg font-semibold text-white transition-all hover:scale-[1.02]"
-              style={{ background: `linear-gradient(135deg, ${INDIGO} 0%, ${VIOLET} 100%)`, boxShadow: "0 0 16px rgba(99,102,241,0.25)" }}>
-              Open Dashboard
+            <button
+              className="text-sm h-9 rounded-full font-semibold text-white transition-all hover:scale-[1.03] active:scale-[0.97] flex items-center gap-1.5 px-4 sm:px-5"
+              style={{
+                background: `linear-gradient(135deg, ${INDIGO} 0%, ${VIOLET} 100%)`,
+                boxShadow: "0 2px 16px rgba(99,102,241,0.30)",
+              }}>
+              <span className="sm:hidden">Dashboard</span>
+              <span className="hidden sm:inline">Open Dashboard</span>
+              <ArrowRight className="h-3.5 w-3.5 shrink-0" />
             </button>
           </Link>
         </nav>
@@ -114,20 +135,20 @@ export default function Home() {
             <div className="mx-auto max-w-3xl rounded-2xl overflow-hidden shadow-2xl"
               style={{ border: "1px solid rgba(79,70,229,0.3)", background: "#111827" }}>
               {/* Title bar */}
-              <div className="flex items-center gap-3 px-5 py-3.5"
+              <div className="flex items-center gap-2 px-4 py-3"
                 style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "#0f172a" }}>
-                <div className="flex gap-1.5">
+                <div className="flex gap-1.5 shrink-0">
                   <div className="h-3 w-3 rounded-full" style={{ background: "#ef4444" }} />
                   <div className="h-3 w-3 rounded-full" style={{ background: "#f59e0b" }} />
                   <div className="h-3 w-3 rounded-full" style={{ background: "#22c55e" }} />
                 </div>
-                <span className="text-xs font-mono font-medium" style={{ color: "#94a3b8" }}>
-                  VIBA — Diagnostic Report · virelle.life · production
+                <span className="text-xs font-mono font-medium truncate" style={{ color: "#94a3b8" }}>
+                  <span className="hidden sm:inline">VIBA — Diagnostic Report · </span>virelle.life · production
                 </span>
-                <span className="ml-auto text-[10px] font-semibold rounded-full px-2 py-0.5 flex items-center gap-1"
+                <span className="ml-auto shrink-0 text-[10px] font-semibold rounded-full px-2 py-0.5 flex items-center gap-1 whitespace-nowrap"
                   style={{ background: "rgba(245,158,11,0.15)", color: "#fbbf24", border: "1px solid rgba(245,158,11,0.25)" }}>
-                  <span className="h-1.5 w-1.5 rounded-full animate-pulse" style={{ background: "#fbbf24" }} />
-                  READY WITH WARNINGS
+                  <span className="h-1.5 w-1.5 rounded-full animate-pulse shrink-0" style={{ background: "#fbbf24" }} />
+                  <span className="hidden xs:inline">READY WITH </span>WARNINGS
                 </span>
               </div>
 
@@ -222,25 +243,32 @@ export default function Home() {
               {/* Comparison table */}
               <div className="mx-auto max-w-2xl rounded-2xl overflow-hidden"
                 style={{ border: `1px solid ${BORDER}` }}>
-                <div className="grid grid-cols-3 text-xs font-semibold"
-                  style={{ background: CREAM_ALT, borderBottom: `1px solid ${BORDER}` }}>
-                  <div className="px-5 py-3" style={{ color: TEXT_MUT }}>Capability</div>
-                  <div className="px-5 py-3 text-center" style={{ color: "#ef4444", borderLeft: `1px solid ${BORDER}` }}>Generic AI chat</div>
-                  <div className="px-5 py-3 text-center" style={{ color: INDIGO, borderLeft: `1px solid ${BORDER}` }}>VIBA</div>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[480px] text-sm">
+                    <thead>
+                      <tr style={{ background: CREAM_ALT, borderBottom: `1px solid ${BORDER}` }}>
+                        <th className="px-4 py-3 text-left text-xs font-semibold w-[40%]" style={{ color: TEXT_MUT }}>Capability</th>
+                        <th className="px-4 py-3 text-center text-xs font-semibold w-[30%]" style={{ color: "#ef4444", borderLeft: `1px solid ${BORDER}` }}>Generic AI chat</th>
+                        <th className="px-4 py-3 text-center text-xs font-semibold w-[30%]" style={{ color: INDIGO, borderLeft: `1px solid ${BORDER}` }}>VIBA</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[
+                        ["Status honesty", "Says it's done", "Shows evidence or BLOCKED"],
+                        ["Missing checks", "Hides them", "Reports as WARNINGS"],
+                        ["Audit trail", "None", "Owner-readable report"],
+                        ["High-risk actions", "Executes silently", "Requires approval"],
+                        ["False READY status", "Common", "Architecturally prevented"],
+                      ].map(([cap, bad, good]) => (
+                        <tr key={cap} style={{ borderTop: `1px solid ${BORDER}`, background: CREAM_CARD }}>
+                          <td className="px-4 py-3 font-medium" style={{ color: TEXT }}>{cap}</td>
+                          <td className="px-4 py-3 text-center" style={{ color: "#9ca3af", borderLeft: `1px solid ${BORDER}` }}>{bad}</td>
+                          <td className="px-4 py-3 text-center font-medium" style={{ color: "#059669", borderLeft: `1px solid ${BORDER}` }}>{good}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-                {[
-                  ["Status honesty", "Says it's done", "Shows evidence or marks BLOCKED"],
-                  ["Missing checks", "Hides them", "Reports as WARNINGS honestly"],
-                  ["Audit trail", "None", "Owner-readable proof report"],
-                  ["High-risk actions", "Executes silently", "Requires explicit approval"],
-                  ["False READY status", "Common", "Architecturally prevented"],
-                ].map(([cap, bad, good]) => (
-                  <div key={cap} className="grid grid-cols-3 text-sm" style={{ borderTop: `1px solid ${BORDER}`, background: CREAM_CARD }}>
-                    <div className="px-5 py-3 font-medium" style={{ color: TEXT }}>{cap}</div>
-                    <div className="px-5 py-3 text-center" style={{ color: "#9ca3af", borderLeft: `1px solid ${BORDER}` }}>{bad}</div>
-                    <div className="px-5 py-3 text-center font-medium" style={{ color: "#059669", borderLeft: `1px solid ${BORDER}` }}>{good}</div>
-                  </div>
-                ))}
               </div>
             </div>
           </div>
