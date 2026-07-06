@@ -176,25 +176,20 @@ function ProviderSection() {
             <Cpu className={`h-4 w-4 ${provider.status === "configured" ? "text-emerald-400" : "text-muted-foreground"}`} />
           </div>
 
-          {/* Name + badge — fills remaining space, truncates cleanly */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium leading-tight truncate">{provider.label}</span>
-              <StatusBadge status={provider.status} />
-            </div>
-            <p className="text-xs text-muted-foreground truncate mt-0.5">{provider.description}</p>
+          {/* Name + badge stacked — badge on its own line so name never gets squeezed */}
+          <div className="flex-1 min-w-0 space-y-0.5">
+            <p className="text-sm font-medium leading-tight truncate">{provider.label}</p>
+            <StatusBadge status={provider.status} />
           </div>
 
-          {/* Controls — fixed width, never shrinks, never overlaps */}
+          {/* Controls — right-pinned, never overlaps the name column */}
           <div className="flex items-center gap-2 shrink-0">
             <Switch
               checked={ls.enabled}
               onCheckedChange={(v) => updateLocal(provider.id, { enabled: v })}
             />
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2.5 text-xs text-muted-foreground hover:text-foreground whitespace-nowrap"
+            <button
+              className="text-xs text-muted-foreground hover:text-foreground whitespace-nowrap px-1"
               onClick={() => {
                 const opening = !(expanded[provider.id] ?? false);
                 setExpanded(prev => ({ ...prev, [provider.id]: opening }));
@@ -202,7 +197,7 @@ function ProviderSection() {
               }}
             >
               {isExpanded ? "Close" : (provider.status === "not_configured" ? "Connect" : "Edit")}
-            </Button>
+            </button>
           </div>
         </div>
 
