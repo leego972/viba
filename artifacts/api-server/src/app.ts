@@ -96,6 +96,8 @@ app.post("/api/sessions/:id/run-next", agentLimiter);
 app.post("/api/sessions/:id/run-full", agentLimiter);
 app.use("/api/admin", apiLimiter, requireAdmin, adminRouter);
 
+app.get("/api/healthz", (_req, res) => { res.json({ status: "ok" }); });
+
 app.use("/api/deploy/github", apiLimiter, githubDeployRoutes);
 app.use("/api/deploy", apiLimiter, accessTokenMiddleware, deployRoutes);
 
