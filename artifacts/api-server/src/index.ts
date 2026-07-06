@@ -395,6 +395,192 @@ async function runStartupMigrations(): Promise<void> {
     END $$
   `);
 
+  // ── deploy engine: Render-backed columns (only when deploy tables exist) ────
+  await pool.query(`
+    DO $$ BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables WHERE table_name = 'viba_deploy_projects'
+      ) THEN
+        ALTER TABLE viba_deploy_projects ADD COLUMN IF NOT EXISTS render_service_id TEXT;
+        ALTER TABLE viba_deploy_projects ADD COLUMN IF NOT EXISTS render_region TEXT NOT NULL DEFAULT 'oregon';
+        ALTER TABLE viba_deploy_projects ADD COLUMN IF NOT EXISTS render_plan TEXT NOT NULL DEFAULT 'starter';
+      END IF;
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables WHERE table_name = 'viba_deployments'
+      ) THEN
+        ALTER TABLE viba_deployments ADD COLUMN IF NOT EXISTS render_deploy_id TEXT;
+      END IF;
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables WHERE table_name = 'viba_deploy_addons'
+      ) THEN
+        ALTER TABLE viba_deploy_addons ADD COLUMN IF NOT EXISTS render_resource_id TEXT;
+      END IF;
+    END $$
+  `);
+
+  // ── marketing tables (autonomous growth engine) ──────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS marketing_settings (
+      id         SERIAL PRIMARY KEY,
+      key        TEXT   NOT NULL UNIQUE,
+      value      TEXT,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS marketing_budgets (
+      id               SERIAL PRIMARY KEY,
+      month            TEXT   NOT NULL,
+      channel          TEXT   NOT NULL,
+      allocated_amount TEXT   NOT NULL DEFAULT '0',
+      spent_amount     TEXT   NOT NULL DEFAULT '0',
+      reasoning        TEXT,
+      created_at       TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS marketing_campaigns (
+      id              SERIAL PRIMARY KEY,
+      name            TEXT   NOT NULL,
+      channel         TEXT   NOT NULL,
+      status          TEXT   NOT NULL DEFAULT 'draft',
+      type            TEXT   NOT NULL DEFAULT 'awareness',
+      target_audience JSONB,
+      daily_budget    INTEGER DEFAULT 0,
+      budget          INTEGER DEFAULT 0,
+      start_date      TIMESTAMPTZ,
+      end_date        TIMESTAMPTZ,
+      ai_strategy     TEXT,
+      created_at      TIMESTAMPTZ DEFAULT NOW(),
+      updated_at      TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS marketing_content (
+      id           SERIAL PRIMARY KEY,
+      campaign_id  INTEGER,
+      platform     TEXT   NOT NULL,
+      type         TEXT   NOT NULL DEFAULT 'organic_post',
+      headline     TEXT,
+      body         TEXT,
+      hashtags     JSONB  DEFAULT '[]',
+      call_to_action TEXT,
+      image_prompt TEXT,
+      image_url    TEXT,
+      published_url TEXT,
+      status       TEXT   NOT NULL DEFAULT 'draft',
+      published_at TIMESTAMPTZ,
+      created_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS marketing_performance (
+      id          SERIAL PRIMARY KEY,
+      campaign_id INTEGER,
+      channel     TEXT   NOT NULL,
+      date        TIMESTAMPTZ DEFAULT NOW(),
+      impressions INTEGER DEFAULT 0,
+      clicks      INTEGER DEFAULT 0,
+      conversions INTEGER DEFAULT 0,
+      spend       NUMERIC(10,2) DEFAULT 0,
+      revenue     NUMERIC(10,2) DEFAULT 0,
+      created_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS marketing_activity_log (
+      id          SERIAL PRIMARY KEY,
+      action      TEXT   NOT NULL,
+      description TEXT,
+      details     JSONB,
+      metadata    JSONB,
+      status      TEXT   DEFAULT 'success',
+      created_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  // ── content creator tables ────────────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS content_creator_campaigns (
+      id                  SERIAL PRIMARY KEY,
+      name                TEXT   NOT NULL,
+      description         TEXT,
+      objective           TEXT,
+      target_audience     TEXT,
+      platforms           JSONB  DEFAULT '[]',
+      seo_keywords        JSONB  DEFAULT '[]',
+      brand_voice         TEXT,
+      ai_strategy         TEXT,
+      status              TEXT   NOT NULL DEFAULT 'draft',
+      total_pieces        INTEGER DEFAULT 0,
+      published_pieces    INTEGER DEFAULT 0,
+      tiktok_linked       BOOLEAN DEFAULT false,
+      seo_linked          BOOLEAN DEFAULT true,
+      advertising_linked  BOOLEAN DEFAULT false,
+      start_date          TIMESTAMPTZ,
+      end_date            TIMESTAMPTZ,
+      created_at          TIMESTAMPTZ DEFAULT NOW(),
+      updated_at          TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS content_creator_pieces (
+      id                SERIAL PRIMARY KEY,
+      campaign_id       INTEGER,
+      platform          TEXT   NOT NULL,
+      content_type      TEXT   NOT NULL,
+      title             TEXT,
+      headline          TEXT,
+      body              TEXT,
+      call_to_action    TEXT,
+      hashtags          JSONB  DEFAULT '[]',
+      hook              TEXT,
+      video_script      TEXT,
+      visual_directions TEXT,
+      seo_keywords      JSONB  DEFAULT '[]',
+      image_prompt      TEXT,
+      media_url         TEXT,
+      seo_score         INTEGER DEFAULT 0,
+      quality_score     INTEGER DEFAULT 0,
+      status            TEXT   NOT NULL DEFAULT 'draft',
+      ai_prompt         TEXT,
+      ai_model          TEXT,
+      generation_ms     INTEGER,
+      published_at      TIMESTAMPTZ,
+      created_at        TIMESTAMPTZ DEFAULT NOW(),
+      updated_at        TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS content_creator_schedules (
+      id           SERIAL PRIMARY KEY,
+      piece_id     INTEGER NOT NULL,
+      campaign_id  INTEGER,
+      platform     TEXT    NOT NULL,
+      scheduled_at TIMESTAMPTZ NOT NULL,
+      status       TEXT    NOT NULL DEFAULT 'pending',
+      published_at TIMESTAMPTZ,
+      error        TEXT,
+      created_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS content_creator_analytics (
+      id               SERIAL PRIMARY KEY,
+      piece_id         INTEGER NOT NULL,
+      campaign_id      INTEGER,
+      platform         TEXT    NOT NULL,
+      impressions      INTEGER DEFAULT 0,
+      likes            INTEGER DEFAULT 0,
+      comments         INTEGER DEFAULT 0,
+      shares           INTEGER DEFAULT 0,
+      clicks           INTEGER DEFAULT 0,
+      engagement_rate  TEXT    DEFAULT '0',
+      recorded_at      TIMESTAMPTZ DEFAULT NOW(),
+      created_at       TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
   logger.info("Startup migrations complete");
 }
 
