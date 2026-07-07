@@ -4,7 +4,6 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Activity,
   AlertTriangle,
@@ -22,10 +21,8 @@ import {
   Play,
   RefreshCw,
   Route,
-  Send,
   ShieldCheck,
   Sparkles,
-  Square,
   TestTube2,
   Wrench,
   Zap,
@@ -326,7 +323,6 @@ export default function ToolConsolePage() {
   const [providers, setProviders] = useState<Array<{ id: string; status: string; label?: string }>>([]);
   const [route, setRoute] = useState<RouteResponse | null>(null);
   const [jobType, setJobType] = useState("repair");
-  const [intervention, setIntervention] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -522,9 +518,15 @@ export default function ToolConsolePage() {
                       <p className="mt-2 text-xs leading-relaxed text-muted-foreground">VIBA does not disappear into a black box. Each stage tells the user what role is moving, what tool is being prepared, and where proof must appear.</p>
                     </div>
                     <div className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4">
-                      <div className="text-sm font-semibold">What the user controls</div>
-                      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">The owner can change direction, pause the work, or add instructions without losing the mission context.</p>
+                      <div className="text-sm font-semibold">Where the user steers</div>
+                      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">Live instructions and stops happen inside the active session workspace, where VIBA already keeps the mission context.</p>
                     </div>
+                    <Link href="/sessions/new">
+                      <Button className="w-full gap-2">
+                        <Play className="h-4 w-4" />
+                        Start a controlled mission
+                      </Button>
+                    </Link>
                     <Link href="/agent-console">
                       <Button variant="secondary" className="w-full gap-2">
                         <Code2 className="h-4 w-4" />
@@ -573,29 +575,28 @@ export default function ToolConsolePage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <MessageSquare className="h-4 w-4 text-primary" />
-                    Owner command panel
+                    Owner command path
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <Textarea
-                    value={intervention}
-                    onChange={(event) => setIntervention(event.target.value)}
-                    placeholder="Give the order: change direction, avoid a file, prioritise design, stop before deploy, demand proof…"
-                    className="min-h-32 bg-black/20"
-                  />
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button variant="outline" className="gap-2">
-                      <Square className="h-4 w-4" />
-                      Hold mission
-                    </Button>
-                    <Button className="gap-2" disabled={!intervention.trim()}>
-                      <Send className="h-4 w-4" />
-                      Add command
-                    </Button>
+                  <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+                    <div className="text-sm font-semibold">Give orders inside a mission</div>
+                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                      To comment, change direction, pause, or demand proof, start a VIBA session. The session workspace is the live control surface for user instructions.
+                    </p>
                   </div>
-                  <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-100/90">
-                    These controls are intentionally honest: Replit still needs to wire them to the active session message and stop APIs before they become live controls.
-                  </div>
+                  <Link href="/sessions/new">
+                    <Button className="w-full gap-2">
+                      <Play className="h-4 w-4" />
+                      Start mission
+                    </Button>
+                  </Link>
+                  <Link href="/dashboard">
+                    <Button variant="outline" className="w-full gap-2">
+                      <Activity className="h-4 w-4" />
+                      View sessions
+                    </Button>
+                  </Link>
                 </CardContent>
               </Card>
 
