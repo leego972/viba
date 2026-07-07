@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Navbar } from "@/components/layout/Navbar";
 import { Badge } from "@/components/ui/badge";
@@ -29,11 +29,12 @@ import {
   TestTube2,
   Wrench,
   Zap,
+  type LucideIcon,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-type IconComponent = ComponentType<{ className?: string }>;
+type IconComponent = LucideIcon;
 
 type CapabilityStatus =
   | "executable"
