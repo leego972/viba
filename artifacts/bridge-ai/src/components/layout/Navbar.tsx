@@ -32,7 +32,7 @@ const GROUPS: NavGroup[] = [
       { href: "/workbench",        label: "Workbench",         icon: FlaskConical },
       { href: "/agent-console",    label: "Agent Console",     icon: Terminal },
       { href: "/tool-console",     label: "Tool Console",      icon: Wrench },
-      { href: "/bridge",           label: "Bridge",            icon: Radio },
+      { href: "/bridge",           label: "Provider Hub",      icon: Radio },
       { href: "/assisted-browser", label: "Assisted Browser",  icon: Bot },
     ],
   },
