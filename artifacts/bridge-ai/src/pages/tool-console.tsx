@@ -101,7 +101,6 @@ interface MetricCardDefinition {
   label: string;
   value: number;
   icon: IconComponent;
-  tone: string;
 }
 
 interface AgentNodeDefinition {
@@ -168,7 +167,7 @@ function countByStatus(items: CapabilityRecord[]): Record<string, number> {
 }
 
 function stageForTool(toolId: string): { label: string; icon: IconComponent; tone: string } {
-  if (toolId.includes("diagnose") || toolId.includes("blueprint")) return { label: "Understand", icon: Brain, tone: "reads the battlefield" };
+  if (toolId.includes("diagnose") || toolId.includes("blueprint")) return { label: "Understand", icon: Brain, tone: "reads the work" };
   if (toolId.includes("plan") || toolId.includes("criteria") || toolId.includes("spec")) return { label: "Design", icon: Layers, tone: "sets the order" };
   if (toolId.includes("github") || toolId.includes("patch")) return { label: "Change", icon: GitBranch, tone: "prepares movement" };
   if (toolId.includes("test") || toolId.includes("build") || toolId.includes("gate")) return { label: "Verify", icon: TestTube2, tone: "checks the proof" };
@@ -356,7 +355,7 @@ export default function ToolConsolePage() {
         setCapabilities(payload.capabilities ?? []);
       } else {
         setCapabilities([]);
-        setError("Capability route is not mounted yet. VIBA is showing the cockpit shell, not pretending unavailable backend data is live.");
+        setError("Capability route is not mounted yet. VIBA is showing the command surface, not pretending unavailable backend data is live.");
       }
 
       if (invRes.ok) {
@@ -400,11 +399,11 @@ export default function ToolConsolePage() {
   const planningCount = counts.planning_only ?? 0;
   const warnings = (counts.adapter_required ?? 0) + (counts.blocked ?? 0) + (counts.failed ?? 0);
   const metrics: MetricCardDefinition[] = [
-    { label: "Can Act", value: executableCount, icon: CheckCircle2, tone: "ready" },
-    { label: "Can Plan", value: planningCount, icon: Brain, tone: "thinking" },
-    { label: "Need Keys", value: counts.credential_required ?? 0, icon: ShieldCheck, tone: "locked" },
-    { label: "Need Build", value: warnings, icon: Wrench, tone: "blocked" },
-    { label: "Providers", value: liveProviders, icon: Bot, tone: "online" },
+    { label: "Can Act", value: executableCount, icon: CheckCircle2 },
+    { label: "Can Plan", value: planningCount, icon: Brain },
+    { label: "Need Keys", value: counts.credential_required ?? 0, icon: ShieldCheck },
+    { label: "Need Build", value: warnings, icon: Wrench },
+    { label: "Providers", value: liveProviders, icon: Bot },
   ];
 
   const recentEvents = invocations.slice(0, 8);
@@ -415,7 +414,13 @@ export default function ToolConsolePage() {
       <Navbar />
       <div className="relative overflow-hidden">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(99,102,241,0.20),transparent_28%),radial-gradient(circle_at_80%_0%,rgba(14,165,233,0.16),transparent_30%),radial-gradient(circle_at_50%_100%,rgba(168,85,247,0.16),transparent_30%)]" />
-        <div className="pointer-events-none absolute inset-0 opacity-[0.03] [background-image:linear-gradient(to_right,#fff_1px,transparent_1px),linear-gradient(to_bottom,#fff_1px,transparent_1px)] [background-size:42px_42px]" />
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage: "linear-gradient(to right, #fff 1px, transparent 1px), linear-gradient(to bottom, #fff 1px, transparent 1px)",
+            backgroundSize: "42px 42px",
+          }}
+        />
 
         <div className="relative mx-auto max-w-screen-2xl px-4 py-6 space-y-6">
           <div className="overflow-hidden rounded-[2rem] border border-white/[0.08] bg-black/25 p-5 shadow-2xl backdrop-blur-xl md:p-7">
@@ -459,7 +464,7 @@ export default function ToolConsolePage() {
                   {metrics.map((metric) => <MetricCard key={metric.label} item={metric} />)}
                 </div>
 
-                <div className="rounded-[1.5rem] border border-primary/15 bg-primary/[0.04] p-4">
+                <div className="rounded-[1.5rem] border border-primary/15 bg-primary/5 p-4">
                   <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div className="flex items-center gap-3">
                       <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-primary/25 bg-primary/10 text-primary">
