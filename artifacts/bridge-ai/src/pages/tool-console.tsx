@@ -1,10 +1,15 @@
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "wouter";
 import { Navbar } from "@/components/layout/Navbar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Wrench, AlertTriangle, CheckCircle2, XCircle, Clock, ShieldAlert, Loader2, RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+import { Activity, AlertTriangle, Bot, Brain, CheckCircle2, CircleDot, Clock, Code2, Eye, FileText, GitBranch, Layers, MessageSquare, Play, RefreshCw, Route, Send, ShieldCheck, Sparkles, Square, TestTube2, Wrench, Zap } from "lucide-react";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+type CapabilityStatus = "executable" | "planning_only" | "credential_required" | "external_setup_required" | "adapter_required" | "failed" | "blocked";
 
 interface ToolEntry {
   toolId: string;
@@ -18,336 +23,185 @@ interface ToolEntry {
   rawValuesReturned: false;
 }
 
-interface Invocation {
-  id: number;
-  tool_id: string;
-  toolLabel: string;
-  agent_name: string | null;
-  risk_level: string;
-  status: string;
-  dry_run: boolean;
-  approval_required: boolean;
-  approved_at: string | null;
-  result_redacted: Record<string, unknown> | null;
-  error: string | null;
-  created_at: string;
+interface CapabilityRecord {
+  toolId: string;
+  label: string;
+  category: string;
+  status: CapabilityStatus;
+  canRunNow: boolean;
+  truthfulClaim: string;
+  missingForFullExecution: string[];
   rawValuesReturned: false;
 }
 
-interface PendingApproval {
-  toolId: string;
-  toolLabel: string;
-  requestedByAgent: string;
-  action: string;
-  riskLevel: string;
-  dryRunResult?: Record<string, unknown>;
-  invocationId?: number;
+interface Invocation { id?: number; tool_id?: string; toolLabel?: string; status?: string; risk_level?: string; created_at?: string; agent_name?: string | null }
+interface RouteResponse { jobType?: string; sequence?: string[]; toolSequence?: string[]; rawValuesReturned?: false }
+interface ProviderResponse { providers?: Array<{ id: string; status: string; label?: string }> }
+
+const STATUS_STYLE: Record<string, string> = {
+  executable: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+  planning_only: "border-blue-500/30 bg-blue-500/10 text-blue-300",
+  credential_required: "border-amber-500/30 bg-amber-500/10 text-amber-300",
+  external_setup_required: "border-purple-500/30 bg-purple-500/10 text-purple-300",
+  adapter_required: "border-slate-500/30 bg-slate-500/10 text-slate-300",
+  failed: "border-red-500/30 bg-red-500/10 text-red-300",
+  blocked: "border-red-500/30 bg-red-500/10 text-red-300",
+};
+
+const WORKFLOWS = [
+  { type: "repair", label: "Repair", icon: Wrench, prompt: "Diagnose, plan, verify, and produce evidence before declaring success." },
+  { type: "design", label: "Design", icon: Eye, prompt: "Improve clarity, visual hierarchy, trust, mobile layout, and conversion." },
+  { type: "upgrade", label: "Upgrade", icon: Sparkles, prompt: "Improve architecture, reliability, safety gates, user experience, and monitoring." },
+  { type: "deploy", label: "Deploy", icon: Zap, prompt: "Check readiness, provider setup, verification, rollback notes, and evidence." },
+];
+
+function countByStatus(items: CapabilityRecord[]) {
+  return items.reduce<Record<string, number>>((acc, item) => {
+    acc[item.status] = (acc[item.status] ?? 0) + 1;
+    return acc;
+  }, {});
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const CATEGORY_ORDER = ["repository", "deployment", "payments", "dns", "email", "browser", "build", "security", "vault", "ai", "storage", "reports"];
-
-function riskColor(level: string) {
-  switch (level) {
-    case "read_only": return "bg-emerald-500/15 text-emerald-400 border-emerald-500/30";
-    case "low":       return "bg-blue-500/15 text-blue-400 border-blue-500/30";
-    case "medium":    return "bg-amber-500/15 text-amber-400 border-amber-500/30";
-    case "high":      return "bg-orange-500/15 text-orange-400 border-orange-500/30";
-    case "destructive": return "bg-red-500/15 text-red-400 border-red-500/30";
-    default: return "bg-muted text-muted-foreground";
-  }
+function stageForTool(toolId: string) {
+  if (toolId.includes("diagnose") || toolId.includes("blueprint")) return { label: "Understand", icon: Brain };
+  if (toolId.includes("plan") || toolId.includes("criteria") || toolId.includes("spec")) return { label: "Design", icon: Layers };
+  if (toolId.includes("github") || toolId.includes("patch")) return { label: "Change", icon: GitBranch };
+  if (toolId.includes("test") || toolId.includes("build") || toolId.includes("gate")) return { label: "Verify", icon: TestTube2 };
+  if (toolId.includes("report")) return { label: "Prove", icon: FileText };
+  return { label: "Act", icon: CircleDot };
 }
 
-function credIcon(status: string) {
-  switch (status) {
-    case "configured": return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />;
-    case "missing":    return <XCircle className="h-3.5 w-3.5 text-red-400" />;
-    default:           return <CheckCircle2 className="h-3.5 w-3.5 text-muted-foreground/40" />;
-  }
-}
-
-function statusIcon(status: string) {
-  switch (status) {
-    case "executed":           return <CheckCircle2 className="h-4 w-4 text-emerald-400" />;
-    case "needs_user_approval": return <ShieldAlert className="h-4 w-4 text-amber-400" />;
-    case "dry_run_required":   return <Clock className="h-4 w-4 text-blue-400" />;
-    case "missing_credential": return <XCircle className="h-4 w-4 text-red-400" />;
-    case "blocked":
-    case "scope_denied":       return <AlertTriangle className="h-4 w-4 text-red-400" />;
-    case "failed":             return <XCircle className="h-4 w-4 text-red-400" />;
-    default:                   return <Clock className="h-4 w-4 text-muted-foreground" />;
-  }
-}
-
-function rel(ts: string) {
-  const diff = (Date.now() - new Date(ts).getTime()) / 1000;
-  if (diff < 60) return `${Math.round(diff)}s ago`;
-  if (diff < 3600) return `${Math.round(diff / 60)}m ago`;
-  return `${Math.round(diff / 3600)}h ago`;
-}
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function ToolCard({ tool }: { tool: ToolEntry }) {
-  const [open, setOpen] = useState(false);
+function BrainOrb({ active, warnings }: { active: number; warnings: number }) {
   return (
-    <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] transition-colors">
-      <button onClick={() => setOpen(!open)} className="w-full flex items-center gap-3 px-4 py-3 text-left">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-foreground truncate">{tool.label}</p>
-          <p className="text-xs text-muted-foreground font-mono">{tool.toolId}</p>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {credIcon(tool.credentialStatus)}
-          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${riskColor(tool.riskLevel)}`}>
-            {tool.riskLevel.replace("_", " ")}
-          </Badge>
-          {open ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
-        </div>
-      </button>
-      {open && (
-        <div className="px-4 pb-3 border-t border-white/[0.04] pt-3 space-y-1.5">
-          <div className="flex flex-wrap gap-1.5">
-            {tool.requiresApproval && <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-500/30 bg-amber-500/10">approval required</Badge>}
-            {tool.supportsDryRun && <Badge variant="outline" className="text-[10px] text-blue-400 border-blue-500/30 bg-blue-500/10">dry-run supported</Badge>}
-            {tool.requiresSafeBuild && <Badge variant="outline" className="text-[10px] text-purple-400 border-purple-500/30 bg-purple-500/10">safe build required</Badge>}
-            <Badge variant="outline" className="text-[10px] text-muted-foreground">
-              cred: {tool.credentialStatus.replace("_", " ")}
-            </Badge>
+    <div className="relative mx-auto flex h-64 w-64 items-center justify-center">
+      <div className="absolute inset-0 rounded-full bg-primary/10 blur-2xl" />
+      <div className="absolute h-64 w-64 rounded-full border border-primary/20 animate-pulse" />
+      <div className="absolute h-48 w-48 rounded-full border border-blue-400/20" />
+      <div className="absolute h-32 w-32 rounded-full border border-purple-400/20" />
+      <div className="absolute -top-1 left-1/2 h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_20px_rgba(52,211,153,.9)]" />
+      <div className="absolute right-8 top-20 h-2.5 w-2.5 rounded-full bg-blue-400 shadow-[0_0_20px_rgba(96,165,250,.9)]" />
+      <div className="absolute bottom-8 left-14 h-2.5 w-2.5 rounded-full bg-purple-400 shadow-[0_0_20px_rgba(192,132,252,.9)]" />
+      <div className="relative z-10 flex h-28 w-28 flex-col items-center justify-center rounded-full border border-white/10 bg-black/40 shadow-2xl backdrop-blur-xl">
+        <Brain className={warnings > 0 ? "h-9 w-9 text-amber-300" : active > 0 ? "h-9 w-9 text-blue-300" : "h-9 w-9 text-emerald-300"} />
+        <div className="mt-2 text-[10px] uppercase tracking-[0.25em] text-muted-foreground">Brain</div>
+      </div>
+    </div>
+  );
+}
+
+function WorkflowRail({ route }: { route: RouteResponse | null }) {
+  const sequence = route?.toolSequence ?? route?.sequence ?? ["builder.project.blueprint", "builder.feature.plan", "builder.patch.plan", "builder.test.plan", "builder.release.gate"];
+  return (
+    <div className="space-y-3">
+      {sequence.map((toolId, index) => {
+        const stage = stageForTool(toolId);
+        const Icon = stage.icon;
+        return (
+          <div key={`${toolId}-${index}`} className="flex gap-3 rounded-xl border border-white/[0.06] bg-white/[0.025] p-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary"><Icon className="h-4 w-4" /></div>
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{index + 1}. {stage.label}</div>
+              <div className="mt-1 truncate font-mono text-xs text-foreground/80">{toolId}</div>
+            </div>
           </div>
-          <p className="text-xs text-muted-foreground italic">rawValuesReturned: false — no secrets ever exposed.</p>
-        </div>
-      )}
+        );
+      })}
     </div>
   );
 }
 
-function InvocationRow({ inv }: { inv: Invocation }) {
+function CapabilityCard({ item }: { item: CapabilityRecord }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg border border-white/[0.04] bg-white/[0.015] hover:bg-white/[0.03] transition-colors">
-      <div className="shrink-0">{statusIcon(inv.status)}</div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-foreground truncate">{inv.toolLabel}</p>
-        <p className="text-xs text-muted-foreground">
-          {inv.agent_name ? `${inv.agent_name} agent` : "user"} · {inv.dry_run ? "dry-run · " : ""}{inv.status.replace(/_/g, " ")}
-          {inv.approval_required && inv.approved_at ? " · approved" : inv.approval_required ? " · pending approval" : ""}
-        </p>
+    <div className="rounded-xl border border-white/[0.06] bg-white/[0.025] p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0"><div className="truncate text-sm font-medium">{item.label}</div><div className="truncate font-mono text-[11px] text-muted-foreground">{item.toolId}</div></div>
+        <Badge variant="outline" className={`shrink-0 text-[10px] ${STATUS_STYLE[item.status] ?? STATUS_STYLE.blocked}`}>{item.status.replace(/_/g, " ")}</Badge>
       </div>
-      <div className="shrink-0 flex items-center gap-2">
-        <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${riskColor(inv.risk_level)}`}>
-          {inv.risk_level.replace("_", " ")}
-        </Badge>
-        <span className="text-xs text-muted-foreground">{rel(inv.created_at)}</span>
-      </div>
+      <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{item.truthfulClaim}</p>
     </div>
   );
 }
-
-function ApprovalPanel({ pending, onApprove, onDeny }: { pending: PendingApproval; onApprove: () => void; onDeny: () => void }) {
-  return (
-    <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-5 space-y-4">
-      <div className="flex items-start gap-3">
-        <ShieldAlert className="h-5 w-5 text-amber-400 mt-0.5 shrink-0" />
-        <div>
-          <p className="text-sm font-semibold text-amber-300">Approval Required</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Review the tool request before allowing execution.</p>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3 text-sm">
-        <div><span className="text-muted-foreground text-xs">Tool</span><p className="font-medium text-foreground">{pending.toolLabel}</p></div>
-        <div><span className="text-muted-foreground text-xs">Requested by</span><p className="font-medium text-foreground capitalize">{pending.requestedByAgent} agent</p></div>
-        <div><span className="text-muted-foreground text-xs">Action</span><p className="font-mono text-xs text-foreground">{pending.action}</p></div>
-        <div><span className="text-muted-foreground text-xs">Risk</span><Badge variant="outline" className={`text-[10px] ${riskColor(pending.riskLevel)}`}>{pending.riskLevel.replace("_", " ")}</Badge></div>
-      </div>
-      {pending.dryRunResult && (
-        <div className="rounded-lg bg-black/30 border border-white/[0.06] p-3">
-          <p className="text-xs text-muted-foreground mb-1 font-medium">Dry-run result</p>
-          <p className="text-xs text-foreground/80 font-mono whitespace-pre-wrap">{JSON.stringify(pending.dryRunResult, null, 2)}</p>
-        </div>
-      )}
-      <p className="text-xs text-muted-foreground italic">No raw credentials are shown. All secrets stay encrypted in the vault.</p>
-      <div className="flex gap-3">
-        <Button onClick={onApprove} size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white border-0">
-          <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Approve & run
-        </Button>
-        <Button onClick={onDeny} size="sm" variant="outline" className="border-red-500/30 text-red-400 hover:bg-red-500/10">
-          <XCircle className="h-3.5 w-3.5 mr-1.5" /> Deny
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-// ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function ToolConsolePage() {
   const [tools, setTools] = useState<ToolEntry[]>([]);
+  const [capabilities, setCapabilities] = useState<CapabilityRecord[]>([]);
   const [invocations, setInvocations] = useState<Invocation[]>([]);
-  const [pending, setPending] = useState<PendingApproval | null>(null);
+  const [providers, setProviders] = useState<ProviderResponse["providers"]>([]);
+  const [route, setRoute] = useState<RouteResponse | null>(null);
+  const [jobType, setJobType] = useState("repair");
+  const [intervention, setIntervention] = useState("");
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [activeCategory, setActiveCategory] = useState<string>("all");
   const [error, setError] = useState<string | null>(null);
 
-  const fetchAll = useCallback(async (silent = false) => {
+  const fetchBrain = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
-    setRefreshing(true);
     setError(null);
     try {
-      const [toolsRes, invRes] = await Promise.all([
-        fetch("/api/tools", { credentials: "include" }),
-        fetch("/api/tools/invocations?limit=30", { credentials: "include" }),
+      const [toolsRes, capRes, invRes, routeRes, providerRes] = await Promise.all([
+        fetch(`${BASE}/api/tools`, { credentials: "include" }),
+        fetch(`${BASE}/api/tools/capabilities`, { credentials: "include" }),
+        fetch(`${BASE}/api/tools/invocations?limit=20`, { credentials: "include" }),
+        fetch(`${BASE}/api/tools/route-job?type=${encodeURIComponent(jobType)}`, { credentials: "include" }),
+        fetch(`${BASE}/api/providers`, { credentials: "include" }),
       ]);
-      if (toolsRes.ok) {
-        const d = await toolsRes.json() as { tools: ToolEntry[] };
-        setTools(d.tools ?? []);
-      }
-      if (invRes.ok) {
-        const d = await invRes.json() as { invocations: Invocation[] };
-        setInvocations(d.invocations ?? []);
-      }
+      setTools(toolsRes.ok ? ((await toolsRes.json()) as { tools?: ToolEntry[] }).tools ?? [] : []);
+      setCapabilities(capRes.ok ? ((await capRes.json()) as { capabilities?: CapabilityRecord[] }).capabilities ?? [] : []);
+      setInvocations(invRes.ok ? ((await invRes.json()) as { invocations?: Invocation[] }).invocations ?? [] : []);
+      setRoute(routeRes.ok ? ((await routeRes.json()) as RouteResponse) : null);
+      setProviders(providerRes.ok ? ((await providerRes.json()) as ProviderResponse).providers ?? [] : []);
+      if (!capRes.ok) setError("Capability route is not mounted yet. The screen works as a visual shell, but Replit must wire /api/tools/capabilities for full live status.");
     } catch {
-      setError("Failed to load tool data. Ensure the API server is running.");
+      setError("Could not load live brain data. Check API server and session auth.");
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
-  }, []);
+  }, [jobType]);
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => { void fetchBrain(); }, [fetchBrain]);
+  useEffect(() => { const timer = setInterval(() => void fetchBrain(true), 5000); return () => clearInterval(timer); }, [fetchBrain]);
 
-  // Poll invocations every 5s
-  useEffect(() => {
-    const iv = setInterval(() => fetchAll(true), 5000);
-    return () => clearInterval(iv);
-  }, [fetchAll]);
-
-  const categories = ["all", ...CATEGORY_ORDER.filter((c) => tools.some((t) => t.category === c))];
-  const visibleTools = activeCategory === "all" ? tools : tools.filter((t) => t.category === activeCategory);
-
-  const categoryStats = (cat: string) => {
-    const subset = cat === "all" ? tools : tools.filter((t) => t.category === cat);
-    return {
-      total: subset.length,
-      missing: subset.filter((t) => t.credentialStatus === "missing").length,
-    };
-  };
+  const counts = useMemo(() => countByStatus(capabilities), [capabilities]);
+  const selected = WORKFLOWS.find((w) => w.type === jobType) ?? WORKFLOWS[0];
+  const SelectedIcon = selected.icon;
+  const liveProviders = (providers ?? []).filter((p) => p.status === "configured").length;
+  const warnings = (counts.adapter_required ?? 0) + (counts.blocked ?? 0) + (counts.failed ?? 0);
 
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      <div className="container max-w-screen-xl mx-auto px-4 py-8 space-y-8">
-
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 border border-primary/20">
-              <Wrench className="h-5 w-5 text-primary" />
-            </div>
+      <div className="relative overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(99,102,241,0.16),transparent_28%),radial-gradient(circle_at_80%_0%,rgba(14,165,233,0.12),transparent_30%),radial-gradient(circle_at_50%_100%,rgba(168,85,247,0.12),transparent_30%)]" />
+        <div className="relative mx-auto max-w-screen-2xl px-4 py-6 space-y-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <h1 className="text-xl font-bold text-foreground">Tool Console</h1>
-              <p className="text-sm text-muted-foreground">VIBA agents use tools through a controlled broker. Sensitive actions require approval, credentials stay encrypted in the vault, and every tool use is logged.</p>
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-primary"><Sparkles className="h-4 w-4" /> Live AI command surface</div>
+              <h1 className="mt-2 text-3xl font-bold tracking-tight md:text-5xl">The VIBA Brain</h1>
+              <p className="mt-2 max-w-3xl text-sm text-muted-foreground md:text-base">A captivating operator screen where users can watch agent work, follow the tool route, see proof status, and interrupt at any time.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={() => void fetchBrain()} disabled={loading} className="gap-2"><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Refresh</Button>
+              <Link href="/sessions/new"><Button className="gap-2"><Play className="h-4 w-4" /> Start job</Button></Link>
+              <Link href="/agent-console"><Button variant="secondary" className="gap-2"><Code2 className="h-4 w-4" /> Agent console</Button></Link>
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={() => fetchAll()} disabled={refreshing} className="shrink-0">
-            <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${refreshing ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-        </div>
 
-        {error && (
-          <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400 flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
-          </div>
-        )}
+          {error && <div className="flex items-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"><AlertTriangle className="h-4 w-4" /> {error}</div>}
 
-        {/* Approval panel */}
-        {pending && (
-          <ApprovalPanel
-            pending={pending}
-            onApprove={() => { setPending(null); fetchAll(true); }}
-            onDeny={() => setPending(null)}
-          />
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-
-          {/* Left: Tool registry */}
-          <div className="lg:col-span-2 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-semibold text-foreground">Tool Registry</h2>
-              <span className="text-xs text-muted-foreground">{tools.length} tools</span>
-            </div>
-
-            {/* Category tabs */}
-            <div className="flex flex-wrap gap-1.5">
-              {categories.map((cat) => {
-                const { total, missing } = categoryStats(cat);
-                return (
-                  <button
-                    key={cat}
-                    onClick={() => setActiveCategory(cat)}
-                    className={`px-3 py-1 rounded-lg text-xs font-medium border transition-all ${
-                      activeCategory === cat
-                        ? "bg-primary/15 border-primary/30 text-primary"
-                        : "bg-white/[0.02] border-white/[0.06] text-muted-foreground hover:text-foreground hover:bg-white/[0.05]"
-                    }`}
-                  >
-                    {cat.replace("_", " ")}
-                    {missing > 0 && <span className="ml-1.5 text-red-400">({missing} missing)</span>}
-                    {missing === 0 && <span className="ml-1.5 opacity-50">{total}</span>}
-                  </button>
-                );
-              })}
-            </div>
-
-            {loading ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground py-8 justify-center">
-                <Loader2 className="h-4 w-4 animate-spin" /> Loading tools…
-              </div>
-            ) : (
-              <div className="space-y-1.5">
-                {visibleTools.map((tool) => <ToolCard key={tool.toolId} tool={tool} />)}
-                {visibleTools.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">No tools in this category.</p>}
-              </div>
-            )}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+            {[["Executable", counts.executable ?? 0, CheckCircle2], ["Planning", counts.planning_only ?? 0, Brain], ["Credentials", counts.credential_required ?? 0, ShieldCheck], ["Need work", warnings, Wrench], ["Providers", liveProviders, Bot]].map(([label, value, Icon]) => (
+              <Card key={String(label)} className="border-white/[0.06] bg-white/[0.025]"><CardContent className="flex items-center gap-3 p-4"><div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03]"><Icon className="h-5 w-5 text-primary" /></div><div><div className="text-2xl font-bold">{String(value)}</div><div className="text-[11px] uppercase tracking-wider text-muted-foreground">{String(label)}</div></div></CardContent></Card>
+            ))}
           </div>
 
-          {/* Right: Invocation log */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-semibold text-foreground">Invocation Log</h2>
-              <span className="text-xs text-muted-foreground">{invocations.length} recent</span>
-            </div>
+          <div className="grid gap-6 xl:grid-cols-[360px_1fr_360px]">
+            <Card className="border-white/[0.06] bg-black/20 backdrop-blur-xl"><CardHeader><CardTitle className="flex items-center gap-2 text-base"><Brain className="h-4 w-4 text-primary" /> Brain state</CardTitle></CardHeader><CardContent><BrainOrb active={(counts.executable ?? 0) + (counts.planning_only ?? 0)} warnings={warnings} /><div className="mt-4 text-center text-xs text-muted-foreground">{tools.length} registered tools · {capabilities.length} classified capabilities</div></CardContent></Card>
+            <Card className="border-white/[0.06] bg-black/20 backdrop-blur-xl"><CardHeader><div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><CardTitle className="flex items-center gap-2 text-base"><Route className="h-4 w-4 text-primary" /> Workflow rail</CardTitle><div className="flex flex-wrap gap-2">{WORKFLOWS.map((flow) => { const Icon = flow.icon; return <button key={flow.type} onClick={() => setJobType(flow.type)} className={`rounded-lg border px-3 py-2 text-xs font-medium ${jobType === flow.type ? "border-primary/40 bg-primary/15 text-primary" : "border-white/[0.07] bg-white/[0.025] text-muted-foreground hover:text-foreground"}`}><Icon className="mr-1.5 inline h-3.5 w-3.5" />{flow.label}</button>; })}</div></div></CardHeader><CardContent className="grid gap-4 lg:grid-cols-[1fr_240px]"><WorkflowRail route={route} /><div className="rounded-xl border border-primary/20 bg-primary/5 p-4"><div className="flex items-center gap-2 text-sm font-semibold"><SelectedIcon className="h-4 w-4 text-primary" /> {selected.label}</div><p className="mt-2 text-xs leading-relaxed text-muted-foreground">{selected.prompt}</p></div></CardContent></Card>
+            <Card className="border-white/[0.06] bg-black/20 backdrop-blur-xl"><CardHeader><CardTitle className="flex items-center gap-2 text-base"><MessageSquare className="h-4 w-4 text-primary" /> User intervention</CardTitle></CardHeader><CardContent className="space-y-3"><Textarea value={intervention} onChange={(e) => setIntervention(e.target.value)} placeholder="Tell VIBA what to change, pause, avoid, or prioritise…" className="min-h-28 bg-black/20" /><div className="grid grid-cols-2 gap-2"><Button variant="outline" className="gap-2"><Square className="h-4 w-4" /> Pause</Button><Button className="gap-2" disabled={!intervention.trim()}><Send className="h-4 w-4" /> Add note</Button></div><p className="text-xs text-muted-foreground">Replit should wire these controls into the active session message and stop APIs.</p></CardContent></Card>
+          </div>
 
-            {/* Tool status legend */}
-            <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 space-y-2">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Status</p>
-              {[
-                { icon: <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />, label: "Available" },
-                { icon: <XCircle className="h-3.5 w-3.5 text-red-400" />, label: "Missing credential" },
-                { icon: <ShieldAlert className="h-3.5 w-3.5 text-amber-400" />, label: "Requires approval" },
-                { icon: <Clock className="h-3.5 w-3.5 text-blue-400" />, label: "Dry-run required" },
-                { icon: <AlertTriangle className="h-3.5 w-3.5 text-purple-400" />, label: "Safe build required" },
-              ].map(({ icon, label }) => (
-                <div key={label} className="flex items-center gap-2 text-xs text-foreground/70">
-                  {icon} {label}
-                </div>
-              ))}
-            </div>
-
-            <div className="space-y-1.5">
-              {loading ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground py-4 justify-center">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Loading…
-                </div>
-              ) : invocations.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">No tool invocations yet. Agent activity will appear here.</p>
-              ) : (
-                invocations.map((inv) => <InvocationRow key={inv.id} inv={inv} />)
-              )}
-            </div>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card className="border-white/[0.06] bg-black/20 backdrop-blur-xl"><CardHeader><CardTitle className="flex items-center gap-2 text-base"><Activity className="h-4 w-4 text-primary" /> Recent activity</CardTitle></CardHeader><CardContent className="space-y-2">{invocations.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">No recent tool activity yet.</p> : invocations.slice(0, 8).map((item, i) => <div key={item.id ?? i} className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.025] p-3"><Clock className="h-4 w-4 text-muted-foreground" /><div className="min-w-0 flex-1"><div className="truncate text-sm font-medium">{item.toolLabel ?? item.tool_id ?? "Tool"}</div><div className="text-xs text-muted-foreground">{item.agent_name ?? "agent"} · {item.status ?? "tracked"}</div></div><Badge variant="outline" className="text-[10px]">{item.risk_level ?? "logged"}</Badge></div>)}</CardContent></Card>
+            <Card className="border-white/[0.06] bg-black/20 backdrop-blur-xl"><CardHeader><CardTitle className="flex items-center gap-2 text-base"><Wrench className="h-4 w-4 text-primary" /> Capability truth board</CardTitle></CardHeader><CardContent className="grid gap-2 md:grid-cols-2">{capabilities.length === 0 ? <p className="col-span-full py-6 text-center text-sm text-muted-foreground">No capability data yet.</p> : capabilities.slice(0, 10).map((item) => <CapabilityCard key={item.toolId} item={item} />)}</CardContent></Card>
           </div>
         </div>
       </div>
