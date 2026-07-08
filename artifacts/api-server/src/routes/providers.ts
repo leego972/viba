@@ -6,12 +6,36 @@ import { saveVibaCredential, resolveVibaCredential, logVibaEvent, listVibaCreden
 const router: IRouter = Router();
 
 type Status = "not_configured" | "configured" | "disabled";
-type AdapterType = "auto" | "openai" | "openai-compatible" | "anthropic" | "gemini" | "groq" | "perplexity" | "ollama" | "replit" | "manus" | "railway";
+type AdapterType =
+  | "auto"
+  | "openai"
+  | "openai-compatible"
+  | "anthropic"
+  | "gemini"
+  | "groq"
+  | "perplexity"
+  | "ollama"
+  | "replit"
+  | "manus"
+  | "railway"
+  | "render"
+  | "vercel"
+  | "digitalocean"
+  | "github"
+  | "cloudflare"
+  | "stripe"
+  | "email-api"
+  | "messaging-api"
+  | "generic-rest"
+  | "credential-only";
+
+type ProviderCategory = "ai" | "deployment" | "repository" | "dns" | "payments" | "email" | "messaging" | "generic";
 
 interface ProviderDef {
   id: string;
   label: string;
   description: string;
+  category: ProviderCategory;
   keyEnvVar: string | null;
   acceptsKey: boolean;
   keyRequired: boolean;
@@ -25,27 +49,56 @@ interface ProviderDef {
   custom?: boolean;
 }
 
-const ADAPTER_TYPES: Array<{ id: AdapterType; label: string; description: string; requiresEndpoint: boolean; requiresKey: boolean }> = [
-  { id: "auto", label: "Automatic", description: "VIBA chooses the best adapter from the provider name and saved details.", requiresEndpoint: false, requiresKey: true },
-  { id: "openai", label: "OpenAI", description: "Native OpenAI Chat Completions adapter.", requiresEndpoint: false, requiresKey: true },
-  { id: "openai-compatible", label: "OpenAI-compatible", description: "Generic adapter for Venice, OpenRouter, Together, Fireworks, DeepSeek-compatible endpoints, LM Studio and similar /v1 APIs.", requiresEndpoint: false, requiresKey: true },
-  { id: "anthropic", label: "Anthropic / Claude", description: "Native Claude Messages API adapter.", requiresEndpoint: false, requiresKey: true },
-  { id: "gemini", label: "Google Gemini", description: "Gemini adapter through Google-compatible endpoint support.", requiresEndpoint: false, requiresKey: true },
-  { id: "groq", label: "Groq", description: "Groq low-latency inference adapter.", requiresEndpoint: false, requiresKey: true },
-  { id: "perplexity", label: "Perplexity", description: "Perplexity research/model adapter.", requiresEndpoint: false, requiresKey: true },
-  { id: "ollama", label: "Ollama / Local", description: "Local or self-hosted Ollama-style endpoint. API key usually not required.", requiresEndpoint: false, requiresKey: false },
-  { id: "replit", label: "Replit", description: "Replit task/tool execution adapter.", requiresEndpoint: false, requiresKey: true },
-  { id: "manus", label: "Manus", description: "Manus workspace/task adapter.", requiresEndpoint: false, requiresKey: true },
-  { id: "railway", label: "Railway", description: "Railway infrastructure/deployment adapter.", requiresEndpoint: false, requiresKey: true },
+const ADAPTER_TYPES: Array<{ id: AdapterType; label: string; description: string; requiresEndpoint: boolean; requiresKey: boolean; category: ProviderCategory | "all" }> = [
+  { id: "auto", label: "Automatic", description: "VIBA chooses from the provider preset and saved details.", requiresEndpoint: false, requiresKey: true, category: "all" },
+  { id: "openai", label: "OpenAI", description: "Native OpenAI Chat Completions adapter.", requiresEndpoint: false, requiresKey: true, category: "ai" },
+  { id: "openai-compatible", label: "OpenAI-compatible AI", description: "Venice, OpenRouter, Together, Fireworks, DeepSeek-compatible endpoints, LM Studio and similar /v1 APIs.", requiresEndpoint: false, requiresKey: true, category: "ai" },
+  { id: "anthropic", label: "Anthropic / Claude", description: "Native Claude Messages API adapter.", requiresEndpoint: false, requiresKey: true, category: "ai" },
+  { id: "gemini", label: "Google Gemini", description: "Gemini adapter.", requiresEndpoint: false, requiresKey: true, category: "ai" },
+  { id: "groq", label: "Groq", description: "Groq low-latency inference adapter.", requiresEndpoint: false, requiresKey: true, category: "ai" },
+  { id: "perplexity", label: "Perplexity", description: "Perplexity research/model adapter.", requiresEndpoint: false, requiresKey: true, category: "ai" },
+  { id: "ollama", label: "Ollama / Local", description: "Local/self-hosted model endpoint. API key usually not required.", requiresEndpoint: false, requiresKey: false, category: "ai" },
+  { id: "replit", label: "Replit", description: "Replit workspace/task/tool adapter.", requiresEndpoint: false, requiresKey: true, category: "deployment" },
+  { id: "manus", label: "Manus", description: "Manus workspace/task adapter.", requiresEndpoint: false, requiresKey: true, category: "deployment" },
+  { id: "railway", label: "Railway", description: "Railway infrastructure/deployment API token.", requiresEndpoint: false, requiresKey: true, category: "deployment" },
+  { id: "render", label: "Render", description: "Render deployment/platform API token.", requiresEndpoint: false, requiresKey: true, category: "deployment" },
+  { id: "vercel", label: "Vercel", description: "Vercel deployment/platform API token.", requiresEndpoint: false, requiresKey: true, category: "deployment" },
+  { id: "digitalocean", label: "DigitalOcean", description: "DigitalOcean cloud API token.", requiresEndpoint: false, requiresKey: true, category: "deployment" },
+  { id: "github", label: "GitHub", description: "GitHub repository/API token.", requiresEndpoint: false, requiresKey: true, category: "repository" },
+  { id: "cloudflare", label: "Cloudflare", description: "Cloudflare DNS/edge API token.", requiresEndpoint: false, requiresKey: true, category: "dns" },
+  { id: "stripe", label: "Stripe", description: "Stripe payment API key.", requiresEndpoint: false, requiresKey: true, category: "payments" },
+  { id: "email-api", label: "Email API", description: "Transactional email APIs such as Resend or SendGrid.", requiresEndpoint: false, requiresKey: true, category: "email" },
+  { id: "messaging-api", label: "Messaging API", description: "Messaging/webhook APIs such as Slack or Discord.", requiresEndpoint: false, requiresKey: true, category: "messaging" },
+  { id: "generic-rest", label: "Generic REST API", description: "Stores a key and endpoint for non-AI REST APIs. Tool-specific code must know how to call it.", requiresEndpoint: true, requiresKey: true, category: "generic" },
+  { id: "credential-only", label: "Credential only", description: "Stores a secret for later use without pretending VIBA can call the API automatically.", requiresEndpoint: false, requiresKey: true, category: "generic" },
 ];
 
 const PROVIDER_DEFS: ProviderDef[] = [
-  { id: "openai", label: "OpenAI (ChatGPT)", description: "Powers GPT-4, GPT-4o, and o-series models.", keyEnvVar: "OPENAI_API_KEY", acceptsKey: true, keyRequired: true, modelSettingKey: "OPENAI_MODEL", defaultModel: "gpt-4.1-mini", modelOptions: ["gpt-4.1-mini", "gpt-4.1", "gpt-4o", "gpt-4o-mini", "o3-mini", "o1-mini"], hasEndpoint: false, endpointSettingKey: null, defaultEndpoint: "", adapterType: "openai" },
-  { id: "anthropic", label: "Anthropic (Claude)", description: "Powers Claude Sonnet, Opus, and Haiku.", keyEnvVar: "ANTHROPIC_API_KEY", acceptsKey: true, keyRequired: true, modelSettingKey: "ANTHROPIC_MODEL", defaultModel: "claude-3-5-sonnet-20241022", modelOptions: ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229"], hasEndpoint: false, endpointSettingKey: null, defaultEndpoint: "", adapterType: "anthropic" },
-  { id: "gemini", label: "Google Gemini", description: "Powers Gemini Flash and Pro models.", keyEnvVar: "GEMINI_API_KEY", acceptsKey: true, keyRequired: true, modelSettingKey: "GEMINI_MODEL", defaultModel: "gemini-2.0-flash", modelOptions: ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro", "gemini-1.5-flash"], hasEndpoint: false, endpointSettingKey: null, defaultEndpoint: "", adapterType: "gemini" },
-  { id: "groq", label: "Groq", description: "Included fast inference when the server Groq credential is configured.", keyEnvVar: "GROQ_API_KEY", acceptsKey: true, keyRequired: true, modelSettingKey: "GROQ_MODEL", defaultModel: "llama-3.3-70b-versatile", modelOptions: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768", "gemma2-9b-it"], hasEndpoint: false, endpointSettingKey: null, defaultEndpoint: "", adapterType: "groq" },
-  { id: "local", label: "Local / Self-hosted", description: "Ollama or any OpenAI-compatible local server. Requires a saved endpoint URL.", keyEnvVar: null, acceptsKey: false, keyRequired: false, modelSettingKey: "LOCAL_MODEL", defaultModel: "llama3", modelOptions: [], hasEndpoint: true, endpointSettingKey: "LOCAL_ENDPOINT", defaultEndpoint: "http://localhost:11434", adapterType: "ollama" },
-  { id: "custom", label: "Custom AI Provider", description: "Any API provider not listed above. Choose adapter type if automatic detection is not enough.", keyEnvVar: "CUSTOM_API_KEY", acceptsKey: true, keyRequired: false, modelSettingKey: "CUSTOM_MODEL", defaultModel: "", modelOptions: [], hasEndpoint: true, endpointSettingKey: "CUSTOM_ENDPOINT", defaultEndpoint: "https://your-provider.example.com/v1", adapterType: "auto" },
+  { id: "openai", label: "OpenAI", description: "OpenAI GPT/o-series models.", category: "ai", keyEnvVar: "OPENAI_API_KEY", acceptsKey: true, keyRequired: true, modelSettingKey: "OPENAI_MODEL", defaultModel: "gpt-4.1-mini", modelOptions: ["gpt-4.1-mini", "gpt-4.1", "gpt-4o", "gpt-4o-mini", "o3-mini", "o1-mini"], hasEndpoint: false, endpointSettingKey: null, defaultEndpoint: "", adapterType: "openai" },
+  { id: "anthropic", label: "Anthropic / Claude", description: "Claude Sonnet, Opus and Haiku.", category: "ai", keyEnvVar: "ANTHROPIC_API_KEY", acceptsKey: true, keyRequired: true, modelSettingKey: "ANTHROPIC_MODEL", defaultModel: "claude-3-5-sonnet-20241022", modelOptions: ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229"], hasEndpoint: false, endpointSettingKey: null, defaultEndpoint: "", adapterType: "anthropic" },
+  { id: "gemini", label: "Google Gemini", description: "Google Gemini models.", category: "ai", keyEnvVar: "GEMINI_API_KEY", acceptsKey: true, keyRequired: true, modelSettingKey: "GEMINI_MODEL", defaultModel: "gemini-2.0-flash", modelOptions: ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro", "gemini-1.5-flash"], hasEndpoint: false, endpointSettingKey: null, defaultEndpoint: "", adapterType: "gemini" },
+  { id: "groq", label: "Groq", description: "Groq low-latency inference.", category: "ai", keyEnvVar: "GROQ_API_KEY", acceptsKey: true, keyRequired: true, modelSettingKey: "GROQ_MODEL", defaultModel: "llama-3.3-70b-versatile", modelOptions: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768", "gemma2-9b-it"], hasEndpoint: false, endpointSettingKey: null, defaultEndpoint: "", adapterType: "groq" },
+  { id: "perplexity", label: "Perplexity", description: "Perplexity API.", category: "ai", keyEnvVar: "PERPLEXITY_API_KEY", acceptsKey: true, keyRequired: true, modelSettingKey: "PERPLEXITY_MODEL", defaultModel: "sonar", modelOptions: ["sonar", "sonar-pro"], hasEndpoint: false, endpointSettingKey: null, defaultEndpoint: "", adapterType: "perplexity" },
+  { id: "venice", label: "Venice", description: "Venice AI using the OpenAI-compatible adapter.", category: "ai", keyEnvVar: "VENICE_API_KEY", acceptsKey: true, keyRequired: true, modelSettingKey: "VENICE_MODEL", defaultModel: "", modelOptions: [], hasEndpoint: true, endpointSettingKey: "VENICE_ENDPOINT", defaultEndpoint: "https://api.venice.ai/api/v1", adapterType: "openai-compatible" },
+  { id: "openrouter", label: "OpenRouter", description: "OpenRouter OpenAI-compatible API.", category: "ai", keyEnvVar: "OPENROUTER_API_KEY", acceptsKey: true, keyRequired: true, modelSettingKey: "OPENROUTER_MODEL", defaultModel: "", modelOptions: [], hasEndpoint: true, endpointSettingKey: "OPENROUTER_ENDPOINT", defaultEndpoint: "https://openrouter.ai/api/v1", adapterType: "openai-compatible" },
+  { id: "together", label: "Together AI", description: "Together OpenAI-compatible API.", category: "ai", keyEnvVar: "TOGETHER_API_KEY", acceptsKey: true, keyRequired: true, modelSettingKey: "TOGETHER_MODEL", defaultModel: "", modelOptions: [], hasEndpoint: true, endpointSettingKey: "TOGETHER_ENDPOINT", defaultEndpoint: "https://api.together.xyz/v1", adapterType: "openai-compatible" },
+  { id: "fireworks", label: "Fireworks AI", description: "Fireworks OpenAI-compatible API.", category: "ai", keyEnvVar: "FIREWORKS_API_KEY", acceptsKey: true, keyRequired: true, modelSettingKey: "FIREWORKS_MODEL", defaultModel: "", modelOptions: [], hasEndpoint: true, endpointSettingKey: "FIREWORKS_ENDPOINT", defaultEndpoint: "https://api.fireworks.ai/inference/v1", adapterType: "openai-compatible" },
+  { id: "deepseek", label: "DeepSeek", description: "DeepSeek OpenAI-compatible API.", category: "ai", keyEnvVar: "DEEPSEEK_API_KEY", acceptsKey: true, keyRequired: true, modelSettingKey: "DEEPSEEK_MODEL", defaultModel: "", modelOptions: [], hasEndpoint: true, endpointSettingKey: "DEEPSEEK_ENDPOINT", defaultEndpoint: "https://api.deepseek.com", adapterType: "openai-compatible" },
+  { id: "ollama", label: "Ollama / Local", description: "Local or self-hosted Ollama.", category: "ai", keyEnvVar: null, acceptsKey: false, keyRequired: false, modelSettingKey: "OLLAMA_MODEL", defaultModel: "llama3.2", modelOptions: [], hasEndpoint: true, endpointSettingKey: "OLLAMA_BASE_URL", defaultEndpoint: "http://localhost:11434", adapterType: "ollama" },
+  { id: "lm-studio", label: "LM Studio", description: "Local LM Studio OpenAI-compatible server.", category: "ai", keyEnvVar: "LM_STUDIO_API_KEY", acceptsKey: false, keyRequired: false, modelSettingKey: "LM_STUDIO_MODEL", defaultModel: "", modelOptions: [], hasEndpoint: true, endpointSettingKey: "LM_STUDIO_ENDPOINT", defaultEndpoint: "http://localhost:1234/v1", adapterType: "openai-compatible" },
+  { id: "replit", label: "Replit", description: "Replit workspace/task tool connection.", category: "deployment", keyEnvVar: "REPLIT_API_KEY", acceptsKey: true, keyRequired: true, modelSettingKey: null, defaultModel: "", modelOptions: [], hasEndpoint: false, endpointSettingKey: null, defaultEndpoint: "", adapterType: "replit" },
+  { id: "manus", label: "Manus", description: "Manus workspace connection.", category: "deployment", keyEnvVar: "MANUS_API_KEY", acceptsKey: true, keyRequired: true, modelSettingKey: null, defaultModel: "", modelOptions: [], hasEndpoint: false, endpointSettingKey: null, defaultEndpoint: "", adapterType: "manus" },
+  { id: "railway", label: "Railway", description: "Railway deploy/infrastructure API.", category: "deployment", keyEnvVar: "RAILWAY_TOKEN", acceptsKey: true, keyRequired: true, modelSettingKey: null, defaultModel: "", modelOptions: [], hasEndpoint: true, endpointSettingKey: "RAILWAY_ENDPOINT", defaultEndpoint: "https://backboard.railway.com/graphql/v2", adapterType: "railway" },
+  { id: "render", label: "Render", description: "Render deploy/platform API.", category: "deployment", keyEnvVar: "RENDER_API_KEY", acceptsKey: true, keyRequired: true, modelSettingKey: null, defaultModel: "", modelOptions: [], hasEndpoint: true, endpointSettingKey: "RENDER_ENDPOINT", defaultEndpoint: "https://api.render.com/v1", adapterType: "render" },
+  { id: "vercel", label: "Vercel", description: "Vercel deploy/platform API.", category: "deployment", keyEnvVar: "VERCEL_TOKEN", acceptsKey: true, keyRequired: true, modelSettingKey: null, defaultModel: "", modelOptions: [], hasEndpoint: true, endpointSettingKey: "VERCEL_ENDPOINT", defaultEndpoint: "https://api.vercel.com", adapterType: "vercel" },
+  { id: "digitalocean", label: "DigitalOcean", description: "DigitalOcean cloud API.", category: "deployment", keyEnvVar: "DIGITALOCEAN_TOKEN", acceptsKey: true, keyRequired: true, modelSettingKey: null, defaultModel: "", modelOptions: [], hasEndpoint: true, endpointSettingKey: "DIGITALOCEAN_ENDPOINT", defaultEndpoint: "https://api.digitalocean.com/v2", adapterType: "digitalocean" },
+  { id: "github", label: "GitHub", description: "GitHub repository API token.", category: "repository", keyEnvVar: "GITHUB_TOKEN", acceptsKey: true, keyRequired: true, modelSettingKey: null, defaultModel: "", modelOptions: [], hasEndpoint: true, endpointSettingKey: "GITHUB_ENDPOINT", defaultEndpoint: "https://api.github.com", adapterType: "github" },
+  { id: "cloudflare", label: "Cloudflare", description: "Cloudflare DNS/edge API.", category: "dns", keyEnvVar: "CLOUDFLARE_API_TOKEN", acceptsKey: true, keyRequired: true, modelSettingKey: null, defaultModel: "", modelOptions: [], hasEndpoint: true, endpointSettingKey: "CLOUDFLARE_ENDPOINT", defaultEndpoint: "https://api.cloudflare.com/client/v4", adapterType: "cloudflare" },
+  { id: "stripe", label: "Stripe", description: "Stripe payments API.", category: "payments", keyEnvVar: "STRIPE_SECRET_KEY", acceptsKey: true, keyRequired: true, modelSettingKey: null, defaultModel: "", modelOptions: [], hasEndpoint: true, endpointSettingKey: "STRIPE_ENDPOINT", defaultEndpoint: "https://api.stripe.com/v1", adapterType: "stripe" },
+  { id: "resend", label: "Resend", description: "Resend email API.", category: "email", keyEnvVar: "RESEND_API_KEY", acceptsKey: true, keyRequired: true, modelSettingKey: null, defaultModel: "", modelOptions: [], hasEndpoint: true, endpointSettingKey: "RESEND_ENDPOINT", defaultEndpoint: "https://api.resend.com", adapterType: "email-api" },
+  { id: "sendgrid", label: "SendGrid", description: "SendGrid email API.", category: "email", keyEnvVar: "SENDGRID_API_KEY", acceptsKey: true, keyRequired: true, modelSettingKey: null, defaultModel: "", modelOptions: [], hasEndpoint: true, endpointSettingKey: "SENDGRID_ENDPOINT", defaultEndpoint: "https://api.sendgrid.com/v3", adapterType: "email-api" },
+  { id: "slack", label: "Slack", description: "Slack messaging API.", category: "messaging", keyEnvVar: "SLACK_BOT_TOKEN", acceptsKey: true, keyRequired: true, modelSettingKey: null, defaultModel: "", modelOptions: [], hasEndpoint: true, endpointSettingKey: "SLACK_ENDPOINT", defaultEndpoint: "https://slack.com/api", adapterType: "messaging-api" },
+  { id: "custom", label: "Custom API", description: "Any API provider not listed above. Choose adapter type if automatic detection is not enough.", category: "generic", keyEnvVar: "CUSTOM_API_KEY", acceptsKey: true, keyRequired: false, modelSettingKey: "CUSTOM_MODEL", defaultModel: "", modelOptions: [], hasEndpoint: true, endpointSettingKey: "CUSTOM_ENDPOINT", defaultEndpoint: "", adapterType: "generic-rest" },
 ];
 
 function isValidProviderId(id: string): boolean {
@@ -53,24 +106,15 @@ function isValidProviderId(id: string): boolean {
 }
 
 function displayNameFromId(id: string): string {
-  return id
-    .split(/[-_.]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ") || id;
+  return id.split(/[-_.]+/).filter(Boolean).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ") || id;
 }
 
 function settingPrefix(id: string): string {
   return id.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
 }
 
-function adapterSettingKey(id: string): string {
-  return `${settingPrefix(id)}_ADAPTER_TYPE`;
-}
-
-function enabledSettingKey(id: string): string {
-  return `${settingPrefix(id)}_ENABLED`;
-}
+function adapterSettingKey(id: string): string { return `${settingPrefix(id)}_ADAPTER_TYPE`; }
+function enabledSettingKey(id: string): string { return `${settingPrefix(id)}_ENABLED`; }
 
 function parseAdapterType(value: unknown, fallback: AdapterType): AdapterType {
   if (typeof value !== "string") return fallback;
@@ -84,6 +128,7 @@ function customProviderDef(id: string): ProviderDef {
     id,
     label: displayNameFromId(id),
     description: "Custom API provider saved in the VIBA vault.",
+    category: "generic",
     keyEnvVar: `${prefix}_API_KEY`,
     acceptsKey: true,
     keyRequired: false,
@@ -93,7 +138,7 @@ function customProviderDef(id: string): ProviderDef {
     hasEndpoint: true,
     endpointSettingKey: `${prefix}_ENDPOINT`,
     defaultEndpoint: "",
-    adapterType: "auto",
+    adapterType: "generic-rest",
     custom: true,
   };
 }
@@ -134,10 +179,27 @@ function savedEndpoint(def: ProviderDef, settingsMap: Map<string, string>): stri
   return (settingsMap.get(def.endpointSettingKey) ?? "").trim();
 }
 
+function effectiveEndpoint(def: ProviderDef, settingsMap: Map<string, string>): string {
+  return savedEndpoint(def, settingsMap) || def.defaultEndpoint;
+}
+
 function configured(def: ProviderDef, hasKey: boolean, settingsMap: Map<string, string>): boolean {
-  const endpointOk = !def.hasEndpoint || !def.keyRequired || savedEndpoint(def, settingsMap).length > 0 || def.custom === true;
+  const endpointOk = !def.hasEndpoint || effectiveEndpoint(def, settingsMap).length > 0 || def.adapterType === "credential-only";
   const keyOk = !def.keyRequired || hasKey;
-  return endpointOk && keyOk && (hasKey || def.acceptsKey === false || savedEndpoint(def, settingsMap).length > 0);
+  return endpointOk && keyOk && (hasKey || def.acceptsKey === false || effectiveEndpoint(def, settingsMap).length > 0);
+}
+
+function publicProviderPreset(def: ProviderDef) {
+  return {
+    id: def.id,
+    label: def.label,
+    description: def.description,
+    category: def.category,
+    adapterType: def.adapterType,
+    defaultEndpoint: def.defaultEndpoint,
+    defaultModel: def.defaultModel,
+    acceptsKey: def.acceptsKey,
+  };
 }
 
 async function serializeProvider(def: ProviderDef, uid: number | null, settingsMap: Map<string, string>) {
@@ -148,28 +210,23 @@ async function serializeProvider(def: ProviderDef, uid: number | null, settingsM
   const status: Status = !isConfigured ? "not_configured" : !enabled ? "disabled" : "configured";
   const adapterType = parseAdapterType(settingsMap.get(adapterSettingKey(def.id)), def.adapterType);
   return {
-    id: def.id,
-    label: def.label,
-    description: def.description,
+    ...publicProviderPreset(def),
     hasKey,
-    acceptsKey: def.acceptsKey,
     keyRequired: def.keyRequired,
     enabled,
     model: settingsMap.get(def.modelSettingKey ?? "") ?? def.defaultModel,
-    endpoint: def.hasEndpoint ? savedEndpoint(def, settingsMap) : undefined,
+    endpoint: def.hasEndpoint ? effectiveEndpoint(def, settingsMap) : undefined,
     placeholderEndpoint: def.defaultEndpoint,
     hasEndpoint: def.hasEndpoint,
-    defaultModel: def.defaultModel,
     modelOptions: def.modelOptions,
     adapterType,
-    availableAdapterTypes: ADAPTER_TYPES,
     status,
     custom: def.custom === true,
   };
 }
 
 router.get("/providers/adapter-types", (_req, res): void => {
-  res.json({ adapterTypes: ADAPTER_TYPES, rawValuesReturned: false });
+  res.json({ adapterTypes: ADAPTER_TYPES, providerPresets: PROVIDER_DEFS.map(publicProviderPreset), rawValuesReturned: false });
 });
 
 router.get("/providers", async (req, res): Promise<void> => {
@@ -179,13 +236,11 @@ router.get("/providers", async (req, res): Promise<void> => {
   const credentials = await listVibaCredentials(uid);
   const ids = new Set(PROVIDER_DEFS.map((def) => def.id));
   for (const credential of credentials) {
-    if (credential.kind === "api_key" && isValidProviderId(credential.provider)) {
-      ids.add(credential.provider);
-    }
+    if (credential.kind === "api_key" && isValidProviderId(credential.provider)) ids.add(credential.provider);
   }
   const defs = Array.from(ids).map((id) => providerDefFor(id)).filter((def): def is ProviderDef => Boolean(def));
   const providers = await Promise.all(defs.map((def) => serializeProvider(def, uid, settingsMap)));
-  res.json({ providers, adapterTypes: ADAPTER_TYPES, rawValuesReturned: false });
+  res.json({ providers, adapterTypes: ADAPTER_TYPES, providerPresets: PROVIDER_DEFS.map(publicProviderPreset), rawValuesReturned: false });
 });
 
 router.post("/providers", async (req, res): Promise<void> => {
@@ -234,8 +289,8 @@ router.post("/providers/:provider/test", async (req, res): Promise<void> => {
   const settingsMap = new Map(allSettings.map((s) => [s.key, s.value]));
   const hasKey = await hasKeyConfigured(def, userId(req));
   if (!configured(def, hasKey, settingsMap)) { res.json({ configured: false, message: "Provider is missing a required credential or endpoint.", rawValuesReturned: false }); return; }
-  if (def.hasEndpoint && savedEndpoint(def, settingsMap)) {
-    const endpoint = savedEndpoint(def, settingsMap);
+  if (def.hasEndpoint && effectiveEndpoint(def, settingsMap)) {
+    const endpoint = effectiveEndpoint(def, settingsMap);
     try {
       const controller = new AbortController();
       const t = setTimeout(() => controller.abort(), 5000);
@@ -247,7 +302,7 @@ router.post("/providers/:provider/test", async (req, res): Promise<void> => {
     }
     return;
   }
-  res.json({ configured: true, requiresManualValidation: true, message: "Credential is present. Live validation happens during a real session.", rawValuesReturned: false });
+  res.json({ configured: true, requiresManualValidation: true, message: "Credential is present. Live validation happens during a real session or tool call.", rawValuesReturned: false });
 });
 
 router.get("/providers/:provider/keys", async (req, res): Promise<void> => {
@@ -288,7 +343,7 @@ router.get("/providers/setting/:key", async (req, res): Promise<void> => {
   const key = String(req.params["key"] ?? "");
   if (!key || key.length > 64) { res.status(400).json({ error: "Invalid key" }); return; }
   const value = await getSettingValue(key);
-  res.json({ key, value });
+  res.json({ key, value, rawValuesReturned: false });
 });
 
 export default router;
