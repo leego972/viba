@@ -2,6 +2,34 @@ import type { AgentAdapter, AgentTaskInput, AgentTaskResult } from "./interface"
 import { logger } from "../logger";
 import { buildAdapterJsonSchema, parseAdapterJson } from "./shared";
 
+type OpenAIClient = {
+  chat: {
+    completions: {
+      create(input: {
+        model: string;
+        messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
+        max_tokens: number;
+        temperature: number;
+      }): Promise<{
+        choices?: Array<{ message?: { content?: string | null } }>;
+      }>;
+    };
+  };
+  models?: {
+    list(): Promise<{ data?: Array<{ id?: string }> }>;
+  };
+};
+
+function modelLooksUsable(id: string): boolean {
+  const lower = id.toLowerCase();
+  return Boolean(id.trim())
+    && !lower.includes("embed")
+    && !lower.includes("image")
+    && !lower.includes("audio")
+    && !lower.includes("tts")
+    && !lower.includes("whisper");
+}
+
 export class OpenAICompatibleAdapter implements AgentAdapter {
   id: string;
   name: string;
@@ -14,6 +42,7 @@ export class OpenAICompatibleAdapter implements AgentAdapter {
 
   private apiKey: string;
   private baseURL: string;
+  private requestedModel?: string;
 
   constructor(
     id: string,
@@ -30,9 +59,27 @@ export class OpenAICompatibleAdapter implements AgentAdapter {
     this.role = role;
     this.provider = provider;
     this.apiKey = apiKey;
-    this.baseURL = baseURL;
-    this.model = model || "default";
+    this.baseURL = baseURL.replace(/\/+$/, "");
+    this.requestedModel = model?.trim() || undefined;
+    this.model = this.requestedModel ?? "auto";
     this.canUseTools = canUseTools;
+  }
+
+  private async resolveModel(client: OpenAIClient): Promise<string> {
+    if (this.requestedModel) return this.requestedModel;
+
+    try {
+      const models = await client.models?.list();
+      const detected = models?.data?.map((item) => item.id).find((id): id is string => typeof id === "string" && modelLooksUsable(id));
+      if (detected) {
+        this.model = detected;
+        return detected;
+      }
+    } catch (err) {
+      logger.warn({ err, provider: this.provider, baseURL: this.baseURL }, "Could not auto-detect OpenAI-compatible model");
+    }
+
+    throw new Error(`No model configured for provider '${this.provider}', and model auto-detection failed. Add a model name in Settings > API Keys > Optional details.`);
   }
 
   async runTask(input: AgentTaskInput): Promise<AgentTaskResult> {
@@ -54,10 +101,11 @@ ${buildAdapterJsonSchema(this.canUseTools, input.pendingQuestions)}`;
 
     try {
       const { default: OpenAI } = await import("openai");
-      const client = new OpenAI({ apiKey: this.apiKey, baseURL: this.baseURL, timeout: 30_000 });
+      const client = new OpenAI({ apiKey: this.apiKey, baseURL: this.baseURL, timeout: 30_000 }) as OpenAIClient;
+      const model = await this.resolveModel(client);
 
       const response = await client.chat.completions.create({
-        model: this.model,
+        model,
         messages: [
           { role: "system", content: systemPrompt },
           ...messages.slice(-15),
@@ -66,7 +114,7 @@ ${buildAdapterJsonSchema(this.canUseTools, input.pendingQuestions)}`;
         temperature: 0.7,
       });
 
-      const text = response.choices[0]?.message?.content ?? "";
+      const text = response.choices?.[0]?.message?.content ?? "";
       return parseAdapterJson(text, 0);
     } catch (err) {
       logger.error({ err, provider: this.provider, baseURL: this.baseURL }, "OpenAI-compatible API call failed");
@@ -77,10 +125,11 @@ ${buildAdapterJsonSchema(this.canUseTools, input.pendingQuestions)}`;
   async evaluateTask(goal: string, peers: Array<{ name: string; role: string }>): Promise<{ accepted: boolean; reason?: string }> {
     try {
       const { default: OpenAI } = await import("openai");
-      const client = new OpenAI({ apiKey: this.apiKey, baseURL: this.baseURL, timeout: 10_000 });
+      const client = new OpenAI({ apiKey: this.apiKey, baseURL: this.baseURL, timeout: 10_000 }) as OpenAIClient;
+      const model = await this.resolveModel(client);
       const peerList = peers.map((peer) => `${peer.name} (${peer.role})`).join(", ") || "none";
       const response = await client.chat.completions.create({
-        model: this.model,
+        model,
         max_tokens: 120,
         temperature: 0,
         messages: [
@@ -94,7 +143,7 @@ ${buildAdapterJsonSchema(this.canUseTools, input.pendingQuestions)}`;
           },
         ],
       });
-      const text = response.choices[0]?.message?.content ?? "";
+      const text = response.choices?.[0]?.message?.content ?? "";
       const match = text.match(/\{[\s\S]*?\}/);
       if (match) {
         const parsed = JSON.parse(match[0]) as { accepted?: boolean; reason?: string };
