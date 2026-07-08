@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Key, Plus, RefreshCw, Trash2, X, CheckCircle2 } from "lucide-react";
+import { ChevronDown, CheckCircle2, Key, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,6 +43,7 @@ export function GenericApiKeysCard() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+  const [showOptionalDetails, setShowOptionalDetails] = useState(false);
   const [name, setName] = useState("");
   const [value, setValue] = useState("");
   const [model, setModel] = useState("");
@@ -76,7 +77,7 @@ export function GenericApiKeysCard() {
     const id = providerIdFromName(name);
     const key = value.trim();
     if (!id) {
-      toast({ title: "Name required", description: "Enter a provider name such as Venice, OpenAI, Groq, or Custom Client.", variant: "destructive" });
+      toast({ title: "Name required", description: "Enter a provider name such as Venice, OpenRouter, Groq, or Custom Client.", variant: "destructive" });
       return;
     }
     if (!key) {
@@ -106,6 +107,7 @@ export function GenericApiKeysCard() {
       setValue("");
       setModel("");
       setEndpoint("");
+      setShowOptionalDetails(false);
       setShowAdd(false);
       await loadProviders();
     } catch (error) {
@@ -146,7 +148,7 @@ export function GenericApiKeysCard() {
               <Key className="h-5 w-5" /> API Keys
             </CardTitle>
             <CardDescription>
-              Add any provider once, including Venice. VIBA stores the value server-side and only shows a registered status here.
+              Add any provider once. Required: name and API key. Optional details can be added only when needed.
             </CardDescription>
           </div>
           <Button type="button" onClick={() => setShowAdd((current) => !current)} className="gap-2 shrink-0">
@@ -181,28 +183,43 @@ export function GenericApiKeysCard() {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="api-provider-model">Model <span className="text-muted-foreground font-normal">optional</span></Label>
-                <Input
-                  id="api-provider-model"
-                  value={model}
-                  onChange={(event) => setModel(event.target.value)}
-                  placeholder="venice-uncensored, llama-3.1, etc."
-                  autoComplete="off"
-                />
+
+            <button
+              type="button"
+              onClick={() => setShowOptionalDetails((current) => !current)}
+              className="flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+            >
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showOptionalDetails ? "rotate-180" : ""}`} />
+              Optional details
+            </button>
+
+            {showOptionalDetails && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-md border bg-background/50 p-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="api-provider-model">Model</Label>
+                  <Input
+                    id="api-provider-model"
+                    value={model}
+                    onChange={(event) => setModel(event.target.value)}
+                    placeholder="Leave blank to auto-detect"
+                    autoComplete="off"
+                  />
+                  <p className="text-[11px] text-muted-foreground">VIBA will try to detect a model if this is empty.</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="api-provider-endpoint">API Base URL / Endpoint</Label>
+                  <Input
+                    id="api-provider-endpoint"
+                    value={endpoint}
+                    onChange={(event) => setEndpoint(event.target.value)}
+                    placeholder="Usually ends in /v1"
+                    autoComplete="off"
+                  />
+                  <p className="text-[11px] text-muted-foreground">Only needed if VIBA does not already know this provider endpoint.</p>
+                </div>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="api-provider-endpoint">Base URL <span className="text-muted-foreground font-normal">optional</span></Label>
-                <Input
-                  id="api-provider-endpoint"
-                  value={endpoint}
-                  onChange={(event) => setEndpoint(event.target.value)}
-                  placeholder="https://api.venice.ai/api/v1"
-                  autoComplete="off"
-                />
-              </div>
-            </div>
+            )}
+
             <Button type="button" onClick={handleAdd} disabled={saving} className="w-full sm:w-auto">
               {saving ? "Saving..." : "Save API"}
             </Button>
