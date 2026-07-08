@@ -37,7 +37,17 @@ type AdapterType =
   | "ollama"
   | "replit"
   | "manus"
-  | "railway";
+  | "railway"
+  | "render"
+  | "vercel"
+  | "digitalocean"
+  | "github"
+  | "cloudflare"
+  | "stripe"
+  | "email-api"
+  | "messaging-api"
+  | "generic-rest"
+  | "credential-only";
 
 const CUSTOM_COMPATIBLE_BASE_URLS: Record<string, string> = {
   venice: "https://api.venice.ai/api/v1",
@@ -63,6 +73,15 @@ const KNOWN_PROVIDER_ADAPTER_TYPES: Record<string, AdapterType> = {
   replit: "replit",
   manus: "manus",
   railway: "railway",
+  render: "render",
+  vercel: "vercel",
+  digitalocean: "digitalocean",
+  github: "github",
+  cloudflare: "cloudflare",
+  stripe: "stripe",
+  resend: "email-api",
+  sendgrid: "email-api",
+  slack: "messaging-api",
   venice: "openai-compatible",
   openrouter: "openai-compatible",
   together: "openai-compatible",
@@ -106,7 +125,17 @@ function parseAdapterType(value: string | null | undefined, provider: string): A
     candidate === "ollama" ||
     candidate === "replit" ||
     candidate === "manus" ||
-    candidate === "railway"
+    candidate === "railway" ||
+    candidate === "render" ||
+    candidate === "vercel" ||
+    candidate === "digitalocean" ||
+    candidate === "github" ||
+    candidate === "cloudflare" ||
+    candidate === "stripe" ||
+    candidate === "email-api" ||
+    candidate === "messaging-api" ||
+    candidate === "generic-rest" ||
+    candidate === "credential-only"
   ) return candidate;
   return KNOWN_PROVIDER_ADAPTER_TYPES[provider] ?? "openai-compatible";
 }
@@ -181,6 +210,7 @@ async function buildConfiguredAdapter(params: {
     return new OpenAICompatibleAdapter(String(agent.id), agent.name, agent.role, provider, apiKey, baseUrl, model, agent.canUseTools);
   }
 
+  logger.warn({ provider, adapterType }, "Provider connection is registered but is not an AI agent runtime adapter. It is available to tool-specific code, not agent chat execution.");
   return null;
 }
 
@@ -290,6 +320,6 @@ export async function buildAdapter(agent: Agent, userId?: number | null): Promis
 
   if (built) return built;
 
-  logger.warn({ provider, selectedAdapterType }, "Provider could not be routed through selected adapter type — using simulation mode");
+  logger.warn({ provider, selectedAdapterType }, "Provider could not be used as an AI runtime adapter — using simulation mode");
   return new ChatGPTMockAdapter(String(agent.id), agent.name, agent.role);
 }
