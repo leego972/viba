@@ -20,6 +20,7 @@ interface ProviderDef {
   hasEndpoint: boolean;
   endpointSettingKey: string | null;
   defaultEndpoint: string;
+  custom?: boolean;
 }
 
 const PROVIDER_DEFS: ProviderDef[] = [
@@ -30,6 +31,46 @@ const PROVIDER_DEFS: ProviderDef[] = [
   { id: "local", label: "Local / Self-hosted", description: "Ollama or any OpenAI-compatible local server. Requires a saved endpoint URL.", keyEnvVar: null, acceptsKey: false, keyRequired: false, modelSettingKey: "LOCAL_MODEL", defaultModel: "llama3", modelOptions: [], hasEndpoint: true, endpointSettingKey: "LOCAL_ENDPOINT", defaultEndpoint: "http://localhost:11434" },
   { id: "custom", label: "Custom AI Provider", description: "Any OpenAI-compatible AI API not listed above.", keyEnvVar: "CUSTOM_API_KEY", acceptsKey: true, keyRequired: false, modelSettingKey: "CUSTOM_MODEL", defaultModel: "", modelOptions: [], hasEndpoint: true, endpointSettingKey: "CUSTOM_ENDPOINT", defaultEndpoint: "https://your-provider.example.com/v1" },
 ];
+
+function isValidProviderId(id: string): boolean {
+  return /^[a-z0-9][a-z0-9._-]{0,63}$/.test(id);
+}
+
+function displayNameFromId(id: string): string {
+  return id
+    .split(/[-_.]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ") || id;
+}
+
+function settingPrefix(id: string): string {
+  return id.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
+}
+
+function customProviderDef(id: string): ProviderDef {
+  const prefix = settingPrefix(id);
+  return {
+    id,
+    label: displayNameFromId(id),
+    description: "Custom API provider saved in the VIBA vault.",
+    keyEnvVar: `${prefix}_API_KEY`,
+    acceptsKey: true,
+    keyRequired: false,
+    modelSettingKey: `${prefix}_MODEL`,
+    defaultModel: "",
+    modelOptions: [],
+    hasEndpoint: true,
+    endpointSettingKey: `${prefix}_ENDPOINT`,
+    defaultEndpoint: "",
+    custom: true,
+  };
+}
+
+function providerDefFor(id: string): ProviderDef | null {
+  if (!isValidProviderId(id)) return null;
+  return PROVIDER_DEFS.find((d) => d.id === id) ?? customProviderDef(id);
+}
 
 async function getSettingValue(key: string): Promise<string | null> {
   const [row] = await db.select().from(settingsTable).where(eq(settingsTable.key, key));
@@ -63,40 +104,49 @@ function savedEndpoint(def: ProviderDef, settingsMap: Map<string, string>): stri
 }
 
 function configured(def: ProviderDef, hasKey: boolean, settingsMap: Map<string, string>): boolean {
-  const endpointOk = !def.hasEndpoint || savedEndpoint(def, settingsMap).length > 0;
+  const endpointOk = !def.hasEndpoint || !def.keyRequired || savedEndpoint(def, settingsMap).length > 0 || def.custom === true;
   const keyOk = !def.keyRequired || hasKey;
-  return endpointOk && keyOk;
+  return endpointOk && keyOk && (hasKey || def.acceptsKey === false || savedEndpoint(def, settingsMap).length > 0);
+}
+
+async function serializeProvider(def: ProviderDef, uid: number | null, settingsMap: Map<string, string>) {
+  const hasKey = await hasKeyConfigured(def, uid);
+  const isConfigured = configured(def, hasKey, settingsMap);
+  const enabledSetting = settingsMap.get(`${def.id.toUpperCase()}_ENABLED`);
+  const enabled = enabledSetting !== undefined ? enabledSetting === "true" : isConfigured;
+  const status: Status = !isConfigured ? "not_configured" : !enabled ? "disabled" : "configured";
+  return {
+    id: def.id,
+    label: def.label,
+    description: def.description,
+    hasKey,
+    acceptsKey: def.acceptsKey,
+    keyRequired: def.keyRequired,
+    enabled,
+    model: settingsMap.get(def.modelSettingKey ?? "") ?? def.defaultModel,
+    endpoint: def.hasEndpoint ? savedEndpoint(def, settingsMap) : undefined,
+    placeholderEndpoint: def.defaultEndpoint,
+    hasEndpoint: def.hasEndpoint,
+    defaultModel: def.defaultModel,
+    modelOptions: def.modelOptions,
+    status,
+    custom: def.custom === true,
+  };
 }
 
 router.get("/providers", async (req, res): Promise<void> => {
   const uid = userId(req);
   const allSettings = await db.select().from(settingsTable);
   const settingsMap = new Map(allSettings.map((s) => [s.key, s.value]));
-
-  const providers = await Promise.all(PROVIDER_DEFS.map(async (def) => {
-    const hasKey = await hasKeyConfigured(def, uid);
-    const isConfigured = configured(def, hasKey, settingsMap);
-    const enabledSetting = settingsMap.get(`${def.id.toUpperCase()}_ENABLED`);
-    const enabled = enabledSetting !== undefined ? enabledSetting === "true" : isConfigured;
-    const status: Status = !isConfigured ? "not_configured" : !enabled ? "disabled" : "configured";
-    return {
-      id: def.id,
-      label: def.label,
-      description: def.description,
-      hasKey,
-      acceptsKey: def.acceptsKey,
-      keyRequired: def.keyRequired,
-      enabled,
-      model: settingsMap.get(def.modelSettingKey ?? "") ?? def.defaultModel,
-      endpoint: def.hasEndpoint ? savedEndpoint(def, settingsMap) : undefined,
-      placeholderEndpoint: def.defaultEndpoint,
-      hasEndpoint: def.hasEndpoint,
-      defaultModel: def.defaultModel,
-      modelOptions: def.modelOptions,
-      status,
-    };
-  }));
-
+  const credentials = await listVibaCredentials(uid);
+  const ids = new Set(PROVIDER_DEFS.map((def) => def.id));
+  for (const credential of credentials) {
+    if (credential.kind === "api_key" && isValidProviderId(credential.provider)) {
+      ids.add(credential.provider);
+    }
+  }
+  const defs = Array.from(ids).map((id) => providerDefFor(id)).filter((def): def is ProviderDef => Boolean(def));
+  const providers = await Promise.all(defs.map((def) => serializeProvider(def, uid, settingsMap)));
   res.json({ providers });
 });
 
@@ -105,8 +155,8 @@ router.post("/providers", async (req, res): Promise<void> => {
   if (!Array.isArray(body.providers)) { res.status(400).json({ error: "providers array is required" }); return; }
   const results: Array<{ id: string; ok: boolean; error?: string }> = [];
   for (const p of body.providers) {
-    const def = PROVIDER_DEFS.find((d) => d.id === p.id);
-    if (!def) { results.push({ id: p.id, ok: false, error: "Unknown provider" }); continue; }
+    const def = providerDefFor(p.id);
+    if (!def) { results.push({ id: p.id, ok: false, error: "Invalid provider id" }); continue; }
     if (p.enabled !== undefined) await upsertSetting(`${def.id.toUpperCase()}_ENABLED`, String(p.enabled));
     if (p.model !== undefined && def.modelSettingKey) await upsertSetting(def.modelSettingKey, p.model.trim());
     if (p.endpoint !== undefined && def.endpointSettingKey) await upsertSetting(def.endpointSettingKey, p.endpoint.trim());
@@ -116,9 +166,9 @@ router.post("/providers", async (req, res): Promise<void> => {
 });
 
 router.patch("/providers/:provider", async (req, res): Promise<void> => {
-  const id = String(req.params["provider"] ?? "");
-  const def = PROVIDER_DEFS.find((d) => d.id === id);
-  if (!def) { res.status(404).json({ error: `Unknown provider: ${id}` }); return; }
+  const id = String(req.params["provider"] ?? "").toLowerCase();
+  const def = providerDefFor(id);
+  if (!def) { res.status(404).json({ error: `Unknown or invalid provider: ${id}` }); return; }
   const body = req.body as { enabled?: boolean; model?: string; endpoint?: string; key?: string };
   if (body.enabled !== undefined) await upsertSetting(`${def.id.toUpperCase()}_ENABLED`, String(body.enabled));
   if (body.model !== undefined && def.modelSettingKey) await upsertSetting(def.modelSettingKey, body.model.trim());
@@ -137,14 +187,14 @@ router.patch("/providers/:provider", async (req, res): Promise<void> => {
 });
 
 router.post("/providers/:provider/test", async (req, res): Promise<void> => {
-  const id = String(req.params["provider"] ?? "");
-  const def = PROVIDER_DEFS.find((d) => d.id === id);
-  if (!def) { res.status(404).json({ error: `Unknown provider: ${id}` }); return; }
+  const id = String(req.params["provider"] ?? "").toLowerCase();
+  const def = providerDefFor(id);
+  if (!def) { res.status(404).json({ error: `Unknown or invalid provider: ${id}` }); return; }
   const allSettings = await db.select().from(settingsTable);
   const settingsMap = new Map(allSettings.map((s) => [s.key, s.value]));
   const hasKey = await hasKeyConfigured(def, userId(req));
   if (!configured(def, hasKey, settingsMap)) { res.json({ configured: false, message: "Provider is missing a required credential or endpoint." }); return; }
-  if (def.hasEndpoint) {
+  if (def.hasEndpoint && savedEndpoint(def, settingsMap)) {
     const endpoint = savedEndpoint(def, settingsMap);
     try {
       const controller = new AbortController();
@@ -161,18 +211,18 @@ router.post("/providers/:provider/test", async (req, res): Promise<void> => {
 });
 
 router.get("/providers/:provider/keys", async (req, res): Promise<void> => {
-  const id = String(req.params["provider"] ?? "");
-  const def = PROVIDER_DEFS.find((d) => d.id === id);
-  if (!def) { res.status(404).json({ error: `Unknown provider: ${id}` }); return; }
+  const id = String(req.params["provider"] ?? "").toLowerCase();
+  const def = providerDefFor(id);
+  if (!def) { res.status(404).json({ error: `Unknown or invalid provider: ${id}` }); return; }
   const all = await listVibaCredentials(userId(req));
   const keys = all.filter((c) => c.provider === def.id && c.kind === "api_key").map((c) => ({ label: c.label, status: c.status, lastUsedAt: c.last_used_at ?? null, updatedAt: c.updated_at }));
   res.json({ provider: def.id, keys });
 });
 
 router.post("/providers/:provider/keys", async (req, res): Promise<void> => {
-  const id = String(req.params["provider"] ?? "");
-  const def = PROVIDER_DEFS.find((d) => d.id === id);
-  if (!def) { res.status(404).json({ error: `Unknown provider: ${id}` }); return; }
+  const id = String(req.params["provider"] ?? "").toLowerCase();
+  const def = providerDefFor(id);
+  if (!def) { res.status(404).json({ error: `Unknown or invalid provider: ${id}` }); return; }
   if (!def.acceptsKey) { res.status(400).json({ error: "This provider does not use a stored secret." }); return; }
   const body = req.body as { key?: string; label?: string };
   const label = typeof body.label === "string" && body.label.trim() ? body.label.trim().slice(0, 80) : "default";
@@ -184,10 +234,10 @@ router.post("/providers/:provider/keys", async (req, res): Promise<void> => {
 });
 
 router.delete("/providers/:provider/keys/:label", async (req, res): Promise<void> => {
-  const id = String(req.params["provider"] ?? "");
+  const id = String(req.params["provider"] ?? "").toLowerCase();
   const label = String(req.params["label"] ?? "");
-  const def = PROVIDER_DEFS.find((d) => d.id === id);
-  if (!def) { res.status(404).json({ error: `Unknown provider: ${id}` }); return; }
+  const def = providerDefFor(id);
+  if (!def) { res.status(404).json({ error: `Unknown or invalid provider: ${id}` }); return; }
   if (!label) { res.status(400).json({ error: "label is required" }); return; }
   const result = await deleteVibaCredential({ userId: userId(req), provider: def.id, kind: "api_key", label });
   await logVibaEvent({ userId: userId(req), eventType: "provider_key_deleted", provider: def.id, status: "deleted", message: `${def.label} stored credential removed.` });
