@@ -1,5 +1,6 @@
 import type { AgentAdapter } from "./adapters/interface";
 import { OpenAIAdapter } from "./adapters/openai";
+import { OpenAICompatibleAdapter } from "./adapters/openaiCompatible";
 import { AnthropicAdapter } from "./adapters/anthropic";
 import { GeminiAdapter } from "./adapters/gemini";
 import { PerplexityAdapter } from "./adapters/perplexity";
@@ -25,6 +26,17 @@ import { eq } from "drizzle-orm";
 import { logger } from "./logger";
 import { getVibaCredential } from "./vibaVault";
 
+const CUSTOM_COMPATIBLE_BASE_URLS: Record<string, string> = {
+  venice: "https://api.venice.ai/api/v1",
+  openrouter: "https://openrouter.ai/api/v1",
+  together: "https://api.together.xyz/v1",
+  fireworks: "https://api.fireworks.ai/inference/v1",
+  deepseek: "https://api.deepseek.com",
+  lmstudio: "http://localhost:1234/v1",
+  "lm-studio": "http://localhost:1234/v1",
+  localai: "http://localhost:8080/v1",
+};
+
 async function getSetting(uppercaseKey: string): Promise<string | null> {
   const [upper] = await db.select().from(settingsTable).where(eq(settingsTable.key, uppercaseKey));
   if (upper?.value) return upper.value;
@@ -35,6 +47,15 @@ async function getSetting(uppercaseKey: string): Promise<string | null> {
 
 function isValidKey(key: string | null): key is string {
   return typeof key === "string" && key.length > 10;
+}
+
+function settingPrefix(provider: string): string {
+  return provider.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
+}
+
+function cleanEndpoint(endpoint: string | null | undefined): string | undefined {
+  const value = endpoint?.trim().replace(/\/+$/, "");
+  return value ? value : undefined;
 }
 
 export function buildMockAdapter(agent: Agent): AgentAdapter {
@@ -189,6 +210,24 @@ export async function buildAdapter(agent: Agent, userId?: number | null): Promis
     return new ManusMockAdapter(String(agent.id), agent.name, agent.role, agent.canUseTools);
   }
 
-  logger.warn({ provider }, "Unknown provider — using simulation mode");
+  const prefix = settingPrefix(provider);
+  const apiKey = await resolveApiKey(userId, provider, credLabel, `${prefix}_API_KEY`);
+  const baseUrl = cleanEndpoint(await getSetting(`${prefix}_ENDPOINT`)) ?? CUSTOM_COMPATIBLE_BASE_URLS[provider];
+  const model = await getSetting(`${prefix}_MODEL`) ?? undefined;
+
+  if (isValidKey(apiKey) && baseUrl) {
+    return new OpenAICompatibleAdapter(
+      String(agent.id),
+      agent.name,
+      agent.role,
+      provider,
+      apiKey,
+      baseUrl,
+      model,
+      agent.canUseTools,
+    );
+  }
+
+  logger.warn({ provider, hasKey: isValidKey(apiKey), hasBaseUrl: Boolean(baseUrl) }, "Unknown provider could not be routed through generic OpenAI-compatible adapter — using simulation mode");
   return new ChatGPTMockAdapter(String(agent.id), agent.name, agent.role);
 }
