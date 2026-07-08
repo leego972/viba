@@ -5,9 +5,25 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 
 type ProviderStatus = "configured" | "not_configured" | "disabled";
+type AdapterType = "auto" | "openai" | "openai-compatible" | "anthropic" | "gemini" | "groq" | "perplexity" | "ollama" | "replit" | "manus" | "railway";
+
+type AdapterTypeOption = {
+  id: AdapterType;
+  label: string;
+  description: string;
+  requiresEndpoint: boolean;
+  requiresKey: boolean;
+};
 
 type Provider = {
   id: string;
@@ -17,8 +33,23 @@ type Provider = {
   enabled?: boolean;
   model?: string;
   endpoint?: string;
+  adapterType?: AdapterType;
   status?: ProviderStatus;
 };
+
+const FALLBACK_ADAPTER_TYPES: AdapterTypeOption[] = [
+  { id: "auto", label: "Automatic", description: "VIBA chooses the best adapter from the provider name and saved details.", requiresEndpoint: false, requiresKey: true },
+  { id: "openai-compatible", label: "OpenAI-compatible", description: "Generic adapter for Venice, OpenRouter, Together, Fireworks and similar /v1 APIs.", requiresEndpoint: false, requiresKey: true },
+  { id: "openai", label: "OpenAI", description: "Native OpenAI adapter.", requiresEndpoint: false, requiresKey: true },
+  { id: "anthropic", label: "Anthropic / Claude", description: "Native Claude adapter.", requiresEndpoint: false, requiresKey: true },
+  { id: "gemini", label: "Google Gemini", description: "Google Gemini adapter.", requiresEndpoint: false, requiresKey: true },
+  { id: "groq", label: "Groq", description: "Groq adapter.", requiresEndpoint: false, requiresKey: true },
+  { id: "perplexity", label: "Perplexity", description: "Perplexity adapter.", requiresEndpoint: false, requiresKey: true },
+  { id: "ollama", label: "Ollama / Local", description: "Local/self-hosted adapter.", requiresEndpoint: false, requiresKey: false },
+  { id: "replit", label: "Replit", description: "Replit task/tool adapter.", requiresEndpoint: false, requiresKey: true },
+  { id: "manus", label: "Manus", description: "Manus workspace adapter.", requiresEndpoint: false, requiresKey: true },
+  { id: "railway", label: "Railway", description: "Railway infrastructure adapter.", requiresEndpoint: false, requiresKey: true },
+];
 
 function providerIdFromName(name: string): string {
   return name
@@ -37,15 +68,21 @@ function displayNameFromId(id: string): string {
     .join(" ") || id;
 }
 
+function adapterLabel(adapterTypes: AdapterTypeOption[], id?: AdapterType): string {
+  return adapterTypes.find((item) => item.id === id)?.label ?? "Automatic";
+}
+
 export function GenericApiKeysCard() {
   const { toast } = useToast();
   const [providers, setProviders] = useState<Provider[]>([]);
+  const [adapterTypes, setAdapterTypes] = useState<AdapterTypeOption[]>(FALLBACK_ADAPTER_TYPES);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [showOptionalDetails, setShowOptionalDetails] = useState(false);
   const [name, setName] = useState("");
   const [value, setValue] = useState("");
+  const [adapterType, setAdapterType] = useState<AdapterType>("auto");
   const [model, setModel] = useState("");
   const [endpoint, setEndpoint] = useState("");
 
@@ -54,8 +91,9 @@ export function GenericApiKeysCard() {
     try {
       const response = await fetch("/api/providers", { credentials: "include" });
       if (!response.ok) throw new Error(`Provider list failed with HTTP ${response.status}`);
-      const payload = (await response.json()) as { providers?: Provider[] };
+      const payload = (await response.json()) as { providers?: Provider[]; adapterTypes?: AdapterTypeOption[] };
       setProviders(payload.providers ?? []);
+      if (payload.adapterTypes?.length) setAdapterTypes(payload.adapterTypes);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not load API providers.";
       toast({ title: "API list failed", description: message, variant: "destructive" });
@@ -73,14 +111,16 @@ export function GenericApiKeysCard() {
     [providers],
   );
 
+  const selectedAdapter = adapterTypes.find((item) => item.id === adapterType);
+
   const handleAdd = async () => {
     const id = providerIdFromName(name);
     const key = value.trim();
     if (!id) {
-      toast({ title: "Name required", description: "Enter a provider name such as Venice, OpenRouter, Groq, or Custom Client.", variant: "destructive" });
+      toast({ title: "Name required", description: "Enter a provider name such as Venice, OpenRouter, Groq, Claude, or Custom Client.", variant: "destructive" });
       return;
     }
-    if (!key) {
+    if (!key && selectedAdapter?.requiresKey !== false) {
       toast({ title: "API value required", description: "Paste the API key or token value.", variant: "destructive" });
       return;
     }
@@ -94,6 +134,7 @@ export function GenericApiKeysCard() {
         body: JSON.stringify({
           enabled: true,
           key,
+          adapterType,
           model: model.trim() || undefined,
           endpoint: endpoint.trim() || undefined,
         }),
@@ -102,9 +143,10 @@ export function GenericApiKeysCard() {
         const payload = (await response.json().catch(() => ({}))) as { error?: string };
         throw new Error(payload.error ?? `Save failed with HTTP ${response.status}`);
       }
-      toast({ title: "API saved", description: `${displayNameFromId(id)} was saved to the VIBA vault.` });
+      toast({ title: "API saved", description: `${displayNameFromId(id)} was saved to the VIBA vault using ${adapterLabel(adapterTypes, adapterType)}.` });
       setName("");
       setValue("");
+      setAdapterType("auto");
       setModel("");
       setEndpoint("");
       setShowOptionalDetails(false);
@@ -148,7 +190,7 @@ export function GenericApiKeysCard() {
               <Key className="h-5 w-5" /> API Keys
             </CardTitle>
             <CardDescription>
-              Add any provider once. Required: name and API key. Optional details can be added only when needed.
+              Add any provider once. Required: name and API key. Optional details let you choose the connection adapter.
             </CardDescription>
           </div>
           <Button type="button" onClick={() => setShowAdd((current) => !current)} className="gap-2 shrink-0">
@@ -194,28 +236,45 @@ export function GenericApiKeysCard() {
             </button>
 
             {showOptionalDetails && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-md border bg-background/50 p-3">
+              <div className="grid grid-cols-1 gap-3 rounded-md border bg-background/50 p-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="api-provider-model">Model</Label>
-                  <Input
-                    id="api-provider-model"
-                    value={model}
-                    onChange={(event) => setModel(event.target.value)}
-                    placeholder="Leave blank to auto-detect"
-                    autoComplete="off"
-                  />
-                  <p className="text-[11px] text-muted-foreground">VIBA will try to detect a model if this is empty.</p>
+                  <Label htmlFor="api-adapter-type">Adapter type</Label>
+                  <Select value={adapterType} onValueChange={(value) => setAdapterType(value as AdapterType)}>
+                    <SelectTrigger id="api-adapter-type">
+                      <SelectValue placeholder="Automatic" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {adapterTypes.map((type) => (
+                        <SelectItem key={type.id} value={type.id}>{type.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground">{selectedAdapter?.description ?? "Automatic is recommended unless the provider needs a specific protocol."}</p>
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="api-provider-endpoint">API Base URL / Endpoint</Label>
-                  <Input
-                    id="api-provider-endpoint"
-                    value={endpoint}
-                    onChange={(event) => setEndpoint(event.target.value)}
-                    placeholder="Usually ends in /v1"
-                    autoComplete="off"
-                  />
-                  <p className="text-[11px] text-muted-foreground">Only needed if VIBA does not already know this provider endpoint.</p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="api-provider-model">Model</Label>
+                    <Input
+                      id="api-provider-model"
+                      value={model}
+                      onChange={(event) => setModel(event.target.value)}
+                      placeholder="Leave blank to auto-detect"
+                      autoComplete="off"
+                    />
+                    <p className="text-[11px] text-muted-foreground">VIBA will try to detect a model if this is empty.</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="api-provider-endpoint">API Base URL / Endpoint</Label>
+                    <Input
+                      id="api-provider-endpoint"
+                      value={endpoint}
+                      onChange={(event) => setEndpoint(event.target.value)}
+                      placeholder="Usually ends in /v1"
+                      autoComplete="off"
+                    />
+                    <p className="text-[11px] text-muted-foreground">Only needed if VIBA does not already know this provider endpoint.</p>
+                  </div>
                 </div>
               </div>
             )}
@@ -252,6 +311,7 @@ export function GenericApiKeysCard() {
                     {provider.enabled === false && <Badge variant="outline">Disabled</Badge>}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1 font-mono">{provider.id}</p>
+                  <p className="text-xs text-muted-foreground mt-1">Adapter: {adapterLabel(adapterTypes, provider.adapterType)}</p>
                   {provider.model && <p className="text-xs text-muted-foreground mt-1">Model: {provider.model}</p>}
                   {provider.endpoint && <p className="text-xs text-muted-foreground mt-1 truncate">Base URL: {provider.endpoint}</p>}
                 </div>
@@ -273,7 +333,7 @@ export function GenericApiKeysCard() {
       </CardContent>
       <CardFooter>
         <p className="text-xs text-muted-foreground">
-          Keys are never returned to the browser. This list only shows provider names and status.
+          Keys are never returned to the browser. This list only shows provider names, adapter type and status.
         </p>
       </CardFooter>
     </Card>
