@@ -6,7 +6,7 @@ import {
   ChevronDown, FlaskConical, Terminal, Wrench, Radio, Bot, ClipboardCheck,
   Rocket, ShieldAlert, Activity, ShieldCheck, Globe, FolderInput, Server,
   Plug, FileText, Search, Megaphone, PenTool, Building2,
-  AlertTriangle, BarChart3,
+  AlertTriangle, BarChart3, BrainCircuit, TrendingDown, History, Wallet, BookOpen,
 } from "lucide-react";
 
 interface DropItem { href: string; label: string; icon: React.ElementType }
@@ -64,6 +64,17 @@ const GROUPS: NavGroup[] = [
       { href: "/advertising",      label: "Advertising",        icon: Megaphone },
       { href: "/content-creator",  label: "Content Creator",    icon: PenTool },
       { href: "/brand-outreach",   label: "Brand Outreach",     icon: Building2 },
+    ],
+  },
+  {
+    label: "AI", icon: BrainCircuit,
+    matchPaths: ["/ai-optimizer", "/ai-savings", "/usage-history", "/budgets", "/project-memory"],
+    items: [
+      { href: "/ai-optimizer",   label: "AI Optimiser",      icon: BrainCircuit },
+      { href: "/ai-savings",     label: "Savings",           icon: TrendingDown },
+      { href: "/usage-history",  label: "Usage History",     icon: History },
+      { href: "/budgets",        label: "Budgets",           icon: Wallet },
+      { href: "/project-memory", label: "Project Memory",    icon: BookOpen },
     ],
   },
 ];

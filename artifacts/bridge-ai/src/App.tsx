@@ -41,6 +41,11 @@ import AdvertisingDashboardPage from "@/pages/advertising-dashboard";
 import ContentCreatorPage from "@/pages/content-creator";
 import BrandOutreachPage from "@/pages/brand-outreach";
 import RenderConnectorPage from "@/pages/render-connector";
+import AiOptimizerPage from "@/pages/ai-optimizer";
+import AiSavingsPage from "@/pages/ai-savings";
+import UsageHistoryPage from "@/pages/usage-history";
+import BudgetsPage from "@/pages/budgets";
+import ProjectMemoryPage from "@/pages/project-memory";
 import CompletionPage, {
   CollaborationMapPage,
   DemoDoctorReport,
@@ -133,6 +138,11 @@ function GatedRouter() {
         <Route path="/content-creator" component={ContentCreatorPage} />
         <Route path="/brand-outreach" component={BrandOutreachPage} />
         <Route path="/render-connector" component={RenderConnectorPage} />
+        <Route path="/ai-optimizer" component={AiOptimizerPage} />
+        <Route path="/ai-savings" component={AiSavingsPage} />
+        <Route path="/usage-history" component={UsageHistoryPage} />
+        <Route path="/budgets" component={BudgetsPage} />
+        <Route path="/project-memory" component={ProjectMemoryPage} />
         <Route component={NotFound} />
       </Switch>
     </AuthGuard>

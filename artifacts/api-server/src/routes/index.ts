@@ -1,4 +1,4 @@
-import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
+import { Router, type IRouter } from "express";
 import healthRouter from "./health";
 import sessionsRouter from "./sessions";
 import settingsRouter from "./settings";
@@ -52,19 +52,13 @@ import seoRouter from "./seo";
 import marketingRouter from "./marketing";
 import advertisingRouter from "./advertising";
 import contentCreatorRouter from "./contentCreator";
-import growthAutopilotRouter from "./growthAutopilot";
 import userBrowserRouter from "./userBrowserRouter";
+import aiOptimizerRouter from "./aiOptimizer";
+import aiBudgetsRouter from "./aiBudgets";
+import aiModelsRouter from "./aiModels";
+import projectMemoryRouter from "./projectMemory";
 
 const router: IRouter = Router();
-
-function contentCreatorCompatibilityMount(req: Request, res: Response, next: NextFunction): void {
-  const originalUrl = req.url;
-  req.url = `/api/content-creator${req.url}`;
-  contentCreatorRouter(req, res, (err?: unknown) => {
-    req.url = originalUrl;
-    next(err);
-  });
-}
 
 // auth routes are registered first and bypass the ACCESS_TOKEN gate in app.ts
 router.use(authRouter);
@@ -119,9 +113,11 @@ router.use(accountRouter);
 router.use(seoRouter);
 router.use(marketingRouter);
 router.use(advertisingRouter);
-router.use("/content-creator", contentCreatorCompatibilityMount);
 router.use(contentCreatorRouter);
-router.use(growthAutopilotRouter);
 router.use(userBrowserRouter);
+router.use(aiOptimizerRouter);
+router.use(aiBudgetsRouter);
+router.use(aiModelsRouter);
+router.use(projectMemoryRouter);
 
 export default router;
