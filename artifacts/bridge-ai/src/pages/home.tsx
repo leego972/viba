@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "wouter";
 import {
   ArrowRight, FileText, CheckCircle2, X, TrendingDown, DollarSign,
-  Brain, Zap, Users, Shield, Lock, ChevronRight, BarChart3,
+  Brain, Zap, Users, Shield, Lock, BarChart3,
 } from "lucide-react";
 
 const CREAM      = "#faf8f2";
@@ -101,8 +101,8 @@ export default function Home() {
                 </span>
               </h1>
 
-              <p className="max-w-[620px] text-xl leading-relaxed" style={{ color: TEXT_MUT }}>
-                VIBA routes each task to the <strong style={{ color: TEXT }}>cheapest AI that can actually handle it</strong> — using cache, local tools, or economy models before ever touching a premium API. You keep your builds running. You stop wasting money on tasks that don't need GPT-4.
+              <p className="max-w-[620px] text-base sm:text-lg leading-relaxed" style={{ color: TEXT_MUT }}>
+                VIBA routes each task to the <strong style={{ color: TEXT }}>cheapest AI that can handle it</strong> — using cache, local tools, or economy models before touching a premium API. Stop wasting money on tasks that don't need GPT-4.
               </p>
 
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-1">
@@ -203,24 +203,23 @@ export default function Home() {
               {/* Priority ladder */}
               <div className="mx-auto max-w-2xl space-y-2 mb-10">
                 {[
-                  { n: "1", label: "Task cache",      desc: "Identical task run before? Return the cached result instantly — zero AI cost.",         color: EMERALD },
-                  { n: "2", label: "Project memory",  desc: "Stored context reused instead of re-sending full history on every call.",               color: "#0891b2" },
-                  { n: "3", label: "Local tool",      desc: "Browser automation or code analysis — no AI model needed at all.",                      color: "#3b82f6" },
-                  { n: "4", label: "Rule engine",     desc: "Deterministic checks for repeatable findings — instant, free, consistent.",              color: "#6366f1" },
-                  { n: "5", label: "Economy model",   desc: "Fast, cheap model (Groq / Llama) for tasks that don't need premium reasoning.",         color: "#8b5cf6" },
-                  { n: "6", label: "Premium model",   desc: "GPT-4o, Claude 3.5, or Gemini — only when the task genuinely justifies the cost.",     color: VIOLET },
-                  { n: "7", label: "Multi-model",     desc: "Two independent models to verify high-stakes outputs — never used by default.",         color: "#a21caf" },
+                  { n: "1", label: "Task cache",     desc: "Identical task run before? Return the cached result instantly — zero AI cost.",    color: EMERALD },
+                  { n: "2", label: "Project memory", desc: "Stored context reused instead of re-sending full history on every call.",          color: "#0891b2" },
+                  { n: "3", label: "Local tool",     desc: "Browser automation or code analysis — no AI model needed at all.",                 color: "#3b82f6" },
+                  { n: "4", label: "Rule engine",    desc: "Deterministic checks for repeatable findings — instant, free, consistent.",        color: "#6366f1" },
+                  { n: "5", label: "Economy model",  desc: "Fast, cheap model (Groq / Llama) for tasks that don't need premium reasoning.",    color: "#8b5cf6" },
+                  { n: "6", label: "Premium model",  desc: "GPT-4o, Claude 3.5, or Gemini — only when the task genuinely needs it.",          color: VIOLET },
+                  { n: "7", label: "Multi-model",    desc: "Two independent models to verify high-stakes outputs — never the default.",        color: "#a21caf" },
                 ].map(({ n, label, desc, color }) => (
-                  <div key={n} className="flex items-start gap-4 rounded-xl px-4 py-3.5"
+                  <div key={n} className="flex items-start gap-3 rounded-xl px-4 py-3"
                     style={{ background: CREAM_CARD, border: `1px solid ${BORDER}` }}>
                     <span className="h-6 w-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5 text-white"
                       style={{ background: color }}>
                       {n}
                     </span>
                     <div className="min-w-0">
-                      <span className="text-sm font-semibold" style={{ color: TEXT }}>{label}</span>
-                      <ChevronRight className="h-3.5 w-3.5 inline mx-1.5" style={{ color: TEXT_FAINT }} />
-                      <span className="text-sm" style={{ color: TEXT_MUT }}>{desc}</span>
+                      <p className="text-sm font-semibold leading-snug" style={{ color: TEXT }}>{label}</p>
+                      <p className="text-xs mt-0.5 leading-relaxed" style={{ color: TEXT_MUT }}>{desc}</p>
                     </div>
                   </div>
                 ))}
@@ -253,30 +252,30 @@ export default function Home() {
                 </p>
               </div>
 
-              <div className="grid sm:grid-cols-3 gap-6 mb-8">
+              <div className="grid sm:grid-cols-3 gap-4 mb-8">
                 {[
                   {
                     value: "Up to 80%",
-                    label: "Cost reduction on typical builds",
-                    desc: "When cache hits and economy models handle the majority of tasks, premium API spend drops dramatically.",
+                    label: "Cost reduction",
+                    desc: "Cache hits and economy models handle most tasks — premium API spend drops dramatically.",
                     color: EMERALD,
                   },
                   {
                     value: "0 tokens",
                     label: "Wasted on repeated context",
-                    desc: "Project Memory stores your stack, decisions, and architecture once — and reuses it instead of re-sending every session.",
+                    desc: "Project Memory stores your stack once and reuses it — instead of re-sending it every session.",
                     color: INDIGO,
                   },
                   {
                     value: "7 checks",
-                    label: "Before a premium model is used",
-                    desc: "VIBA exhausts every cheaper alternative before routing to GPT-4, Claude, or Gemini.",
+                    label: "Before a premium model fires",
+                    desc: "VIBA exhausts every cheaper option before routing to GPT-4, Claude, or Gemini.",
                     color: VIOLET,
                   },
                 ].map(({ value, label, desc, color }) => (
                   <div key={label} className="rounded-2xl p-5 text-center"
                     style={{ background: CREAM_CARD, border: `1px solid ${BORDER}` }}>
-                    <p className="text-4xl font-extrabold mb-1" style={{ color }}>{value}</p>
+                    <p className="text-3xl sm:text-4xl font-extrabold mb-1" style={{ color }}>{value}</p>
                     <p className="text-sm font-semibold mb-2" style={{ color: TEXT }}>{label}</p>
                     <p className="text-xs leading-relaxed" style={{ color: TEXT_MUT }}>{desc}</p>
                   </div>
@@ -285,24 +284,24 @@ export default function Home() {
 
               <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${BORDER}` }}>
                 <div className="px-4 py-3 flex items-center gap-2" style={{ background: CREAM_ALT, borderBottom: `1px solid ${BORDER}` }}>
-                  <div className="flex gap-1.5">
+                  <div className="flex gap-1.5 shrink-0">
                     <div className="h-3 w-3 rounded-full bg-red-400" />
                     <div className="h-3 w-3 rounded-full bg-amber-400" />
                     <div className="h-3 w-3 rounded-full bg-green-400" />
                   </div>
-                  <span className="text-xs font-mono" style={{ color: TEXT_MUT }}>VIBA AI Savings Dashboard — this month</span>
+                  <span className="text-xs font-mono truncate" style={{ color: TEXT_MUT }}>VIBA Savings Dashboard</span>
                 </div>
-                <div className="p-5 grid grid-cols-2 sm:grid-cols-4 gap-4" style={{ background: "#111827" }}>
+                <div className="p-4 grid grid-cols-2 gap-3" style={{ background: "#111827" }}>
                   {[
-                    { label: "Tasks run",       value: "247",    sub: "this month" },
-                    { label: "Without premium", value: "189",    sub: "76% of tasks" },
-                    { label: "Est. spend",       value: "$4.12",  sub: "with VIBA" },
-                    { label: "Est. saved",       value: "$31.80", sub: "vs unoptimised", green: true },
+                    { label: "Tasks run",    value: "247",    sub: "this month" },
+                    { label: "No premium",   value: "189",    sub: "76% of tasks" },
+                    { label: "Spent",        value: "$4.12",  sub: "with VIBA" },
+                    { label: "Saved",        value: "$31.80", sub: "vs unoptimised", green: true },
                   ].map(({ label, value, sub, green }) => (
-                    <div key={label} className="rounded-xl p-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                      <p className="text-[10px] tracking-widest uppercase mb-1" style={{ color: "#64748b" }}>{label}</p>
-                      <p className="text-2xl font-bold" style={{ color: green ? "#34d399" : "#f8fafc" }}>{value}</p>
-                      <p className="text-[10px] mt-0.5" style={{ color: "#475569" }}>{sub}</p>
+                    <div key={label} className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                      <p className="text-[10px] tracking-widest uppercase mb-1 truncate" style={{ color: "#64748b" }}>{label}</p>
+                      <p className="text-xl font-bold" style={{ color: green ? "#34d399" : "#f8fafc" }}>{value}</p>
+                      <p className="text-[10px] mt-0.5 truncate" style={{ color: "#475569" }}>{sub}</p>
                     </div>
                   ))}
                 </div>
