@@ -29,6 +29,19 @@ export default function SignUpPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
+  async function openTrialCheckout(): Promise<boolean> {
+    const checkout = await fetch("/api/billing/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+    });
+    if (!checkout.ok) return false;
+    const data = (await checkout.json()) as { url?: string };
+    if (!data.url) return false;
+    window.location.href = data.url;
+    return true;
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -55,9 +68,10 @@ export default function SignUpPage() {
       }
       setSuccess(true);
       queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
-      setTimeout(() => {
-        window.location.href = "/dashboard";
-      }, 1500);
+      const opened = await openTrialCheckout();
+      if (!opened) {
+        window.location.href = "/pricing";
+      }
     } catch {
       setError("Could not connect to the server. Please check your connection.");
     } finally {
@@ -110,7 +124,7 @@ export default function SignUpPage() {
             </p>
           </div>
 
-          <SocialLoginButtons mode="register" returnPath="/dashboard" />
+          <SocialLoginButtons mode="register" returnPath="/pricing" />
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">

@@ -39,13 +39,14 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import {
-  Play, FastForward, Square, Send, CheckCircle2, Clock, Bot,
+  Play, FastForward, Square, Send, CheckCircle2, Clock, Bot, Coins,
   Crosshair, LineChart, Zap, FlaskConical, RotateCcw, X,
   RefreshCw, History, ShieldCheck, TrendingDown, AlertTriangle,
   Download, Brain, Copy, GitBranch, ExternalLink, Server, Pencil, Wrench,
   CopyPlus, BarChart3, MessageSquare, ListChecks, Search, Mic, MicOff,
 } from "lucide-react";
 import { useSessionStream } from "@/hooks/useSessionStream";
+import { IntelligentBuildFlow } from "@/components/IntelligentBuildFlow";
 import { MarkdownContent } from "@/components/MarkdownContent";
 import { ToolOutputCards, type ToolOutput } from "@/components/ToolOutputCards";
 import {
@@ -135,6 +136,13 @@ export default function SessionWorkspace() {
   const [showEditCtxModal, setShowEditCtxModal] = useState(false);
   const [editRepoUrl, setEditRepoUrl] = useState("");
   const [editRepoBranch, setEditRepoBranch] = useState("");
+
+    // Budget cap state
+    const [budgetCap, setBudgetCap] = useState<number | null>(null);
+    const [budgetReserved, setBudgetReserved] = useState<number>(0);
+    const [budgetLoading, setBudgetLoading] = useState(false);
+    const [showBudgetEdit, setShowBudgetEdit] = useState(false);
+    const [budgetInput, setBudgetInput] = useState("");
   const [editWorkspaceEnv, setEditWorkspaceEnv] = useState("");
 
   // Inline reply state for user-directed questions
@@ -410,7 +418,36 @@ export default function SessionWorkspace() {
     }
   };
 
-  const handleRunNext = async () => {
+  // Load session budget cap on mount
+    useEffect(() => {
+      if (!sessionId) return;
+      void fetch(`/api/sessions/${sessionId}/budget`, { credentials: "include" })
+        .then(r => r.ok ? r.json() as Promise<{ budgetCapCredits: number | null; creditsReserved: number }> : null)
+        .then(d => { if (!d) return; setBudgetCap(d.budgetCapCredits); setBudgetReserved(d.creditsReserved); })
+        .catch(() => {});
+    }, [sessionId]);
+
+    const handleSaveBudget = async () => {
+      setBudgetLoading(true);
+      try {
+        const cap = budgetInput.trim() === "" ? null : Number(budgetInput);
+        if (budgetInput.trim() !== "" && !Number.isFinite(cap)) return;
+        const res = await fetch(`/api/sessions/${sessionId}/budget`, {
+          method: "PATCH", credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ budgetCapCredits: cap }),
+        });
+        if (res.ok) {
+          const d = await res.json() as { budgetCapCredits: number | null; creditsReserved: number };
+          setBudgetCap(d.budgetCapCredits);
+          setBudgetReserved(d.creditsReserved);
+          setShowBudgetEdit(false);
+          toast({ title: cap === null ? "Budget cap cleared" : `Budget set to ${cap} credits` });
+        }
+      } finally { setBudgetLoading(false); }
+    };
+
+    const handleRunNext = async () => {
     // On first run, conduct safety vote before executing anything
     if (messages.length === 0 && !voteResult) {
       const ok = await handleSafetyVote();
@@ -836,7 +873,16 @@ export default function SessionWorkspace() {
           </div>
         )}
 
-        {/* 3 Column Layout */}
+        {/* Collaboration flow — shows current workflow stage */}
+          <IntelligentBuildFlow
+            status={session.status}
+            hasTasks={tasks.length > 0}
+            hasApprovals={approvals.some(a => a.status === "approved")}
+            hasReceipts={tasks.some(t => t.status === "completed")}
+            hasFinalOutput={!!session.finalOutput}
+          />
+
+          {/* 3 Column Layout */}
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 min-h-0 overflow-auto lg:overflow-hidden">
 
           {/* Left: Info, Memory & Agents (3 cols) */}
@@ -852,7 +898,82 @@ export default function SessionWorkspace() {
               </CardContent>
             </Card>
 
-            {/* Workspace Context — repo, branch, environment */}
+            {/* Budget cap — compact collapsible card */}
+              <details className="group/budget shrink-0">
+                <summary className="cursor-pointer select-none list-none flex items-center gap-2 rounded-lg border bg-card px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors">
+                  <Coins className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <span className="flex-1">Budget cap</span>
+                  <span className="text-[11px] text-muted-foreground">{budgetCap !== null ? `${budgetCap} cr` : "None"}</span>
+                  <span className="text-[10px] text-muted-foreground transition-transform group-open/budget:rotate-180 inline-block">▼</span>
+                </summary>
+                <div className="mt-1 rounded-lg border bg-card p-4 space-y-3">
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">VIBA pauses before exceeding this cap. Leave blank for no limit.</p>
+                  {budgetCap !== null && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Cap</p>
+                        <p className="text-sm font-medium">{budgetCap} cr</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Remaining</p>
+                        <p className="text-sm font-medium">{Math.max(0, budgetCap - budgetReserved)} cr</p>
+                      </div>
+                    </div>
+                  )}
+                  {showBudgetEdit ? (
+                    <div className="flex gap-2">
+                      <Input type="number" min="0" placeholder="Credits (blank = no cap)" value={budgetInput} onChange={e => setBudgetInput(e.target.value)} className="h-8 text-sm" />
+                      <Button size="sm" onClick={handleSaveBudget} disabled={budgetLoading} className="shrink-0 h-8 px-3">{budgetLoading ? "…" : "Save"}</Button>
+                      <Button size="sm" variant="ghost" onClick={() => setShowBudgetEdit(false)} className="shrink-0 h-8 px-2"><X className="h-3.5 w-3.5" /></Button>
+                    </div>
+                  ) : (
+                    <button type="button"
+                      onClick={() => { setBudgetInput(budgetCap !== null ? String(budgetCap) : ""); setShowBudgetEdit(true); }}
+                      className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <Pencil className="h-3 w-3" /> {budgetCap !== null ? "Edit cap" : "Set cap"}
+                    </button>
+                  )}
+                </div>
+              </details>
+
+              {/* Proof Report quick link */}
+              <Link href={`/sessions/${sessionId}/proof-report`}>
+                <button
+                  type="button"
+                  className="shrink-0 flex items-center gap-2 rounded-lg border bg-card px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors w-full"
+                >
+                  <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <span className="flex-1 text-left">Proof Report</span>
+                  <ExternalLink className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                </button>
+              </Link>
+
+              {/* Next Action quick link */}
+              <Link href={`/sessions/${sessionId}/next-action`}>
+                <button
+                  type="button"
+                  className="shrink-0 flex items-center gap-2 rounded-lg border bg-card px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors w-full"
+                >
+                  <ListChecks className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <span className="flex-1 text-left">Next Action</span>
+                  <ExternalLink className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                </button>
+              </Link>
+
+              {/* Approvals quick link */}
+              <Link href={`/sessions/${sessionId}/approvals`}>
+                <button
+                  type="button"
+                  className="shrink-0 flex items-center gap-2 rounded-lg border bg-card px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors w-full"
+                >
+                  <ClipboardCheck className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <span className="flex-1 text-left">Approvals</span>
+                  <ExternalLink className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                </button>
+              </Link>
+
+              {/* Workspace Context — repo, branch, environment */}
             {(session.repoUrl || session.repoBranch || session.workspaceEnv) ? (
               <details className="group/wctx shrink-0">
                 <summary className="cursor-pointer select-none list-none flex items-center gap-2 rounded-lg border bg-card px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors">

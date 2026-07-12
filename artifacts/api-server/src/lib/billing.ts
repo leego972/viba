@@ -1,17 +1,7 @@
-/**
- * VIBA Billing — Stripe integration
- *
- * $50/month membership — 7-day free trial, card captured upfront
- * 1,000 credits/month included
- * One-time credit top-up packs available when allowance runs out
- *
- * Adapted from leego972/virellestudios billing system (simplified for VIBA).
- */
 import Stripe from "stripe";
 import { pool } from "@workspace/db";
 import { logger } from "./logger";
 
-// ─── Stripe singleton ─────────────────────────────────────────────────────────
 let _stripe: Stripe | null = null;
 
 export function getStripe(): Stripe {
@@ -37,11 +27,12 @@ export const VIBA_PLAN = {
   priceEnvKey: "STRIPE_BILLING_SUBSCRIPTION_PRICE_ID",
   productName: "VIBA Member",
   description:
-    "Full access to VIBA collaborative multi-agent orchestration. Includes 1,000 credits/month. 7-day free trial — card required.",
-  unitAmount: 5000, // $50.00 USD in cents
+    "Full access to VIBA collaborative multi-agent orchestration. Includes 1,000 credits/month and a 3-day trial with 500 daily credits.",
+  unitAmount: 5000,
   currency: "usd",
-  monthlyCredits: 1000,
-  trialDays: 7,
+  monthlyCredits: VIBA_CREDIT_ECONOMICS.monthlyCredits,
+  trialDays: 3,
+  trialCredits: VIBA_CREDIT_ECONOMICS.trialCreditsDaily,
 } as const;
 
 export const BASIC_PLAN = {
@@ -93,55 +84,28 @@ export interface CreditPack {
   label: string;
   description: string;
   credits: number;
-  unitAmount: number; // USD cents
+  unitAmount: number;
   badge?: string;
 }
 
 export const CREDIT_PACKS: CreditPack[] = [
   {
-    key: "credits_200",
-    priceEnvKey: "STRIPE_BILLING_CREDITS_200_PRICE_ID",
-    label: "Starter Pack",
-    description: "200 credits",
-    credits: 200,
-    unitAmount: 900, // $9
-  },
-  {
-    key: "credits_500",
-    priceEnvKey: "STRIPE_BILLING_CREDITS_500_PRICE_ID",
-    label: "Pro Pack",
-    description: "500 credits",
-    credits: 500,
-    unitAmount: 1900, // $19
-    badge: "Popular",
-  },
-  {
-    key: "credits_1200",
-    priceEnvKey: "STRIPE_BILLING_CREDITS_1200_PRICE_ID",
-    label: "Power Pack",
-    description: "1,200 credits",
-    credits: 1200,
-    unitAmount: 3900, // $39
-  },
-  {
-    key: "credits_3000",
-    priceEnvKey: "STRIPE_BILLING_CREDITS_3000_PRICE_ID",
-    label: "Pro Max Pack",
-    description: "3,000 credits",
-    credits: 3000,
-    unitAmount: 7900, // $79
-    badge: "Best Value",
+    key: "credits_1000",
+    priceEnvKey: "STRIPE_BILLING_CREDITS_1000_PRICE_ID",
+    label: "1,000 Credit Pack",
+    description: "1,000 credits",
+    credits: VIBA_CREDIT_ECONOMICS.topUpCredits,
+    unitAmount: VIBA_CREDIT_ECONOMICS.topUpUnitAmount,
+    badge: "Another Month",
   },
 ];
 
-// ─── In-memory price ID cache ─────────────────────────────────────────────────
 const _priceCache: Record<string, string> = {};
 
 export function getBillingPriceId(key: string): string {
   return _priceCache[key] ?? "";
 }
 
-// ─── Auto-provisioning (idempotent — safe on every restart) ──────────────────
 export async function provisionStripeProducts(): Promise<void> {
   if (!isStripeConfigured()) {
     logger.warn("Stripe not configured — billing provisioning skipped");
@@ -176,7 +140,6 @@ export async function provisionStripeProducts(): Promise<void> {
     logger.info({ key: plan.key, priceId }, "Billing: plan price ready");
   }
 
-  // ── Credit pack prices ────────────────────────────────────────────────────
   for (const pack of CREDIT_PACKS) {
     const envVal = process.env[pack.priceEnvKey];
     if (envVal) {
@@ -188,7 +151,7 @@ export async function provisionStripeProducts(): Promise<void> {
     const priceId = await findOrCreatePrice({
       stripe,
       productName: `VIBA ${pack.label}`,
-      productDesc: `${pack.description} — one-time top-up for VIBA`,
+      productDesc: `${pack.description} — VIBA add-on`,
       unitAmount: pack.unitAmount,
       currency: "usd",
       metadata: {
@@ -212,8 +175,6 @@ async function findOrCreatePrice(opts: {
   metadata?: Record<string, string>;
 }): Promise<string> {
   const { stripe, productName, productDesc, unitAmount, currency, recurring, metadata } = opts;
-
-  // Find or create the product
   const products = await stripe.products.list({ active: true, limit: 100 });
   let product = products.data.find((p) => p.name === productName);
   if (!product) {
@@ -225,7 +186,6 @@ async function findOrCreatePrice(opts: {
     logger.info({ productId: product.id, name: productName }, "Billing: created Stripe product");
   }
 
-  // Find or create the price
   const prices = await stripe.prices.list({ product: product.id, active: true, limit: 20 });
   let price = prices.data.find(
     (p) =>
@@ -246,7 +206,44 @@ async function findOrCreatePrice(opts: {
   return price.id;
 }
 
-// ─── Credit management ────────────────────────────────────────────────────────
+async function ensureDailyTrialCredits(userId: number): Promise<void> {
+  const userResult = await pool.query<{
+    subscription_status: string | null;
+    credits_period_end: Date | null;
+    credits_remaining: number;
+  }>(
+    `SELECT subscription_status, credits_period_end, credits_remaining
+     FROM users WHERE id = $1`,
+    [userId],
+  );
+  const user = userResult.rows[0];
+  if (!user || user.subscription_status !== "trialing") return;
+  if (user.credits_period_end && user.credits_period_end.getTime() < Date.now()) return;
+
+  const resetCheck = await pool.query(
+    `SELECT id FROM credit_transactions
+     WHERE user_id = $1
+       AND reason = 'trial_daily_reset'
+       AND created_at >= date_trunc('day', NOW())
+     LIMIT 1`,
+    [userId],
+  );
+  if ((resetCheck.rowCount ?? 0) > 0) return;
+
+  const newBalance = VIBA_CREDIT_ECONOMICS.trialCreditsDaily;
+  const delta = newBalance - (user.credits_remaining ?? 0);
+  await pool.query(
+    `UPDATE users SET credits_remaining = $1, updated_at = NOW()
+     WHERE id = $2`,
+    [newBalance, userId],
+  );
+  await pool.query(
+    `INSERT INTO credit_transactions (user_id, amount, balance_after, reason)
+     VALUES ($1, $2, $3, $4)`,
+    [userId, delta, newBalance, "trial_daily_reset"],
+  );
+  logger.info({ userId, balanceAfter: newBalance }, "Billing: trial credits reset for the day");
+}
 
 export async function grantCredits(
   userId: number,
@@ -267,12 +264,12 @@ export async function grantCredits(
   logger.info({ userId, amount, balanceAfter, reason }, "Billing: credits granted");
 }
 
-/** Returns false when insufficient credits — atomically deducts only if balance allows */
 export async function deductCredits(
   userId: number,
   amount: number,
   sessionId?: number,
 ): Promise<boolean> {
+  await ensureDailyTrialCredits(userId);
   const result = await pool.query(
     `UPDATE users SET credits_remaining = credits_remaining - $1, updated_at = NOW()
      WHERE id = $2 AND credits_remaining >= $1
@@ -311,14 +308,13 @@ export async function getCreditTransactions(
 }
 
 export async function getCredits(userId: number): Promise<number> {
+  await ensureDailyTrialCredits(userId);
   const result = await pool.query(
     `SELECT credits_remaining FROM users WHERE id = $1`,
     [userId],
   );
   return (result.rows[0]?.credits_remaining as number) ?? 0;
 }
-
-// ─── Subscription management ──────────────────────────────────────────────────
 
 export async function linkSubscription(
   userId: number,
@@ -411,6 +407,7 @@ export async function getBillingStatus(userId: number): Promise<{
   stripeSubscriptionId: string | null;
   planKey: string;
 }> {
+  await ensureDailyTrialCredits(userId);
   const result = await pool.query(
     `SELECT subscription_status, credits_remaining, credits_period_end,
             stripe_customer_id, stripe_subscription_id,
@@ -588,6 +585,7 @@ setInterval(() => {
 export function isWebhookProcessed(id: string): boolean {
   return _processedWebhooks.has(id);
 }
+
 export function markWebhookProcessed(id: string): void {
   _processedWebhooks.set(id, Date.now());
 }

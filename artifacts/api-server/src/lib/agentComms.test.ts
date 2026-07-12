@@ -92,6 +92,7 @@ describe("processPendingQuestions", () => {
     // Agent B is executing task 11. The DB filters by taskId=11, so the question
     // stored on task 10 is NOT returned.
     const { db } = await import("@workspace/db");
+    const questionFromTask10 = makeQuestionRow({ id: 5, taskId: 10, toAgentId: 2 });
 
     (db.select as ReturnType<typeof vi.fn>)
       // DB filters by taskId=11; task-10 question is excluded — returns empty
@@ -100,6 +101,12 @@ describe("processPendingQuestions", () => {
           where: vi.fn().mockReturnValue({
             orderBy: vi.fn().mockResolvedValue([]),
           }),
+        }),
+      })
+      // Second call: fetch answers — none yet
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([]),
         }),
       });
 
