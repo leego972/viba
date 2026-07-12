@@ -51,7 +51,7 @@ export default function Home() {
               style={{ color: "rgba(255,255,255,0.5)" }}>
               <X className="h-4 w-4" />
             </button>
-            <img src="/leego-logo-transparent.png" alt="Leego" className="h-24 w-auto object-contain mx-auto" />
+            <img src={`${import.meta.env.BASE_URL}leego-logo-transparent.png`} alt="Leego" className="h-24 w-auto object-contain mx-auto" />
             <p className="text-center text-sm mt-4 font-medium" style={{ color: "rgba(255,255,255,0.6)" }}>Built by Leego</p>
             <p className="text-center text-[10px] mt-1" style={{ color: "rgba(255,255,255,0.25)" }}>Closes automatically…</p>
           </div>
@@ -62,7 +62,7 @@ export default function Home() {
       <header className="px-4 sm:px-6 h-14 flex items-center sticky top-0 z-50"
         style={{ background: "rgba(250,248,242,0.92)", backdropFilter: "blur(12px)", borderBottom: `1px solid ${BORDER}` }}>
         <Link href="/" className="flex items-center shrink-0">
-          <img src="/viba-logo.png" alt="VIBA" className="h-12 w-auto object-contain" />
+          <img src={`${import.meta.env.BASE_URL}viba-logo.png`} alt="VIBA" className="h-12 w-auto object-contain" />
         </Link>
         <nav className="ml-auto flex items-center gap-1.5 sm:gap-2">
           <Link href="/pricing" className="hidden sm:block">
@@ -532,7 +532,7 @@ export default function Home() {
       <footer className="w-full" style={{ borderTop: `1px solid ${BORDER}`, background: CREAM_ALT }}>
         <div className="container flex flex-col items-center gap-4 py-6 sm:flex-row sm:justify-between">
           <div className="flex items-center gap-3">
-            <img src="/viba-logo.png" alt="VIBA" className="h-9 w-auto object-contain shrink-0" />
+            <img src={`${import.meta.env.BASE_URL}viba-logo.png`} alt="VIBA" className="h-9 w-auto object-contain shrink-0" />
             <p className="text-sm" style={{ color: TEXT_FAINT }}>Route the right task to the right AI.</p>
           </div>
           <div className="flex flex-wrap justify-center sm:justify-end items-center gap-x-4 gap-y-2 text-xs" style={{ color: TEXT_FAINT }}>
@@ -547,7 +547,7 @@ export default function Home() {
               style={{ opacity: 0.6 }}
             >
               <span>by</span>
-              <img src="/leego-logo-transparent.png" alt="Leego" className="h-6 w-auto object-contain" />
+              <img src={`${import.meta.env.BASE_URL}leego-logo-transparent.png`} alt="Leego" className="h-6 w-auto object-contain" />
             </button>
           </div>
         </div>

@@ -29,10 +29,10 @@ const GROUPS: NavGroup[] = [
     label: "Command", icon: Terminal,
     matchPaths: ["/workbench", "/agent-console", "/tool-console", "/bridge", "/assisted-browser"],
     items: [
-      { href: "/tool-console",     label: "VIBA Brain",        icon: Brain },
       { href: "/workbench",        label: "Workbench",         icon: FlaskConical },
       { href: "/agent-console",    label: "Agent Console",     icon: Terminal },
-      { href: "/bridge",           label: "Provider Hub",      icon: Radio },
+      { href: "/tool-console",     label: "Tool Console",      icon: Wrench },
+      { href: "/bridge",           label: "Bridge",            icon: Radio },
       { href: "/assisted-browser", label: "Assisted Browser",  icon: Bot },
     ],
   },
@@ -144,7 +144,7 @@ export function Navbar() {
       <div className="container flex h-[60px] max-w-screen-2xl items-center gap-1.5 sm:gap-3 px-3 sm:px-4">
         {/* Logo */}
         <Link href="/" className="flex items-center shrink-0">
-          <img src="/viba-logo.png" alt="VIBA" className="h-10 sm:h-14 w-auto object-contain" />
+          <img src={`${import.meta.env.BASE_URL}viba-logo.png`} alt="VIBA" className="h-10 sm:h-14 w-auto object-contain" />
         </Link>
 
         <div className="hidden md:block h-5 w-px bg-border/50 shrink-0" />
@@ -198,7 +198,7 @@ export function Navbar() {
         <nav className="flex md:hidden items-center gap-0.5 flex-1">
           {[
             { href: "/dashboard", icon: LayoutDashboard, match: isDashboard },
-            { href: "/tool-console", icon: Brain, match: location.startsWith("/tool-console") },
+            { href: "/connections", icon: Plug, match: location.startsWith("/connections") },
             { href: "/billing", icon: CreditCard, match: isBilling },
             { href: "/settings", icon: Settings, match: isSettings },
           ].map(({ href, icon: Icon, match }) => (
