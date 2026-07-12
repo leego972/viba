@@ -29,10 +29,10 @@ const GROUPS: NavGroup[] = [
     label: "Command", icon: Terminal,
     matchPaths: ["/workbench", "/agent-console", "/tool-console", "/bridge", "/assisted-browser"],
     items: [
+      { href: "/tool-console",     label: "VIBA Brain",        icon: Brain },
       { href: "/workbench",        label: "Workbench",         icon: FlaskConical },
       { href: "/agent-console",    label: "Agent Console",     icon: Terminal },
-      { href: "/tool-console",     label: "Tool Console",      icon: Wrench },
-      { href: "/bridge",           label: "Bridge",            icon: Radio },
+      { href: "/bridge",           label: "Provider Hub",      icon: Radio },
       { href: "/assisted-browser", label: "Assisted Browser",  icon: Bot },
     ],
   },
@@ -198,7 +198,7 @@ export function Navbar() {
         <nav className="flex md:hidden items-center gap-0.5 flex-1">
           {[
             { href: "/dashboard", icon: LayoutDashboard, match: isDashboard },
-            { href: "/connections", icon: Plug, match: location.startsWith("/connections") },
+            { href: "/tool-console", icon: Brain, match: location.startsWith("/tool-console") },
             { href: "/billing", icon: CreditCard, match: isBilling },
             { href: "/settings", icon: Settings, match: isSettings },
           ].map(({ href, icon: Icon, match }) => (
