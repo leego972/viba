@@ -377,8 +377,8 @@ export default function Home() {
                       style={{ background: `${color}12`, border: `1px solid ${color}28` }}>
                       <Icon className="h-5 w-5" style={{ color }} />
                     </div>
-                    <h3 className="text-sm font-bold mb-1.5" style={{ color: TEXT }}>{title}</h3>
-                    <p className="text-sm leading-relaxed" style={{ color: TEXT_MUT }}>{desc}</p>
+                    <h3 className="text-sm font-bold mb-1.5" style={{ color: "#ffffff" }}>{title}</h3>
+                    <p className="text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.72)" }}>{desc}</p>
                   </div>
                 ))}
               </div>
@@ -418,8 +418,8 @@ export default function Home() {
                   },
                 ].map(({ title, desc, saving }) => (
                   <div key={title} className="viba-card flex flex-col">
-                    <h3 className="text-sm font-bold mb-2" style={{ color: TEXT }}>{title}</h3>
-                    <p className="text-sm leading-relaxed flex-1" style={{ color: TEXT_MUT }}>{desc}</p>
+                    <h3 className="text-sm font-bold mb-2" style={{ color: "#ffffff" }}>{title}</h3>
+                    <p className="text-sm leading-relaxed flex-1" style={{ color: "rgba(255,255,255,0.72)" }}>{desc}</p>
                     <div className="mt-4 pt-4 flex items-center gap-2" style={{ borderTop: `1px solid ${BORDER}` }}>
                       <TrendingDown className="h-4 w-4 shrink-0" style={{ color: EMERALD }} />
                       <p className="text-xs font-semibold" style={{ color: EMERALD }}>{saving}</p>
