@@ -1,5 +1,6 @@
 import type { AgentAdapter } from "./adapters/interface";
 import { OpenAIAdapter } from "./adapters/openai";
+import { OpenAICompatibleAdapter } from "./adapters/openaiCompatible";
 import { AnthropicAdapter } from "./adapters/anthropic";
 import { GeminiAdapter } from "./adapters/gemini";
 import { PerplexityAdapter } from "./adapters/perplexity";
@@ -25,6 +26,72 @@ import { eq } from "drizzle-orm";
 import { logger } from "./logger";
 import { getVibaCredential } from "./vibaVault";
 
+type AdapterType =
+  | "auto"
+  | "openai"
+  | "openai-compatible"
+  | "anthropic"
+  | "gemini"
+  | "groq"
+  | "perplexity"
+  | "ollama"
+  | "replit"
+  | "manus"
+  | "railway"
+  | "render"
+  | "vercel"
+  | "digitalocean"
+  | "github"
+  | "cloudflare"
+  | "stripe"
+  | "email-api"
+  | "messaging-api"
+  | "generic-rest"
+  | "credential-only";
+
+const CUSTOM_COMPATIBLE_BASE_URLS: Record<string, string> = {
+  venice: "https://api.venice.ai/api/v1",
+  openrouter: "https://openrouter.ai/api/v1",
+  together: "https://api.together.xyz/v1",
+  fireworks: "https://api.fireworks.ai/inference/v1",
+  deepseek: "https://api.deepseek.com",
+  lmstudio: "http://localhost:1234/v1",
+  "lm-studio": "http://localhost:1234/v1",
+  localai: "http://localhost:8080/v1",
+};
+
+const KNOWN_PROVIDER_ADAPTER_TYPES: Record<string, AdapterType> = {
+  openai: "openai",
+  anthropic: "anthropic",
+  claude: "anthropic",
+  google: "gemini",
+  gemini: "gemini",
+  groq: "groq",
+  perplexity: "perplexity",
+  ollama: "ollama",
+  local: "ollama",
+  replit: "replit",
+  manus: "manus",
+  railway: "railway",
+  render: "render",
+  vercel: "vercel",
+  digitalocean: "digitalocean",
+  github: "github",
+  cloudflare: "cloudflare",
+  stripe: "stripe",
+  resend: "email-api",
+  sendgrid: "email-api",
+  slack: "messaging-api",
+  venice: "openai-compatible",
+  openrouter: "openai-compatible",
+  together: "openai-compatible",
+  fireworks: "openai-compatible",
+  deepseek: "openai-compatible",
+  lmstudio: "openai-compatible",
+  "lm-studio": "openai-compatible",
+  localai: "openai-compatible",
+};
+
 async function getSetting(uppercaseKey: string): Promise<string | null> {
   const [upper] = await db.select().from(settingsTable).where(eq(settingsTable.key, uppercaseKey));
   if (upper?.value) return upper.value;
@@ -37,12 +104,47 @@ function isValidKey(key: string | null): key is string {
   return typeof key === "string" && key.length > 10;
 }
 
+function settingPrefix(provider: string): string {
+  return provider.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
+}
+
+function cleanEndpoint(endpoint: string | null | undefined): string | undefined {
+  const value = endpoint?.trim().replace(/\/+$/, "");
+  return value ? value : undefined;
+}
+
+function parseAdapterType(value: string | null | undefined, provider: string): AdapterType {
+  const candidate = value?.trim().toLowerCase();
+  if (
+    candidate === "openai" ||
+    candidate === "openai-compatible" ||
+    candidate === "anthropic" ||
+    candidate === "gemini" ||
+    candidate === "groq" ||
+    candidate === "perplexity" ||
+    candidate === "ollama" ||
+    candidate === "replit" ||
+    candidate === "manus" ||
+    candidate === "railway" ||
+    candidate === "render" ||
+    candidate === "vercel" ||
+    candidate === "digitalocean" ||
+    candidate === "github" ||
+    candidate === "cloudflare" ||
+    candidate === "stripe" ||
+    candidate === "email-api" ||
+    candidate === "messaging-api" ||
+    candidate === "generic-rest" ||
+    candidate === "credential-only"
+  ) return candidate;
+  return KNOWN_PROVIDER_ADAPTER_TYPES[provider] ?? "openai-compatible";
+}
+
 export function buildMockAdapter(agent: Agent): AgentAdapter {
   const provider = agent.provider.toLowerCase();
   if (provider === "anthropic") return new ClaudeMockAdapter(String(agent.id), agent.name, agent.role);
-  if (provider === "google") return new GeminiMockAdapter(String(agent.id), agent.name, agent.role);
+  if (provider === "google" || provider === "gemini") return new GeminiMockAdapter(String(agent.id), agent.name, agent.role);
   if (provider === "perplexity") return new PerplexityMockAdapter(String(agent.id), agent.name, agent.role);
-  // Pass agent.canUseTools so simulation mode preserves the same handoff/capability semantics as live mode
   if (provider === "replit") return new ReplitMockAdapter(String(agent.id), agent.name, agent.role, agent.canUseTools);
   if (provider === "manus") return new ManusMockAdapter(String(agent.id), agent.name, agent.role, agent.canUseTools);
   if (provider === "railway") return new RailwayMockAdapter(String(agent.id), agent.name, agent.role);
@@ -51,12 +153,6 @@ export function buildMockAdapter(agent: Agent): AgentAdapter {
   return new ChatGPTMockAdapter(String(agent.id), agent.name, agent.role);
 }
 
-/**
- * Resolves an API key for the given provider. Priority order:
- *   1. User-specific vault entry matching the agent's credentialLabel (multi-key support)
- *   2. Global admin settings table
- *   3. Environment variable
- */
 async function resolveApiKey(
   userId: number | null | undefined,
   provider: string,
@@ -64,33 +160,64 @@ async function resolveApiKey(
   settingKey: string,
   envKey: string = settingKey,
 ): Promise<string> {
-  // 1. User vault: check for the labeled credential first
   if (userId) {
     const vaultKey = await getVibaCredential({ userId, provider, kind: "api_key", label: credentialLabel });
     if (vaultKey) return vaultKey;
-    // If a non-default label was requested but not found, log a warning
     if (credentialLabel !== "default") {
       logger.warn({ provider, credentialLabel }, "Requested credential label not found in vault — falling back to global settings");
-    }
-    // Also try the "default" label in vault before going to settingsTable
-    if (credentialLabel !== "default") {
       const defaultVaultKey = await getVibaCredential({ userId, provider, kind: "api_key", label: "default" });
       if (defaultVaultKey) return defaultVaultKey;
     }
   }
-  // 2. Admin settings table
   const settingVal = await getSetting(settingKey);
   if (settingVal) return settingVal;
-  // 3. Environment variable
   return process.env[envKey] ?? "";
+}
+
+async function buildConfiguredAdapter(params: {
+  agent: Agent;
+  userId?: number | null;
+  provider: string;
+  settingPrefix: string;
+  adapterType: AdapterType;
+  defaultBaseUrl?: string;
+  railwayToken?: string | null;
+  githubToken?: string | null;
+}): Promise<AgentAdapter | null> {
+  const { agent, userId, provider, settingPrefix: prefix, adapterType, defaultBaseUrl, railwayToken, githubToken } = params;
+  const credLabel = agent.credentialLabel ?? "default";
+  const apiKey = await resolveApiKey(userId, provider, credLabel, `${prefix}_API_KEY`);
+  const model = await getSetting(`${prefix}_MODEL`) ?? undefined;
+  const baseUrl = cleanEndpoint(await getSetting(`${prefix}_ENDPOINT`)) ?? defaultBaseUrl;
+
+  if (adapterType === "ollama") {
+    const ollamaBaseUrl = baseUrl ?? "http://localhost:11434";
+    return new OllamaAdapter(String(agent.id), agent.name, agent.role, model ?? "llama3.2", ollamaBaseUrl, agent.canUseTools, githubToken ?? undefined);
+  }
+
+  if (!isValidKey(apiKey)) return null;
+
+  if (adapterType === "openai") return new OpenAIAdapter(String(agent.id), agent.name, agent.role, apiKey, model, agent.canUseTools);
+  if (adapterType === "anthropic") return new AnthropicAdapter(String(agent.id), agent.name, agent.role, apiKey, model, agent.canUseTools);
+  if (adapterType === "gemini") return new GeminiAdapter(String(agent.id), agent.name, agent.role, apiKey, model, agent.canUseTools);
+  if (adapterType === "groq") return new GroqAdapter(String(agent.id), agent.name, agent.role, apiKey, model, agent.canUseTools, railwayToken ?? undefined, githubToken ?? undefined);
+  if (adapterType === "perplexity") return new PerplexityAdapter(String(agent.id), agent.name, agent.role, apiKey, model, agent.canUseTools);
+  if (adapterType === "replit") return new ReplitAdapter(String(agent.id), agent.name, agent.role, apiKey, model, agent.canUseTools);
+  if (adapterType === "manus") return new ManusAdapter(String(agent.id), agent.name, agent.role, apiKey, model, agent.canUseTools);
+  if (adapterType === "railway") return new RailwayAdapter(String(agent.id), agent.name, agent.role, apiKey, "", model);
+  if (adapterType === "openai-compatible") {
+    if (!baseUrl) return null;
+    return new OpenAICompatibleAdapter(String(agent.id), agent.name, agent.role, provider, apiKey, baseUrl, model, agent.canUseTools);
+  }
+
+  logger.warn({ provider, adapterType }, "Provider connection is registered but is not an AI agent runtime adapter. It is available to tool-specific code, not agent chat execution.");
+  return null;
 }
 
 export async function buildAdapter(agent: Agent, userId?: number | null): Promise<AgentAdapter> {
   const provider = agent.provider.toLowerCase();
   const credLabel = agent.credentialLabel ?? "default";
 
-  // Shared tool tokens — loaded once and reused across tool-capable adapters
-  // For tool tokens, always use admin settings / env (they are global infrastructure tokens)
   const [railwayToken, githubToken] = await Promise.all([
     getSetting("RAILWAY_TOKEN").then((v) => v ?? process.env["RAILWAY_TOKEN"] ?? null),
     getSetting("GITHUB_TOKEN").then((v) => v ?? process.env["GITHUB_TOKEN"] ?? null),
@@ -116,7 +243,7 @@ export async function buildAdapter(agent: Agent, userId?: number | null): Promis
     return new ClaudeMockAdapter(String(agent.id), agent.name, agent.role);
   }
 
-  if (provider === "google") {
+  if (provider === "google" || provider === "gemini") {
     const apiKey = await resolveApiKey(userId, provider, credLabel, "GEMINI_API_KEY");
     if (isValidKey(apiKey)) {
       const model = await getSetting("GEMINI_MODEL") ?? undefined;
@@ -138,9 +265,7 @@ export async function buildAdapter(agent: Agent, userId?: number | null): Promis
 
   if (provider === "replit") {
     const apiKey = await resolveApiKey(userId, provider, credLabel, "REPLIT_API_KEY");
-    if (isValidKey(apiKey)) {
-      return new ReplitAdapter(String(agent.id), agent.name, agent.role, apiKey, undefined, agent.canUseTools);
-    }
+    if (isValidKey(apiKey)) return new ReplitAdapter(String(agent.id), agent.name, agent.role, apiKey, undefined, agent.canUseTools);
     logger.warn({ provider, credLabel }, "No Replit API key found — using simulation mode");
     return new ReplitMockAdapter(String(agent.id), agent.name, agent.role, agent.canUseTools);
   }
@@ -149,11 +274,7 @@ export async function buildAdapter(agent: Agent, userId?: number | null): Promis
     const apiKey = await resolveApiKey(userId, provider, credLabel, "GROQ_API_KEY");
     if (isValidKey(apiKey)) {
       const model = await getSetting("GROQ_MODEL") ?? undefined;
-      return new GroqAdapter(
-        String(agent.id), agent.name, agent.role, apiKey, model, agent.canUseTools,
-        railwayToken ?? undefined,
-        githubToken ?? undefined,
-      );
+      return new GroqAdapter(String(agent.id), agent.name, agent.role, apiKey, model, agent.canUseTools, railwayToken ?? undefined, githubToken ?? undefined);
     }
     logger.warn({ provider, credLabel }, "No Groq API key found — using simulation mode");
     return new GroqMockAdapter(String(agent.id), agent.name, agent.role);
@@ -162,10 +283,7 @@ export async function buildAdapter(agent: Agent, userId?: number | null): Promis
   if (provider === "ollama") {
     const baseUrl = await getSetting("OLLAMA_BASE_URL") ?? process.env["OLLAMA_BASE_URL"] ?? "http://localhost:11434";
     const model = await getSetting("OLLAMA_MODEL") ?? process.env["OLLAMA_MODEL"] ?? "llama3.2";
-    return new OllamaAdapter(
-      String(agent.id), agent.name, agent.role, model, baseUrl, agent.canUseTools,
-      githubToken ?? undefined,
-    );
+    return new OllamaAdapter(String(agent.id), agent.name, agent.role, model, baseUrl, agent.canUseTools, githubToken ?? undefined);
   }
 
   if (provider === "railway") {
@@ -182,13 +300,26 @@ export async function buildAdapter(agent: Agent, userId?: number | null): Promis
 
   if (provider === "manus") {
     const apiKey = await resolveApiKey(userId, provider, credLabel, "MANUS_API_KEY");
-    if (isValidKey(apiKey)) {
-      return new ManusAdapter(String(agent.id), agent.name, agent.role, apiKey, undefined, agent.canUseTools);
-    }
+    if (isValidKey(apiKey)) return new ManusAdapter(String(agent.id), agent.name, agent.role, apiKey, undefined, agent.canUseTools);
     logger.warn({ provider, credLabel }, "No Manus API key found — using simulation mode");
     return new ManusMockAdapter(String(agent.id), agent.name, agent.role, agent.canUseTools);
   }
 
-  logger.warn({ provider }, "Unknown provider — using simulation mode");
+  const prefix = settingPrefix(provider);
+  const selectedAdapterType = parseAdapterType(await getSetting(`${prefix}_ADAPTER_TYPE`), provider);
+  const built = await buildConfiguredAdapter({
+    agent,
+    userId,
+    provider,
+    settingPrefix: prefix,
+    adapterType: selectedAdapterType,
+    defaultBaseUrl: CUSTOM_COMPATIBLE_BASE_URLS[provider],
+    railwayToken,
+    githubToken,
+  });
+
+  if (built) return built;
+
+  logger.warn({ provider, selectedAdapterType }, "Provider could not be used as an AI runtime adapter — using simulation mode");
   return new ChatGPTMockAdapter(String(agent.id), agent.name, agent.role);
 }
