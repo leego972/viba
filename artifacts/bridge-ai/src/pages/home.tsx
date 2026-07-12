@@ -395,8 +395,8 @@ export default function Home() {
                     saving: "Typical saving: $100–400/mo",
                   },
                   {
-                    title: "Technical teams on Replit, Railway, Render",
-                    desc: "VIBA connects to your deployment stack and runs diagnostic sessions — with browser checks, code review, and security audits — all routed to the cheapest capable model.",
+                    title: "Technical teams on Replit, Railway, Render & Manus",
+                    desc: "VIBA connects to your deployment stack and runs diagnostic sessions — browser checks, code review, security audits — all routed to the cheapest capable model.",
                     saving: "Typical saving: $50–200/mo",
                   },
                 ].map(({ title, desc, saving }) => (
