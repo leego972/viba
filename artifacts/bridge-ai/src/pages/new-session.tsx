@@ -648,50 +648,56 @@ export default function NewSession() {
                   const lockedForBasic = isBasicPlan && isExternalProvider &&
                     !selectedAgents[provider.id]!.selected && currentExternalCount >= 1;
                   return (
-                    <div key={provider.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 p-2 rounded-md hover:bg-muted/50 transition-colors">
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div key={provider.id} className="p-2 rounded-md hover:bg-muted/50 transition-colors">
+                      {/* Row 1: checkbox + dot + name + status badge */}
+                      <div className="flex items-center gap-2.5">
                         {lockedForBasic ? (
-                          <div className="flex items-center h-4 w-4 justify-center">
+                          <div className="flex items-center h-4 w-4 justify-center shrink-0">
                             <span title="Upgrade to Pro for multi-agent collaboration" className="text-indigo-400/60 text-xs">🔒</span>
                           </div>
                         ) : (
-                        <Checkbox 
-                          id={`agent-${provider.id}`} 
-                          checked={selectedAgents[provider.id]!.selected}
-                          onCheckedChange={() => handleAgentToggle(provider.id)}
-                        />
+                          <Checkbox
+                            id={`agent-${provider.id}`}
+                            checked={selectedAgents[provider.id]!.selected}
+                            onCheckedChange={() => handleAgentToggle(provider.id)}
+                            className="shrink-0"
+                          />
                         )}
-                        <Label htmlFor={`agent-${provider.id}`} className="cursor-pointer flex items-center gap-2 min-w-0">
-                          <div className={`w-2 h-2 rounded-full flex-shrink-0 ${provider.color}`} />
-                          <span className="font-medium truncate">{provider.name}</span>
-                          {live ? (
-                            <Badge variant="outline" className="text-green-600 border-green-500/40 bg-green-500/10 gap-1 px-1.5 py-0 text-[10px] flex-shrink-0">
-                              <Zap className="h-2.5 w-2.5" /> Live
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-muted-foreground border-muted-foreground/30 bg-muted/40 gap-1 px-1.5 py-0 text-[10px] flex-shrink-0">
-                              <FlaskConical className="h-2.5 w-2.5" /> Simulation
-                            </Badge>
-                          )}
+                        <Label htmlFor={`agent-${provider.id}`} className="cursor-pointer flex items-center gap-2 min-w-0 flex-1">
+                          <div className={`w-2 h-2 rounded-full shrink-0 ${provider.color}`} />
+                          <span className="font-medium text-sm truncate">{provider.name}</span>
+                        </Label>
+                        {/* Status badge — always visible, far right of name row */}
+                        {live ? (
+                          <Badge variant="outline" className="text-green-600 border-green-500/40 bg-green-500/10 gap-1 px-1.5 py-0 text-[10px] shrink-0">
+                            <Zap className="h-2.5 w-2.5" /> Live
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-muted-foreground border-muted-foreground/30 bg-muted/40 gap-1 px-1.5 py-0 text-[10px] shrink-0">
+                            <FlaskConical className="h-2.5 w-2.5" /> Sim
+                          </Badge>
+                        )}
+                      </div>
+
+                      {/* Row 2: tools badge + role controls — only when selected, indented to align with name */}
+                      {selectedAgents[provider.id]!.selected && (
+                        <div className="flex items-center gap-2 mt-1.5 pl-[26px] flex-wrap">
+                          {/* Tools badge */}
                           {provider.canUseTools ? (
-                            <Badge variant="outline" className="text-blue-500 border-blue-500/30 bg-blue-500/10 gap-1 px-1.5 py-0 text-[10px] flex-shrink-0" title="Uses its own native tool stack (git, code execution, deployment). You pay for these via your existing subscription — VIBA charges only a platform orchestration fee.">
-                              <Wrench className="h-2.5 w-2.5" /> Native Tools
+                            <Badge variant="outline" className="text-blue-500 border-blue-500/30 bg-blue-500/10 gap-1 px-1.5 py-0 text-[10px] shrink-0" title="Native tool stack">
+                              <Wrench className="h-2.5 w-2.5" /> Tools
                             </Badge>
                           ) : selectedAgents[provider.id]!.canUseTools ? (
-                            <Badge variant="outline" className="text-violet-500 border-violet-500/30 bg-violet-500/10 gap-1 px-1.5 py-0 text-[10px] flex-shrink-0" title="Uses VIBA's broker tool suite (GitHub, Railway, Stripe, DNS, Browser, SMTP). Credits charged per tool call.">
-                              <Wrench className="h-2.5 w-2.5" /> Broker Tools
+                            <Badge variant="outline" className="text-violet-500 border-violet-500/30 bg-violet-500/10 gap-1 px-1.5 py-0 text-[10px] shrink-0" title="VIBA broker tools">
+                              <Wrench className="h-2.5 w-2.5" /> Tools
                             </Badge>
                           ) : null}
-                        </Label>
-                      </div>
-                      {selectedAgents[provider.id]!.selected && (
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <Select 
-                            value={selectedAgents[provider.id]!.role} 
+                          <Select
+                            value={selectedAgents[provider.id]!.role}
                             onValueChange={(val) => handleRoleChange(provider.id, val)}
                           >
-                            <SelectTrigger className="w-[130px] sm:w-[140px] h-8 text-xs flex-shrink-0">
-                              <SelectValue placeholder="Select role" />
+                            <SelectTrigger className="h-7 text-xs shrink-0" style={{ width: "120px" }}>
+                              <SelectValue placeholder="Role" />
                             </SelectTrigger>
                             <SelectContent>
                               {ROLES.map(role => (
@@ -699,13 +705,13 @@ export default function NewSession() {
                               ))}
                             </SelectContent>
                           </Select>
-                          {/* Multi-key: show account picker when provider has >1 saved key */}
+                          {/* Multi-key account picker */}
                           {(providerKeyLabels[provider.id]?.length ?? 0) > 1 && (
                             <Select
                               value={credentialLabels[provider.id] ?? "default"}
                               onValueChange={(val) => setCredentialLabels(prev => ({ ...prev, [provider.id]: val }))}
                             >
-                              <SelectTrigger className="w-[110px] h-8 text-xs flex-shrink-0" title="Which API account to use">
+                              <SelectTrigger className="h-7 text-xs shrink-0" style={{ width: "90px" }} title="API account">
                                 <SelectValue placeholder="Account" />
                               </SelectTrigger>
                               <SelectContent>
@@ -718,16 +724,15 @@ export default function NewSession() {
                           {!provider.canUseTools && (
                             <button
                               type="button"
-                              title={selectedAgents[provider.id]!.canUseTools ? "Disable tool access" : "Enable tool access"}
+                              title={selectedAgents[provider.id]!.canUseTools ? "Disable tools" : "Enable tools"}
                               onClick={() => handleToolsToggle(provider.id)}
-                              className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] border transition-colors ${
+                              className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] border transition-colors shrink-0 ${
                                 selectedAgents[provider.id]!.canUseTools
                                   ? "border-blue-500/40 bg-blue-500/10 text-blue-500"
                                   : "border-muted-foreground/20 bg-muted/30 text-muted-foreground"
                               }`}
                             >
-                              <Wrench className="h-2.5 w-2.5" />
-                              Tools
+                              <Wrench className="h-2.5 w-2.5" /> Tools
                             </button>
                           )}
                         </div>
