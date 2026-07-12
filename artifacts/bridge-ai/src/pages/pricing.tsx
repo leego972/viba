@@ -1,17 +1,14 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
-import { Check, Zap, Star, Shield, Clock } from "lucide-react";
+import { Check, Zap, Star, Shield } from "lucide-react";
 
 interface Plan {
-  key: string;
   name: string;
   unitAmount: number;
   currency: string;
   monthlyCredits: number;
   trialDays: number;
-  trialDailyCredits?: number;
-  badge?: string | null;
   configured: boolean;
 }
 
@@ -27,8 +24,6 @@ interface CreditPack {
 
 interface PlansData {
   plan: Plan;
-  plans?: Plan[];
-  proPlan?: Plan;
   creditPacks: CreditPack[];
 }
 
@@ -49,7 +44,7 @@ const FEATURES = [
 export default function Pricing() {
   const [, setLocation] = useLocation();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const [plansData, setPlansData] = useState<PlansData | null>(null);
+  const [plans, setPlans] = useState<PlansData | null>(null);
   const [plansLoading, setPlansLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [annualCheckoutLoading, setAnnualCheckoutLoading] = useState(false);
@@ -59,7 +54,7 @@ export default function Pricing() {
   useEffect(() => {
     fetch("/api/billing/plans")
       .then((r) => r.json())
-      .then((d) => setPlansData(d as PlansData))
+      .then((d) => setPlans(d as PlansData))
       .catch(() => {})
       .finally(() => setPlansLoading(false));
   }, []);
@@ -79,18 +74,18 @@ export default function Pricing() {
         credentials: "include",
         body: JSON.stringify({ planKey }),
       });
-      const data = (await res.json()) as { url?: string; error?: string; message?: string };
+      const data = (await res.json()) as { url?: string; error?: string };
       if (res.status === 409) {
         setLocation("/billing");
         return;
       }
       if (!res.ok || !data.url) {
-        setCheckoutError(data.message ?? data.error ?? "Something went wrong. Please try again.");
+        setCheckoutError(data.error ?? "Something went wrong — please try again.");
         return;
       }
       window.location.href = data.url;
     } catch {
-      setCheckoutError("Network error. Please check your connection.");
+      setCheckoutError("Network error — please check your connection.");
     } finally {
       setCheckoutLoading(null);
     }
@@ -117,7 +112,7 @@ export default function Pricing() {
       }
       window.location.href = data.url;
     } catch {
-      setCheckoutError("Network error. Please check your connection.");
+      setCheckoutError("Network error — please check your connection.");
     } finally {
       setAnnualCheckoutLoading(false);
     }
@@ -138,39 +133,58 @@ export default function Pricing() {
       });
       const data = (await res.json()) as { url?: string; error?: string };
       if (!res.ok || !data.url) {
-        alert(data.error ?? "Could not start checkout. Please try again.");
+        alert(data.error ?? "Could not start checkout — please try again.");
         return;
       }
       window.location.href = data.url;
     } catch {
-      alert("Network error. Please check your connection.");
+      alert("Network error — please check your connection.");
     } finally {
       setPackLoading(null);
     }
   }
 
-  const planOptions = fallbackPlans(plansData);
-  const packs = plansData?.creditPacks ?? [];
-  const trialDays = planOptions[0]?.trialDays ?? 3;
-  const trialCredits = planOptions[0]?.trialDailyCredits ?? 500;
+  const plan = plans?.plan;
+  const packs = plans?.creditPacks ?? [];
 
   return (
     <div
       className="min-h-screen text-white"
       style={{ background: "linear-gradient(135deg,#0a0e1a 0%,#0d1224 60%,#080b16 100%)" }}
     >
-      <nav className="flex items-center justify-between px-6 py-5 max-w-6xl mx-auto">
+      {/* Nav */}
+      <nav className="flex items-center justify-between px-6 py-5 max-w-5xl mx-auto">
         <span className="text-lg font-bold tracking-tight text-white">VIBA</span>
         <div className="flex items-center gap-3">
           {isAuthenticated ? (
             <>
-              <button onClick={() => setLocation("/billing")} className="text-sm text-zinc-400 hover:text-white transition-colors">Billing</button>
-              <button onClick={() => setLocation("/dashboard")} className="text-sm bg-white/10 hover:bg-white/20 border border-white/10 rounded-lg px-4 py-1.5 transition-colors">Dashboard</button>
+              <button
+                onClick={() => setLocation("/billing")}
+                className="text-sm text-zinc-400 hover:text-white transition-colors"
+              >
+                Billing
+              </button>
+              <button
+                onClick={() => setLocation("/")}
+                className="text-sm bg-white/10 hover:bg-white/20 border border-white/10 rounded-lg px-4 py-1.5 transition-colors"
+              >
+                Dashboard
+              </button>
             </>
           ) : (
             <>
-              <button onClick={() => setLocation("/login")} className="text-sm text-zinc-400 hover:text-white transition-colors">Log in</button>
-              <button onClick={() => setLocation("/signup")} className="text-sm bg-white/10 hover:bg-white/20 border border-white/10 rounded-lg px-4 py-1.5 transition-colors">Sign up</button>
+              <button
+                onClick={() => setLocation("/login")}
+                className="text-sm text-zinc-400 hover:text-white transition-colors"
+              >
+                Log in
+              </button>
+              <button
+                onClick={() => setLocation("/signup")}
+                className="text-sm bg-white/10 hover:bg-white/20 border border-white/10 rounded-lg px-4 py-1.5 transition-colors"
+              >
+                Sign up
+              </button>
             </>
           )}
         </div>
@@ -267,7 +281,7 @@ export default function Pricing() {
                       7-day free trial
                     </span>
                   </div>
-                  <div className="p-8 space-y-6 flex flex-col flex-1">
+                  <div className="pt-16 px-8 pb-8 space-y-6 flex flex-col flex-1">
                     <div>
                       <p className="text-sm font-medium text-indigo-400 uppercase tracking-widest mb-2">Pro Repair</p>
                       <div className="flex items-end gap-2">
@@ -302,49 +316,58 @@ export default function Pricing() {
               </div>
             </>
           )}
-          {checkoutError && <p className="text-sm text-red-400 text-center mt-5">{checkoutError}</p>}
-          <p className="text-center text-xs text-zinc-500 flex items-center justify-center gap-1.5 mt-5">
-            <Shield className="w-3 h-3" /> Secure Stripe checkout. Cancel or manage billing from Billing.
-          </p>
         </div>
 
+        {/* Credit packs */}
         <div className="space-y-8">
           <div className="text-center space-y-2">
             <div className="flex items-center justify-center gap-2 text-zinc-300 font-semibold text-lg">
-              <Zap className="w-5 h-5 text-amber-400" /> Need more credits?
+              <Zap className="w-5 h-5 text-amber-400" />
+              Need more credits?
             </div>
-            <p className="text-zinc-500 text-sm">Top up from $50 to $300. Every $50 adds 1,000 credits. Top-ups are best for overflow usage; Pro is better value for steady heavy usage.</p>
+            <p className="text-zinc-500 text-sm">
+              Top up anytime — credits are added instantly after payment.
+            </p>
           </div>
 
           {plansLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl mx-auto">
-              <div className="h-36 rounded-xl bg-white/5 animate-pulse" />
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="h-36 rounded-xl bg-white/5 animate-pulse" />
+              ))}
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl mx-auto">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               {packs.map((pack) => (
-                <div key={pack.key} className="relative rounded-xl border border-white/10 bg-white/5 hover:bg-white/8 hover:border-white/20 transition-all p-5 flex flex-col gap-4">
+                <div
+                  key={pack.key}
+                  className="relative rounded-xl border border-white/10 bg-white/5 hover:bg-white/8 hover:border-white/20 transition-all p-4 flex flex-col gap-3"
+                >
                   {pack.badge && (
-                    <span className="absolute -top-2 left-5 bg-amber-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap">{pack.badge}</span>
+                    <span className="absolute -top-2 left-1/2 -translate-x-1/2 bg-amber-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap">
+                      {pack.badge}
+                    </span>
                   )}
                   <div>
                     <p className="text-xs text-zinc-500 font-medium">{pack.label}</p>
-                    <p className="text-3xl font-bold mt-0.5">{fmt(pack.unitAmount)}</p>
-                    <p className="text-sm text-zinc-400 mt-0.5">{pack.credits.toLocaleString()} credits</p>
+                    <p className="text-2xl font-bold mt-0.5">{fmt(pack.unitAmount)}</p>
+                    <p className="text-xs text-zinc-400 mt-0.5">{pack.description}</p>
                   </div>
                   <button
                     onClick={() => handleBuyPack(pack.key)}
-                    disabled={packLoading === pack.key || !pack.configured}
-                    className="mt-auto text-sm py-2.5 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-60 transition-colors font-medium"
+                    disabled={packLoading === pack.key}
+                    className="mt-auto text-xs py-2 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-60 transition-colors font-medium"
                   >
-                    {packLoading === pack.key ? "Opening..." : `Buy ${pack.credits.toLocaleString()} credits`}
+                    {packLoading === pack.key ? "…" : "Buy"}
                   </button>
                 </div>
               ))}
             </div>
           )}
 
-          <p className="text-center text-xs text-zinc-600">Credit packs require an active VIBA membership. Bought top-up credits are added immediately; included monthly credits reset rather than stacking.</p>
+          <p className="text-center text-xs text-zinc-600">
+            Credit packs require an active VIBA membership. Credits never expire while your membership is active.
+          </p>
         </div>
 
         {/* Buyer reassurance */}
