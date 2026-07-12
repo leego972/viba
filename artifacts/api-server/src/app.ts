@@ -185,7 +185,7 @@ app.use(["/api/sessions/:id/run-next", "/api/sessions/:id/run-full"], async (req
   if (!isStripeConfigured()) { next(); return; }
 
   try {
-    const { subscriptionStatus } = await getBillingStatus(userId);
+    const { subscriptionStatus, creditsRemaining } = await getBillingStatus(userId);
     if (subscriptionStatus === "canceled" || subscriptionStatus === "none") {
       res.status(402).json({ error: "subscription_required", message: "An active VIBA membership is required. Visit /pricing to subscribe.", subscriptionUrl: "/pricing" });
       return;

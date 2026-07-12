@@ -117,7 +117,7 @@ export default function Pricing() {
       }
       window.location.href = data.url;
     } catch {
-      setCheckoutError("Network error — please check your connection.");
+      setCheckoutError("Network error. Please check your connection.");
     } finally {
       setAnnualCheckoutLoading(false);
     }

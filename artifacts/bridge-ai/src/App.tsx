@@ -10,9 +10,20 @@ import Home from "@/pages/home";
 import Dashboard from "@/pages/dashboard";
 import NewSession from "@/pages/new-session";
 import SessionWorkspace from "@/pages/session-workspace";
+import SessionProofReport from "@/pages/session-proof-report";
+import SessionBudget from "@/pages/session-budget";
+import SessionApprovals from "@/pages/session-approvals";
+import SessionNextAction from "@/pages/session-next-action";
 import Settings from "@/pages/settings";
 import Workbench from "@/pages/workbench";
 import Bridge from "@/pages/bridge";
+import Doctor from "@/pages/doctor";
+import DoctorHistory from "@/pages/doctor-history";
+import DoctorProposalPreview from "@/pages/doctor-proposal-preview";
+import DoctorReportDetail from "@/pages/doctor-report-detail";
+import DoctorImplementationPlan from "@/pages/doctor-implementation-plan";
+import DoctorReportChecklist from "@/pages/doctor-report-checklist";
+import ReleaseReadiness from "@/pages/release-readiness";
 import Pricing from "@/pages/pricing";
 import CheckoutSuccess from "@/pages/checkout-success";
 import Admin from "@/pages/admin";
@@ -178,6 +189,10 @@ function BypassHandler() {
 }
 
 function App() {
+  useEffect(() => {
+    installMobileViewportFix();
+  }, []);
+
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
   return (

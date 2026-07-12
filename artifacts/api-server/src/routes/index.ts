@@ -7,6 +7,7 @@ import circuitStatusRouter from "./circuitStatus";
 import workbenchRouter from "../workbench/serverRoutes";
 import authRouter from "./auth";
 import stripeRouter from "./stripe";
+import annualBillingRouter from "./annualBilling";
 import billingRouter from "./billing";
 import githubRouter from "./github";
 import sessionAccessRouter from "./sessionPrivacy";
