@@ -78,10 +78,13 @@ router.get("/api/ai/savings/summary", async (req, res) => {
   const user = (req as unknown as { user?: { id: number } }).user;
   if (!user) return void res.status(401).json({ error: "Unauthorized" });
 
+  const after = req.query["after"] as string | undefined;
+  const before = req.query["before"] as string | undefined;
+
   try {
     await ensureTables();
     const [summary, budgetStatus] = await Promise.all([
-      getMonthlySummary(user.id),
+      getMonthlySummary(user.id, { after, before }),
       checkBudgetStatus(user.id),
     ]);
     res.json({ summary, budgetStatus });
@@ -101,6 +104,8 @@ router.get("/api/ai/usage/history", async (req, res) => {
   const provider = req.query["provider"] as string | undefined;
   const taskType = req.query["taskType"] as string | undefined;
   const method = req.query["method"] as string | undefined;
+  const after = req.query["after"] as string | undefined;
+  const before = req.query["before"] as string | undefined;
 
   try {
     await ensureTables();
@@ -108,9 +113,11 @@ router.get("/api/ai/usage/history", async (req, res) => {
     const params: unknown[] = [user.id];
     let pi = 2;
 
-    if (provider) { conditions.push(`provider = $${pi++}`); params.push(provider); }
-    if (taskType) { conditions.push(`task_type = $${pi++}`); params.push(taskType); }
-    if (method) { conditions.push(`execution_method = $${pi++}`); params.push(method); }
+    if (provider)   { conditions.push(`provider = $${pi++}`);           params.push(provider); }
+    if (taskType)   { conditions.push(`task_type = $${pi++}`);          params.push(taskType); }
+    if (method)     { conditions.push(`execution_method = $${pi++}`);   params.push(method); }
+    if (after)      { conditions.push(`created_at >= $${pi++}`);        params.push(after); }
+    if (before)     { conditions.push(`created_at < $${pi++}`);         params.push(before); }
 
     const where = conditions.join(" AND ");
     const { rows } = await pool.query(
@@ -137,33 +144,47 @@ router.get("/api/ai/usage/breakdown", async (req, res) => {
   const user = (req as unknown as { user?: { id: number } }).user;
   if (!user) return void res.status(401).json({ error: "Unauthorized" });
 
+  const after = req.query["after"] as string | undefined;
+  const before = req.query["before"] as string | undefined;
+
   try {
     await ensureTables();
-    const { rows: byProvider } = await pool.query(
-      `SELECT provider, COUNT(*) AS tasks,
-              SUM(estimated_cost_usd) AS cost, SUM(estimated_savings_usd) AS savings
-       FROM ai_usage_events WHERE user_id = $1 AND created_at >= date_trunc('month', NOW())
-       GROUP BY provider ORDER BY cost DESC`,
-      [user.id],
-    );
-    const { rows: byTaskType } = await pool.query(
-      `SELECT task_type, COUNT(*) AS tasks, SUM(estimated_savings_usd) AS savings
-       FROM ai_usage_events WHERE user_id = $1 AND created_at >= date_trunc('month', NOW())
-       GROUP BY task_type ORDER BY tasks DESC`,
-      [user.id],
-    );
-    const { rows: byMethod } = await pool.query(
-      `SELECT execution_method, COUNT(*) AS tasks, SUM(estimated_savings_usd) AS savings
-       FROM ai_usage_events WHERE user_id = $1 AND created_at >= date_trunc('month', NOW())
-       GROUP BY execution_method ORDER BY tasks DESC`,
-      [user.id],
-    );
-    const { rows: daily } = await pool.query(
-      `SELECT DATE(created_at) AS day, COUNT(*) AS tasks, SUM(estimated_cost_usd) AS cost
-       FROM ai_usage_events WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '30 days'
-       GROUP BY day ORDER BY day`,
-      [user.id],
-    );
+
+    // Build shared date conditions
+    const dateConditions: string[] = [];
+    const dateParams: unknown[] = [user.id];
+    let pi = 2;
+    if (after)  { dateConditions.push(`created_at >= $${pi++}`); dateParams.push(after); }
+    else        { dateConditions.push(`created_at >= date_trunc('month', NOW())`); }
+    if (before) { dateConditions.push(`created_at < $${pi++}`);  dateParams.push(before); }
+
+    const dateWhere = dateConditions.join(" AND ");
+    const baseWhere = `user_id = $1 AND ${dateWhere}`;
+
+    const [{ rows: byProvider }, { rows: byTaskType }, { rows: byMethod }, { rows: daily }] =
+      await Promise.all([
+        pool.query(
+          `SELECT provider, COUNT(*) AS tasks, SUM(estimated_cost_usd) AS cost, SUM(estimated_savings_usd) AS savings
+           FROM ai_usage_events WHERE ${baseWhere} GROUP BY provider ORDER BY cost DESC`,
+          dateParams,
+        ),
+        pool.query(
+          `SELECT task_type, COUNT(*) AS tasks, SUM(estimated_savings_usd) AS savings
+           FROM ai_usage_events WHERE ${baseWhere} GROUP BY task_type ORDER BY tasks DESC`,
+          dateParams,
+        ),
+        pool.query(
+          `SELECT execution_method, COUNT(*) AS tasks, SUM(estimated_savings_usd) AS savings
+           FROM ai_usage_events WHERE ${baseWhere} GROUP BY execution_method ORDER BY tasks DESC`,
+          dateParams,
+        ),
+        pool.query(
+          `SELECT DATE(created_at) AS day, COUNT(*) AS tasks, SUM(estimated_cost_usd) AS cost
+           FROM ai_usage_events WHERE ${baseWhere} GROUP BY day ORDER BY day`,
+          dateParams,
+        ),
+      ]);
+
     res.json({ byProvider, byTaskType, byMethod, daily });
   } catch (err) {
     logger.error({ err }, "GET /api/ai/usage/breakdown failed");

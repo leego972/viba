@@ -202,8 +202,21 @@ export async function recordUsageEvent(input: UsageEventInput): Promise<number> 
   }
 }
 
-export async function getMonthlySummary(userId: number): Promise<MonthlySummary> {
+export async function getMonthlySummary(
+  userId: number,
+  opts?: { after?: string; before?: string },
+): Promise<MonthlySummary> {
   try {
+    const conditions: string[] = ["user_id = $1"];
+    const params: unknown[] = [userId];
+    let pi = 2;
+
+    if (opts?.after) { conditions.push(`created_at >= $${pi++}`); params.push(opts.after); }
+    else { conditions.push(`created_at >= date_trunc('month', NOW())`); }
+    if (opts?.before) { conditions.push(`created_at < $${pi++}`); params.push(opts.before); }
+
+    const where = conditions.join(" AND ");
+
     const { rows } = await pool.query<{
       total_tasks: string;
       tasks_without_premium: string;
@@ -230,9 +243,8 @@ export async function getMonthlySummary(userId: number): Promise<MonthlySummary>
          COALESCE(SUM(estimated_savings_usd), 0) AS estimated_savings_usd,
          COALESCE(SUM(tokens_avoided), 0) AS tokens_avoided
        FROM ai_usage_events
-       WHERE user_id = $1
-         AND created_at >= date_trunc('month', NOW())`,
-      [userId],
+       WHERE ${where}`,
+      params,
     );
 
     const r = rows[0] ?? {};
