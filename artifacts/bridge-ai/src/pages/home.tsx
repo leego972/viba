@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
 import {
   ArrowRight, FileText, CheckCircle2, X, TrendingDown, DollarSign,
@@ -18,6 +18,18 @@ const EMERALD    = "#059669";
 
 export default function Home() {
   const [leegoBig, setLeegoBig] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const openLeego = () => {
+    setLeegoBig(true);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setLeegoBig(false), 5000);
+  };
+  const closeLeego = () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setLeegoBig(false);
+  };
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
 
   return (
     <div className="flex flex-col min-h-screen" style={{ background: CREAM, color: TEXT }}>
@@ -26,17 +38,22 @@ export default function Home() {
       {leegoBig && (
         <div
           className="fixed inset-0 z-[999] flex items-center justify-center"
-          style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)" }}
-          onClick={() => setLeegoBig(false)}
+          style={{ background: "rgba(0,0,0,0.88)", backdropFilter: "blur(8px)" }}
+          onClick={closeLeego}
         >
-          <div className="relative rounded-2xl p-8 shadow-2xl" style={{ background: CREAM_CARD, border: `1px solid ${BORDER}` }}>
-            <button onClick={() => setLeegoBig(false)}
-              className="absolute top-3 right-3 flex items-center justify-center h-8 w-8 rounded-full transition-colors hover:bg-black/[0.06]"
-              style={{ color: TEXT_MUT }}>
+          <div
+            className="relative rounded-2xl p-8 shadow-2xl"
+            style={{ background: "#000", border: "1px solid rgba(255,255,255,0.12)" }}
+            onClick={e => e.stopPropagation()}
+          >
+            <button onClick={closeLeego}
+              className="absolute top-3 right-3 flex items-center justify-center h-8 w-8 rounded-full transition-colors hover:bg-white/10"
+              style={{ color: "rgba(255,255,255,0.5)" }}>
               <X className="h-4 w-4" />
             </button>
             <img src="/leego-logo-transparent.png" alt="Leego" className="h-24 w-auto object-contain mx-auto" />
-            <p className="text-center text-sm mt-4 font-medium" style={{ color: TEXT_MUT }}>Built by Leego</p>
+            <p className="text-center text-sm mt-4 font-medium" style={{ color: "rgba(255,255,255,0.6)" }}>Built by Leego</p>
+            <p className="text-center text-[10px] mt-1" style={{ color: "rgba(255,255,255,0.25)" }}>Closes automatically…</p>
           </div>
         </div>
       )}
@@ -525,7 +542,7 @@ export default function Home() {
             <Link href="/dashboard" className="hover:text-gray-600 transition-colors">Dashboard</Link>
             <span className="hidden sm:inline" style={{ color: "#d1d5db" }}>|</span>
             <button
-              onClick={() => setLeegoBig(true)}
+              onClick={openLeego}
               className="flex items-center gap-1.5 transition-all hover:opacity-100 active:scale-95"
               style={{ opacity: 0.6 }}
             >
