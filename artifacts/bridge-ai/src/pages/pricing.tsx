@@ -393,6 +393,20 @@ export default function Pricing() {
           </p>
         </div>
       </div>
+
+      {/* Footer */}
+      <div className="border-t border-white/[0.06] mt-8 pt-8 pb-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-zinc-600">
+        <div className="flex items-center gap-2">
+          <img src={`${import.meta.env.BASE_URL}viba-logo.png`} alt="VIBA" className="h-6 w-auto object-contain" />
+          <span>© 2026 VIBA. All rights reserved.</span>
+        </div>
+        <div className="flex items-center gap-4">
+          <a href="/" className="hover:text-zinc-400 transition-colors">Home</a>
+          <a href="/dashboard" className="hover:text-zinc-400 transition-colors">Dashboard</a>
+          <a href="/connections" className="hover:text-zinc-400 transition-colors">API Keys</a>
+          <a href="/sessions/new" className="hover:text-zinc-400 transition-colors">New Session</a>
+        </div>
+      </div>
     </div>
   );
 }
