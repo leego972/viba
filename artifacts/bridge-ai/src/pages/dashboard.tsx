@@ -1284,16 +1284,18 @@ export default function Dashboard() {
                     Assign AI agents their roles, set a goal, and VIBA will coordinate them through your task — with human-in-the-loop approval for any risky action.
                   </p>
                 </div>
-                <div className="grid grid-cols-3 gap-3 text-left">
+                <div className="flex flex-col sm:grid sm:grid-cols-3 gap-2 text-left">
                   {[
                     { n: "1", label: "Set a goal", desc: "Describe what you want to accomplish" },
                     { n: "2", label: "Assign agents", desc: "Pick AI providers and their roles" },
                     { n: "3", label: "Review & approve", desc: "VIBA runs and asks before acting" },
                   ].map(({ n, label, desc }) => (
-                    <div key={n} className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-3">
-                      <div className="h-6 w-6 rounded-full bg-primary/15 border border-primary/25 flex items-center justify-center text-xs font-bold text-primary mb-2">{n}</div>
-                      <p className="text-xs font-semibold">{label}</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{desc}</p>
+                    <div key={n} className="flex sm:flex-col items-start gap-3 rounded-xl border border-white/[0.07] bg-white/[0.02] px-3 py-2.5">
+                      <div className="h-6 w-6 rounded-full bg-primary/15 border border-primary/25 flex items-center justify-center text-xs font-bold text-primary shrink-0">{n}</div>
+                      <div>
+                        <p className="text-xs font-semibold">{label}</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{desc}</p>
+                      </div>
                     </div>
                   ))}
                 </div>
