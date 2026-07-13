@@ -370,7 +370,7 @@ export default function Home() {
                     color: VIOLET,
                   },
                 ].map(({ icon: Icon, title, desc, color }) => (
-                  <div key={title} className="viba-card relative">
+                  <div key={title} className="viba-card relative" style={{ background: "#111827", borderColor: "rgba(255,255,255,0.10)" }}>
                     <div className="absolute top-0 left-0 right-0 h-[2px] rounded-t-xl"
                       style={{ background: `linear-gradient(90deg, transparent, ${color}60, transparent)` }} />
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl mb-4"
@@ -417,10 +417,10 @@ export default function Home() {
                     saving: "Typical saving: $50–200/mo",
                   },
                 ].map(({ title, desc, saving }) => (
-                  <div key={title} className="viba-card flex flex-col">
+                  <div key={title} className="viba-card flex flex-col" style={{ background: "#111827", borderColor: "rgba(255,255,255,0.10)" }}>
                     <h3 className="text-sm font-bold mb-2" style={{ color: "#ffffff" }}>{title}</h3>
                     <p className="text-sm leading-relaxed flex-1" style={{ color: "rgba(255,255,255,0.72)" }}>{desc}</p>
-                    <div className="mt-4 pt-4 flex items-center gap-2" style={{ borderTop: `1px solid ${BORDER}` }}>
+                    <div className="mt-4 pt-4 flex items-center gap-2" style={{ borderTop: "1px solid rgba(255,255,255,0.12)" }}>
                       <TrendingDown className="h-4 w-4 shrink-0" style={{ color: EMERALD }} />
                       <p className="text-xs font-semibold" style={{ color: EMERALD }}>{saving}</p>
                     </div>
