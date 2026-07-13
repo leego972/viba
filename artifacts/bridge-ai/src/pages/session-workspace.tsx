@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import {
@@ -39,14 +39,13 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import {
-  Play, FastForward, Square, Send, CheckCircle2, Clock, Bot, Coins,
+  Play, FastForward, Square, Send, CheckCircle2, Clock, Bot,
   Crosshair, LineChart, Zap, FlaskConical, RotateCcw, X,
   RefreshCw, History, ShieldCheck, TrendingDown, AlertTriangle,
   Download, Brain, Copy, GitBranch, ExternalLink, Server, Pencil, Wrench,
   CopyPlus, BarChart3, MessageSquare, ListChecks, Search, Mic, MicOff,
 } from "lucide-react";
 import { useSessionStream } from "@/hooks/useSessionStream";
-import { IntelligentBuildFlow } from "@/components/IntelligentBuildFlow";
 import { MarkdownContent } from "@/components/MarkdownContent";
 import { ToolOutputCards, type ToolOutput } from "@/components/ToolOutputCards";
 import {
@@ -62,6 +61,15 @@ import {
   broadcastSpikeDismissal,
   subscribeToSpikeDismissals,
 } from "@/lib/spikeAlertLogic";
+import { MissionHeader } from "@/components/viba-command/MissionHeader";
+import { OrchestrationCanvas } from "@/components/orchestration/OrchestrationCanvas";
+import {
+  buildDemoViewModel,
+  AGENT_ROLE_COLORS,
+  type OrchestrationViewModel,
+  type CoordinatorPhase,
+  type AgentStatus,
+} from "@/lib/orchestrationViewModel";
 
 function shortRepoName(url: string): string {
   try {
@@ -136,13 +144,6 @@ export default function SessionWorkspace() {
   const [showEditCtxModal, setShowEditCtxModal] = useState(false);
   const [editRepoUrl, setEditRepoUrl] = useState("");
   const [editRepoBranch, setEditRepoBranch] = useState("");
-
-    // Budget cap state
-    const [budgetCap, setBudgetCap] = useState<number | null>(null);
-    const [budgetReserved, setBudgetReserved] = useState<number>(0);
-    const [budgetLoading, setBudgetLoading] = useState(false);
-    const [showBudgetEdit, setShowBudgetEdit] = useState(false);
-    const [budgetInput, setBudgetInput] = useState("");
   const [editWorkspaceEnv, setEditWorkspaceEnv] = useState("");
 
   // Inline reply state for user-directed questions
@@ -418,36 +419,7 @@ export default function SessionWorkspace() {
     }
   };
 
-  // Load session budget cap on mount
-    useEffect(() => {
-      if (!sessionId) return;
-      void fetch(`/api/sessions/${sessionId}/budget`, { credentials: "include" })
-        .then(r => r.ok ? r.json() as Promise<{ budgetCapCredits: number | null; creditsReserved: number }> : null)
-        .then(d => { if (!d) return; setBudgetCap(d.budgetCapCredits); setBudgetReserved(d.creditsReserved); })
-        .catch(() => {});
-    }, [sessionId]);
-
-    const handleSaveBudget = async () => {
-      setBudgetLoading(true);
-      try {
-        const cap = budgetInput.trim() === "" ? null : Number(budgetInput);
-        if (budgetInput.trim() !== "" && !Number.isFinite(cap)) return;
-        const res = await fetch(`/api/sessions/${sessionId}/budget`, {
-          method: "PATCH", credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ budgetCapCredits: cap }),
-        });
-        if (res.ok) {
-          const d = await res.json() as { budgetCapCredits: number | null; creditsReserved: number };
-          setBudgetCap(d.budgetCapCredits);
-          setBudgetReserved(d.creditsReserved);
-          setShowBudgetEdit(false);
-          toast({ title: cap === null ? "Budget cap cleared" : `Budget set to ${cap} credits` });
-        }
-      } finally { setBudgetLoading(false); }
-    };
-
-    const handleRunNext = async () => {
+  const handleRunNext = async () => {
     // On first run, conduct safety vote before executing anything
     if (messages.length === 0 && !voteResult) {
       const ok = await handleSafetyVote();
@@ -696,6 +668,85 @@ export default function SessionWorkspace() {
   const liveAgentCount = agents.filter(a => !a.isMock).length;
   const simAgentCount = agents.filter(a => a.isMock).length;
 
+  // ── Orchestration view ───────────────────────────────────────────────────
+  const [showOrchestration, setShowOrchestration] = useState(false);
+
+  const phaseFromStatus: Record<string, CoordinatorPhase> = {
+    active: "delegating",
+    completed: "complete",
+    stopped: "error",
+    paused: "waiting_approval",
+    pending: "idle",
+  };
+
+  const liveVm = useMemo((): OrchestrationViewModel => {
+    if (!session || agents.length === 0) return buildDemoViewModel();
+    const elapsedMs = session.createdAt
+      ? Math.max(0, Date.now() - new Date(session.createdAt).getTime())
+      : 0;
+    const sessionPhase: CoordinatorPhase = phaseFromStatus[session.status] ?? "idle";
+    const msgCountByAgent: Record<number, number> = {};
+    for (const m of messages) {
+      if (m.agentId) msgCountByAgent[m.agentId] = (msgCountByAgent[m.agentId] ?? 0) + 1;
+    }
+    const lastMsgByAgent: Record<number, string> = {};
+    for (const m of [...messages].reverse()) {
+      if (m.agentId && !lastMsgByAgent[m.agentId] && m.content) {
+        lastMsgByAgent[m.agentId] = m.content.slice(0, 80);
+      }
+    }
+    const builtAgents = agents.map(a => {
+      const roleKey = (a.role ?? "").toLowerCase();
+      const colors = AGENT_ROLE_COLORS[roleKey] ?? AGENT_ROLE_COLORS["default"];
+      let agentStatus: AgentStatus = "idle";
+      if (session.status === "completed") agentStatus = "complete";
+      else if (session.status === "stopped") agentStatus = "failed";
+      else if (session.status === "paused") agentStatus = "paused";
+      else if (session.status === "active") {
+        const msgCount = msgCountByAgent[a.id] ?? 0;
+        agentStatus = msgCount > 0 ? "working" : "queued";
+      }
+      return {
+        id: String(a.id),
+        name: a.name,
+        provider: a.provider,
+        role: a.role ?? "Agent",
+        status: agentStatus,
+        taskSummary: lastMsgByAgent[a.id],
+        cost: undefined,
+        latencyMs: undefined,
+        confidence: undefined,
+        color: colors.color,
+        accentColor: colors.accent,
+      };
+    });
+    const completedTasks = tasks.filter(t => t.status === "complete").length;
+    const totalTasks = tasks.length;
+    const progress = totalTasks > 0
+      ? Math.round((completedTasks / totalTasks) * 100)
+      : session.status === "completed" ? 100 : 0;
+    return {
+      sessionId: session.id,
+      sessionName: session.goal,
+      phase: sessionPhase,
+      agents: builtAgents,
+      events: auditLogs.slice(-8).map((log, i) => ({
+        id: String(log.id ?? i),
+        timestamp: log.createdAt ? new Date(log.createdAt) : new Date(),
+        agentName: "VIBA",
+        agentColor: "#a78bfa",
+        action: log.eventType ?? "event",
+        detail: undefined,
+        type: log.eventType === "adapter_fallback" ? "warning" as const : "info" as const,
+      })),
+      totalCost: session.estimatedCost ?? 0,
+      estimatedPremiumCost: (session.estimatedCost ?? 0) * 5.2,
+      elapsedMs,
+      progress,
+      isDemo: false,
+    };
+  }, [session, agents, messages, tasks, auditLogs]);
+
   if (sessionLoading || !session) {
     return (
       <AppLayout>
@@ -709,6 +760,19 @@ export default function SessionWorkspace() {
   return (
     <AppLayout>
       <div className="flex flex-col lg:h-[calc(100vh-8rem)] gap-4">
+        {/* Mission Control Header */}
+        <MissionHeader
+          sessionName={session.goal}
+          phase={liveVm.phase}
+          progress={liveVm.progress}
+          elapsedMs={liveVm.elapsedMs}
+          cost={session.estimatedCost ?? 0}
+          estimatedPremiumCost={(session.estimatedCost ?? 0) * 5.2}
+          status={session.status}
+          hasApproval={!!pendingApproval}
+          onStop={isSessionActive ? handleStop : undefined}
+        />
+
         {/* Spike alert */}
         {showSpikeAlert && (
           <div className="flex items-start gap-3 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm text-red-300 shrink-0">
@@ -850,6 +914,23 @@ export default function SessionWorkspace() {
           </div>
         </div>
 
+        {/* Orchestration view toggle */}
+        <div className="shrink-0">
+          <button
+            type="button"
+            onClick={() => setShowOrchestration(v => !v)}
+            className="flex items-center gap-1.5 text-[10px] text-white/30 hover:text-white/60 transition-colors mb-1"
+          >
+            <span className={`transition-transform duration-200 ${showOrchestration ? "rotate-90" : ""}`}>▶</span>
+            {showOrchestration ? "Hide" : "Show"} orchestration view
+          </button>
+          {showOrchestration && (
+            <div className="rounded-xl border border-white/[0.06] bg-[#0a0b11] overflow-hidden">
+              <OrchestrationCanvas vm={liveVm} height={260} />
+            </div>
+          )}
+        </div>
+
         {/* Completion summary banner */}
         {isSessionComplete && (
           <div className="flex items-start gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300 shrink-0">
@@ -863,16 +944,7 @@ export default function SessionWorkspace() {
           </div>
         )}
 
-        {/* Collaboration flow — shows current workflow stage */}
-          <IntelligentBuildFlow
-            status={session.status}
-            hasTasks={tasks.length > 0}
-            hasApprovals={approvals.some(a => a.status === "approved")}
-            hasReceipts={tasks.some(t => t.status === "completed")}
-            hasFinalOutput={!!session.finalOutput}
-          />
-
-          {/* 3 Column Layout */}
+        {/* 3 Column Layout */}
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 min-h-0 overflow-auto lg:overflow-hidden">
 
           {/* Left: Info, Memory & Agents (3 cols) */}
@@ -888,82 +960,7 @@ export default function SessionWorkspace() {
               </CardContent>
             </Card>
 
-            {/* Budget cap — compact collapsible card */}
-              <details className="group/budget shrink-0">
-                <summary className="cursor-pointer select-none list-none flex items-center gap-2 rounded-lg border bg-card px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors">
-                  <Coins className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <span className="flex-1">Budget cap</span>
-                  <span className="text-[11px] text-muted-foreground">{budgetCap !== null ? `${budgetCap} cr` : "None"}</span>
-                  <span className="text-[10px] text-muted-foreground transition-transform group-open/budget:rotate-180 inline-block">▼</span>
-                </summary>
-                <div className="mt-1 rounded-lg border bg-card p-4 space-y-3">
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">VIBA pauses before exceeding this cap. Leave blank for no limit.</p>
-                  {budgetCap !== null && (
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Cap</p>
-                        <p className="text-sm font-medium">{budgetCap} cr</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Remaining</p>
-                        <p className="text-sm font-medium">{Math.max(0, budgetCap - budgetReserved)} cr</p>
-                      </div>
-                    </div>
-                  )}
-                  {showBudgetEdit ? (
-                    <div className="flex gap-2">
-                      <Input type="number" min="0" placeholder="Credits (blank = no cap)" value={budgetInput} onChange={e => setBudgetInput(e.target.value)} className="h-8 text-sm" />
-                      <Button size="sm" onClick={handleSaveBudget} disabled={budgetLoading} className="shrink-0 h-8 px-3">{budgetLoading ? "…" : "Save"}</Button>
-                      <Button size="sm" variant="ghost" onClick={() => setShowBudgetEdit(false)} className="shrink-0 h-8 px-2"><X className="h-3.5 w-3.5" /></Button>
-                    </div>
-                  ) : (
-                    <button type="button"
-                      onClick={() => { setBudgetInput(budgetCap !== null ? String(budgetCap) : ""); setShowBudgetEdit(true); }}
-                      className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      <Pencil className="h-3 w-3" /> {budgetCap !== null ? "Edit cap" : "Set cap"}
-                    </button>
-                  )}
-                </div>
-              </details>
-
-              {/* Proof Report quick link */}
-              <Link href={`/sessions/${sessionId}/proof-report`}>
-                <button
-                  type="button"
-                  className="shrink-0 flex items-center gap-2 rounded-lg border bg-card px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors w-full"
-                >
-                  <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <span className="flex-1 text-left">Proof Report</span>
-                  <ExternalLink className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                </button>
-              </Link>
-
-              {/* Next Action quick link */}
-              <Link href={`/sessions/${sessionId}/next-action`}>
-                <button
-                  type="button"
-                  className="shrink-0 flex items-center gap-2 rounded-lg border bg-card px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors w-full"
-                >
-                  <ListChecks className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <span className="flex-1 text-left">Next Action</span>
-                  <ExternalLink className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                </button>
-              </Link>
-
-              {/* Approvals quick link */}
-              <Link href={`/sessions/${sessionId}/approvals`}>
-                <button
-                  type="button"
-                  className="shrink-0 flex items-center gap-2 rounded-lg border bg-card px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors w-full"
-                >
-                  <ClipboardCheck className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <span className="flex-1 text-left">Approvals</span>
-                  <ExternalLink className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                </button>
-              </Link>
-
-              {/* Workspace Context — repo, branch, environment */}
+            {/* Workspace Context — repo, branch, environment */}
             {(session.repoUrl || session.repoBranch || session.workspaceEnv) ? (
               <details className="group/wctx shrink-0">
                 <summary className="cursor-pointer select-none list-none flex items-center gap-2 rounded-lg border bg-card px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors">
