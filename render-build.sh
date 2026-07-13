@@ -35,7 +35,7 @@ console.log('[build] node version OK for Vite 7: ' + process.version);
 "
 
 echo "[build] installing dependencies..."
-pnpm install --no-frozen-lockfile --prod=false 2>&1
+pnpm install --frozen-lockfile 2>&1
 echo "[build] install done"
 
 echo "[build] building bridge-ai..."
