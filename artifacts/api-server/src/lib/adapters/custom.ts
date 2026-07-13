@@ -28,14 +28,14 @@ export class CustomAIAdapter implements AgentAdapter {
     this.name = name;
     this.role = role;
     this.apiKey = apiKey;
-    this.model = model ?? process.env["CUSTOM_AI_MODEL"] ?? "default";
-    this.baseURL = (baseURL ?? process.env["CUSTOM_AI_ENDPOINT"] ?? "").replace(/\/$/, "");
+    this.model = model ?? process.env["CUSTOM_MODEL"] ?? "default";
+    this.baseURL = (baseURL ?? process.env["CUSTOM_ENDPOINT"] ?? "").replace(/\/$/, "");
     this.canUseTools = canUseTools;
   }
 
   async runTask(input: AgentTaskInput): Promise<AgentTaskResult> {
     if (!this.baseURL) {
-      throw new Error("Custom AI endpoint URL is not configured. Set CUSTOM_AI_ENDPOINT in settings.");
+      throw new Error("Custom AI endpoint URL is not configured. Set CUSTOM_ENDPOINT in settings.");
     }
 
     const systemPrompt = `You are ${this.name}, an AI agent with the role of ${this.role} in a multi-agent collaboration platform called VIBA - Collaborative Multi-Agent Orchestration System.

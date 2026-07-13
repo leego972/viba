@@ -206,10 +206,10 @@ export async function buildAdapter(agent: Agent, userId?: number | null): Promis
   }
 
   if (provider === "custom") {
-    const apiKey = await resolveApiKey(userId, provider, credLabel, "CUSTOM_AI_API_KEY");
-    const endpoint = await getSetting("CUSTOM_AI_ENDPOINT") ?? process.env["CUSTOM_AI_ENDPOINT"] ?? "";
+    const apiKey = await resolveApiKey(userId, provider, credLabel, "CUSTOM_API_KEY");
+    const endpoint = await getSetting("CUSTOM_ENDPOINT") ?? process.env["CUSTOM_ENDPOINT"] ?? "";
     if (endpoint) {
-      const model = await getSetting("CUSTOM_AI_MODEL") ?? undefined;
+      const model = await getSetting("CUSTOM_MODEL") ?? undefined;
       return new CustomAIAdapter(String(agent.id), agent.name, agent.role, apiKey, model, agent.canUseTools, endpoint);
     }
     logger.warn({ provider, credLabel }, "No Custom AI endpoint configured — using simulation mode");
