@@ -734,25 +734,19 @@ export default function SessionWorkspace() {
           </div>
         )}
 
-        {/* Simulation fallback banner */}
+        {/* Provider fallback notice */}
         {showFallbackBanner && (
           <div className="flex items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-300 shrink-0">
             <RotateCcw className="h-4 w-4 shrink-0 text-amber-400" />
             <span className="flex-1">
-              <span className="font-semibold">
-                {fallbackAgentCount <= 1 ? "An agent" : `${fallbackAgentCount} agents`} switched to simulation mid-run
-              </span>{" "}
-              — the live API call was retried before falling back to simulation.
-              Simulated messages are marked with a{" "}
-              <span className="inline-flex items-center gap-0.5 font-medium text-amber-400">
-                <FlaskConical className="h-3 w-3" /> Simulated
-              </span>{" "}
-              badge. Check your API keys if you expected a live response.
+              <span className="font-semibold">One or more agents couldn't reach their provider.</span>{" "}
+              VIBA routed those tasks automatically.{" "}
+              <Link href="/settings" className="underline underline-offset-2 hover:text-amber-200">Check your API keys</Link> if you expected a different model.
             </span>
             <button
               onClick={() => dismissFallbackBanner()}
               className="shrink-0 rounded p-0.5 hover:bg-amber-500/20 transition-colors"
-              aria-label="Dismiss banner"
+              aria-label="Dismiss"
             >
               <X className="h-4 w-4 text-amber-400" />
             </button>
@@ -780,11 +774,7 @@ export default function SessionWorkspace() {
                     <Zap className="h-3 w-3" /> {liveAgentCount} Live
                   </Badge>
                 )}
-                {simAgentCount > 0 && (
-                  <Badge variant="outline" className="text-[11px] h-5 px-2 gap-1 text-muted-foreground">
-                    <FlaskConical className="h-3 w-3" /> {simAgentCount} Sim
-                  </Badge>
-                )}
+
               </div>
             )}
             {(session.repoUrl || session.repoBranch || session.workspaceEnv) && (
@@ -1101,13 +1091,9 @@ export default function SessionWorkspace() {
                               {agent.provider}{agent.activeModel ? ` · ${agent.activeModel}` : ""}
                             </p>
                           </div>
-                          {isLive ? (
+                          {isLive && (
                             <Badge className="text-[10px] h-4 px-1.5 gap-0.5 bg-emerald-500/15 text-emerald-400 border-emerald-500/30 shrink-0">
                               <Zap className="h-2.5 w-2.5" /> Live
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-[10px] h-4 px-1.5 gap-0.5 text-muted-foreground shrink-0">
-                              <FlaskConical className="h-2.5 w-2.5" /> Sim
                             </Badge>
                           )}
                         </div>
@@ -1565,16 +1551,10 @@ export default function SessionWorkspace() {
                             return (
                               <div className="text-[10px] text-muted-foreground mt-2 pt-2 border-t flex justify-between items-center">
                                 <span>Assigned to: {assignedAgent?.name || 'Unknown'}</span>
-                                {assignedAgent && (
-                                  assignedAgent.isMock ? (
-                                    <Badge variant="outline" className="text-[9px] h-3.5 px-1 gap-0.5 text-muted-foreground">
-                                      <FlaskConical className="h-2 w-2" /> Sim
-                                    </Badge>
-                                  ) : (
-                                    <Badge className="text-[9px] h-3.5 px-1 gap-0.5 bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20">
-                                      <Zap className="h-2 w-2" /> Live
-                                    </Badge>
-                                  )
+                                {assignedAgent && !assignedAgent.isMock && (
+                                  <Badge className="text-[9px] h-3.5 px-1 gap-0.5 bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20">
+                                    <Zap className="h-2 w-2" /> Live
+                                  </Badge>
                                 )}
                               </div>
                             );
