@@ -1868,6 +1868,7 @@ export default function AdminPage() {
       if (r.ok) {
         sessionStorage.setItem(SESSION_KEY, input.trim());
         setToken(input.trim());
+        window.dispatchEvent(new Event("storage"));
       } else {
         setAuthErr("Invalid admin token");
       }
@@ -1882,6 +1883,7 @@ export default function AdminPage() {
     sessionStorage.removeItem(SESSION_KEY);
     setToken("");
     setInput("");
+    window.dispatchEvent(new Event("storage"));
   };
 
   // ── Token gate ──────────────────────────────────────────────────────────────

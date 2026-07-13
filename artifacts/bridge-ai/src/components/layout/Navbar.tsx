@@ -132,10 +132,19 @@ function DropMenu({ group, location }: { group: NavGroup; location: string }) {
 export function Navbar() {
   const [location] = useLocation();
   const { theme, toggleTheme } = useTheme();
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    const check = () => setIsAdmin(!!sessionStorage.getItem("viba_admin_token"));
+    check();
+    window.addEventListener("storage", check);
+    return () => window.removeEventListener("storage", check);
+  }, []);
 
   const isDashboard = location.startsWith("/dashboard") || location.startsWith("/sessions");
   const isBilling   = location.startsWith("/billing") || location.startsWith("/pricing");
   const isSettings  = location === "/settings";
+  const isAdmin_    = location === "/admin";
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-white/[0.06] bg-background/90 backdrop-blur-xl">
@@ -192,6 +201,21 @@ export function Navbar() {
               {isSettings && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-[1px] h-[2px] w-5 rounded-full bg-primary/70" />}
             </button>
           </Link>
+
+          {/* Admin — only visible once the admin token is stored in session */}
+          {isAdmin && (
+            <Link href="/admin">
+              <button className={`relative flex items-center gap-1.5 h-9 px-3.5 rounded-lg text-sm font-medium transition-all duration-150 ${
+                isAdmin_
+                  ? "text-foreground bg-red-500/10 border border-red-500/25"
+                  : "text-foreground/55 hover:text-foreground/90 hover:bg-red-500/[0.05] border border-transparent"
+              }`}>
+                <ShieldCheck className={`h-3.5 w-3.5 shrink-0 ${isAdmin_ ? "text-red-400" : ""}`} />
+                Admin
+                {isAdmin_ && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-[1px] h-[2px] w-5 rounded-full bg-red-400/70" />}
+              </button>
+            </Link>
+          )}
         </nav>
 
         {/* Mobile nav — 4 core actions only */}

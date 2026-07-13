@@ -554,6 +554,57 @@ export class OllamaMockAdapter extends TextOnlyMockAdapter {
   }
 }
 
+// ── Venice ────────────────────────────────────────────────────────────────────
+export class VeniceMockAdapter extends TextOnlyMockAdapter {
+  id: string; name: string; provider = "venice"; model = "llama-3.3-70b (sim)"; role: string;
+  capabilities = ["planning", "reasoning", "creative_direction", "research", "code_review"];
+
+  constructor(id: string, name: string, role: string) { super(); this.id = id; this.name = name; this.role = role; }
+
+  generateResponse(input: AgentTaskInput): string {
+    const goal = input.projectGoal;
+    const type = input.taskType ?? "planning";
+    const responses: Record<string, string[]> = {
+      planning: [
+        `Venice AI analysis for "${goal}": privacy-first reasoning complete. Task decomposed with full context isolation — no data retained after session. Three-phase plan ready.`,
+        `Strategic plan for "${goal}" via Venice AI: uncensored reasoning applied. All perspectives considered. Deliverable is clear, well-scoped, and ready for execution.`,
+      ],
+      research: [
+        `Venice AI research for "${goal}": comprehensive analysis with unrestricted access to reasoning pathways. Key findings documented and ready for synthesis.`,
+      ],
+      code_review: [
+        `Venice AI code review for "${goal}": logic verified, edge cases covered, performance is acceptable. No critical issues found.`,
+      ],
+    };
+    const fallback = [`Venice AI response for "${goal}": analysis complete. Privacy-first, uncensored reasoning applied. Output ready for the next agent.`];
+    return pick(responses[type] ?? fallback);
+  }
+}
+
+// ── Custom AI ─────────────────────────────────────────────────────────────────
+export class CustomAIMockAdapter extends TextOnlyMockAdapter {
+  id: string; name: string; provider = "custom"; model = "custom-model (sim)"; role: string;
+  capabilities = ["planning", "reasoning", "build", "research", "code_review"];
+
+  constructor(id: string, name: string, role: string) { super(); this.id = id; this.name = name; this.role = role; }
+
+  generateResponse(input: AgentTaskInput): string {
+    const goal = input.projectGoal;
+    const type = input.taskType ?? "planning";
+    const responses: Record<string, string[]> = {
+      planning: [
+        `Custom AI analysis for "${goal}": self-hosted model reasoning complete. Task structured and ready for execution.`,
+        `Plan for "${goal}" via custom endpoint: private model applied, no data sent externally. Three execution phases outlined.`,
+      ],
+      build: [
+        `Custom AI build guidance for "${goal}": implementation path is clear. Running on your private endpoint — zero third-party data exposure.`,
+      ],
+    };
+    const fallback = [`Custom AI response for "${goal}": processed on private endpoint. Output ready for next agent.`];
+    return pick(responses[type] ?? fallback);
+  }
+}
+
 // ── Railway ───────────────────────────────────────────────────────────────────
 export class RailwayMockAdapter extends ToolCapableMockAdapter {
   id: string; name: string; provider = "railway"; model = "railway-mcp (sim)"; role: string;
