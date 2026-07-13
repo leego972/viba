@@ -647,13 +647,29 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     outputsSecretValues: false,
   },
 
-  // ─── Provider-specific tools ──────────────────────────────────────────────────
+  // ─── Provider-specific tools — Render ────────────────────────────────────────
+
+  "render.services.list": {
+    toolId: "render.services.list",
+    label: "Render: List Services",
+    category: "deployment",
+    description: "List all Render services on the account. Returns service IDs, names, types, and URLs. Use this first to find the serviceId needed for env writes or deploy triggers.",
+    riskLevel: "read_only",
+    permissionsRequired: ["login_required"],
+    credentialProvider: "render",
+    credentialKind: "api_key",
+    supportsDryRun: false,
+    requiresApproval: false,
+    requiresSafeBuild: false,
+    outputsSecretValues: false,
+    executionName: "render_services_list",
+  },
 
   "render.env.write": {
     toolId: "render.env.write",
     label: "Render: Write Env Vars",
     category: "deployment",
-    description: "Write environment variables to a Render service. Requires vault credential and owner approval. Adapter is placeholder — generates manual guide instead of executing.",
+    description: "Write environment variables to a Render service via the Render REST API. Pass the complete desired env var set — this replaces all existing vars. Use render.services.list first to get the serviceId.",
     riskLevel: "high",
     permissionsRequired: ["login_required"],
     credentialProvider: "render",
@@ -662,13 +678,14 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     requiresApproval: true,
     requiresSafeBuild: true,
     outputsSecretValues: false,
+    executionName: "render_env_write",
   },
 
   "render.deploy.trigger": {
     toolId: "render.deploy.trigger",
     label: "Render: Trigger Deploy",
     category: "deployment",
-    description: "Trigger a deployment on Render. Requires vault credential, owner approval, and passing safe-build. Adapter is placeholder — generates manual guide instead of executing.",
+    description: "Trigger a new deployment on Render via the Render REST API. Requires vault credential and owner approval.",
     riskLevel: "high",
     permissionsRequired: ["login_required"],
     credentialProvider: "render",
@@ -677,13 +694,32 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     requiresApproval: true,
     requiresSafeBuild: true,
     outputsSecretValues: false,
+    executionName: "render_deploy_trigger",
+  },
+
+  // ─── Provider-specific tools — DigitalOcean ──────────────────────────────────
+
+  "digitalocean.apps.list": {
+    toolId: "digitalocean.apps.list",
+    label: "DigitalOcean: List Apps",
+    category: "deployment",
+    description: "List all DigitalOcean App Platform apps on the account. Returns app IDs, names, regions, live URLs, and deployment phases. Use this first to find the appId.",
+    riskLevel: "read_only",
+    permissionsRequired: ["login_required"],
+    credentialProvider: "digitalocean",
+    credentialKind: "access_token",
+    supportsDryRun: false,
+    requiresApproval: false,
+    requiresSafeBuild: false,
+    outputsSecretValues: false,
+    executionName: "digitalocean_apps_list",
   },
 
   "digitalocean.env.write": {
     toolId: "digitalocean.env.write",
     label: "DigitalOcean: Write Env Vars",
     category: "deployment",
-    description: "Write environment variables to a DigitalOcean App Platform app. Requires vault credential and owner approval. Adapter is placeholder — generates manual guide instead of executing.",
+    description: "Merge environment variables into a DigitalOcean App Platform app spec via the DO API. Non-destructive — existing vars not in the list are preserved.",
     riskLevel: "high",
     permissionsRequired: ["login_required"],
     credentialProvider: "digitalocean",
@@ -692,13 +728,14 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     requiresApproval: true,
     requiresSafeBuild: true,
     outputsSecretValues: false,
+    executionName: "digitalocean_env_write",
   },
 
   "digitalocean.deploy.trigger": {
     toolId: "digitalocean.deploy.trigger",
     label: "DigitalOcean: Trigger Deploy",
     category: "deployment",
-    description: "Trigger a deployment on DigitalOcean App Platform. Requires vault credential, owner approval, and passing safe-build. Adapter is placeholder — generates manual guide instead of executing.",
+    description: "Trigger a new deployment on DigitalOcean App Platform via the DO API. Requires vault credential and owner approval.",
     riskLevel: "high",
     permissionsRequired: ["login_required"],
     credentialProvider: "digitalocean",
@@ -707,13 +744,32 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     requiresApproval: true,
     requiresSafeBuild: true,
     outputsSecretValues: false,
+    executionName: "digitalocean_deploy_trigger",
+  },
+
+  // ─── Provider-specific tools — Vercel ────────────────────────────────────────
+
+  "vercel.projects.list": {
+    toolId: "vercel.projects.list",
+    label: "Vercel: List Projects",
+    category: "deployment",
+    description: "List all Vercel projects on the account. Returns project IDs, names, framework, and latest deployment URLs. Use this first to find the projectId.",
+    riskLevel: "read_only",
+    permissionsRequired: ["login_required"],
+    credentialProvider: "vercel",
+    credentialKind: "access_token",
+    supportsDryRun: false,
+    requiresApproval: false,
+    requiresSafeBuild: false,
+    outputsSecretValues: false,
+    executionName: "vercel_projects_list",
   },
 
   "vercel.env.write": {
     toolId: "vercel.env.write",
-    label: "Vercel: Write Env Vars",
+    label: "Vercel: Write Env Var",
     category: "deployment",
-    description: "Write environment variables to a Vercel project. Requires vault credential and owner approval. Adapter is placeholder — generates manual guide instead of executing.",
+    description: "Create or update an environment variable on a Vercel project via the Vercel API. Supports production, preview, and development targets. Auto-upserts if the key already exists.",
     riskLevel: "high",
     permissionsRequired: ["login_required"],
     credentialProvider: "vercel",
@@ -722,13 +778,14 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     requiresApproval: true,
     requiresSafeBuild: true,
     outputsSecretValues: false,
+    executionName: "vercel_env_write",
   },
 
   "vercel.deploy.trigger": {
     toolId: "vercel.deploy.trigger",
     label: "Vercel: Trigger Deploy",
     category: "deployment",
-    description: "Trigger a deployment on Vercel. Requires vault credential, owner approval, and passing safe-build. Adapter is placeholder — generates manual guide instead of executing.",
+    description: "Trigger a redeployment on Vercel. If a deploy_hook_url is provided, POST to it directly. Otherwise uses the Vercel API to find and redeploy the latest production deployment.",
     riskLevel: "high",
     permissionsRequired: ["login_required"],
     credentialProvider: "vercel",
@@ -737,13 +794,32 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     requiresApproval: true,
     requiresSafeBuild: true,
     outputsSecretValues: false,
+    executionName: "vercel_deploy_trigger",
+  },
+
+  // ─── Provider-specific tools — Sevall / Sevalla ───────────────────────────────
+
+  "sevall.apps.list": {
+    toolId: "sevall.apps.list",
+    label: "Sevall: List Applications",
+    category: "deployment",
+    description: "List Sevalla applications on the account. Returns app IDs, names, status, and URLs. Use this first to find the app ID needed for env writes or deploy triggers.",
+    riskLevel: "read_only",
+    permissionsRequired: ["login_required"],
+    credentialProvider: "sevall",
+    credentialKind: "api_key",
+    supportsDryRun: false,
+    requiresApproval: false,
+    requiresSafeBuild: false,
+    outputsSecretValues: false,
+    executionName: "sevall_apps_list",
   },
 
   "sevall.env.write": {
     toolId: "sevall.env.write",
     label: "Sevall: Write Env Vars",
     category: "deployment",
-    description: "Write environment variables to a Sevall service. Requires vault credential and owner approval. Adapter is placeholder — generates manual guide instead of executing.",
+    description: "Set environment variables on a Sevalla application via the Sevalla REST API. Requires vault credential and owner approval.",
     riskLevel: "high",
     permissionsRequired: ["login_required"],
     credentialProvider: "sevall",
@@ -752,13 +828,14 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     requiresApproval: true,
     requiresSafeBuild: true,
     outputsSecretValues: false,
+    executionName: "sevall_env_write",
   },
 
   "sevall.deploy.trigger": {
     toolId: "sevall.deploy.trigger",
     label: "Sevall: Trigger Deploy",
     category: "deployment",
-    description: "Trigger a deployment on Sevall. Requires vault credential, owner approval, and passing safe-build. Adapter is placeholder — generates manual guide instead of executing. Note: Sevall support is available as a manual-guided provider until API integration is confirmed.",
+    description: "Trigger a deployment on a Sevalla application via the Sevalla REST API. Requires vault credential and owner approval.",
     riskLevel: "high",
     permissionsRequired: ["login_required"],
     credentialProvider: "sevall",
@@ -767,6 +844,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     requiresApproval: true,
     requiresSafeBuild: true,
     outputsSecretValues: false,
+    executionName: "sevall_deploy_trigger",
   },
 
   "custom.deploy.guide": {

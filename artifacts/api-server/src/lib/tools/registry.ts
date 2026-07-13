@@ -32,6 +32,8 @@
  *   Slack tools      — slack_webhook
  *   Inference tools  — generate_text (Groq LLM sub-call)
  *   Webhook tools    — webhook_post (fire-and-confirm with retry + HMAC signing)
+ *   Deploy tools     — Render (list/env/deploy), DigitalOcean (list/env/deploy),
+ *                      Vercel (list/env/deploy), Sevall/Sevalla (list/env/deploy)
  */
 
 import { getGitHubTools, type GitHubContext } from "./github";
@@ -61,6 +63,7 @@ import { getRssTools } from "./rss";
 import { getSlackTools } from "./slack";
 import { getInferenceTools } from "./inference";
 import { getWebhookTools } from "./webhookpost";
+import { getDeployTools } from "./deploy";
 
 export interface ToolContext {
   githubToken?: string;
@@ -167,6 +170,9 @@ function buildAllTools(ctx: ToolContext): RegistryTool[] {
   // ── Webhook tools — fire-and-confirm delivery, always available ───────────
   for (const t of getWebhookTools()) tools.push(wrap(t));
 
+  // ── Deploy tools — Render/DO/Vercel/Sevall live API integrations ──────────
+  for (const t of getDeployTools()) tools.push(wrap(t));
+
   // ── GitHub tools — only when token is provided ───────────────────────────
   if (ctx.githubToken) {
     const ghCtx: GitHubContext = { token: ctx.githubToken };
@@ -198,6 +204,7 @@ export function getToolSummary(ctx: ToolContext): Record<string, string[]> {
     sql: [], translate: [], diff_stripe: [],
     security: [], network: [], utility: [], smoketest: [],
     datetime: [], rss: [], slack: [], inference: [], webhook: [],
+    deploy: [],
     github: [],
   };
   for (const t of tools) {
@@ -228,6 +235,7 @@ export function getToolSummary(ctx: ToolContext): Record<string, string[]> {
     else if (name === "slack_webhook") summary["slack"]!.push(name);
     else if (name === "generate_text") summary["inference"]!.push(name);
     else if (name === "webhook_post") summary["webhook"]!.push(name);
+    else if (name.startsWith("render_") || name.startsWith("digitalocean_") || name.startsWith("vercel_") || name.startsWith("sevall_")) summary["deploy"]!.push(name);
     else if (name.startsWith("github_") || name.startsWith("git_")) summary["github"]!.push(name);
   }
   return summary;
