@@ -22,6 +22,16 @@
  *   SQL tools        — sql_query (read-only PostgreSQL)
  *   Translate tools  — text_translate (any language via Groq)
  *   Diff/Stripe tools — diff_generate, stripe_query
+ *   Security tools   — headers_audit, ssl_check, cors_check, secrets_scan, password_audit, url_reputation
+ *   Network tools    — dns_lookup, whois_lookup, port_check, cve_search, dependency_audit
+ *   Utility tools    — hash_text, base64_encode/decode, jwt_decode, uuid_generate, regex_test,
+ *                      json_validate, csv_parse, markdown_to_html, qr_code_generate, calendar_event_create
+ *   Smoke test tools — smoke_test, smoke_test_suite, smoke_test_page
+ *   Date/time tools  — datetime_parse, datetime_format, datetime_diff, cron_next
+ *   RSS tools        — rss_feed_read
+ *   Slack tools      — slack_webhook
+ *   Inference tools  — generate_text (Groq LLM sub-call)
+ *   Webhook tools    — webhook_post (fire-and-confirm with retry + HMAC signing)
  */
 
 import { getGitHubTools, type GitHubContext } from "./github";
@@ -42,6 +52,15 @@ import { getFilestoreTools } from "./filestore";
 import { getSqlTools } from "./sqltool";
 import { getTranslateTools } from "./translate";
 import { getDiffTools } from "./diff";
+import { getSecurityTools } from "./security";
+import { getNetworkTools } from "./network";
+import { getUtilsTools } from "./utils";
+import { getSmokeTestTools } from "./smoketest";
+import { getDateTimeTools } from "./datetime";
+import { getRssTools } from "./rss";
+import { getSlackTools } from "./slack";
+import { getInferenceTools } from "./inference";
+import { getWebhookTools } from "./webhookpost";
 
 export interface ToolContext {
   githubToken?: string;
@@ -121,6 +140,33 @@ function buildAllTools(ctx: ToolContext): RegistryTool[] {
   // ── Diff + Stripe tools — always available ───────────────────────────────
   for (const t of getDiffTools()) tools.push(wrap(t));
 
+  // ── Security audit tools — always available ───────────────────────────────
+  for (const t of getSecurityTools()) tools.push(wrap(t));
+
+  // ── Network / recon tools — always available ──────────────────────────────
+  for (const t of getNetworkTools()) tools.push(wrap(t));
+
+  // ── Utility tools — always available ─────────────────────────────────────
+  for (const t of getUtilsTools()) tools.push(wrap(t));
+
+  // ── Smoke test tools — always available ──────────────────────────────────
+  for (const t of getSmokeTestTools()) tools.push(wrap(t));
+
+  // ── Date/time tools — always available ───────────────────────────────────
+  for (const t of getDateTimeTools()) tools.push(wrap(t));
+
+  // ── RSS / feed tools — always available ──────────────────────────────────
+  for (const t of getRssTools()) tools.push(wrap(t));
+
+  // ── Slack tools — always available (requires SLACK_WEBHOOK_URL or arg) ───
+  for (const t of getSlackTools()) tools.push(wrap(t));
+
+  // ── Inference tools — Groq sub-call, always available (requires GROQ_API_KEY) ──
+  for (const t of getInferenceTools()) tools.push(wrap(t));
+
+  // ── Webhook tools — fire-and-confirm delivery, always available ───────────
+  for (const t of getWebhookTools()) tools.push(wrap(t));
+
   // ── GitHub tools — only when token is provided ───────────────────────────
   if (ctx.githubToken) {
     const ghCtx: GitHubContext = { token: ctx.githubToken };
@@ -149,7 +195,10 @@ export function getToolSummary(ctx: ToolContext): Record<string, string[]> {
     web: [], search: [], http: [], browser: [], user_browser: [],
     vision: [], continuity: [], site_operator: [], memory: [],
     email: [], discord: [], pdf: [], files: [], sandbox: [],
-    sql: [], translate: [], diff_stripe: [], github: [],
+    sql: [], translate: [], diff_stripe: [],
+    security: [], network: [], utility: [], smoketest: [],
+    datetime: [], rss: [], slack: [], inference: [], webhook: [],
+    github: [],
   };
   for (const t of tools) {
     const name = t.definition.function.name;
@@ -170,6 +219,15 @@ export function getToolSummary(ctx: ToolContext): Record<string, string[]> {
     else if (name === "sql_query") summary["sql"]!.push(name);
     else if (name === "text_translate") summary["translate"]!.push(name);
     else if (name === "diff_generate" || name === "stripe_query") summary["diff_stripe"]!.push(name);
+    else if (name.endsWith("_audit") || name === "ssl_check" || name === "cors_check" || name === "secrets_scan" || name === "password_audit" || name === "url_reputation") summary["security"]!.push(name);
+    else if (name === "dns_lookup" || name === "whois_lookup" || name === "port_check" || name === "cve_search" || name === "dependency_audit") summary["network"]!.push(name);
+    else if (name === "hash_text" || name === "base64_encode" || name === "base64_decode" || name === "jwt_decode" || name === "uuid_generate" || name === "regex_test" || name === "json_validate" || name === "csv_parse" || name === "markdown_to_html" || name === "qr_code_generate" || name === "calendar_event_create") summary["utility"]!.push(name);
+    else if (name.startsWith("smoke_test")) summary["smoketest"]!.push(name);
+    else if (name.startsWith("datetime_") || name === "cron_next") summary["datetime"]!.push(name);
+    else if (name === "rss_feed_read") summary["rss"]!.push(name);
+    else if (name === "slack_webhook") summary["slack"]!.push(name);
+    else if (name === "generate_text") summary["inference"]!.push(name);
+    else if (name === "webhook_post") summary["webhook"]!.push(name);
     else if (name.startsWith("github_") || name.startsWith("git_")) summary["github"]!.push(name);
   }
   return summary;
