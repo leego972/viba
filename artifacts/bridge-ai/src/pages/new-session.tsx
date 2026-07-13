@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowRight, Bot, Target, ShieldCheck, Zap, AlertTriangle, FlaskConical, GitBranch, ChevronDown, Wrench, CheckCircle2, Loader2, Sparkles, Bookmark, BookMarked, Trash2 } from "lucide-react";
+import { ArrowRight, Bot, Target, ShieldCheck, Zap, AlertTriangle, GitBranch, ChevronDown, Wrench, CheckCircle2, Loader2, Sparkles, Bookmark, BookMarked, Trash2 } from "lucide-react";
 import { UpgradePrompt } from "@/components/UpgradePrompt";
 
 const AVAILABLE_PROVIDERS = [
@@ -667,14 +667,10 @@ export default function NewSession() {
                           <div className={`w-2 h-2 rounded-full shrink-0 ${provider.color}`} />
                           <span className="font-medium text-sm truncate">{provider.name}</span>
                         </Label>
-                        {/* Status badge — always visible, far right of name row */}
-                        {live ? (
+                        {/* Live badge — only shown when API key is configured */}
+                        {live && (
                           <Badge variant="outline" className="text-green-600 border-green-500/40 bg-green-500/10 gap-1 px-1.5 py-0 text-[10px] shrink-0">
                             <Zap className="h-2.5 w-2.5" /> Live
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-muted-foreground border-muted-foreground/30 bg-muted/40 gap-1 px-1.5 py-0 text-[10px] shrink-0">
-                            <FlaskConical className="h-2.5 w-2.5" /> Sim
                           </Badge>
                         )}
                       </div>
