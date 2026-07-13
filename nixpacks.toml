@@ -1,6 +1,11 @@
 [phases.setup]
-  nixPkgs = ["nodejs_22", "pnpm"]
+nixPkgs = ["nodejs_22", "pnpm"]
 
-  [phases.install]
-  cmds = ["pnpm install --no-frozen-lockfile"]
-  
+[phases.install]
+cmds = ["pnpm install --no-frozen-lockfile"]
+
+[phases.build]
+cmds = ["bash render-build.sh"]
+
+[start]
+cmd = "node --enable-source-maps artifacts/api-server/dist/index.mjs"
