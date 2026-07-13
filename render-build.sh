@@ -1,14 +1,5 @@
 #!/usr/bin/env bash
 set -e
-set -x
-
-echo "[diag] === RENDER BUILD STARTING ==="
-echo "[diag] date: $(date -u)"
-echo "[diag] pwd: $(pwd)"
-echo "[diag] os: $(uname -a)"
-echo "[diag] node: $(node -v 2>&1)"
-echo "[diag] npm:  $(npm -v 2>&1)"
-echo "[diag] pnpm check: $(command -v pnpm 2>&1 || echo 'NOT FOUND')"
 
 export NODE_ENV=production
 export NPM_CONFIG_PRODUCTION=false
@@ -35,7 +26,7 @@ console.log('[build] node version OK for Vite 7: ' + process.version);
 "
 
 echo "[build] installing dependencies..."
-pnpm install --frozen-lockfile 2>&1
+pnpm install --no-frozen-lockfile --prod=false 2>&1
 echo "[build] install done"
 
 echo "[build] building bridge-ai..."
