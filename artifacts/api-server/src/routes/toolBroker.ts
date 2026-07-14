@@ -20,7 +20,6 @@ import {
   executeToolAction,
 } from "../lib/toolActionBroker";
 import { getToolById, type ToolDefinition } from "../lib/toolRegistry";
-import { getBuilderToolById } from "../lib/builderToolbox";
 import { getSecurityHardeningToolById } from "../lib/securityToolPack";
 
 const router = Router();
@@ -43,7 +42,7 @@ const ARTIFACT_DELIVERY_TOOL: ToolDefinition = {
 function brokerToolById(toolId: string): ToolDefinition | undefined {
   return toolId === ARTIFACT_DELIVERY_TOOL.toolId
     ? ARTIFACT_DELIVERY_TOOL
-    : getBuilderToolById(toolId) ?? getSecurityHardeningToolById(toolId) ?? getToolById(toolId);
+    : getSecurityHardeningToolById(toolId) ?? getToolById(toolId);
 }
 
 function userId(req: { session?: { userId?: number } }): number {
