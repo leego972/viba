@@ -29,9 +29,10 @@ echo "[build] installing dependencies..."
 pnpm install --no-frozen-lockfile --prod=false 2>&1
 echo "[build] install done"
 
-echo "[build] building bridge-ai..."
-pnpm --filter @workspace/bridge-ai run build 2>&1
-echo "[build] bridge-ai done"
+# bridge-ai dist is pre-committed to git — skip the memory-intensive Vite build
+# on Render's 512 MB starter plan. Rebuild locally and re-commit whenever
+# frontend sources change: pnpm --filter @workspace/bridge-ai run build
+echo "[build] bridge-ai dist is pre-committed, skipping Vite build"
 
 echo "[build] building api-server..."
 pnpm --filter @workspace/api-server run build 2>&1
