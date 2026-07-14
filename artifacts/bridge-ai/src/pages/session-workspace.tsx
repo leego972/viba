@@ -49,6 +49,7 @@ import {
 import { useSessionStream } from "@/hooks/useSessionStream";
 import { MarkdownContent } from "@/components/MarkdownContent";
 import { StreamingMarkdown } from "@/components/StreamingMarkdown";
+import { OdometerCost } from "@/components/OdometerCost";
 import { ToolOutputCards, type ToolOutput } from "@/components/ToolOutputCards";
 import {
   SIMULATED_PREFIX,
@@ -1156,7 +1157,7 @@ export default function SessionWorkspace() {
                 <LineChart className="w-4 h-4" /> Live Collaboration
                 <span className="ml-auto text-[10px] font-normal text-muted-foreground flex items-center gap-3">
                   <span>{messages.length} msg{messages.length !== 1 ? "s" : ""}</span>
-                  {session && <span className="font-mono tabular-nums">${session.estimatedCost?.toFixed(4) ?? "0.0000"}</span>}
+                  {session && <OdometerCost value={session.estimatedCost ?? 0} />}
                   {(runNext.isPending || runFull.isPending) && (
                     <span className="text-primary animate-pulse font-medium">Processing…</span>
                   )}
