@@ -275,7 +275,10 @@ router.post("/providers/:provider/test", async (req, res): Promise<void> => {
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      res.json({ configured: false, reachable: false, message: `Endpoint unreachable: ${msg}` });
+      const hint = endpoint.includes("localhost") || endpoint.includes("127.0.0.1")
+        ? " The URL points to localhost — this is the server's localhost, not your device. Expose Ollama via a tunnel (e.g. cloudflare tunnel) and use that public URL instead."
+        : "";
+      res.json({ configured: false, reachable: false, message: `Endpoint unreachable: ${msg}.${hint}` });
     }
     return;
   }
