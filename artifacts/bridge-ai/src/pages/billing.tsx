@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { AlertTriangle, CheckCircle2, Clock, XCircle, Zap, RefreshCw, ExternalLink, TrendingDown, TrendingUp, History, ToggleLeft, ToggleRight } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, XCircle, Zap, RefreshCw, ExternalLink, TrendingDown, TrendingUp, History, ToggleLeft, ToggleRight, ShieldCheck } from "lucide-react";
 import { PlanBadge } from "@/components/PlanBadge";
 
 interface AutoTopupConfig { enabled: boolean; threshold: number; packKey: string; }
@@ -66,6 +66,14 @@ export default function Billing() {
   const [autoTopup, setAutoTopup] = useState<AutoTopupConfig>({ enabled: false, threshold: 100, packKey: "" });
   const [autoTopupSaving, setAutoTopupSaving] = useState(false);
   const [annualLoading, setAnnualLoading] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    const check = () => setIsAdmin(!!sessionStorage.getItem("viba_admin_token"));
+    check();
+    window.addEventListener("storage", check);
+    return () => window.removeEventListener("storage", check);
+  }, []);
 
   // Check if we just bought credits (Stripe redirected back with ?credits_added=N)
   const params = new URLSearchParams(window.location.search);
@@ -309,7 +317,14 @@ export default function Billing() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1.5">Subscription</p>
-                  <StatusBadge status={status!.subscriptionStatus} />
+                  <div className="flex items-center gap-2">
+                    <StatusBadge status={status!.subscriptionStatus} />
+                    {isAdmin && (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border bg-red-500/15 text-red-400 border-red-500/30">
+                        <ShieldCheck className="w-3.5 h-3.5" /> Admin
+                      </span>
+                    )}
+                  </div>
                 </div>
                 {isActive && (
                   <button
@@ -345,33 +360,40 @@ export default function Billing() {
               <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Credits Remaining</p>
               <div className="flex items-end gap-3">
                 <span className="text-4xl font-bold tabular-nums">
-                  {(status!.creditsRemaining).toLocaleString()}
+                  {isAdmin ? "∞" : (status!.creditsRemaining).toLocaleString()}
                 </span>
-                <span className="text-muted-foreground text-sm mb-1">/ {totalCredits.toLocaleString()} this period</span>
+                {!isAdmin && (
+                  <span className="text-muted-foreground text-sm mb-1">/ {totalCredits.toLocaleString()} this period</span>
+                )}
               </div>
-              {/* Progress bar */}
-              <div className="h-2 bg-muted rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-500"
-                  style={{
-                    width: `${creditPct}%`,
-                    background: creditPct > 30
-                      ? "linear-gradient(90deg,#2563eb,#7c3aed)"
-                      : creditPct > 10
-                        ? "linear-gradient(90deg,#d97706,#f59e0b)"
-                        : "linear-gradient(90deg,#dc2626,#ef4444)",
-                  }}
-                />
-              </div>
-              {status!.creditsRemaining <= 0 && (
+              {/* Progress bar — hidden for admin */}
+              {!isAdmin && (
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{
+                      width: `${creditPct}%`,
+                      background: creditPct > 30
+                        ? "linear-gradient(90deg,#2563eb,#7c3aed)"
+                        : creditPct > 10
+                          ? "linear-gradient(90deg,#d97706,#f59e0b)"
+                          : "linear-gradient(90deg,#dc2626,#ef4444)",
+                    }}
+                  />
+                </div>
+              )}
+              {!isAdmin && status!.creditsRemaining <= 0 && (
                 <p className="text-xs text-red-400 font-medium">
                   ⚠ No credits remaining — AI services are paused. Buy a top-up pack below to continue.
                 </p>
               )}
-              {status!.creditsRemaining > 0 && status!.creditsRemaining <= 100 && (
+              {!isAdmin && status!.creditsRemaining > 0 && status!.creditsRemaining <= 100 && (
                 <p className="text-xs text-amber-400 font-medium">
                   ⚠ Credits running low — consider topping up.
                 </p>
+              )}
+              {isAdmin && (
+                <p className="text-xs text-red-400/70 font-medium">Admin account — unlimited credits.</p>
               )}
               {periodEnd && status!.creditsRemaining > 0 && (
                 <p className="text-xs text-muted-foreground">
