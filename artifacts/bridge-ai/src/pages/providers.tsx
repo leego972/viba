@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Cpu, CheckCircle2, XCircle, MinusCircle, Zap, Save, RefreshCw, AlertTriangle, Key, Globe, Eye, EyeOff,
+  Cpu, CheckCircle2, XCircle, MinusCircle, Zap, Save, RefreshCw, AlertTriangle, Key, Globe, Eye, EyeOff, Info,
 } from "lucide-react";
 
 interface ProviderInfo {
@@ -295,6 +295,15 @@ export default function ProvidersPage() {
                         onChange={(e) => updateLocal(provider.id, { endpoint: e.target.value })}
                         className="h-9 text-xs font-mono bg-background/50"
                       />
+                      {provider.id === "local" && (
+                        <div className="flex items-start gap-2 rounded-lg border border-blue-500/20 bg-blue-500/6 px-2.5 py-2">
+                          <Info className="h-3.5 w-3.5 text-blue-400 mt-0.5 shrink-0" />
+                          <p className="text-[11px] text-blue-300/80 leading-relaxed">
+                            This URL is tested from the <strong className="text-blue-300/95">VIBA server</strong>, not your browser. To use Ollama on your own machine, expose it with a tunnel (e.g.{" "}
+                            <code className="bg-blue-500/15 px-1 rounded">cloudflared tunnel</code>) and paste the public URL here.
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )}
 
