@@ -290,6 +290,9 @@ export default function SessionWorkspace() {
   const isSessionActive = session?.status === "active";
   const isSessionComplete = session?.status === "completed";
 
+  // ── Feature 9: Session sounds ──────────────────────────────────────────
+  const sounds = useSessionSounds();
+
   // Memory from SSE-enriched session data
   const sessionMemory = session?.memory ?? null;
 
@@ -305,6 +308,35 @@ export default function SessionWorkspace() {
   const showFallbackBanner = hasFallbackMessages && (
     dismissedAt === null || (latestFallbackTimestamp !== null && latestFallbackTimestamp > dismissedAt)
   );
+
+  // ── Feature 8+9: Sound effects wiring ────────────────────────────────
+  const prevMsgCount = useRef(0);
+  const prevTaskCount = useRef(0);
+  const prevApproval = useRef<number | null>(null);
+  const prevComplete = useRef(false);
+
+  useEffect(() => {
+    const count = messages.length;
+    if (count > prevMsgCount.current) sounds.play("message");
+    prevMsgCount.current = count;
+  }, [messages.length, sounds]);
+
+  useEffect(() => {
+    const completed = tasks.filter(t => t.status === "completed").length;
+    if (completed > prevTaskCount.current) sounds.play("task_complete");
+    prevTaskCount.current = completed;
+  }, [tasks, sounds]);
+
+  useEffect(() => {
+    const id = pendingApproval?.id ?? null;
+    if (id != null && id !== prevApproval.current) sounds.play("approval");
+    prevApproval.current = id ?? null;
+  }, [pendingApproval, sounds]);
+
+  useEffect(() => {
+    if (isSessionComplete && !prevComplete.current) sounds.play("session_done");
+    prevComplete.current = isSessionComplete;
+  }, [isSessionComplete, sounds]);
 
   // Spike alert from stats API
   const recentSpikeProviders = stats?.recentSpikeProviders ?? [];
@@ -909,6 +941,16 @@ export default function SessionWorkspace() {
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap shrink-0">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={sounds.toggle}
+              title={sounds.enabled ? "Mute session sounds" : "Enable session sounds"}
+              aria-label={sounds.enabled ? "Mute" : "Unmute"}
+              className={sounds.enabled ? "text-primary/70" : "text-muted-foreground/40"}
+            >
+              {sounds.enabled ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+            </Button>
             <Button size="sm" variant="ghost" onClick={handleExport} title="Download session transcript as Markdown" aria-label="Export session as Markdown">
               <Download className="w-4 h-4 mr-1.5" /> Export
             </Button>
@@ -1791,12 +1833,19 @@ export default function SessionWorkspace() {
       <Dialog open={showApprovalModal} onOpenChange={setShowApprovalModal}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-amber-500">
-              <AlertTriangle className="h-5 w-5" /> Approval Required
-            </DialogTitle>
-            <DialogDescription>
-              The agents have requested approval before proceeding.
-            </DialogDescription>
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1.5">
+                <DialogTitle className="flex items-center gap-2 text-amber-500">
+                  <AlertTriangle className="h-5 w-5" /> Approval Required
+                </DialogTitle>
+                <DialogDescription>
+                  The agents have requested approval before proceeding.
+                </DialogDescription>
+              </div>
+              {showApprovalModal && (
+                <ApprovalCountdown seconds={90} />
+              )}
+            </div>
           </DialogHeader>
           <div className="py-4 space-y-3">
             <div className="font-semibold text-sm mb-1">{pendingApproval?.type || 'Action'}</div>
