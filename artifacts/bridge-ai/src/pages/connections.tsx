@@ -178,7 +178,7 @@ function ProviderSection() {
 
           {/* Name + badge stacked — badge on its own line so name never gets squeezed */}
           <div className="flex-1 min-w-0 space-y-0.5">
-            <p className="text-sm font-medium leading-tight truncate">{provider.label}</p>
+            <p className="text-sm font-medium leading-tight">{provider.label}</p>
             <StatusBadge status={provider.status} />
           </div>
 
@@ -473,7 +473,7 @@ function MyBrowserSection() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [removing, setRemoving] = useState(false);
-  const [showInstructions, setShowInstructions] = useState(false);
+  const [showInstructions, setShowInstructions] = useState(true);
 
   const fetchStatus = useCallback(async () => {
     setLoading(true);
@@ -642,6 +642,19 @@ function MyBrowserSection() {
         <div className="flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/8 px-3 py-2.5">
           <AlertTriangle className="h-3.5 w-3.5 text-amber-400 mt-0.5 shrink-0" />
           <p className="text-xs text-amber-200/80">{status.error}</p>
+        </div>
+      )}
+
+      {/* Desktop-required notice */}
+      {!status?.configured && (
+        <div className="flex items-start gap-2.5 rounded-lg border border-blue-500/25 bg-blue-500/8 px-3 py-3">
+          <Server className="h-4 w-4 text-blue-400 mt-0.5 shrink-0" />
+          <div className="space-y-1 min-w-0">
+            <p className="text-xs font-semibold text-blue-300">Requires a desktop computer</p>
+            <p className="text-xs text-blue-300/70 leading-relaxed">
+              My Browser connects to Chrome running on your <strong className="text-blue-300/90">Mac, Windows, or Linux</strong> machine — it cannot be set up from a phone or tablet. Follow the steps below on your computer.
+            </p>
+          </div>
         </div>
       )}
 
