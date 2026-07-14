@@ -421,7 +421,7 @@ export default function Dashboard() {
       {showOnboarding && <OnboardingModal onClose={dismissOnboarding} />}
 
       {/* ── Three-zone command layout ── */}
-      <div className="flex overflow-hidden" style={{ height: "calc(100vh - 60px)" }}>
+      <div className="flex overflow-hidden" style={{ height: "calc(100dvh - 60px)" }}>
 
         {/* ══════════ LEFT SIDEBAR ══════════ */}
         <aside className="hidden lg:flex w-52 xl:w-60 shrink-0 flex-col border-r border-white/[0.05] bg-[#0a0b0f] overflow-y-auto">
@@ -649,11 +649,11 @@ export default function Dashboard() {
                 </Link>
               )}
             </div>
-            <OrchestrationCanvas vm={canvasVm} height={280} />
+            <OrchestrationCanvas vm={canvasVm} height={typeof window !== "undefined" && window.innerWidth < 768 ? 160 : 280} />
           </div>
 
           {/* ── Sessions list ── */}
-          <div className="mx-4 mt-4 mb-4 flex-1">
+          <div className="mx-4 mt-4 mb-4 pb-[env(safe-area-inset-bottom,0px)] flex-1">
             <div className="flex items-center gap-2 mb-3">
               <h2 className="text-sm font-semibold text-white/80">Missions</h2>
               <span className="text-[10px] text-white/30">{(sessions ?? []).length} total</span>
