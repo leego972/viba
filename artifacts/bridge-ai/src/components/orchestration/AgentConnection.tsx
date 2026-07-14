@@ -69,15 +69,26 @@ export function AgentConnection({ from, to, status, color, reducedMotion, id }: 
         strokeLinecap="round"
       />
 
-      {/* Moving task packet when active */}
+      {/* Moving task packet when active — refined dual-pulse */}
       {isActive && !reducedMotion && (
         <>
-          <circle r={3} fill={color} opacity={0.9}>
-            <animateMotion dur="1.8s" repeatCount="indefinite" path={d} />
+          {/* Leading packet — crisp, bright */}
+          <circle r={2.5} fill={color} opacity={0.95}>
+            <animateMotion dur="1.6s" repeatCount="indefinite" path={d} />
           </circle>
-          <circle r={5} fill={color} opacity={0.3}>
-            <animateMotion dur="1.8s" repeatCount="indefinite" begin="0.6s" path={d} />
+          {/* Trail — softer, larger, delayed */}
+          <circle r={4.5} fill={color} opacity={0.18}>
+            <animateMotion dur="1.6s" repeatCount="indefinite" begin="0.3s" path={d} />
           </circle>
+          {/* Path glow overlay */}
+          <path
+            d={d}
+            stroke={color}
+            strokeWidth={3}
+            fill="none"
+            strokeLinecap="round"
+            opacity={0.07}
+          />
         </>
       )}
 
