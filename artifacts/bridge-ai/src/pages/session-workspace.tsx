@@ -26,6 +26,7 @@ import {
   getGetBannerDismissalQueryKey,
   getGetStatsQueryKey,
   type Approval,
+  type Task,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -403,7 +404,7 @@ export default function SessionWorkspace() {
         setShowDeclineModal(true);
         return false;
       }
-      const satOut = result.votes.filter((v) => !v.accepted);
+      const satOut = (result.votes ?? []).filter((v) => !v.accepted);
       if (satOut.length > 0) {
         const names = satOut.map((v) => v.agentName).join(", ");
         toast({
@@ -668,6 +669,9 @@ export default function SessionWorkspace() {
   const liveAgentCount = agents.filter(a => !a.isMock).length;
   const simAgentCount = agents.filter(a => a.isMock).length;
 
+  // ── Task detail modal ────────────────────────────────────────────────────
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+
   // ── Orchestration view ───────────────────────────────────────────────────
   const [showOrchestration, setShowOrchestration] = useState(false);
 
@@ -798,19 +802,25 @@ export default function SessionWorkspace() {
           </div>
         )}
 
-        {/* Provider fallback notice */}
+        {/* Simulation fallback banner */}
         {showFallbackBanner && (
           <div className="flex items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-300 shrink-0">
             <RotateCcw className="h-4 w-4 shrink-0 text-amber-400" />
             <span className="flex-1">
-              <span className="font-semibold">One or more agents couldn't reach their provider.</span>{" "}
-              VIBA routed those tasks automatically.{" "}
-              <Link href="/settings" className="underline underline-offset-2 hover:text-amber-200">Check your API keys</Link> if you expected a different model.
+              <span className="font-semibold">
+                {fallbackAgentCount <= 1 ? "An agent" : `${fallbackAgentCount} agents`} switched to simulation mid-run
+              </span>{" "}
+              — the live API call was retried before falling back to simulation.
+              Simulated messages are marked with a{" "}
+              <span className="inline-flex items-center gap-0.5 font-medium text-amber-400">
+                <FlaskConical className="h-3 w-3" /> Simulated
+              </span>{" "}
+              badge. Check your API keys if you expected a live response.
             </span>
             <button
               onClick={() => dismissFallbackBanner()}
               className="shrink-0 rounded p-0.5 hover:bg-amber-500/20 transition-colors"
-              aria-label="Dismiss"
+              aria-label="Dismiss banner"
             >
               <X className="h-4 w-4 text-amber-400" />
             </button>
@@ -838,7 +848,11 @@ export default function SessionWorkspace() {
                     <Zap className="h-3 w-3" /> {liveAgentCount} Live
                   </Badge>
                 )}
-
+                {simAgentCount > 0 && (
+                  <Badge variant="outline" className="text-[11px] h-5 px-2 gap-1 text-muted-foreground">
+                    <FlaskConical className="h-3 w-3" /> {simAgentCount} Sim
+                  </Badge>
+                )}
               </div>
             )}
             {(session.repoUrl || session.repoBranch || session.workspaceEnv) && (
@@ -1088,9 +1102,13 @@ export default function SessionWorkspace() {
                               {agent.provider}{agent.activeModel ? ` · ${agent.activeModel}` : ""}
                             </p>
                           </div>
-                          {isLive && (
+                          {isLive ? (
                             <Badge className="text-[10px] h-4 px-1.5 gap-0.5 bg-emerald-500/15 text-emerald-400 border-emerald-500/30 shrink-0">
                               <Zap className="h-2.5 w-2.5" /> Live
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] h-4 px-1.5 gap-0.5 text-muted-foreground shrink-0">
+                              <FlaskConical className="h-2.5 w-2.5" /> Sim
                             </Badge>
                           )}
                         </div>
@@ -1525,7 +1543,7 @@ export default function SessionWorkspace() {
                         <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">{columnTasks.length}</Badge>
                       </div>
                       {columnTasks.map(task => (
-                        <div key={task.id} className={`bg-card border rounded p-2 text-sm shadow-sm ${task.status === "blocked_needs_tools" ? "border-amber-500/30 bg-amber-500/5" : ""}`}>
+                        <div key={task.id} onClick={() => setSelectedTask(task)} className={`bg-card border rounded p-2 text-sm shadow-sm cursor-pointer hover:border-primary/40 hover:bg-muted/30 transition-colors ${task.status === "blocked_needs_tools" ? "border-amber-500/30 bg-amber-500/5" : ""}`}>
                           <div className="font-medium line-clamp-2 leading-tight">{task.title}</div>
                           {task.status === "blocked_needs_tools" && task.blockedReason && (
                             <div className="flex items-start gap-1 mt-1.5 text-[10px] text-amber-400/90">
@@ -1548,10 +1566,16 @@ export default function SessionWorkspace() {
                             return (
                               <div className="text-[10px] text-muted-foreground mt-2 pt-2 border-t flex justify-between items-center">
                                 <span>Assigned to: {assignedAgent?.name || 'Unknown'}</span>
-                                {assignedAgent && !assignedAgent.isMock && (
-                                  <Badge className="text-[9px] h-3.5 px-1 gap-0.5 bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20">
-                                    <Zap className="h-2 w-2" /> Live
-                                  </Badge>
+                                {assignedAgent && (
+                                  assignedAgent.isMock ? (
+                                    <Badge variant="outline" className="text-[9px] h-3.5 px-1 gap-0.5 text-muted-foreground">
+                                      <FlaskConical className="h-2 w-2" /> Sim
+                                    </Badge>
+                                  ) : (
+                                    <Badge className="text-[9px] h-3.5 px-1 gap-0.5 bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20">
+                                      <Zap className="h-2 w-2" /> Live
+                                    </Badge>
+                                  )
                                 )}
                               </div>
                             );
@@ -1703,7 +1727,7 @@ export default function SessionWorkspace() {
           <div className="py-3 space-y-2">
             <div className="text-xs font-medium text-muted-foreground">Agent reasoning:</div>
             <div className="space-y-2 max-h-48 overflow-y-auto">
-              {voteResult?.votes.filter((v) => !v.accepted).map((v) => (
+              {voteResult?.votes?.filter((v) => !v.accepted).map((v) => (
                 <div key={v.agentId} className="rounded bg-muted/50 p-2.5 text-xs">
                   <span className="font-semibold text-foreground">{v.agentName}: </span>
                   <span className="text-muted-foreground">{v.reason ?? "Declined to participate"}</span>
@@ -1752,6 +1776,89 @@ export default function SessionWorkspace() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Task Detail Modal */}
+      <Dialog open={!!selectedTask} onOpenChange={(o) => { if (!o) setSelectedTask(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base leading-snug">
+              <ListChecks className="h-4 w-4 shrink-0 text-primary" />
+              {selectedTask?.title}
+            </DialogTitle>
+            <DialogDescription asChild>
+              <div className="flex items-center gap-2 mt-1">
+                <Badge variant="secondary" className="text-[10px] capitalize">
+                  {selectedTask?.status.replace(/_/g, " ")}
+                </Badge>
+                {selectedTask?.type && (
+                  <Badge variant="outline" className="text-[10px]">{selectedTask.type}</Badge>
+                )}
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 text-sm py-1">
+            {selectedTask?.description && (
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Description</p>
+                <p className="text-muted-foreground leading-relaxed">{selectedTask.description}</p>
+              </div>
+            )}
+
+            {selectedTask?.assignedAgentId && (() => {
+              const a = agents.find(ag => ag.id === selectedTask.assignedAgentId);
+              return a ? (
+                <div className="flex items-center gap-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Assigned to</p>
+                  <span className="font-medium">{a.name}</span>
+                  {a.isMock
+                    ? <Badge variant="outline" className="text-[9px] h-4 px-1">Sim</Badge>
+                    : <Badge className="text-[9px] h-4 px-1 bg-emerald-500/15 text-emerald-400 border-emerald-500/30">Live</Badge>
+                  }
+                </div>
+              ) : null;
+            })()}
+
+            {selectedTask?.costEstimate != null && (
+              <div className="flex items-center gap-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Cost estimate</p>
+                <span className="font-mono text-xs">${selectedTask.costEstimate.toFixed(4)}</span>
+              </div>
+            )}
+
+            {selectedTask?.blockedReason && (
+              <div className="rounded border border-amber-500/30 bg-amber-500/5 p-2.5">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-400 mb-1">Blocked reason</p>
+                <p className="text-amber-300/80 text-xs leading-relaxed">{selectedTask.blockedReason}</p>
+              </div>
+            )}
+
+            {selectedTask?.partialWork && (
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Partial work</p>
+                <p className="text-muted-foreground text-xs leading-relaxed whitespace-pre-wrap">{selectedTask.partialWork}</p>
+              </div>
+            )}
+
+            {selectedTask?.toolRequirements && selectedTask.toolRequirements.length > 0 && (
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Tools required</p>
+                <div className="flex flex-wrap gap-1">
+                  {selectedTask.toolRequirements.map((req, i) => (
+                    <span key={i} className="inline-flex items-center gap-1 text-[10px] font-mono bg-violet-500/10 text-violet-300 border border-violet-500/25 rounded px-2 py-0.5">
+                      <Wrench className="h-2.5 w-2.5" />{req}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setSelectedTask(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </AppLayout>
   );
 }
