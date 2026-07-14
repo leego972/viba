@@ -1,14 +1,21 @@
 import type { AgentTaskInput, AgentTaskResult, ToolOutput } from "./interface";
 
 /**
- * Builds the JSON schema section of the system prompt, adapting to whether the
- * agent can use tools. Text-only agents (canUseTools=false) receive extra fields
- * so they can signal a tool handoff when they hit a blocker. All agents receive
- * the inter-agent comms fields (outboundQuestions / answersToQuestions).
+ * Builds the JSON schema section of the system prompt.
+ *
+ * Three modes:
+ *  - canUseTools=false              → tool-block schema (blockedReason / partialWork / toolRequirements)
+ *  - canUseTools=true, brokerMode=false → base schema only (native executors: Replit / Manus / Groq own their tools)
+ *  - canUseTools=true, brokerMode=true  → VIBA broker schema (text agents: OpenAI / Anthropic / Gemini / Perplexity)
+ *
+ * brokerMode should be true only for text-only LLM adapters that the user has
+ * explicitly enabled tool access for. Native executors handle their own tool loops
+ * and must NOT set brokerMode=true (they would get a broker prompt they can't act on).
  */
 export function buildAdapterJsonSchema(
   canUseTools: boolean,
   pendingQuestions?: AgentTaskInput["pendingQuestions"],
+  brokerMode = false,
 ): string {
   const questionSection =
     pendingQuestions && pendingQuestions.length > 0
@@ -25,7 +32,8 @@ export function buildAdapterJsonSchema(
   "answersToQuestions": [{ "messageId": number, "answer": "string" }]
 }`;
 
-  const toolBlockSchema = !canUseTools
+  // ── Tool-block schema (text-only, no tools) ─────────────────────────────────
+  const toolBlockSchema = (!canUseTools)
     ? `
 
 If you require running code, executing shell commands, cloning a repo, calling an API, or any other tool-based action to complete your task, you CANNOT do it yourself. In that case:
@@ -44,8 +52,36 @@ Extended JSON when blocked:
 }`
     : "";
 
+  // ── Broker tool schema (text agents with canUseTools=true in broker mode) ───
+  const brokerSchema = (canUseTools && brokerMode)
+    ? `
+
+You have access to VIBA's tool broker. You may invoke ONE tool per response turn by adding a "toolCall" field to your JSON. VIBA will execute the tool, inject the result, and call you again so you can continue the task.
+
+Available VIBA broker tools:
+  • github.repo.read    / read   — Read repository files and directory structure
+  • github.pr.create   / create — Open a pull request (title, body, head, base required in payload)
+  • railway.deploy.status / status — Check Railway deployment status for a service
+  • railway.env.read   / read   — Read Railway environment variable keys (values redacted)
+  • stripe.products.read / read  — Read Stripe products and prices
+  • stripe.webhook.verify / verify — Verify a Stripe webhook signature
+  • credits.ledger.read / read  — Read credit balance and transaction history
+  • dns.records.read   / read   — Read DNS records for a domain
+  • browser.open       / open   — Fetch a URL and return page content or screenshot
+  • smtp.test          / send   — Send a test email (to, subject, body required)
+  • build.safe_build   / run    — Run typecheck + tests + build gate
+
+Extended JSON when invoking a tool (omit toolCall if not needed this turn):
+{
+  ...base fields...,
+  "toolCall": { "toolId": "github.repo.read", "action": "read", "payload": { "owner": "...", "repo": "...", "path": "..." } }
+}
+
+Note: Each tool call costs credits. Prefer read-only tools first. Do NOT fabricate tool results.`
+    : "";
+
   return `\n${questionSection}Respond in character as your role. Be specific, actionable, and concise. At the end of your response, include a JSON block (surrounded by \`\`\`json ... \`\`\`) with this structure:
-${baseSchema}${toolBlockSchema}
+${baseSchema}${toolBlockSchema}${brokerSchema}
 
 Only include "outboundQuestions" if you genuinely need input from another agent for THIS task. Keep questions concise and task-scoped. Omit if not needed.
 Only include "answersToQuestions" if there are pending questions listed above. Map each messageId to your answer.`;
@@ -53,7 +89,7 @@ Only include "answersToQuestions" if there are pending questions listed above. M
 
 /**
  * Parses the JSON block from an adapter response text.
- * Extracts all fields including optional handoff, comms, and tool output fields.
+ * Extracts all fields including optional handoff, comms, tool output, and broker toolCall fields.
  * Safe — never throws; falls back to defaults on parse failure.
  */
 export function parseAdapterJson(text: string, estimatedCost: number): AgentTaskResult {
@@ -66,6 +102,7 @@ export function parseAdapterJson(text: string, estimatedCost: number): AgentTask
   let outboundQuestions: AgentTaskResult["outboundQuestions"];
   let answersToQuestions: AgentTaskResult["answersToQuestions"];
   let toolOutputs: ToolOutput[] | undefined;
+  let toolCall: AgentTaskResult["toolCall"];
   let messageText = text;
 
   const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/);
@@ -102,6 +139,22 @@ export function parseAdapterJson(text: string, estimatedCost: number): AgentTask
         );
       }
 
+      // Parse VIBA broker tool call (only emitted by text agents in broker mode)
+      if (
+        typeof parsed.toolCall === "object" &&
+        parsed.toolCall !== null &&
+        typeof parsed.toolCall.toolId === "string" &&
+        typeof parsed.toolCall.action === "string"
+      ) {
+        toolCall = {
+          toolId: parsed.toolCall.toolId,
+          action: parsed.toolCall.action,
+          payload: typeof parsed.toolCall.payload === "object" && parsed.toolCall.payload !== null
+            ? (parsed.toolCall.payload as Record<string, unknown>)
+            : undefined,
+        };
+      }
+
       messageText = text.replace(/```json\n[\s\S]*?\n```/, "").trim();
     } catch {
       // ignore parse errors — return full text as messageText
@@ -120,6 +173,7 @@ export function parseAdapterJson(text: string, estimatedCost: number): AgentTask
     outboundQuestions,
     answersToQuestions,
     toolOutputs,
+    toolCall,
   };
 }
 
