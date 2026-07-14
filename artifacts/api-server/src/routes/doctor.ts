@@ -1,3 +1,13 @@
+// ─── SAFETY VERIFICATION ────────────────────────────────────────────────────
+// This router is READ-ONLY against GitHub. It never writes files, never creates
+// commits, branches, or PRs, and never modifies any repository content.
+// All GitHub API calls use the token's read:repo scope only.
+//
+// reportStore is an in-memory Map — ephemeral by design. Reports are scoped to
+// the current server process and are lost on restart. This is intentional: scan
+// results may contain sensitive file paths and should not persist to the DB.
+// Callers that need durability must copy relevant findings themselves.
+// ────────────────────────────────────────────────────────────────────────────
 import { Router, type IRouter } from "express";
 import { db, settingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
@@ -238,6 +248,21 @@ async function scanRepo(owner: string, repo: string, branch: string, token: stri
 // ──────────────────────────────────────────────────
 
 // POST /doctor/scan
+// ─── SAFETY CONTRACT ─────────────────────────────────────────────────────────
+// Project Doctor diagnostic mode must be read-only. It may inspect repository
+// metadata, configuration, health, and required files, but must not mutate
+// GitHub, deploy, change billing, or call paid providers unless a separate
+// explicit approval flow is implemented.
+//
+// Safety gates enforced by this handler:
+//   • no mutation in diagnostic mode — only ghGet (HTTP GET) calls are made
+//   • no deploy in diagnostic mode — no railway/render/vercel calls in scanRepo
+//   • no paid provider call without approval — token resolved from env/DB only
+//   • repair requires separate approval — POST /doctor/reports/:id/prepare-repair-pr
+//     is the ONLY write path and requires explicit { confirm: true } in the body
+//
+// Do NOT add write operations here without a confirmation gate and approval log entry.
+// ─────────────────────────────────────────────────────────────────────────────
 router.post("/doctor/scan", async (req, res): Promise<void> => {
   const body = req.body as { owner?: string; repo?: string; branch?: string };
   const { owner, repo, branch = "main" } = body;
