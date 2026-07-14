@@ -48,6 +48,7 @@ import {
 } from "lucide-react";
 import { useSessionStream } from "@/hooks/useSessionStream";
 import { MarkdownContent } from "@/components/MarkdownContent";
+import { StreamingMarkdown } from "@/components/StreamingMarkdown";
 import { ToolOutputCards, type ToolOutput } from "@/components/ToolOutputCards";
 import {
   SIMULATED_PREFIX,
@@ -239,6 +240,23 @@ export default function SessionWorkspace() {
   const { data: messages = [] } = useListMessages(sessionId, undefined, {
     query: { enabled: !!sessionId, queryKey: getListMessagesQueryKey(sessionId) }
   });
+
+  // Track which message IDs existed on first load — new arrivals get the streaming reveal
+  const seenMsgIds = useRef<Set<number>>(new Set());
+  const msgStreamInitialized = useRef(false);
+  useEffect(() => {
+    if (!msgStreamInitialized.current && messages.length > 0) {
+      msgStreamInitialized.current = true;
+      messages.forEach(m => seenMsgIds.current.add(m.id));
+    }
+  }, [messages]);
+  const isNewMsg = (id: number): boolean => {
+    if (!seenMsgIds.current.has(id)) {
+      seenMsgIds.current.add(id);
+      return true;
+    }
+    return false;
+  };
 
   const { data: tasks = [] } = useListTasks(sessionId, {
     query: { enabled: !!sessionId, queryKey: getListTasksQueryKey(sessionId) }
@@ -1356,7 +1374,7 @@ export default function SessionWorkspace() {
                       ) : isUser ? (
                         <div className="text-sm whitespace-pre-wrap leading-relaxed">{displayContent}</div>
                       ) : msgType !== "context" ? (
-                        <MarkdownContent content={displayContent || ""} />
+                        <StreamingMarkdown content={displayContent || ""} isNew={isNewMsg(msg.id)} />
                       ) : null}
 
                       {/* Tool outputs — diffs, test results, deployment links, etc. */}
