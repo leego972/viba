@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link } from "wouter";
 import { OnboardingModal, useOnboarding } from "@/components/OnboardingModal";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -9,6 +9,10 @@ import {
   useDeleteCircuitStatus,
   useDeleteSession,
   useListGithubRepos,
+  useListAgents,
+  useListMessages,
+  getListAgentsQueryKey,
+  getListMessagesQueryKey,
   getListSessionsQueryKey,
   getGetCircuitStatusQueryKey,
   type AgentModeSummary,
@@ -50,7 +54,13 @@ import { OrchestrationCanvas } from "@/components/orchestration/OrchestrationCan
 import { ProviderNetwork } from "@/components/viba-command/ProviderNetwork";
 import { SavingsMeter } from "@/components/viba-command/SavingsMeter";
 import { MissionCard } from "@/components/viba-command/MissionCard";
-import { buildDemoViewModel } from "@/lib/orchestrationViewModel";
+import {
+  buildDemoViewModel,
+  AGENT_ROLE_COLORS,
+  type CoordinatorPhase,
+  type AgentStatus,
+  type OrchestrationViewModel,
+} from "@/lib/orchestrationViewModel";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -333,8 +343,66 @@ export default function Dashboard() {
     ? "warning"
     : "healthy";
 
-  // Demo orchestration model (replaces with live session data when one is active)
-  const demoVm = buildDemoViewModel();
+  // Spotlight session: active first, then paused, then most recent
+  const spotlightSession =
+    activeSessions[0] ??
+    (sessions ?? []).find(s => s.status === "paused") ??
+    (sessions ?? [])[0] ??
+    null;
+
+  const { data: spotlightAgents = [] } = useListAgents(spotlightSession?.id ?? 0, {
+    query: { enabled: !!spotlightSession?.id, queryKey: getListAgentsQueryKey(spotlightSession?.id ?? 0) },
+  });
+  const { data: spotlightMessages = [] } = useListMessages(spotlightSession?.id ?? 0, undefined, {
+    query: { enabled: !!spotlightSession?.id, queryKey: getListMessagesQueryKey(spotlightSession?.id ?? 0) },
+  });
+
+  const phaseMap: Record<string, CoordinatorPhase> = {
+    active: "delegating", completed: "complete", stopped: "error",
+    paused: "waiting_approval", pending: "idle",
+  };
+
+  const canvasVm = useMemo((): OrchestrationViewModel => {
+    if (!spotlightSession || spotlightAgents.length === 0) return buildDemoViewModel();
+    const msgCountByAgent: Record<number, number> = {};
+    for (const m of spotlightMessages) {
+      if (m.agentId) msgCountByAgent[m.agentId] = (msgCountByAgent[m.agentId] ?? 0) + 1;
+    }
+    const builtAgents = spotlightAgents.map(a => {
+      const colors = AGENT_ROLE_COLORS[(a.role ?? "").toLowerCase()] ?? AGENT_ROLE_COLORS["default"];
+      let agentStatus: AgentStatus = "idle";
+      if (spotlightSession.status === "completed") agentStatus = "complete";
+      else if (spotlightSession.status === "stopped") agentStatus = "failed";
+      else if (spotlightSession.status === "paused") agentStatus = "paused";
+      else if (spotlightSession.status === "active") {
+        agentStatus = (msgCountByAgent[a.id] ?? 0) > 0 ? "working" : "queued";
+      }
+      return {
+        id: String(a.id),
+        name: a.name,
+        provider: a.provider,
+        role: a.role ?? "Agent",
+        status: agentStatus,
+        color: colors.color,
+        accentColor: colors.accent,
+      };
+    });
+    return {
+      sessionId: spotlightSession.id,
+      sessionName: spotlightSession.goal ?? undefined,
+      phase: phaseMap[spotlightSession.status] ?? "idle",
+      agents: builtAgents,
+      events: [],
+      totalCost: spotlightSession.estimatedCost ?? 0,
+      estimatedPremiumCost: (spotlightSession.estimatedCost ?? 0) * 5.2,
+      elapsedMs: spotlightSession.createdAt
+        ? Math.max(0, Date.now() - new Date(spotlightSession.createdAt).getTime())
+        : 0,
+      progress: 0,
+      isDemo: false,
+    };
+  }, [spotlightSession, spotlightAgents, spotlightMessages]);
+
   const recentSessions = (sessions ?? []).slice(0, 8);
 
   // ─── Sidebar nav items ─────────────────────────────────────────────────────
@@ -564,7 +632,7 @@ export default function Dashboard() {
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-violet-500 animate-pulse" />
                 <span className="text-[10px] font-semibold text-white/60 uppercase tracking-widest">
-                  {activeSessions.length > 0 ? "Live Orchestration" : "Orchestration Preview"}
+                  {activeSessions.length > 0 ? "Live Orchestration" : spotlightSession ? "Last Session" : "Orchestration Preview"}
                 </span>
               </div>
               {activeSessions.length > 0 ? (
@@ -581,7 +649,7 @@ export default function Dashboard() {
                 </Link>
               )}
             </div>
-            <OrchestrationCanvas vm={demoVm} height={280} />
+            <OrchestrationCanvas vm={canvasVm} height={280} />
           </div>
 
           {/* ── Sessions list ── */}
