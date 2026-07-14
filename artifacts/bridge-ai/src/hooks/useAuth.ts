@@ -27,8 +27,8 @@ export function useAuth() {
     queryFn: fetchMe,
     retry: 1,
     retryDelay: 800,
-    staleTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: false,
+    staleTime: 60_000,
+    refetchOnWindowFocus: true,
   });
 
   return {
