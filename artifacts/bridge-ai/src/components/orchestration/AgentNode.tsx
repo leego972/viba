@@ -23,6 +23,7 @@ const STATUS_LABELS: Record<string, string> = {
 export function AgentNode({ agent, reducedMotion, onClick, size = 52 }: Props) {
   const statusColor = STATUS_COLORS[agent.status] ?? "#6b7280";
   const isActive = agent.status === "working" || agent.status === "reviewing";
+  const isIdle = agent.status === "idle" || agent.status === "queued";
 
   return (
     <motion.button
@@ -47,6 +48,23 @@ export function AgentNode({ agent, reducedMotion, onClick, size = 52 }: Props) {
           }}
           animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
           transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
+        />
+      )}
+
+      {/* Idle breathing — very gentle, signals the node is alive */}
+      {isIdle && !reducedMotion && (
+        <motion.div
+          className="absolute rounded-full pointer-events-none"
+          style={{
+            width: size + 8,
+            height: size + 8,
+            top: -4,
+            left: "50%",
+            x: "-50%",
+            background: `radial-gradient(circle, ${agent.color}18 0%, transparent 70%)`,
+          }}
+          animate={{ opacity: [0.3, 0.7, 0.3] }}
+          transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut" }}
         />
       )}
 
