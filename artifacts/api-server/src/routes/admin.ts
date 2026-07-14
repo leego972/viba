@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import growthRouter from "./adminGrowth";
-import { db } from "@workspace/db";
+import { db, pool } from "@workspace/db";
 import {
   sessionsTable,
   messagesTable,
@@ -200,6 +200,52 @@ router.post("/users/:id/cancel-subscription", requireConfirmation, async (req, r
   );
   req.log.warn({ adminAction: "cancel_subscription", targetId: id }, "Admin canceled subscription");
   res.json({ ok: true, message: "Subscription canceled" });
+});
+
+// ─── POST /api/admin/users/grant-pro ─────────────────────────────────────────
+// Create or upsert a user with active subscription + credits (beta tester / gifted access).
+// Body: { email, name?, credits?, note? }
+router.post("/users/grant-pro", async (req, res): Promise<void> => {
+  const body = req.body as { email?: unknown; name?: unknown; credits?: unknown; note?: unknown };
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    res.status(400).json({ error: "valid email required" });
+    return;
+  }
+  const name = typeof body.name === "string" ? body.name.trim().slice(0, 100) : null;
+  const credits = typeof body.credits === "number" && body.credits > 0
+    ? Math.round(body.credits)
+    : 1000;
+  const note = typeof body.note === "string" ? body.note.trim().slice(0, 200) : "admin grant-pro";
+
+  const { rows } = await pool.query<{ id: number; email: string; subscription_status: string; credits_remaining: number }>(
+    `INSERT INTO users (email, name, subscription_status, credits_remaining, email_verified, created_at, updated_at)
+     VALUES ($1, $2, 'active', $3, true, NOW(), NOW())
+     ON CONFLICT (email) DO UPDATE
+       SET subscription_status = 'active',
+           credits_remaining   = GREATEST(users.credits_remaining, $3),
+           name                = COALESCE(EXCLUDED.name, users.name),
+           email_verified      = true,
+           updated_at          = NOW()
+     RETURNING id, email, subscription_status, credits_remaining`,
+    [email, name, credits],
+  );
+  const user = rows[0];
+  if (!user) { res.status(500).json({ error: "upsert failed" }); return; }
+
+  // Record a credit transaction for audit trail
+  await pool.query(
+    `INSERT INTO credit_transactions (user_id, amount, balance_after, reason)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT DO NOTHING`,
+    [user.id, credits, user.credits_remaining, note],
+  ).catch(() => {});
+
+  req.log.warn(
+    { adminAction: "grant_pro", targetEmail: email, userId: user.id, credits, note },
+    "Admin granted pro access",
+  );
+  res.json({ ok: true, user: { id: user.id, email: user.email, subscriptionStatus: user.subscription_status, creditsRemaining: user.credits_remaining }, note });
 });
 
 // ─── GET /api/admin/sessions ──────────────────────────────────────────────────
