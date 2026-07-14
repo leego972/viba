@@ -66,14 +66,6 @@ export default function Billing() {
   const [autoTopup, setAutoTopup] = useState<AutoTopupConfig>({ enabled: false, threshold: 100, packKey: "" });
   const [autoTopupSaving, setAutoTopupSaving] = useState(false);
   const [annualLoading, setAnnualLoading] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  useEffect(() => {
-    const check = () => setIsAdmin(!!sessionStorage.getItem("viba_admin_token"));
-    check();
-    window.addEventListener("storage", check);
-    return () => window.removeEventListener("storage", check);
-  }, []);
 
   // Check if we just bought credits (Stripe redirected back with ?credits_added=N)
   const params = new URLSearchParams(window.location.search);
@@ -210,6 +202,7 @@ export default function Billing() {
   };
   const totalCredits = PLAN_CREDITS[status?.planKey ?? "basic_assessment"] ?? 750;
   const creditPct = status ? Math.min(100, (status.creditsRemaining / totalCredits) * 100) : 0;
+  const isAdmin = (status?.creditsRemaining ?? 0) > 1_000_000;
 
   return (
     <AppLayout>
@@ -358,12 +351,12 @@ export default function Billing() {
             {/* Credits card */}
             <div className="rounded-xl border border-border bg-card p-5 space-y-4">
               <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Credits Remaining</p>
-              <div className="flex items-end gap-3">
-                <span className="text-4xl font-bold tabular-nums">
+              <div className="flex flex-col gap-1">
+                <span className="text-4xl font-bold tabular-nums leading-none">
                   {isAdmin ? "∞" : (status!.creditsRemaining).toLocaleString()}
                 </span>
                 {!isAdmin && (
-                  <span className="text-muted-foreground text-sm mb-1">/ {totalCredits.toLocaleString()} this period</span>
+                  <span className="text-muted-foreground text-sm">/ {totalCredits.toLocaleString()} this period</span>
                 )}
               </div>
               {/* Progress bar — hidden for admin */}
