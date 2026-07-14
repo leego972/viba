@@ -51,6 +51,8 @@ import { useSessionStream } from "@/hooks/useSessionStream";
 import { MarkdownContent } from "@/components/MarkdownContent";
 import { StreamingMarkdown } from "@/components/StreamingMarkdown";
 import { OdometerCost } from "@/components/OdometerCost";
+import { ApprovalCountdown } from "@/components/ApprovalCountdown";
+import { useSessionSounds } from "@/hooks/useSessionSounds";
 import { ToolOutputCards, type ToolOutput } from "@/components/ToolOutputCards";
 import {
   SIMULATED_PREFIX,
@@ -1462,14 +1464,27 @@ export default function SessionWorkspace() {
                 })()
               )}
               {(runNext.isPending || runFull.isPending) && (
-                <div className="flex self-start items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 mt-1">
-                  <span className="flex gap-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-primary/70 animate-bounce [animation-delay:0ms]" />
-                    <span className="h-1.5 w-1.5 rounded-full bg-primary/70 animate-bounce [animation-delay:150ms]" />
-                    <span className="h-1.5 w-1.5 rounded-full bg-primary/70 animate-bounce [animation-delay:300ms]" />
+                <motion.div
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="flex self-start items-center gap-2.5 rounded border border-white/8 bg-white/[0.03] px-3 py-2 mt-1"
+                >
+                  <span className="flex gap-[3px] items-center">
+                    {[0, 1, 2].map(i => (
+                      <motion.span
+                        key={i}
+                        className="h-1 w-1 rounded-full bg-primary/50"
+                        animate={{ opacity: [0.3, 1, 0.3] }}
+                        transition={{ duration: 1.4, repeat: Infinity, delay: i * 0.22, ease: "easeInOut" }}
+                      />
+                    ))}
                   </span>
-                  <span className="text-xs text-muted-foreground">Processing…</span>
-                </div>
+                  <span className="text-[11px] font-mono tracking-wide text-muted-foreground/70 uppercase">
+                    Agents deliberating
+                  </span>
+                </motion.div>
               )}
             </div>
 
