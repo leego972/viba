@@ -9,7 +9,7 @@ import {
   marketingPerformance,
   marketingActivityLog,
 } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import {
   generateContent,
   allocateBudget,
@@ -22,7 +22,7 @@ import {
 
 const router: IRouter = Router();
 
-router.get("/marketing/settings", requireAdmin, async (_req, res): Promise<void> => {
+router.get("/api/marketing/settings", requireAdmin, async (_req, res): Promise<void> => {
   const rows = await db.select().from(marketingSettings);
   const map: Record<string, string> = {};
   for (const r of rows) map[r.key] = r.value ?? "";
@@ -36,7 +36,7 @@ router.get("/marketing/settings", requireAdmin, async (_req, res): Promise<void>
   });
 });
 
-router.put("/marketing/settings", requireAdmin, async (req, res): Promise<void> => {
+router.put("/api/marketing/settings", requireAdmin, async (req, res): Promise<void> => {
   const { enabled, monthlyBudget, autoPublish, contentFrequency } = req.body as Record<string, unknown>;
   const updates: { key: string; value: string }[] = [];
   if (enabled !== undefined) updates.push({ key: "enabled", value: String(enabled) });
@@ -55,11 +55,11 @@ router.put("/marketing/settings", requireAdmin, async (req, res): Promise<void> 
   res.json({ success: true });
 });
 
-router.get("/marketing/channels", requireAdmin, async (_req, res): Promise<void> => {
+router.get("/api/marketing/channels", requireAdmin, async (_req, res): Promise<void> => {
   res.json(getAllChannelStatuses());
 });
 
-router.get("/marketing/budget", requireAdmin, async (_req, res): Promise<void> => {
+router.get("/api/marketing/budget", requireAdmin, async (_req, res): Promise<void> => {
   const currentMonth = new Date().toISOString().substring(0, 7);
   const rows = await db.select().from(marketingBudgets)
     .where(eq(marketingBudgets.month, currentMonth))
@@ -67,12 +67,12 @@ router.get("/marketing/budget", requireAdmin, async (_req, res): Promise<void> =
   res.json(rows[0] ?? null);
 });
 
-router.get("/marketing/budget/history", requireAdmin, async (_req, res): Promise<void> => {
+router.get("/api/marketing/budget/history", requireAdmin, async (_req, res): Promise<void> => {
   const rows = await db.select().from(marketingBudgets).orderBy(desc(marketingBudgets.createdAt)).limit(12);
   res.json(rows);
 });
 
-router.post("/marketing/budget/allocate", requireAdmin, async (req, res): Promise<void> => {
+router.post("/api/marketing/budget/allocate", requireAdmin, async (req, res): Promise<void> => {
   const { monthlyBudget } = req.body as { monthlyBudget: number };
   const allocations = await allocateBudget({ monthlyBudget });
   const month = new Date().toISOString().substring(0, 7);
@@ -87,7 +87,7 @@ router.post("/marketing/budget/allocate", requireAdmin, async (req, res): Promis
   res.json({ allocations, month });
 });
 
-router.post("/marketing/content/generate", requireAdmin, async (req, res): Promise<void> => {
+router.post("/api/marketing/content/generate", requireAdmin, async (req, res): Promise<void> => {
   const { platform, contentType, topic, campaignGoal, includeImage } = req.body as Record<string, unknown>;
   const content = await generateContent({
     platform: String(platform ?? "linkedin"),
@@ -104,7 +104,7 @@ router.post("/marketing/content/generate", requireAdmin, async (req, res): Promi
   res.json(content);
 });
 
-router.get("/marketing/content", requireAdmin, async (req, res): Promise<void> => {
+router.get("/api/marketing/content", requireAdmin, async (req, res): Promise<void> => {
   const { status, channel, limit = "50" } = req.query as Record<string, string>;
   let query = db.select().from(marketingContent).orderBy(desc(marketingContent.createdAt)).limit(parseInt(limit, 10));
   if (status) query = query.where(eq(marketingContent.status, status)) as typeof query;
@@ -112,14 +112,14 @@ router.get("/marketing/content", requireAdmin, async (req, res): Promise<void> =
   res.json(await query);
 });
 
-router.patch("/marketing/content/:id/status", requireAdmin, async (req, res): Promise<void> => {
+router.patch("/api/marketing/content/:id/status", requireAdmin, async (req, res): Promise<void> => {
   const id = parseInt(String(req.params["id"] ?? "0"), 10);
   const { status } = req.body as { status: string };
   await db.update(marketingContent).set({ status } as never).where(eq(marketingContent.id, id));
   res.json({ success: true });
 });
 
-router.post("/marketing/campaigns", requireAdmin, async (req, res): Promise<void> => {
+router.post("/api/marketing/campaigns", requireAdmin, async (req, res): Promise<void> => {
   const { goal, budget, durationDays, focusChannels } = req.body as Record<string, unknown>;
   const plan = await createCampaignPlan({
     goal: String(goal ?? "awareness"),
@@ -142,26 +142,26 @@ router.post("/marketing/campaigns", requireAdmin, async (req, res): Promise<void
   res.json({ campaignId: inserted?.id, plan });
 });
 
-router.get("/marketing/campaigns", requireAdmin, async (req, res): Promise<void> => {
+router.get("/api/marketing/campaigns", requireAdmin, async (req, res): Promise<void> => {
   const { status, limit = "50" } = req.query as Record<string, string>;
   let query = db.select().from(marketingCampaigns).orderBy(desc(marketingCampaigns.createdAt)).limit(parseInt(limit, 10));
   if (status) query = query.where(eq(marketingCampaigns.status, status)) as typeof query;
   res.json(await query);
 });
 
-router.patch("/marketing/campaigns/:id/status", requireAdmin, async (req, res): Promise<void> => {
+router.patch("/api/marketing/campaigns/:id/status", requireAdmin, async (req, res): Promise<void> => {
   const id = parseInt(String(req.params["id"] ?? "0"), 10);
   const { status } = req.body as { status: string };
   await db.update(marketingCampaigns).set({ status } as never).where(eq(marketingCampaigns.id, id));
   res.json({ success: true });
 });
 
-router.get("/marketing/campaigns/:id/performance", requireAdmin, async (req, res): Promise<void> => {
+router.get("/api/marketing/campaigns/:id/performance", requireAdmin, async (req, res): Promise<void> => {
   const id = parseInt(String(req.params["id"] ?? "0"), 10);
   res.json(await analyzePerformance(id));
 });
 
-router.get("/marketing/metrics", requireAdmin, async (_req, res): Promise<void> => {
+router.get("/api/marketing/metrics", requireAdmin, async (_req, res): Promise<void> => {
   const rows = await db.select().from(marketingPerformance).orderBy(desc(marketingPerformance.date)).limit(90);
   let totalSpend = 0, totalImpressions = 0, totalClicks = 0, totalConversions = 0;
   const channelTotals: Record<string, { spend: number; impressions: number; clicks: number; conversions: number }> = {};
@@ -188,13 +188,13 @@ router.get("/marketing/metrics", requireAdmin, async (_req, res): Promise<void> 
   });
 });
 
-router.get("/marketing/activity", requireAdmin, async (req, res): Promise<void> => {
+router.get("/api/marketing/activity", requireAdmin, async (req, res): Promise<void> => {
   const limit = parseInt(String(req.query["limit"] ?? "50"), 10);
   const rows = await db.select().from(marketingActivityLog).orderBy(desc(marketingActivityLog.createdAt)).limit(limit);
   res.json(rows);
 });
 
-router.post("/marketing/cycle", requireAdmin, async (_req, res): Promise<void> => {
+router.post("/api/marketing/cycle", requireAdmin, async (_req, res): Promise<void> => {
   const result = await runAutonomousCycle();
   const settings = await db.select().from(marketingSettings).where(eq(marketingSettings.key, "last_cycle_at")).limit(1);
   if (settings.length > 0) {
