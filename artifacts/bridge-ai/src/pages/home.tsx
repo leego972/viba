@@ -4,6 +4,7 @@ import {
   ArrowRight, FileText, CheckCircle2, X, TrendingDown, DollarSign,
   Brain, Zap, Users, Shield, Lock, BarChart3,
 } from "lucide-react";
+import { useAuth, useLogout } from "@/hooks/useAuth";
 
 const CREAM      = "#faf8f2";
 const CREAM_CARD = "#fefcf7";
@@ -17,6 +18,8 @@ const VIOLET     = "#7c3aed";
 const EMERALD    = "#059669";
 
 export default function Home() {
+  const { isAuthenticated } = useAuth();
+  const logout = useLogout();
   const [leegoBig, setLeegoBig] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -75,17 +78,27 @@ export default function Home() {
               AI Savings
             </button>
           </Link>
-          <Link href="/login">
-            <button className="text-sm px-4 h-9 rounded-full font-medium border transition-all hover:bg-black/[0.04] active:scale-[0.97]"
-              style={{ borderColor: BORDER, color: TEXT, background: "transparent" }}>
-              Sign in
+          {isAuthenticated ? (
+            <button
+              onClick={() => void logout()}
+              className="text-sm px-4 h-9 rounded-full font-medium border transition-all hover:bg-black/[0.04] active:scale-[0.97]"
+              style={{ borderColor: BORDER, color: TEXT, background: "transparent" }}
+            >
+              Sign out
             </button>
-          </Link>
-          <Link href="/dashboard">
+          ) : (
+            <Link href="/login">
+              <button className="text-sm px-4 h-9 rounded-full font-medium border transition-all hover:bg-black/[0.04] active:scale-[0.97]"
+                style={{ borderColor: BORDER, color: TEXT, background: "transparent" }}>
+                Sign in
+              </button>
+            </Link>
+          )}
+          <Link href={isAuthenticated ? "/dashboard" : "/login"}>
             <button className="text-sm h-9 rounded-full font-semibold text-white transition-all hover:scale-[1.03] active:scale-[0.97] flex items-center gap-1.5 px-4 sm:px-5"
               style={{ background: `linear-gradient(135deg, ${INDIGO} 0%, ${VIOLET} 100%)`, boxShadow: "0 2px 16px rgba(99,102,241,0.30)" }}>
-              <span className="sm:hidden">Dashboard</span>
-              <span className="hidden sm:inline">Get Started</span>
+              <span className="sm:hidden">{isAuthenticated ? "Dashboard" : "Sign up"}</span>
+              <span className="hidden sm:inline">{isAuthenticated ? "Go to Dashboard" : "Get Started"}</span>
               <ArrowRight className="h-3.5 w-3.5 shrink-0" />
             </button>
           </Link>
@@ -370,7 +383,7 @@ export default function Home() {
                     color: VIOLET,
                   },
                 ].map(({ icon: Icon, title, desc, color }) => (
-                  <div key={title} className="viba-card relative" style={{ background: "#111827", borderColor: "rgba(255,255,255,0.10)" }}>
+                  <div key={title} className="viba-card relative">
                     <div className="absolute top-0 left-0 right-0 h-[2px] rounded-t-xl"
                       style={{ background: `linear-gradient(90deg, transparent, ${color}60, transparent)` }} />
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl mb-4"
@@ -417,10 +430,10 @@ export default function Home() {
                     saving: "Typical saving: $50–200/mo",
                   },
                 ].map(({ title, desc, saving }) => (
-                  <div key={title} className="viba-card flex flex-col" style={{ background: "#111827", borderColor: "rgba(255,255,255,0.10)" }}>
+                  <div key={title} className="viba-card flex flex-col">
                     <h3 className="text-sm font-bold mb-2" style={{ color: "#ffffff" }}>{title}</h3>
                     <p className="text-sm leading-relaxed flex-1" style={{ color: "rgba(255,255,255,0.72)" }}>{desc}</p>
-                    <div className="mt-4 pt-4 flex items-center gap-2" style={{ borderTop: "1px solid rgba(255,255,255,0.12)" }}>
+                    <div className="mt-4 pt-4 flex items-center gap-2" style={{ borderTop: `1px solid ${BORDER}` }}>
                       <TrendingDown className="h-4 w-4 shrink-0" style={{ color: EMERALD }} />
                       <p className="text-xs font-semibold" style={{ color: EMERALD }}>{saving}</p>
                     </div>
