@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useParams, Link } from "wouter";
+import { useParams, Link, useLocation } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import {
   useGetSession,
@@ -19,6 +19,7 @@ import {
   useGetBannerDismissal,
   useDismissBanner,
   useAnswerQuestion,
+  useDeleteSession,
   getGetSessionQueryKey,
   getListMessagesQueryKey,
   getListTasksQueryKey,
@@ -38,6 +39,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import {
@@ -45,7 +47,7 @@ import {
   Crosshair, LineChart, Zap, FlaskConical, RotateCcw, X,
   RefreshCw, History, ShieldCheck, TrendingDown, AlertTriangle,
   Download, Brain, Copy, GitBranch, ExternalLink, Server, Pencil, Wrench,
-  CopyPlus, BarChart3, MessageSquare, ListChecks, Search, Mic, MicOff,
+  CopyPlus, BarChart3, MessageSquare, ListChecks, Search, Mic, MicOff, Trash2,
 } from "lucide-react";
 import { useSessionStream } from "@/hooks/useSessionStream";
 import { MarkdownContent } from "@/components/MarkdownContent";
@@ -131,6 +133,7 @@ function getActivityDisplay(eventType: string, description: string, meta: Record
 
 export default function SessionWorkspace() {
   const { id } = useParams();
+  const [, navigate] = useLocation();
   const sessionId = parseInt(id || "0", 10);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -158,6 +161,7 @@ export default function SessionWorkspace() {
   const [rejectFeedback, setRejectFeedback] = useState("");
   const [isRejectingApproval, setIsRejectingApproval] = useState(false);
   const [isReopening, setIsReopening] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   // Safety-voting state
   const [isVoting, setIsVoting] = useState(false);
@@ -619,6 +623,18 @@ export default function SessionWorkspace() {
     }
   };
 
+  const deleteSession = useDeleteSession({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Session deleted" });
+        navigate("/");
+      },
+      onError: () => {
+        toast({ title: "Error", description: "Failed to delete session.", variant: "destructive" });
+      },
+    },
+  });
+
   const handleExport = () => {
     if (!session) return;
     const lines: string[] = [];
@@ -989,6 +1005,17 @@ export default function SessionWorkspace() {
                 {isReopening ? "Reopening…" : "Reopen Session"}
               </Button>
             )}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setDeleteConfirmOpen(true)}
+              disabled={deleteSession.isPending}
+              className="gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10"
+              title="Permanently delete this session"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete
+            </Button>
           </div>
         </div>
 
@@ -1953,6 +1980,30 @@ export default function SessionWorkspace() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete session?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {session?.goal
+                ? <><span className="font-medium text-foreground">"{session.goal}"</span> will be permanently deleted including all messages, tasks, and agents. This cannot be undone.</>
+                : "This session will be permanently deleted. This cannot be undone."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (session) deleteSession.mutate({ id: session.id });
+              }}
+            >
+              Delete session
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
     </AppLayout>
   );
