@@ -3,6 +3,7 @@ import { z } from "zod/v4";
 import {
   getStripe,
   isStripeConfigured,
+  getBillingPriceId,
   getBillingStatus,
   getCreditTransactions,
   getAutoTopupConfig,
@@ -16,48 +17,6 @@ import {
 
 const router: IRouter = Router();
 
-const TRIAL_DAILY_CREDITS = 500;
-const SUBSCRIPTION_PLANS = [
-  {
-    key: "viba_member",
-    productName: "VIBA Member Monthly",
-    displayName: "VIBA Member",
-    unitAmount: 5000,
-    currency: "usd",
-    credits: 1500,
-    trialDays: VIBA_PLAN.trialDays,
-    badge: "Member",
-  },
-  {
-    key: "viba_pro",
-    productName: "VIBA Pro Monthly",
-    displayName: "VIBA Pro",
-    unitAmount: 15000,
-    currency: "usd",
-    credits: 6000,
-    trialDays: VIBA_PLAN.trialDays,
-    badge: "Best Value",
-  },
-] as const;
-
-const DEFAULT_PLAN = SUBSCRIPTION_PLANS[0];
-const PRO_PLAN = SUBSCRIPTION_PLANS[1];
-type SubscriptionPlan = (typeof SUBSCRIPTION_PLANS)[number];
-
-const TOP_UP_PACKS = [
-  { key: "credits_1000", label: "1,000 Credit Pack", description: "1,000 credits", credits: 1000, unitAmount: 5000, badge: "$50" },
-  { key: "credits_2000", label: "2,000 Credit Pack", description: "2,000 credits", credits: 2000, unitAmount: 10000, badge: "$100" },
-  { key: "credits_3000", label: "3,000 Credit Pack", description: "3,000 credits", credits: 3000, unitAmount: 15000, badge: "$150" },
-  { key: "credits_4000", label: "4,000 Credit Pack", description: "4,000 credits", credits: 4000, unitAmount: 20000, badge: "$200" },
-  { key: "credits_5000", label: "5,000 Credit Pack", description: "5,000 credits", credits: 5000, unitAmount: 25000, badge: "$250" },
-  { key: "credits_6000", label: "6,000 Credit Pack", description: "6,000 credits", credits: 6000, unitAmount: 30000, badge: "$300" },
-] as const;
-
-type TopUpPack = (typeof TOP_UP_PACKS)[number];
-
-const cachedSubscriptionPriceIds: Record<string, string> = {};
-const cachedTopUpPriceIds: Record<string, string> = {};
-
 function origin(req: import("express").Request): string {
   return (
     (req.headers["origin"] as string | undefined) ??
@@ -70,14 +29,12 @@ router.get("/billing/plans", (_req, res): void => {
   res.json({
     // Legacy field kept for backward compat
     plan: {
-      name: DEFAULT_PLAN.displayName,
-      key: DEFAULT_PLAN.key,
-      unitAmount: DEFAULT_PLAN.unitAmount,
-      currency: DEFAULT_PLAN.currency,
-      monthlyCredits: DEFAULT_PLAN.credits,
-      trialDays: DEFAULT_PLAN.trialDays,
-      trialDailyCredits: TRIAL_DAILY_CREDITS,
-      configured: isStripeConfigured(),
+      name: VIBA_PLAN.productName,
+      unitAmount: VIBA_PLAN.unitAmount,
+      currency: VIBA_PLAN.currency,
+      monthlyCredits: VIBA_PLAN.monthlyCredits,
+      trialDays: VIBA_PLAN.trialDays,
+      configured: isStripeConfigured() && !!getBillingPriceId(VIBA_PLAN.key),
     },
     plans: [BASIC_PLAN, PRO_PLAN].map((p) => ({
       key: p.key,
@@ -100,6 +57,7 @@ router.get("/billing/plans", (_req, res): void => {
   });
 });
 
+// GET /api/billing/status — requires session
 router.get("/billing/status", async (req, res): Promise<void> => {
   const userId = req.session?.userId as number | undefined;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
@@ -142,16 +100,16 @@ router.post("/billing/checkout", async (req, res): Promise<void> => {
     return;
   }
 
+  // Check if user already has an active subscription
   const current = await getBillingStatus(userId);
   if (current.subscriptionStatus === "active" || current.subscriptionStatus === "trialing") {
-    res.status(409).json({ error: "already_subscribed", message: "You already have an active subscription. Use Billing > Manage to change plans." });
+    res.status(409).json({ error: "You already have an active subscription" });
     return;
   }
 
   try {
     const stripe = getStripe();
     const base = origin(req);
-    const priceId = await getSubscriptionPriceId(plan);
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
@@ -176,31 +134,7 @@ router.post("/billing/checkout", async (req, res): Promise<void> => {
   }
 });
 
-router.post("/billing/upgrade/pro", async (req, res): Promise<void> => {
-  const userId = req.session?.userId as number | undefined;
-  if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
-  if (!isStripeConfigured()) { res.status(503).json({ error: "Stripe is not configured" }); return; }
-
-  const current = await getBillingStatus(userId);
-  if (!current.stripeCustomerId) {
-    res.status(400).json({ error: "No billing customer found. Start a Pro checkout from Pricing." });
-    return;
-  }
-
-  try {
-    const stripe = getStripe();
-    const base = origin(req);
-    const portal = await stripe.billingPortal.sessions.create({
-      customer: current.stripeCustomerId,
-      return_url: `${base}/billing`,
-    });
-    res.json({ url: portal.url });
-  } catch (err) {
-    req.log.error({ err }, "pro upgrade portal error");
-    res.status(500).json({ error: "Failed to open upgrade portal" });
-  }
-});
-
+// POST /api/billing/credits/checkout — buy a one-time credit pack (requires session)
 const CreditPackBody = z.object({ packKey: z.string().min(1) });
 
 router.post("/billing/credits/checkout", async (req, res): Promise<void> => {
@@ -214,15 +148,21 @@ router.post("/billing/credits/checkout", async (req, res): Promise<void> => {
 
   const parsed = CreditPackBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "packKey is required" }); return; }
-  const pack = TOP_UP_PACKS.find((item) => item.key === parsed.data.packKey);
+
+  const pack = CREDIT_PACKS.find((p) => p.key === parsed.data.packKey);
   if (!pack) { res.status(400).json({ error: "Unknown credit pack" }); return; }
+
+  const priceId = getBillingPriceId(pack.key);
+  if (!priceId) {
+    res.status(503).json({ error: "Credit pack not provisioned yet — try again in a moment" });
+    return;
+  }
 
   const current = await getBillingStatus(userId);
 
   try {
     const stripe = getStripe();
     const base = origin(req);
-    const priceId = await getTopUpPriceId(pack);
 
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
@@ -252,6 +192,7 @@ router.post("/billing/credits/checkout", async (req, res): Promise<void> => {
   }
 });
 
+// POST /api/billing/portal — open Stripe customer portal (requires active subscription)
 router.post("/billing/portal", async (req, res): Promise<void> => {
   const userId = req.session?.userId as number | undefined;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
