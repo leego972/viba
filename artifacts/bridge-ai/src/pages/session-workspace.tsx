@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useParams, Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import {
@@ -1561,8 +1562,18 @@ export default function SessionWorkspace() {
                         {status.replace('_', ' ')}
                         <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">{columnTasks.length}</Badge>
                       </div>
+                      <AnimatePresence initial={false}>
                       {columnTasks.map(task => (
-                        <div key={task.id} onClick={() => setSelectedTask(task)} className={`bg-card border rounded p-2 text-sm shadow-sm cursor-pointer hover:border-primary/40 hover:bg-muted/30 transition-colors ${task.status === "blocked_needs_tools" ? "border-amber-500/30 bg-amber-500/5" : ""}`}>
+                        <motion.div
+                          key={task.id}
+                          layout
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                          transition={{ duration: 0.22, ease: [0.25, 0.46, 0.45, 0.94] }}
+                          onClick={() => setSelectedTask(task)}
+                          className={`bg-card border rounded p-2 text-sm shadow-sm cursor-pointer hover:border-primary/40 hover:bg-muted/30 transition-colors ${task.status === "blocked_needs_tools" ? "border-amber-500/30 bg-amber-500/5" : ""}`}
+                        >
                           <div className="font-medium line-clamp-2 leading-tight">{task.title}</div>
                           {task.status === "blocked_needs_tools" && task.blockedReason && (
                             <div className="flex items-start gap-1 mt-1.5 text-[10px] text-amber-400/90">
@@ -1599,8 +1610,9 @@ export default function SessionWorkspace() {
                               </div>
                             );
                           })()}
-                        </div>
+                        </motion.div>
                       ))}
+                      </AnimatePresence>
                       {columnTasks.length === 0 && status === 'planned' && (
                         <div className="border border-dashed rounded p-3 text-center text-xs text-muted-foreground">
                           No tasks planned yet
