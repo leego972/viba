@@ -85,6 +85,18 @@ export interface AgentTaskResult {
    * Persisted in message metadata for display in the session feed.
    */
   toolOutputs?: ToolOutput[];
+  /**
+   * A single VIBA broker tool call declared by a text agent with canUseTools=true.
+   * The agent loop executes this via the tool broker, injects the result into the
+   * conversation, and re-runs the agent (up to MAX_BROKER_LOOPS per task step).
+   * Only used by OpenAI / Anthropic / Gemini / Perplexity adapters in broker mode.
+   * Native executors (Replit, Manus, Railway) handle their own tool loops.
+   */
+  toolCall?: {
+    toolId: string;
+    action: string;
+    payload?: Record<string, unknown>;
+  };
 }
 
 export interface AgentAdapter {
