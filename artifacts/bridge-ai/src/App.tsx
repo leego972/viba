@@ -10,20 +10,9 @@ import Home from "@/pages/home";
 import Dashboard from "@/pages/dashboard";
 import NewSession from "@/pages/new-session";
 import SessionWorkspace from "@/pages/session-workspace";
-import SessionProofReport from "@/pages/session-proof-report";
-import SessionBudget from "@/pages/session-budget";
-import SessionApprovals from "@/pages/session-approvals";
-import SessionNextAction from "@/pages/session-next-action";
 import Settings from "@/pages/settings";
 import Workbench from "@/pages/workbench";
 import Bridge from "@/pages/bridge";
-import Doctor from "@/pages/doctor";
-import DoctorHistory from "@/pages/doctor-history";
-import DoctorProposalPreview from "@/pages/doctor-proposal-preview";
-import DoctorReportDetail from "@/pages/doctor-report-detail";
-import DoctorImplementationPlan from "@/pages/doctor-implementation-plan";
-import DoctorReportChecklist from "@/pages/doctor-report-checklist";
-import ReleaseReadiness from "@/pages/release-readiness";
 import Pricing from "@/pages/pricing";
 import CheckoutSuccess from "@/pages/checkout-success";
 import Admin from "@/pages/admin";
@@ -85,20 +74,22 @@ function Spinner() {
 }
 
 function AuthGuard({ children }: { children: ReactNode }) {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const { isAuthenticated, isLoading } = useAuth();
 
+  // Archibald Titan AI embed bypass is ONLY valid on the /bridge route.
+  // Any other route still requires a real VIBA session even if bypass is set.
+  const bypassActive = isBypassValid() && location.startsWith("/bridge");
+
   useEffect(() => {
-    if (!isLoading && !isAuthenticated && !isBypassValid()) {
+    if (!isLoading && !isAuthenticated && !bypassActive) {
       setLocation("/login");
     }
-  }, [isLoading, isAuthenticated, setLocation]);
+  }, [isLoading, isAuthenticated, bypassActive, setLocation]);
 
-  // Archibald Titan AI embedded bypass — skip auth entirely
-  if (isBypassValid()) return <>{children}</>;
-
+  if (bypassActive) return <>{children}</>;
   if (isLoading) return <Spinner />;
-
+  // Redirect immediately in render — no flash of protected content
   if (!isAuthenticated) return <Spinner />;
 
   return <>{children}</>;
@@ -189,10 +180,6 @@ function BypassHandler() {
 }
 
 function App() {
-  useEffect(() => {
-    installMobileViewportFix();
-  }, []);
-
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
   return (
