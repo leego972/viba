@@ -627,11 +627,11 @@ export async function runFullWorkflow(sessionId: number, userId = 0): Promise<{
   approval: typeof approvalsTable.$inferSelect | null;
   stepsRun: number;
 }> {
-  const allMessages: Message[] = [];
-  const allTasks: Task[] = [];
+  const allNewMessages: Message[] = [];
+  const allUpdatedTasks: Task[] = [];
+  let stepsRun = 0;
   let approvalRequired = false;
   let approval: typeof approvalsTable.$inferSelect | null = null;
-  let stepsRun = 0;
 
   for (let i = 0; i < MAX_TURNS; i++) {
     const result = await runNextAgentStep(sessionId, userId);
@@ -653,5 +653,5 @@ export async function runFullWorkflow(sessionId: number, userId = 0): Promise<{
     if (session?.status !== "active") break;
   }
 
-  return { newMessages: allMessages, updatedTasks: allTasks, approvalRequired, approval, stepsRun };
+  return { newMessages: allNewMessages, updatedTasks: allUpdatedTasks, approvalRequired, approval, stepsRun };
 }
