@@ -283,7 +283,7 @@ function CredentialRow({
 
       <div className={`border-b border-zinc-800/60 last:border-b-0 ${expanded ? "bg-zinc-800/20" : ""}`}>
         <div className="grid grid-cols-[1fr_auto] gap-2 items-center px-4 py-3">
-          <div className="grid grid-cols-[1.5fr_1fr_1fr_1fr] gap-3 items-center min-w-0">
+          <div className="grid grid-cols-[1fr_auto] sm:grid-cols-[1.5fr_1fr_1fr_1fr] gap-3 items-center min-w-0">
             <ProviderLabel provider={cred.provider} kind={cred.kind} />
             <div className="hidden sm:block">
               <p className="text-xs text-zinc-400">{cred.scope ?? "all"}</p>
@@ -437,7 +437,7 @@ export default function VaultPage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-zinc-400 font-medium flex items-center gap-1.5"><Shield className="h-4 w-4" />Security note</CardTitle>
           </CardHeader>
-          <CardContent className="text-xs text-zinc-500 space-y-1.5">
+          <CardContent className="text-xs text-zinc-400 space-y-1.5">
             <p>Your saved credentials are encrypted at rest using AES-256-GCM. VIBA can use them server-side for authorized tasks only.</p>
             <p>Raw API keys, tokens, passwords, secrets, and webhook secrets are never returned to the frontend after saving.</p>
             <p>Access is logged per use. You can view the usage log for any credential using the activity icon.</p>
