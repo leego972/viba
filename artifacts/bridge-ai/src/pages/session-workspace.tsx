@@ -1572,7 +1572,7 @@ export default function SessionWorkspace() {
                           exit={{ opacity: 0, y: -4, scale: 0.98 }}
                           transition={{ duration: 0.22, ease: [0.25, 0.46, 0.45, 0.94] }}
                           onClick={() => setSelectedTask(task)}
-                          className={`bg-card border rounded p-2 text-sm shadow-sm cursor-pointer hover:border-primary/40 hover:bg-muted/30 transition-colors ${task.status === "blocked_needs_tools" ? "border-amber-500/30 bg-amber-500/5" : ""}`}
+                          className={`bg-card border rounded p-2 text-sm shadow-sm cursor-pointer hover:border-primary/40 hover:bg-muted/30 transition-colors ${task.status === "blocked_needs_tools" ? "border-amber-500/30 bg-amber-500/5" : ""} ${task.status === "complete" ? "border-emerald-500/25 task-complete-shimmer" : ""}`}
                         >
                           <div className="font-medium line-clamp-2 leading-tight">{task.title}</div>
                           {task.status === "blocked_needs_tools" && task.blockedReason && (
