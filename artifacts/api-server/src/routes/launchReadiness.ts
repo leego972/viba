@@ -1,8 +1,63 @@
 import { Router, type IRouter } from "express";
 import { runLaunchReadinessCheck, getLatestReport, getReport } from "../lib/launchReadiness";
 import { requireAdmin } from "../middlewares/adminAuth";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+
+// ─── Public env-var readiness check (no admin required) ──────────────────────
+const REQUIRED_PROD_VARS = ["DATABASE_URL", "SESSION_SECRET", "NODE_ENV"] as const;
+const OPTIONAL_BILLING_VARS = ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"] as const;
+const OPTIONAL_PROVIDER_VARS = ["GITHUB_TOKEN", "GROQ_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"] as const;
+const OPTIONAL_DEPLOY_VARS = ["PUBLIC_ORIGIN", "VIBA_PUBLIC_URL", "CORS_ALLOWED_ORIGINS", "ADMIN_BOOTSTRAP_EMAIL", "ADMIN_BOOTSTRAP_PASSWORD"] as const;
 
 const router: IRouter = Router();
+
+// GET /api/launch-readiness — public env-var readiness snapshot (no secrets returned)
+router.get("/launch-readiness", (_req, res): void => {
+  type CheckEntry = { name: string; status: "passed" | "failed" | "warning"; details: string };
+  const checks: CheckEntry[] = [];
+  const unresolvedRisks: string[] = [];
+
+  for (const v of REQUIRED_PROD_VARS) {
+    const present = Boolean(process.env[v]);
+    checks.push({ name: v, status: present ? "passed" : "failed", details: present ? "Set" : "MISSING — required for production" });
+    if (!present) unresolvedRisks.push(`Required env var missing: ${v}`);
+  }
+
+  for (const v of OPTIONAL_DEPLOY_VARS) {
+    const present = Boolean(process.env[v]);
+    checks.push({ name: v, status: present ? "passed" : "warning", details: present ? "Set" : "Not set — recommended for production" });
+    if (!present) unresolvedRisks.push(`Optional deploy var not set: ${v}`);
+  }
+
+  for (const v of OPTIONAL_BILLING_VARS) {
+    const present = Boolean(process.env[v]);
+    checks.push({ name: v, status: present ? "passed" : "warning", details: present ? "Set" : "Not set — billing features disabled" });
+  }
+
+  for (const v of OPTIONAL_PROVIDER_VARS) {
+    const present = Boolean(process.env[v]);
+    checks.push({ name: v, status: present ? "passed" : "warning", details: present ? "Set" : "Not set — this provider unavailable" });
+  }
+
+  const root = resolve(process.cwd(), "../..");
+  const frontendBuilt = existsSync(resolve(root, "artifacts/bridge-ai/dist/public/index.html"));
+  const apiBuilt = existsSync(resolve(process.cwd(), "dist/index.mjs"));
+  checks.push({ name: "frontend_build", status: frontendBuilt ? "passed" : "warning", details: frontendBuilt ? "artifacts/bridge-ai/dist/public/index.html exists" : "Frontend not built — run pnpm --filter @workspace/bridge-ai run build" });
+  checks.push({ name: "api_build", status: apiBuilt ? "passed" : "warning", details: apiBuilt ? "dist/index.mjs exists" : "API not built — run pnpm --filter @workspace/api-server run build" });
+
+  const failed = checks.filter((c) => c.status === "failed").length;
+  const warnings = checks.filter((c) => c.status === "warning").length;
+  const overallStatus = failed > 0 ? "not_ready" : warnings > 0 ? "ready_with_warnings" : "ready";
+
+  res.json({
+    status: overallStatus,
+    checks,
+    unresolvedRisks,
+    rawValuesReturned: false,
+    generatedAt: new Date().toISOString(),
+  });
+});
 
 // POST /api/launch-readiness/run — trigger a full launch readiness check
 router.post("/launch-readiness/run", requireAdmin, async (_req, res): Promise<void> => {
