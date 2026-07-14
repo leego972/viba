@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import growthRouter from "./adminGrowth";
 import { db } from "@workspace/db";
 import {
   sessionsTable,
@@ -507,5 +508,8 @@ router.get("/credentials", async (_req, res): Promise<void> => {
     note: "encrypted_value, iv, auth_tag are never included in admin responses.",
   });
 });
+
+// ─── Growth / advertising sub-router ─────────────────────────────────────────
+router.use("/growth", growthRouter);
 
 export default router;
