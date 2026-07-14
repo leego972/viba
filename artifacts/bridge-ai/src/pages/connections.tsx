@@ -43,18 +43,25 @@ interface ProviderLocalState {
   dirty: boolean;
 }
 
-function StatusBadge({ status }: { status: ProviderInfo["status"] }) {
-  if (status === "configured") {
+function StatusBadge({ status, enabled }: { status: ProviderInfo["status"]; enabled?: boolean }) {
+  if (status === "configured" && enabled !== false) {
     return (
       <Badge className="gap-1 bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/15">
         <CheckCircle2 className="h-3 w-3" /> Connected
       </Badge>
     );
   }
-  if (status === "disabled") {
+  if (enabled === false || status === "disabled") {
     return (
       <Badge className="gap-1 bg-zinc-500/15 text-zinc-400 border-zinc-500/30 hover:bg-zinc-500/15">
         <MinusCircle className="h-3 w-3" /> Disabled
+      </Badge>
+    );
+  }
+  if (enabled === true) {
+    return (
+      <Badge className="gap-1 bg-blue-500/15 text-blue-400 border-blue-500/30 hover:bg-blue-500/15">
+        <CheckCircle2 className="h-3 w-3" /> Enabled
       </Badge>
     );
   }
@@ -168,22 +175,22 @@ function ProviderSection() {
 
     return (
       <div key={provider.id} className="rounded-xl border border-white/[0.08] bg-white/[0.02] overflow-hidden">
-        <div className="flex items-center gap-3 px-4 py-3">
+        <div className="flex items-start gap-3 px-4 py-3">
           {/* Icon */}
-          <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${
+          <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
             provider.status === "configured" ? "bg-emerald-500/15 border border-emerald-500/25" : "bg-muted/30 border border-border/50"
           }`}>
             <Cpu className={`h-4 w-4 ${provider.status === "configured" ? "text-emerald-400" : "text-muted-foreground"}`} />
           </div>
 
-          {/* Name + badge stacked — badge on its own line so name never gets squeezed */}
-          <div className="flex-1 min-w-0 space-y-0.5">
-            <p className="text-sm font-medium leading-tight">{provider.label}</p>
-            <StatusBadge status={provider.status} />
+          {/* Name + badge stacked */}
+          <div className="flex-1 min-w-0 space-y-1">
+            <p className="text-sm font-medium leading-snug">{provider.label}</p>
+            <StatusBadge status={provider.status} enabled={ls.enabled} />
           </div>
 
-          {/* Controls — right-pinned, never overlaps the name column */}
-          <div className="flex items-center gap-2 shrink-0">
+          {/* Controls — top-aligned so they never visually cut through wrapped name text */}
+          <div className="flex items-center gap-2 shrink-0 mt-0.5">
             <Switch
               checked={ls.enabled}
               onCheckedChange={(v) => updateLocal(provider.id, { enabled: v })}
