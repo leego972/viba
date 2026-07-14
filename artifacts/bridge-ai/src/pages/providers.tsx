@@ -212,8 +212,8 @@ export default function ProvidersPage() {
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-0.5">
-                      <CardTitle className="text-base font-medium flex items-center gap-2">
-                        {provider.label}
+                      <CardTitle className="text-base font-medium flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span>{provider.label}</span>
                         {statusBadge(provider.status)}
                       </CardTitle>
                       <CardDescription className="text-xs">{provider.description}</CardDescription>
