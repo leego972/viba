@@ -11,7 +11,7 @@ import {
 
 const router: IRouter = Router();
 
-type Provider = "github" | "railway" | "railway_mcp" | "openai" | "anthropic" | "gemini" | "perplexity" | "groq" | "replit" | "manus";
+type Provider = "github" | "railway" | "railway_mcp" | "openai" | "anthropic" | "gemini" | "perplexity" | "groq" | "mistral" | "deepseek";
 
 const REQUIRED_ENV: Record<Provider, string[]> = {
   github: ["GITHUB_TOKEN"],
@@ -22,8 +22,8 @@ const REQUIRED_ENV: Record<Provider, string[]> = {
   gemini: ["GEMINI_API_KEY"],
   perplexity: ["PERPLEXITY_API_KEY"],
   groq: ["GROQ_API_KEY"],
-  replit: ["REPLIT_API_KEY", "REPLIT_AGENT_URL"],
-  manus: ["MANUS_API_KEY", "MANUS_WORKSPACE_API_KEY"],
+  mistral: ["MISTRAL_API_KEY"],
+  deepseek: ["DEEPSEEK_API_KEY"],
 };
 
 function userId(req: { session?: { userId?: number } }): number | null {

@@ -113,8 +113,6 @@ export const PRO_ONLY_TOOLS = new Set<string>([
   "railway.deploy.trigger",
   "railway.rollback",
   "railway.env.write",
-  "replit.repair.apply",
-  "replit.deploy",
   // Client reports
   "report.client_proof.generate",
   // Multi-agent coordination

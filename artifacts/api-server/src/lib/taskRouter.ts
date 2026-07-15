@@ -150,8 +150,8 @@ export function autoAssignRoles(agentProviders: string[]): Record<string, string
   const providerRoleHints: Record<string, string> = {
     openai:     "strategist",
     anthropic:  "reviewer",
-    manus:      "researcher",
-    replit:     "builder",
+    deepseek:   "researcher",
+    mistral:    "builder",
     google:     "reviewer",
     perplexity: "researcher",
   };

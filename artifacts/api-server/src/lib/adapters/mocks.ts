@@ -474,28 +474,23 @@ export class PerplexityMockAdapter extends TextOnlyMockAdapter {
   }
 }
 
-// ── Manus ─────────────────────────────────────────────────────────────────────
-export class ManusMockAdapter extends ToolCapableMockAdapter {
-  id: string; name: string; provider = "manus"; model = "manus-deep-research-1 (sim)"; role: string;
-  capabilities = ["research", "execution", "data_gathering", "analysis"];
+// ── DeepSeek ──────────────────────────────────────────────────────────────────
+export class DeepSeekMockAdapter extends TextOnlyMockAdapter {
+  id: string; name: string; provider = "deepseek"; model = "deepseek-chat (sim)"; role: string;
+  capabilities = ["research", "reasoning", "analysis", "planning"];
 
-  constructor(id: string, name: string, role: string, canUseTools = true) { super(canUseTools); this.id = id; this.name = name; this.role = role; }
+  constructor(id: string, name: string, role: string) { super(); this.id = id; this.name = name; this.role = role; }
 
   generateResponse(input: AgentTaskInput): string {
     const goal = input.projectGoal;
     const type = input.taskType ?? "research";
-    const repo = input.repoUrl ? ` [repo: ${input.repoUrl}]` : "";
     const responses: Record<string, string[]> = {
       research: [
         `Research complete for "${goal}". Key findings: (1) market demand is validated by three independent data sources, (2) top competitors have gaps in UX and pricing transparency, (3) the technical approach is proven — two similar implementations shipped successfully in the past 12 months. Handing off structured data to the Builder.`,
         `Data gathered for "${goal}". I've cross-referenced industry reports, recent case studies, and primary sources. The opportunity is real and the timing is right. Two risks identified: market saturation risk (low) and execution complexity (medium). Full analysis ready.`,
       ],
-      build: [
-        `Execution plan for "${goal}"${repo}: I've mapped the implementation steps in sequence, flagged dependencies, and estimated effort per component. The critical path is clear. No blockers identified. Ready for the Builder to start sprint 1.`,
-        `Build task complete for "${goal}"${repo}: I've executed the required steps — data gathered, code scaffolded, dependencies installed. The implementation is ready for review.`,
-      ],
-      deployment_approval: [
-        `Deployment verified for "${goal}"${repo}: I've checked the environment config, run the smoke tests, and confirmed the build is healthy. Infrastructure is ready. Recommend proceeding to deploy.`,
+      planning: [
+        `Reasoning breakdown for "${goal}": I've decomposed the goal into executable sub-tasks, identified dependencies, and flagged two ambiguities that need resolution before the build phase. Task graph is ready.`,
       ],
     };
     const fallback = [`Analysis for "${goal}": data collected and synthesised. Key patterns identified. Recommendations grounded in evidence. Ready to hand off.`];
@@ -633,12 +628,12 @@ export class RailwayMockAdapter extends ToolCapableMockAdapter {
   }
 }
 
-// ── Replit ────────────────────────────────────────────────────────────────────
-export class ReplitMockAdapter extends ToolCapableMockAdapter {
-  id: string; name: string; provider = "replit"; model = "replit-code-v1-3b (sim)"; role: string;
-  capabilities = ["build", "code", "deployment", "implementation"];
+// ── Mistral ───────────────────────────────────────────────────────────────────
+export class MistralMockAdapter extends TextOnlyMockAdapter {
+  id: string; name: string; provider = "mistral"; model = "mistral-large-latest (sim)"; role: string;
+  capabilities = ["planning", "reasoning", "code_review", "build", "implementation"];
 
-  constructor(id: string, name: string, role: string, canUseTools = true) { super(canUseTools); this.id = id; this.name = name; this.role = role; }
+  constructor(id: string, name: string, role: string) { super(); this.id = id; this.name = name; this.role = role; }
 
   generateResponse(input: AgentTaskInput): string {
     const goal = input.projectGoal;
@@ -649,9 +644,6 @@ export class ReplitMockAdapter extends ToolCapableMockAdapter {
       build: [
         `Implementation complete for "${goal}"${repo}${env}. Stack: modular, typed, documented. Core components built: data layer, business logic, API interface. Unit tests pass. Edge cases handled. Ready for code review — no known regressions.`,
         `Build done for "${goal}"${repo}. I kept the architecture lean and the dependencies minimal. The module structure is clean enough that the next engineer can pick it up without a handoff call. Deployment config is included.`,
-      ],
-      deployment_approval: [
-        `Deployment ready for "${goal}"${repo}${env}. Build passes all checks: linting ✓, tests ✓, environment config ✓. Infrastructure is provisioned. Awaiting final approval to ship.`,
       ],
       code_review: [
         `Technical review for "${goal}": I've checked the implementation from an engineering perspective. Performance is acceptable, the data layer is efficient, and the error handling is solid. One suggestion: add rate limiting to the API endpoints. Otherwise ship-ready.`,

@@ -42,7 +42,7 @@ import { deductCredits, getCredits, isStripeConfigured, triggerAutoTopupIfNeeded
  * Providers whose agents use their OWN tool execution stack.
  * Only the platform orchestration fee applies — NOT per-VIBA-tool charges.
  */
-const NATIVE_TOOL_PROVIDERS = new Set(["replit", "manus", "railway", "groq", "ollama"]);
+const NATIVE_TOOL_PROVIDERS = new Set(["railway", "groq", "ollama"]);
 
 /**
  * Free task types — no VIBA credits charged.

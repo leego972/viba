@@ -72,8 +72,8 @@ function serialize<T>(val: T): T {
 const PROVIDER_CAPABILITIES: Record<string, string[]> = {
   openai: ["planning", "reasoning", "creative_direction", "code_review", "final_qa"],
   anthropic: ["code_review", "writing", "logic_critique", "ux_review"],
-  manus: ["research", "execution", "data_gathering", "analysis"],
-  replit: ["build", "code", "deployment", "implementation"],
+  deepseek: ["research", "reasoning", "analysis", "planning"],
+  mistral: ["planning", "reasoning", "code_review", "build", "implementation"],
   google: ["multimodal", "contextual_analysis", "summarization", "creative"],
   perplexity: ["research_summary", "fact_checking", "citation"],
   railway: ["deployment", "infrastructure", "monitoring", "environment_management", "rollback"],
@@ -81,7 +81,7 @@ const PROVIDER_CAPABILITIES: Record<string, string[]> = {
   ollama: ["planning", "reasoning", "code_review", "build", "implementation", "research"],
 };
 
-const TOOL_CAPABLE_PROVIDERS = new Set(["replit", "manus", "railway", "groq", "ollama"]);
+const TOOL_CAPABLE_PROVIDERS = new Set(["railway", "groq", "ollama", "mistral", "deepseek"]);
 
 function getCapabilities(provider: string): string[] {
   return PROVIDER_CAPABILITIES[provider.toLowerCase()] ?? ["general"];

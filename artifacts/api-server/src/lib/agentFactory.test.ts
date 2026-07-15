@@ -33,23 +33,13 @@ function makeAgent(provider: string, canUseTools: boolean): Agent {
 describe("buildMockAdapter — canUseTools propagation", () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
-  it("propagates canUseTools=true to ReplitMockAdapter", () => {
-    const adapter = buildMockAdapter(makeAgent("replit", true));
-    expect(adapter.canUseTools).toBe(true);
-  });
-
-  it("propagates canUseTools=false to ReplitMockAdapter", () => {
-    const adapter = buildMockAdapter(makeAgent("replit", false));
+  it("Mistral mock adapter is never tool-capable (text-only)", () => {
+    const adapter = buildMockAdapter(makeAgent("mistral", false));
     expect(adapter.canUseTools).toBe(false);
   });
 
-  it("propagates canUseTools=true to ManusMockAdapter", () => {
-    const adapter = buildMockAdapter(makeAgent("manus", true));
-    expect(adapter.canUseTools).toBe(true);
-  });
-
-  it("propagates canUseTools=false to ManusMockAdapter", () => {
-    const adapter = buildMockAdapter(makeAgent("manus", false));
+  it("DeepSeek mock adapter is never tool-capable (text-only)", () => {
+    const adapter = buildMockAdapter(makeAgent("deepseek", false));
     expect(adapter.canUseTools).toBe(false);
   });
 

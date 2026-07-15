@@ -203,12 +203,12 @@ describe("autoAssignRoles", () => {
     expect(autoAssignRoles(["anthropic"])["anthropic"]).toBe("reviewer");
   });
 
-  it("assigns builder to replit", () => {
-    expect(autoAssignRoles(["replit"])["replit"]).toBe("builder");
+  it("assigns builder to mistral", () => {
+    expect(autoAssignRoles(["mistral"])["mistral"]).toBe("builder");
   });
 
-  it("assigns researcher to manus", () => {
-    expect(autoAssignRoles(["manus"])["manus"]).toBe("researcher");
+  it("assigns researcher to deepseek", () => {
+    expect(autoAssignRoles(["deepseek"])["deepseek"]).toBe("researcher");
   });
 
   it("assigns researcher to perplexity", () => {
@@ -222,7 +222,7 @@ describe("autoAssignRoles", () => {
   });
 
   it("assigns a role to every provider in a full team", () => {
-    const providers = ["openai", "anthropic", "manus", "replit", "google", "perplexity"];
+    const providers = ["openai", "anthropic", "deepseek", "mistral", "google", "perplexity"];
     const result = autoAssignRoles(providers);
     for (const p of providers) {
       expect(result[p]).toBeDefined();
@@ -231,7 +231,7 @@ describe("autoAssignRoles", () => {
   });
 
   it("falls back to qa when role queue is exhausted", () => {
-    const providers = ["openai", "anthropic", "manus", "replit", "google", "perplexity"];
+    const providers = ["openai", "anthropic", "deepseek", "mistral", "google", "perplexity"];
     const result = autoAssignRoles(providers);
     expect(result["perplexity"]).toBe("qa");
   });

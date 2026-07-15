@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { pool } from "@workspace/db";
 
-export type VibaProvider = "github" | "railway" | "railway_mcp" | "openai" | "anthropic" | "gemini" | "perplexity" | "groq" | "replit" | "manus" | "custom_ai" | string;
+export type VibaProvider = "github" | "railway" | "railway_mcp" | "openai" | "anthropic" | "gemini" | "perplexity" | "groq" | "mistral" | "deepseek" | "custom_ai" | string;
 
 function vaultKey(): Buffer {
   const raw = process.env.CREDENTIAL_ENCRYPTION_KEY || process.env.MASTER_ENCRYPTION_KEY || process.env.SESSION_SECRET;

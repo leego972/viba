@@ -3,8 +3,8 @@ import { OpenAIAdapter } from "./adapters/openai";
 import { AnthropicAdapter } from "./adapters/anthropic";
 import { GeminiAdapter } from "./adapters/gemini";
 import { PerplexityAdapter } from "./adapters/perplexity";
-import { ReplitAdapter } from "./adapters/replit";
-import { ManusAdapter } from "./adapters/manus";
+import { MistralAdapter } from "./adapters/mistral";
+import { DeepSeekAdapter } from "./adapters/deepseek";
 import { RailwayAdapter } from "./adapters/railway";
 import { GroqAdapter } from "./adapters/groq";
 import { OllamaAdapter } from "./adapters/ollama";
@@ -15,8 +15,8 @@ import {
   ClaudeMockAdapter,
   GeminiMockAdapter,
   PerplexityMockAdapter,
-  ReplitMockAdapter,
-  ManusMockAdapter,
+  MistralMockAdapter,
+  DeepSeekMockAdapter,
   RailwayMockAdapter,
   GroqMockAdapter,
   OllamaMockAdapter,
@@ -47,12 +47,12 @@ export function buildMockAdapter(agent: Agent): AgentAdapter {
   if (provider === "google") return new GeminiMockAdapter(String(agent.id), agent.name, agent.role);
   if (provider === "perplexity") return new PerplexityMockAdapter(String(agent.id), agent.name, agent.role);
   // Pass agent.canUseTools so simulation mode preserves the same handoff/capability semantics as live mode
-  if (provider === "replit") return new ReplitMockAdapter(String(agent.id), agent.name, agent.role, agent.canUseTools);
-  if (provider === "manus") return new ManusMockAdapter(String(agent.id), agent.name, agent.role, agent.canUseTools);
   if (provider === "railway") return new RailwayMockAdapter(String(agent.id), agent.name, agent.role);
   if (provider === "groq") return new GroqMockAdapter(String(agent.id), agent.name, agent.role);
   if (provider === "ollama") return new OllamaMockAdapter(String(agent.id), agent.name, agent.role);
   if (provider === "venice") return new VeniceMockAdapter(String(agent.id), agent.name, agent.role);
+  if (provider === "mistral") return new MistralMockAdapter(String(agent.id), agent.name, agent.role);
+  if (provider === "deepseek") return new DeepSeekMockAdapter(String(agent.id), agent.name, agent.role);
   if (provider === "custom") return new CustomAIMockAdapter(String(agent.id), agent.name, agent.role);
   return new ChatGPTMockAdapter(String(agent.id), agent.name, agent.role);
 }
@@ -142,13 +142,14 @@ export async function buildAdapter(agent: Agent, userId?: number | null): Promis
     return new PerplexityMockAdapter(String(agent.id), agent.name, agent.role);
   }
 
-  if (provider === "replit") {
-    const apiKey = await resolveApiKey(userId, provider, credLabel, "REPLIT_API_KEY");
+  if (provider === "mistral") {
+    const apiKey = await resolveApiKey(userId, provider, credLabel, "MISTRAL_API_KEY");
     if (isValidKey(apiKey)) {
-      return new ReplitAdapter(String(agent.id), agent.name, agent.role, apiKey, undefined, agent.canUseTools);
+      const model = await getSetting("MISTRAL_MODEL") ?? undefined;
+      return new MistralAdapter(String(agent.id), agent.name, agent.role, apiKey, model, agent.canUseTools);
     }
-    logger.warn({ provider, credLabel }, "No Replit API key found — using simulation mode");
-    return new ReplitMockAdapter(String(agent.id), agent.name, agent.role, agent.canUseTools);
+    logger.warn({ provider, credLabel }, "No Mistral API key found — using simulation mode");
+    return new MistralMockAdapter(String(agent.id), agent.name, agent.role);
   }
 
   if (provider === "groq") {
@@ -186,13 +187,14 @@ export async function buildAdapter(agent: Agent, userId?: number | null): Promis
     return new RailwayMockAdapter(String(agent.id), agent.name, agent.role);
   }
 
-  if (provider === "manus") {
-    const apiKey = await resolveApiKey(userId, provider, credLabel, "MANUS_API_KEY");
+  if (provider === "deepseek") {
+    const apiKey = await resolveApiKey(userId, provider, credLabel, "DEEPSEEK_API_KEY");
     if (isValidKey(apiKey)) {
-      return new ManusAdapter(String(agent.id), agent.name, agent.role, apiKey, undefined, agent.canUseTools);
+      const model = await getSetting("DEEPSEEK_MODEL") ?? undefined;
+      return new DeepSeekAdapter(String(agent.id), agent.name, agent.role, apiKey, model, agent.canUseTools);
     }
-    logger.warn({ provider, credLabel }, "No Manus API key found — using simulation mode");
-    return new ManusMockAdapter(String(agent.id), agent.name, agent.role, agent.canUseTools);
+    logger.warn({ provider, credLabel }, "No DeepSeek API key found — using simulation mode");
+    return new DeepSeekMockAdapter(String(agent.id), agent.name, agent.role);
   }
 
   if (provider === "venice") {

@@ -38,12 +38,12 @@ const MAX_TURNS = 12;
 
 /**
  * Providers that handle tool execution natively inside their own adapter loop
- * (Replit agent URL polling, Manus workspace API, Railway MCP).
+ * (Railway MCP).
  * These are excluded from the VIBA broker tool loop in agentLoop — they must
  * NOT be routed through the broker for their own tools.
  * They ARE still charged per VIBA broker tool call if they explicitly request one.
  */
-const NATIVE_EXECUTION_PROVIDERS = new Set(["replit", "manus", "railway"]);
+const NATIVE_EXECUTION_PROVIDERS = new Set(["railway"]);
 
 /** Max VIBA broker tool calls per task step for a single text agent. */
 const MAX_BROKER_LOOPS = 3;
