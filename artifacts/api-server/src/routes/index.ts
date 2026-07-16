@@ -57,6 +57,7 @@ import aiOptimizerRouter from "./aiOptimizer";
 import aiBudgetsRouter from "./aiBudgets";
 import aiModelsRouter from "./aiModels";
 import projectMemoryRouter from "./projectMemory";
+import fileBuildSafetyRouter from "./fileBuildSafety";
 
 const router: IRouter = Router();
 
@@ -119,5 +120,6 @@ router.use(aiOptimizerRouter);
 router.use(aiBudgetsRouter);
 router.use(aiModelsRouter);
 router.use(projectMemoryRouter);
+router.use(fileBuildSafetyRouter);
 
 export default router;
