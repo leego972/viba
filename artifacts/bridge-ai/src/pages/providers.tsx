@@ -230,7 +230,7 @@ export default function ProvidersPage() {
 
                 <CardContent className="space-y-4">
                   {/* API Key field */}
-                  {provider.hasKey !== undefined && provider.id !== "local" && (
+                  {provider.hasKey !== undefined && provider.id !== "ollama" && (
                     <div className="space-y-1.5">
                       <Label className="text-xs font-medium flex items-center gap-1.5">
                         <Key className="h-3 w-3" />
@@ -290,12 +290,12 @@ export default function ProvidersPage() {
                         Endpoint URL
                       </Label>
                       <Input
-                        placeholder={provider.id === "local" ? "http://localhost:11434" : "https://your-provider.example.com/v1"}
+                        placeholder={provider.id === "ollama" ? "http://localhost:11434" : "https://your-provider.example.com/v1"}
                         value={ls.endpoint}
                         onChange={(e) => updateLocal(provider.id, { endpoint: e.target.value })}
                         className="h-9 text-xs font-mono bg-background/50"
                       />
-                      {provider.id === "local" && (
+                      {provider.id === "ollama" && (
                         <div className="flex items-start gap-2 rounded-lg border border-blue-500/20 bg-blue-500/6 px-2.5 py-2">
                           <Info className="h-3.5 w-3.5 text-blue-400 mt-0.5 shrink-0" />
                           <p className="text-[11px] text-blue-300/80 leading-relaxed">

@@ -69,7 +69,7 @@ describe("PATCH /providers/:provider — key routing", () => {
   it("does not write raw key to settingsTable for any provider", async () => {
     const { db } = await import("@workspace/db");
     const app = await makeApp();
-    for (const provider of ["anthropic", "gemini", "groq"]) {
+    for (const provider of ["anthropic", "google", "groq"]) {
       await request(app).patch(`/providers/${provider}`).send({ key: `raw-key-${provider}` });
     }
     const insertCalls = (db.insert as ReturnType<typeof vi.fn>).mock.calls;

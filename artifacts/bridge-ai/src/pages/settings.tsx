@@ -189,7 +189,7 @@ const PROVIDERS: ProviderConfig[] = [
     key: "GITHUB_TOKEN",
     label: "GitHub Personal Access Token",
     placeholder: "ghp_... or github_pat_...",
-    hint: "Lets agents create repos, read/write files, open pull requests, and manage issues on your GitHub. Generate at github.com/settings/tokens (scopes: repo, read:user).",
+    hint: "Lets agents create repos, read/write files, open pull requests, and manage issues on your GitHub. Classic tokens (ghp_...): check the \"repo\" scope. Fine-grained tokens (github_pat_...): grant \"Contents: Read and write\" — and if you want VIBA to create new repos (not just work in existing ones), set Repository access to \"All repositories\" with \"Administration: Read and write\", since a token limited to specific repos can't create one that doesn't exist yet. Generate at github.com/settings/tokens.",
     providerName: "github",
   },
 ];

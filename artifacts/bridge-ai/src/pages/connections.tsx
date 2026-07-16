@@ -217,7 +217,7 @@ function ProviderSection() {
                 <p className="text-violet-300/50 mt-1">Enter the base URL and your API key below, then pick your model name.</p>
               </div>
             )}
-            {provider.id !== "local" && provider.hasKey !== undefined && (
+            {provider.id !== "ollama" && provider.hasKey !== undefined && (
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium flex items-center gap-1.5">
                   <Key className="h-3 w-3" />
@@ -272,7 +272,7 @@ function ProviderSection() {
                   <Globe className="h-3 w-3" />Endpoint URL
                 </Label>
                 <Input
-                  placeholder={provider.id === "local" ? "http://localhost:11434" : provider.id === "custom" ? "https://api.venice.ai/api/v1" : "https://your-provider.example.com/v1"}
+                  placeholder={provider.id === "ollama" ? "http://localhost:11434" : provider.id === "custom" ? "https://api.venice.ai/api/v1" : "https://your-provider.example.com/v1"}
                   value={ls.endpoint}
                   onChange={(e) => updateLocal(provider.id, { endpoint: e.target.value })}
                   className="h-9 text-xs font-mono bg-background/50"
@@ -332,7 +332,7 @@ function ProviderSection() {
             )}
 
             {/* Add another account */}
-            {provider.id !== "local" && provider.hasKey !== undefined && (
+            {provider.id !== "ollama" && provider.hasKey !== undefined && (
               <div className="pt-1 border-t border-white/[0.06]">
                 {!(addKeyForms[provider.id]?.open) ? (
                   <button

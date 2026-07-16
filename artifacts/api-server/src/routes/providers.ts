@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, settingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { saveVibaCredential, resolveVibaCredential, logVibaEvent, listVibaCredentials, deleteVibaCredential } from "../lib/vibaVault";
+import { validateGithub } from "./credentials";
 
 const router: IRouter = Router();
 
@@ -44,13 +45,25 @@ const PROVIDER_DEFS: ProviderDef[] = [
     defaultEndpoint: "",
   },
   {
-    id: "gemini",
+    id: "google",
     label: "Google Gemini",
     description: "Powers Gemini 2.0 Flash and Gemini 1.5 Pro.",
     keyEnvVar: "GEMINI_API_KEY",
     modelSettingKey: "GEMINI_MODEL",
     defaultModel: "gemini-2.0-flash",
     modelOptions: ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro", "gemini-1.5-flash"],
+    hasEndpoint: false,
+    endpointSettingKey: null,
+    defaultEndpoint: "",
+  },
+  {
+    id: "perplexity",
+    label: "Perplexity",
+    description: "Web-connected research and citation-backed answers.",
+    keyEnvVar: "PERPLEXITY_API_KEY",
+    modelSettingKey: "PERPLEXITY_MODEL",
+    defaultModel: "sonar",
+    modelOptions: ["sonar", "sonar-pro", "sonar-reasoning", "sonar-reasoning-pro"],
     hasEndpoint: false,
     endpointSettingKey: null,
     defaultEndpoint: "",
@@ -68,15 +81,15 @@ const PROVIDER_DEFS: ProviderDef[] = [
     defaultEndpoint: "",
   },
   {
-    id: "local",
-    label: "Local / Self-hosted",
+    id: "ollama",
+    label: "Local / Self-hosted (Ollama)",
     description: "Ollama or any OpenAI-compatible local server. No API key required.",
     keyEnvVar: null,
-    modelSettingKey: "LOCAL_MODEL",
-    defaultModel: "llama3",
+    modelSettingKey: "OLLAMA_MODEL",
+    defaultModel: "llama3.2",
     modelOptions: [],
     hasEndpoint: true,
-    endpointSettingKey: "LOCAL_ENDPOINT",
+    endpointSettingKey: "OLLAMA_BASE_URL",
     defaultEndpoint: "http://localhost:11434",
   },
   {
@@ -97,6 +110,42 @@ const PROVIDER_DEFS: ProviderDef[] = [
     hasEndpoint: false,
     endpointSettingKey: null,
     defaultEndpoint: "https://api.venice.ai/api/v1",
+  },
+  {
+    id: "mistral",
+    label: "Mistral AI",
+    description: "Powers Mistral build/code-review agents (Codestral, Mixtral).",
+    keyEnvVar: "MISTRAL_API_KEY",
+    modelSettingKey: "MISTRAL_MODEL",
+    defaultModel: "mistral-large-latest",
+    modelOptions: ["mistral-large-latest", "mistral-small-latest", "codestral-latest", "open-mixtral-8x22b", "ministral-8b-latest"],
+    hasEndpoint: false,
+    endpointSettingKey: null,
+    defaultEndpoint: "",
+  },
+  {
+    id: "deepseek",
+    label: "DeepSeek",
+    description: "Powers DeepSeek research/reasoning agents.",
+    keyEnvVar: "DEEPSEEK_API_KEY",
+    modelSettingKey: "DEEPSEEK_MODEL",
+    defaultModel: "deepseek-chat",
+    modelOptions: ["deepseek-chat", "deepseek-reasoner"],
+    hasEndpoint: false,
+    endpointSettingKey: null,
+    defaultEndpoint: "",
+  },
+  {
+    id: "github",
+    label: "GitHub",
+    description: "Lets agents create repos, read/write files, open pull requests, and manage issues.",
+    keyEnvVar: "GITHUB_TOKEN",
+    modelSettingKey: null,
+    defaultModel: "",
+    modelOptions: [],
+    hasEndpoint: false,
+    endpointSettingKey: null,
+    defaultEndpoint: "",
   },
   {
     id: "custom",
@@ -137,6 +186,10 @@ function userId(req: { session?: { userId?: number } }): number | null {
 async function hasKeyConfigured(def: ProviderDef, userId: number | null): Promise<boolean> {
   if (!def.keyEnvVar) return true;
   if (process.env[def.keyEnvVar]) return true;
+  // Settings page writes keys straight to the settings table (not the vault) —
+  // this must be checked or a key saved in Settings never shows as configured here.
+  const settingVal = await getSettingValue(def.keyEnvVar);
+  if (settingVal) return true;
   const resolved = await resolveVibaCredential({ userId, provider: def.id, kind: "api_key", envNames: [def.keyEnvVar] });
   return resolved.source === "vault";
 }
@@ -253,7 +306,7 @@ router.post("/providers/:provider/test", async (req, res): Promise<void> => {
     return;
   }
 
-  if (def.id === "local" || def.id === "custom") {
+  if (def.id === "ollama" || def.id === "custom") {
     const allSettings = await db.select().from(settingsTable);
     const settingsMap = new Map(allSettings.map((s) => [s.key, s.value]));
     const endpoint = def.endpointSettingKey
@@ -280,6 +333,20 @@ router.post("/providers/:provider/test", async (req, res): Promise<void> => {
         : "";
       res.json({ configured: false, reachable: false, message: `Endpoint unreachable: ${msg}.${hint}` });
     }
+    return;
+  }
+
+  if (def.id === "github") {
+    const settingVal = await getSettingValue("GITHUB_TOKEN");
+    const token = settingVal
+      ?? process.env["GITHUB_TOKEN"]
+      ?? (await resolveVibaCredential({ userId: userId(req), provider: "github", kind: "api_key", envNames: ["GITHUB_TOKEN"] })).value;
+    if (!token) {
+      res.json({ configured: false, message: "No GitHub token configured. Enter your token and save first." });
+      return;
+    }
+    const result = await validateGithub(token);
+    res.json({ configured: result.ok, reachable: result.ok, message: result.message, details: result.details });
     return;
   }
 

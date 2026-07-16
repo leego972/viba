@@ -91,9 +91,31 @@ async function resolveApiKey(
   return process.env[envKey] ?? "";
 }
 
+/**
+ * Checks the user's Connections-page enable/disable toggle for a provider
+ * (`${PROVIDER}_ENABLED` in the settings table). This is distinct from
+ * whether a key is configured — it's whether the user wants that key
+ * actually used for running agents/tasks right now.
+ * Undefined (never explicitly toggled) defaults to enabled, matching the
+ * Connections page's own default-enabled-when-key-present behavior.
+ */
+async function isProviderEnabled(provider: string): Promise<boolean> {
+  const enabledSetting = await getSetting(`${provider.toUpperCase()}_ENABLED`);
+  if (enabledSetting === null) return true;
+  return enabledSetting === "true";
+}
+
 export async function buildAdapter(agent: Agent, userId?: number | null): Promise<AgentAdapter> {
   const provider = agent.provider.toLowerCase();
   const credLabel = agent.credentialLabel ?? "default";
+
+  // Respect the user's Connections-page toggle: if they've explicitly turned
+  // this provider off, don't use its key for running agents even if one is
+  // configured — fall back to simulation mode, same as "no key present".
+  if (!(await isProviderEnabled(provider))) {
+    logger.info({ provider, agentId: agent.id }, "Provider disabled in Connections — using simulation mode");
+    return buildMockAdapter(agent);
+  }
 
   // Shared tool tokens — loaded once and reused across tool-capable adapters
   // For tool tokens, always use admin settings / env (they are global infrastructure tokens)

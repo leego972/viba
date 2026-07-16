@@ -34,8 +34,8 @@ function isProvider(value: unknown): value is Provider {
   return typeof value === "string" && Object.prototype.hasOwnProperty.call(REQUIRED_ENV, value);
 }
 
-async function validateGithub(token: string): Promise<{ ok: boolean; message: string; details?: Record<string, unknown> }> {
-  const response = await fetch("https://api.github.com/user", {
+export async function validateGithub(token: string): Promise<{ ok: boolean; message: string; details?: Record<string, unknown> }> {
+  const userResponse = await fetch("https://api.github.com/user", {
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: "application/vnd.github+json",
@@ -43,9 +43,68 @@ async function validateGithub(token: string): Promise<{ ok: boolean; message: st
       "User-Agent": "VIBA-Credential-Validator/1.0",
     },
   });
-  if (!response.ok) return { ok: false, message: `GITHUB_TOKEN rejected by GitHub. Replace GITHUB_TOKEN. HTTP ${response.status}` };
-  const data = await response.json() as { login?: string; id?: number };
-  return { ok: true, message: "GITHUB_TOKEN is valid.", details: { login: data.login, id: data.id } };
+  if (!userResponse.ok) return { ok: false, message: `GITHUB_TOKEN rejected by GitHub. Replace GITHUB_TOKEN. HTTP ${userResponse.status}` };
+  const userData = await userResponse.json() as { login?: string; id?: number };
+
+  const isFineGrained = token.startsWith("github_pat_");
+  const isClassic = /^gh[pousr]_/.test(token);
+
+  // Classic tokens (ghp_/gho_/ghu_/ghs_/ghr_) declare their scopes in this header.
+  if (isClassic) {
+    const scopesHeader = userResponse.headers.get("x-oauth-scopes") ?? "";
+    const scopes = scopesHeader.split(",").map((s) => s.trim()).filter(Boolean);
+    if (!scopes.includes("repo")) {
+      return {
+        ok: false,
+        message: `GITHUB_TOKEN is valid but missing the "repo" scope needed to read and write repositories (has: ${scopes.join(", ") || "no scopes"}). Generate a new token at github.com/settings/tokens with the "repo" scope checked.`,
+        details: { login: userData.login, id: userData.id, scopes },
+      };
+    }
+    return { ok: true, message: "GITHUB_TOKEN is valid with repo read/write access.", details: { login: userData.login, id: userData.id, tokenType: "classic", scopes } };
+  }
+
+  // Fine-grained tokens (github_pat_...) don't expose a scopes header — permissions are
+  // per-repository. Verify by listing accessible repos and checking for real push access.
+  if (isFineGrained) {
+    const reposResponse = await fetch("https://api.github.com/user/repos?per_page=10&sort=updated", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "VIBA-Credential-Validator/1.0",
+      },
+    });
+    if (!reposResponse.ok) {
+      return {
+        ok: false,
+        message: `GITHUB_TOKEN authenticated but repository access could not be verified (HTTP ${reposResponse.status}). Make sure the token grants "Contents: Read and write" on at least one repository.`,
+        details: { login: userData.login, id: userData.id },
+      };
+    }
+    const repos = await reposResponse.json() as Array<{ full_name: string; permissions?: { push?: boolean; pull?: boolean } }>;
+    if (repos.length === 0) {
+      return {
+        ok: false,
+        message: "GITHUB_TOKEN is valid but has no repository access configured. Fine-grained tokens must explicitly select repositories — edit the token at github.com/settings/tokens and grant it access to the repos VIBA should manage, with \"Contents: Read and write\" permission.",
+        details: { login: userData.login, id: userData.id, tokenType: "fine-grained" },
+      };
+    }
+    const writable = repos.filter((r) => r.permissions?.push === true);
+    if (writable.length === 0) {
+      return {
+        ok: false,
+        message: `GITHUB_TOKEN can read ${repos.length} repo(s) but has no write access to any of them. Edit the token's repository permissions at github.com/settings/tokens and set "Contents" to "Read and write".`,
+        details: { login: userData.login, id: userData.id, tokenType: "fine-grained", readableRepos: repos.length, writableRepos: 0 },
+      };
+    }
+    return {
+      ok: true,
+      message: `GITHUB_TOKEN is valid with read/write access to ${writable.length} repo(s).`,
+      details: { login: userData.login, id: userData.id, tokenType: "fine-grained", readableRepos: repos.length, writableRepos: writable.length },
+    };
+  }
+
+  return { ok: true, message: "GITHUB_TOKEN is valid.", details: { login: userData.login, id: userData.id, tokenType: "unknown" } };
 }
 
 async function validateRailway(token: string): Promise<{ ok: boolean; message: string; details?: Record<string, unknown> }> {

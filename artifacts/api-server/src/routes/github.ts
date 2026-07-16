@@ -64,6 +64,46 @@ router.get("/github/repos", async (_req, res): Promise<void> => {
   res.json(data.map((d) => ({ fullName: d.full_name, htmlUrl: d.html_url, defaultBranch: d.default_branch, private: d.private })));
 });
 
+// POST /github/repos — create a new repository under the authenticated user's account.
+// Note: fine-grained tokens can only do this if they were created with "All repositories"
+// access and "Administration: Read and write" — a token scoped to specific repositories
+// cannot create a new one, since it can't have been pre-selected. Classic tokens with the
+// "repo" scope always support this.
+router.post("/github/repos", async (req, res): Promise<void> => {
+  const token = await resolveGithubToken();
+  if (!token) { res.status(503).json({ error: "GitHub token not configured" }); return; }
+
+  const body = req.body as { name?: string; description?: string; private?: boolean; autoInit?: boolean };
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  if (!name) { res.status(400).json({ error: "name is required" }); return; }
+  if (!/^[\w.-]+$/.test(name)) { res.status(400).json({ error: "name may only contain letters, numbers, hyphens, underscores, and periods" }); return; }
+
+  const r = await fetch("https://api.github.com/user/repos", {
+    method: "POST",
+    headers: ghHeaders(token),
+    body: JSON.stringify({
+      name,
+      description: body.description ?? "",
+      private: body.private !== false,
+      auto_init: body.autoInit !== false,
+    }),
+  });
+  if (!r.ok) {
+    const detail = await r.text().catch(() => "");
+    if (r.status === 403 || r.status === 404) {
+      res.status(ghError(r.status)).json({
+        error: `GitHub rejected repo creation (HTTP ${r.status}). If you're using a fine-grained token, it must be scoped to "All repositories" with "Administration: Read and write" to create new repos — a token limited to specific repositories cannot create one that doesn't exist yet.`,
+        detail: detail.slice(0, 500),
+      });
+      return;
+    }
+    res.status(ghError(r.status)).json({ error: `GitHub API error: ${r.status}`, detail: detail.slice(0, 500) });
+    return;
+  }
+  const data = await r.json() as GithubApiRepo;
+  res.status(201).json({ fullName: data.full_name, htmlUrl: data.html_url, defaultBranch: data.default_branch, private: data.private });
+});
+
 // GET /github/file?owner=&repo=&path=&ref=  — read a file's content
 router.get("/github/file", async (req, res): Promise<void> => {
   const { owner, repo, path, ref } = req.query as Record<string, string | undefined>;
