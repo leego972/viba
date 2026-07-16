@@ -25,6 +25,7 @@ export default function VibaFooterFinal() {
               <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/35">Legal</p>
               <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-white/65">
                 <Link href="/terms" className="hover:text-teal-300">Terms and Conditions</Link>
+                <Link href="/privacy" className="hover:text-teal-300">Privacy Policy</Link>
                 <Link href="/user-instructions" className="hover:text-teal-300">User Instructions</Link>
               </div>
             </div>

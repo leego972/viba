@@ -46,6 +46,12 @@ import AiSavingsPage from "@/pages/ai-savings";
 import UsageHistoryPage from "@/pages/usage-history";
 import BudgetsPage from "@/pages/budgets";
 import ProjectMemoryPage from "@/pages/project-memory";
+import Terms from "@/pages/terms";
+import Privacy from "@/pages/privacy";
+import UserInstructions from "@/pages/user-instructions";
+import DoctorHistory from "@/pages/doctor-history";
+import OwnerActions from "@/pages/owner-actions";
+import SetupAssistant from "@/pages/setup-assistant";
 import CompletionPage, {
   CollaborationMapPage,
   DemoDoctorReport,
@@ -113,6 +119,9 @@ function GatedRouter() {
         <Route path="/agent-console" component={AgentConsolePage} />
         <Route path="/tool-console" component={ToolConsolePage} />
         <Route path="/doctor" component={DoctorPage} />
+        <Route path="/doctor/history" component={DoctorHistory} />
+        <Route path="/owner-actions" component={OwnerActions} />
+        <Route path="/setup-assistant" component={SetupAssistant} />
         <Route path="/connectors" component={CompletionPage} />
         <Route path="/self-audit" component={CompletionPage} />
         <Route path="/crews" component={CompletionPage} />
@@ -198,6 +207,9 @@ function App() {
             <Route path="/verify-email" component={VerifyEmail} />
             <Route path="/pricing" component={Pricing} />
             <Route path="/checkout/success" component={CheckoutSuccess} />
+            <Route path="/terms" component={Terms} />
+            <Route path="/privacy" component={Privacy} />
+            <Route path="/user-instructions" component={UserInstructions} />
             {/* Public demo & share — no auth required */}
             <Route path="/demo/doctor-report" component={DemoDoctorReport} />
             <Route path="/demo/proof-report" component={DemoProofReport} />
