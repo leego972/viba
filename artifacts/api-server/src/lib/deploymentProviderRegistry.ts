@@ -17,6 +17,7 @@ export type ProviderId =
   | "digitalocean"
   | "vercel"
   | "sevall"
+  | "vastai"
   | "custom";
 
 export type DocsStatus = "implemented" | "manual_guided" | "adapter_placeholder";
@@ -169,6 +170,28 @@ export const DEPLOYMENT_PROVIDER_REGISTRY: Record<ProviderId, DeploymentProvider
     detectionHints: ["SEVALL_API_KEY", "SEVALL_ENDPOINT"],
   },
 
+  vastai: {
+    providerId: "vastai",
+    label: "Vast.ai",
+    description: "Vast.ai — GPU compute marketplace for renting on-demand instances. Full REST API integration: search offers, rent/start/stop/destroy instances, run constrained commands.",
+    credentialProvider: "vastai",
+    requiredCredentialKinds: ["api_key"],
+    supportsEnvRead: false,
+    supportsEnvWrite: false,
+    supportsDeployStatus: true,
+    supportsDeployTrigger: true,
+    supportsDomainCheck: false,
+    supportsLogs: false,
+    supportsBuildLogs: false,
+    supportsDryRun: true,
+    requiresApprovalForEnvWrite: true,
+    requiresApprovalForDeploy: true,
+    requiresSafeBuildBeforeDeploy: false,
+    docsStatus: "implemented",
+    manualGuideAvailable: true,
+    detectionHints: ["VAST_AI_API_KEY"],
+  },
+
   custom: {
     providerId: "custom",
     label: "Custom / Other",
@@ -279,6 +302,16 @@ export function generateManualGuide(providerId: string, appName: string, publicU
         "3. Trigger a redeploy from the Deployments tab, or push to the connected branch",
         "4. Monitor the build output",
         "5. Verify the deployment URL",
+      );
+      break;
+    case "vastai":
+      lines.push(
+        "1. Search for a suitable GPU offer via GET /api/vastai-connector/offers (filter by GPU type, price, region)",
+        "2. Rent it via POST /api/vastai-connector/instances with the offer id and a Docker image",
+        "3. Poll GET /api/vastai-connector/instances until actual_status is 'running'",
+        "4. Connect via SSH using the returned sshHost/sshPort, or run commands via POST /api/vastai-connector/instances/:id/command",
+        "5. Stop the instance when idle to pause compute billing (disk storage still bills until destroyed)",
+        "6. Destroy the instance via DELETE /api/vastai-connector/instances/:id when done — this is irreversible and deletes all data on it",
       );
       break;
     case "sevall":

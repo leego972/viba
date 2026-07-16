@@ -148,6 +148,18 @@ const PROVIDER_DEFS: ProviderDef[] = [
     defaultEndpoint: "",
   },
   {
+    id: "vastai",
+    label: "Vast.ai",
+    description: "GPU compute marketplace — search offers and rent/manage instances for projects that need GPU power.",
+    keyEnvVar: "VAST_AI_API_KEY",
+    modelSettingKey: null,
+    defaultModel: "",
+    modelOptions: [],
+    hasEndpoint: false,
+    endpointSettingKey: null,
+    defaultEndpoint: "",
+  },
+  {
     id: "custom",
     label: "Custom / Generic AI",
     description: "Any OpenAI-compatible endpoint — OpenRouter, Together, a self-hosted vLLM, etc.",
@@ -347,6 +359,24 @@ router.post("/providers/:provider/test", async (req, res): Promise<void> => {
     }
     const result = await validateGithub(token);
     res.json({ configured: result.ok, reachable: result.ok, message: result.message, details: result.details });
+    return;
+  }
+
+  if (def.id === "vastai") {
+    const settingVal = await getSettingValue("VAST_AI_API_KEY");
+    if (!settingVal && !process.env["VAST_AI_API_KEY"]) {
+      res.json({ configured: false, message: "No Vast.ai API key configured. Enter your key and save first." });
+      return;
+    }
+    const { getVastConnectorStatus } = await import("../lib/vastaiConnector");
+    const status = await getVastConnectorStatus();
+    res.json({
+      configured: status.apiAvailable,
+      reachable: status.apiAvailable,
+      message: status.apiAvailable
+        ? `Vast.ai key is valid. ${status.instanceCount ?? 0} instance(s) on this account.`
+        : (status.error ?? "Vast.ai API check failed."),
+    });
     return;
   }
 

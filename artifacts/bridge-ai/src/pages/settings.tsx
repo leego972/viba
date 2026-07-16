@@ -192,6 +192,13 @@ const PROVIDERS: ProviderConfig[] = [
     hint: "Lets agents create repos, read/write files, open pull requests, and manage issues on your GitHub. Classic tokens (ghp_...): check the \"repo\" scope. Fine-grained tokens (github_pat_...): grant \"Contents: Read and write\" — and if you want VIBA to create new repos (not just work in existing ones), set Repository access to \"All repositories\" with \"Administration: Read and write\", since a token limited to specific repos can't create one that doesn't exist yet. Generate at github.com/settings/tokens.",
     providerName: "github",
   },
+  {
+    key: "VAST_AI_API_KEY",
+    label: "Vast.ai API Key",
+    placeholder: "...",
+    hint: "Lets VIBA search GPU offers and rent/manage instances on your Vast.ai account for projects that need GPU compute. Get your key at cloud.vast.ai/manage-keys.",
+    providerName: "vastai",
+  },
 ];
 
 const SMTP_KEYS = ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "SMTP_FROM"] as const;

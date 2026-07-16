@@ -26,6 +26,7 @@ const ALLOWED_SETTINGS_KEYS = new Set([
   "VENICE_API_KEY",
   "CUSTOM_API_KEY",
   "GITHUB_TOKEN",
+  "VAST_AI_API_KEY",
   "OPENAI_MODEL",
   "ANTHROPIC_MODEL",
   "GEMINI_MODEL",
@@ -58,9 +59,10 @@ const CLEARABLE_NOTIFICATION_KEYS = [
   "VENICE_API_KEY",
   "CUSTOM_API_KEY",
   "GITHUB_TOKEN",
+  "VAST_AI_API_KEY",
 ];
 
-const MASKED_KEYS = new Set(["SMTP_PASS", "GITHUB_TOKEN"]);
+const MASKED_KEYS = new Set(["SMTP_PASS", "GITHUB_TOKEN", "VAST_AI_API_KEY"]);
 
 const router: IRouter = Router();
 
