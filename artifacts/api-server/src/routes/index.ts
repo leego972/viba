@@ -59,6 +59,7 @@ import aiModelsRouter from "./aiModels";
 import projectMemoryRouter from "./projectMemory";
 import fileBuildSafetyRouter from "./fileBuildSafety";
 import vastaiConnectorRouter from "./vastaiConnector";
+import googlePlayCredentialOwnershipRouter from "./googlePlayCredentialOwnership";
 import googlePlayPublisherRouter from "./googlePlayPublisher";
 
 const router: IRouter = Router();
@@ -123,6 +124,7 @@ router.use(aiModelsRouter);
 router.use(projectMemoryRouter);
 router.use(fileBuildSafetyRouter);
 router.use(vastaiConnectorRouter);
+router.use(googlePlayCredentialOwnershipRouter);
 router.use(googlePlayPublisherRouter);
 
 export default router;
