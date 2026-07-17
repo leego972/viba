@@ -1,10 +1,13 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
+const productionUrl = process.env.VIBA_MOBILE_URL || "https://viba.guru";
+
 const config: CapacitorConfig = {
   appId: "guru.viba.app",
   appName: "VIBA",
   webDir: "dist/public",
   server: {
+    url: productionUrl,
     androidScheme: "https",
     iosScheme: "https",
     cleartext: false,
@@ -12,6 +15,9 @@ const config: CapacitorConfig = {
       "viba.guru",
       "www.viba.guru",
       "api.viba.guru",
+      "*.stripe.com",
+      "accounts.google.com",
+      "github.com",
     ],
   },
   plugins: {
