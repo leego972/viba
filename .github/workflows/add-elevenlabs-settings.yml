@@ -1,0 +1,68 @@
+name: Add ElevenLabs settings field
+
+on:
+  push:
+    branches:
+      - feature/elevenlabs-api-settings
+    paths:
+      - .github/workflows/add-elevenlabs-settings.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/elevenlabs-api-settings
+      - name: Patch settings UI and API whitelist
+        shell: python
+        run: |
+          from pathlib import Path
+
+          ui = Path('artifacts/bridge-ai/src/pages/settings.tsx')
+          text = ui.read_text()
+          marker = '''  {
+            key: "VAST_AI_API_KEY",
+            label: "Vast.ai API Key",
+            placeholder: "...",
+            hint: "Lets VIBA search GPU offers and rent/manage instances on your Vast.ai account for projects that need GPU compute. Get your key at cloud.vast.ai/manage-keys.",
+            providerName: "vastai",
+          },
+          ];'''
+          replacement = '''  {
+            key: "VAST_AI_API_KEY",
+            label: "Vast.ai API Key",
+            placeholder: "...",
+            hint: "Lets VIBA search GPU offers and rent/manage instances on your Vast.ai account for projects that need GPU compute. Get your key at cloud.vast.ai/manage-keys.",
+            providerName: "vastai",
+          },
+          {
+            key: "ELEVENLABS_API_KEY",
+            label: "ElevenLabs API Key",
+            placeholder: "sk_...",
+            hint: "Enables ElevenLabs voice generation, narration, dubbing, and speech features. Get your key from your ElevenLabs account settings.",
+            providerName: "elevenlabs",
+          },
+          ];'''
+          if marker not in text:
+              raise SystemExit('UI provider insertion marker not found')
+          ui.write_text(text.replace(marker, replacement, 1))
+
+          api = Path('artifacts/api-server/src/routes/settings.ts')
+          text = api.read_text()
+          text = text.replace('  "VAST_AI_API_KEY",\n  "OPENAI_MODEL",', '  "VAST_AI_API_KEY",\n  "ELEVENLABS_API_KEY",\n  "OPENAI_MODEL",', 1)
+          text = text.replace('  "VAST_AI_API_KEY",\n];', '  "VAST_AI_API_KEY",\n  "ELEVENLABS_API_KEY",\n];', 1)
+          api.write_text(text)
+
+          workflow = Path('.github/workflows/add-elevenlabs-settings.yml')
+          workflow.unlink()
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat(settings): add ElevenLabs API key field"
+          git push origin HEAD:feature/elevenlabs-api-settings
