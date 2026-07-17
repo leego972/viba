@@ -59,10 +59,10 @@ import aiModelsRouter from "./aiModels";
 import projectMemoryRouter from "./projectMemory";
 import fileBuildSafetyRouter from "./fileBuildSafety";
 import vastaiConnectorRouter from "./vastaiConnector";
+import googlePlayPublisherRouter from "./googlePlayPublisher";
 
 const router: IRouter = Router();
 
-// auth routes are registered first and bypass the ACCESS_TOKEN gate in app.ts
 router.use(authRouter);
 router.use(healthRouter);
 router.use(sessionAccessRouter);
@@ -123,5 +123,6 @@ router.use(aiModelsRouter);
 router.use(projectMemoryRouter);
 router.use(fileBuildSafetyRouter);
 router.use(vastaiConnectorRouter);
+router.use(googlePlayPublisherRouter);
 
 export default router;
