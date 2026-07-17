@@ -44,6 +44,7 @@ jobs:
         run: pnpm install --frozen-lockfile
         working-directory: ${{ github.workspace }}
       - name: Restore or create Android upload key
+        id: android-signing
         shell: bash
         run: |
           set -euo pipefail
@@ -53,6 +54,7 @@ jobs:
 
           if [ -n "${{ secrets.VIBA_ANDROID_KEYSTORE_BASE64 }}" ]; then
             printf '%s' "${{ secrets.VIBA_ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > "$KEYSTORE"
+            echo "generated=false" >> "$GITHUB_OUTPUT"
             echo "Using the saved Android upload key."
           else
             STORE_PASS="$(openssl rand -hex 24)"
@@ -69,6 +71,7 @@ jobs:
             echo "VIBA_ANDROID_KEYSTORE_PASSWORD=$STORE_PASS" >> "$GITHUB_ENV"
             echo "VIBA_ANDROID_KEY_PASSWORD=$KEY_PASS" >> "$GITHUB_ENV"
             echo "VIBA_ANDROID_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+            echo "generated=true" >> "$GITHUB_OUTPUT"
 
             cp "$KEYSTORE" "$BACKUP_DIR/viba-upload.jks"
             cat > "$BACKUP_DIR/KEEP-PRIVATE.txt" <<EOF
@@ -89,7 +92,7 @@ jobs:
           path: artifacts/bridge-ai/android/app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
-        if: ${{ secrets.VIBA_ANDROID_KEYSTORE_BASE64 == '' }}
+        if: steps.android-signing.outputs.generated == 'true'
         with:
           name: viba-android-signing-backup-keep-private
           path: ${{ runner.temp }}/viba-android-signing
