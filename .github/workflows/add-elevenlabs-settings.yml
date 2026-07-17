@@ -6,6 +6,7 @@ on:
       - feature/elevenlabs-api-settings
     paths:
       - .github/workflows/add-elevenlabs-settings.yml
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -53,9 +54,10 @@ jobs:
 
           api = Path('artifacts/api-server/src/routes/settings.ts')
           text = api.read_text()
-          text = text.replace('  "VAST_AI_API_KEY",\n  "OPENAI_MODEL",', '  "VAST_AI_API_KEY",\n  "ELEVENLABS_API_KEY",\n  "OPENAI_MODEL",', 1)
-          text = text.replace('  "VAST_AI_API_KEY",\n];', '  "VAST_AI_API_KEY",\n  "ELEVENLABS_API_KEY",\n];', 1)
-          api.write_text(text)
+          if '"ELEVENLABS_API_KEY"' not in text:
+              text = text.replace('  "VAST_AI_API_KEY",\n  "OPENAI_MODEL",', '  "VAST_AI_API_KEY",\n  "ELEVENLABS_API_KEY",\n  "OPENAI_MODEL",', 1)
+              text = text.replace('  "VAST_AI_API_KEY",\n];', '  "VAST_AI_API_KEY",\n  "ELEVENLABS_API_KEY",\n];', 1)
+              api.write_text(text)
 
           workflow = Path('.github/workflows/add-elevenlabs-settings.yml')
           workflow.unlink()
