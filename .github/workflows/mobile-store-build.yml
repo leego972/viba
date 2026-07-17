@@ -7,8 +7,8 @@ on:
         description: App version (for example 1.0.0)
         required: true
         default: 1.0.0
-      android_version_code:
-        description: Android version code
+      build_number:
+        description: Store build number
         required: true
         default: "1"
 
@@ -22,7 +22,7 @@ jobs:
     env:
       VIBA_MOBILE_URL: https://viba.guru
       VIBA_APP_VERSION: ${{ inputs.version }}
-      VIBA_ANDROID_VERSION_CODE: ${{ inputs.android_version_code }}
+      VIBA_ANDROID_VERSION_CODE: ${{ inputs.build_number }}
       VIBA_ANDROID_KEYSTORE_PATH: ${{ github.workspace }}/artifacts/bridge-ai/android/app/viba-upload.jks
       VIBA_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.VIBA_ANDROID_KEYSTORE_PASSWORD }}
       VIBA_ANDROID_KEY_ALIAS: ${{ secrets.VIBA_ANDROID_KEY_ALIAS }}
@@ -43,8 +43,41 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
         working-directory: ${{ github.workspace }}
-      - name: Restore Android upload keystore
-        run: echo "${{ secrets.VIBA_ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/viba-upload.jks
+      - name: Restore or create Android upload key
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEYSTORE="android/app/viba-upload.jks"
+          BACKUP_DIR="$RUNNER_TEMP/viba-android-signing"
+          mkdir -p "$BACKUP_DIR"
+
+          if [ -n "${{ secrets.VIBA_ANDROID_KEYSTORE_BASE64 }}" ]; then
+            printf '%s' "${{ secrets.VIBA_ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > "$KEYSTORE"
+            echo "Using the saved Android upload key."
+          else
+            STORE_PASS="$(openssl rand -hex 24)"
+            KEY_PASS="$(openssl rand -hex 24)"
+            KEY_ALIAS="viba-upload"
+            keytool -genkeypair -v \
+              -keystore "$KEYSTORE" \
+              -storepass "$STORE_PASS" \
+              -keypass "$KEY_PASS" \
+              -alias "$KEY_ALIAS" \
+              -keyalg RSA -keysize 4096 -validity 10000 \
+              -dname "CN=VIBA, OU=Mobile, O=VIBA, L=Melbourne, ST=Victoria, C=AU"
+
+            echo "VIBA_ANDROID_KEYSTORE_PASSWORD=$STORE_PASS" >> "$GITHUB_ENV"
+            echo "VIBA_ANDROID_KEY_PASSWORD=$KEY_PASS" >> "$GITHUB_ENV"
+            echo "VIBA_ANDROID_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+
+            cp "$KEYSTORE" "$BACKUP_DIR/viba-upload.jks"
+            cat > "$BACKUP_DIR/KEEP-PRIVATE.txt" <<EOF
+          VIBA_ANDROID_KEYSTORE_PASSWORD=$STORE_PASS
+          VIBA_ANDROID_KEY_PASSWORD=$KEY_PASS
+          VIBA_ANDROID_KEY_ALIAS=$KEY_ALIAS
+          EOF
+            echo "A new Android upload key was generated. Download and preserve the signing-backup artifact."
+          fi
       - name: Build and sync wrapper
         run: pnpm run mobile:prepare
       - name: Build signed Android App Bundle
@@ -55,6 +88,13 @@ jobs:
           name: viba-android-play-store
           path: artifacts/bridge-ai/android/app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: ${{ secrets.VIBA_ANDROID_KEYSTORE_BASE64 == '' }}
+        with:
+          name: viba-android-signing-backup-keep-private
+          path: ${{ runner.temp }}/viba-android-signing
+          if-no-files-found: error
+          retention-days: 90
 
   ios:
     name: iOS App Store IPA
@@ -66,7 +106,8 @@ jobs:
       VIBA_MOBILE_URL: https://viba.guru
       VIBA_APP_VERSION: ${{ inputs.version }}
       APPLE_TEAM_ID: ${{ secrets.VIBA_APPLE_TEAM_ID }}
-      IOS_CERTIFICATE_PASSWORD: ${{ secrets.VIBA_IOS_CERTIFICATE_PASSWORD }}
+      APP_STORE_CONNECT_KEY_ID: ${{ secrets.VIBA_APP_STORE_CONNECT_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.VIBA_APP_STORE_CONNECT_ISSUER_ID }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -79,34 +120,33 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
         working-directory: ${{ github.workspace }}
+      - name: Create App Store Connect API key
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEY_PATH="$RUNNER_TEMP/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
+          printf '%s' "${{ secrets.VIBA_APP_STORE_CONNECT_PRIVATE_KEY }}" > "$KEY_PATH"
+          chmod 600 "$KEY_PATH"
+          echo "APP_STORE_CONNECT_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
       - name: Generate iOS native project
         run: |
           pnpm run build
           rm -rf ios
           pnpm exec cap add ios
           pnpm exec cap sync ios
-      - name: Install signing certificate and provisioning profile
+      - name: Archive with Apple automatic signing
         run: |
-          CERT_PATH="$RUNNER_TEMP/viba-distribution.p12"
-          PROFILE_PATH="$RUNNER_TEMP/viba.mobileprovision"
-          KEYCHAIN_PATH="$RUNNER_TEMP/viba-signing.keychain-db"
-          echo "${{ secrets.VIBA_IOS_CERTIFICATE_BASE64 }}" | base64 --decode > "$CERT_PATH"
-          echo "${{ secrets.VIBA_IOS_PROVISIONING_PROFILE_BASE64 }}" | base64 --decode > "$PROFILE_PATH"
-          security create-keychain -p actions "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p actions "$KEYCHAIN_PATH"
-          security import "$CERT_PATH" -P "$IOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-          security list-keychain -d user -s "$KEYCHAIN_PATH"
-          security set-key-partition-list -S apple-tool:,apple: -s -k actions "$KEYCHAIN_PATH"
-          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/viba.mobileprovision"
-      - name: Configure version and signing
-        run: |
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VIBA_APP_VERSION" ios/App/App/Info.plist
-          xcodebuild -project ios/App/App.xcodeproj -target App -configuration Release \
-            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" PRODUCT_BUNDLE_IDENTIFIER="guru.viba.app" \
-            MARKETING_VERSION="$VIBA_APP_VERSION" CURRENT_PROJECT_VERSION="${{ inputs.android_version_code }}" \
-            CODE_SIGN_STYLE=Manual PROVISIONING_PROFILE_SPECIFIER="${{ secrets.VIBA_IOS_PROFILE_NAME }}" \
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release \
+            -destination "generic/platform=iOS" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            PRODUCT_BUNDLE_IDENTIFIER="guru.viba.app" \
+            MARKETING_VERSION="$VIBA_APP_VERSION" \
+            CURRENT_PROJECT_VERSION="${{ inputs.build_number }}" \
+            CODE_SIGN_STYLE=Automatic \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$APP_STORE_CONNECT_KEY_PATH" \
+            -authenticationKeyID "$APP_STORE_CONNECT_KEY_ID" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
             clean archive -archivePath "$RUNNER_TEMP/VIBA.xcarchive"
       - name: Export IPA
         run: |
@@ -116,12 +156,18 @@ jobs:
           <plist version="1.0"><dict>
             <key>method</key><string>app-store-connect</string>
             <key>teamID</key><string>$APPLE_TEAM_ID</string>
-            <key>signingStyle</key><string>manual</string>
-            <key>provisioningProfiles</key><dict><key>guru.viba.app</key><string>${{ secrets.VIBA_IOS_PROFILE_NAME }}</string></dict>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadSymbols</key><true/>
           </dict></plist>
           EOF
-          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/VIBA.xcarchive" \
-            -exportPath "$RUNNER_TEMP/VIBA-export" -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist"
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/VIBA.xcarchive" \
+            -exportPath "$RUNNER_TEMP/VIBA-export" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$APP_STORE_CONNECT_KEY_PATH" \
+            -authenticationKeyID "$APP_STORE_CONNECT_KEY_ID" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID"
       - uses: actions/upload-artifact@v4
         with:
           name: viba-ios-app-store
