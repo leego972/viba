@@ -3,6 +3,15 @@ name: Build VIBA Store Apps
 on:
   workflow_dispatch:
     inputs:
+      stores:
+        description: Choose which app store build to create
+        required: true
+        type: choice
+        default: both
+        options:
+          - android
+          - apple
+          - both
       version:
         description: App version (for example 1.0.0)
         required: true
@@ -14,6 +23,7 @@ on:
 
 jobs:
   android:
+    if: ${{ inputs.stores == 'android' || inputs.stores == 'both' }}
     name: Android Play Store AAB
     runs-on: ubuntu-latest
     defaults:
@@ -100,6 +110,7 @@ jobs:
           retention-days: 90
 
   ios:
+    if: ${{ inputs.stores == 'apple' || inputs.stores == 'both' }}
     name: iOS App Store IPA
     runs-on: macos-15
     defaults:
