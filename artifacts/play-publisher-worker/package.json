@@ -1,0 +1,11 @@
+{
+  "name": "@workspace/play-publisher-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/worker.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.16.3"
+  }
+}
