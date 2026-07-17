@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">VIBA</string>
+    <string name="title_activity_main">VIBA</string>
+    <string name="package_name">guru.viba.app</string>
+    <string name="custom_url_scheme">guru.viba.app</string>
+</resources>
