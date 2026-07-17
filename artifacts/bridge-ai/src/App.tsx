@@ -46,6 +46,7 @@ import AiSavingsPage from "@/pages/ai-savings";
 import UsageHistoryPage from "@/pages/usage-history";
 import BudgetsPage from "@/pages/budgets";
 import ProjectMemoryPage from "@/pages/project-memory";
+import AppPublisherPage from "@/pages/app-publisher";
 import Terms from "@/pages/terms";
 import Privacy from "@/pages/privacy";
 import UserInstructions from "@/pages/user-instructions";
@@ -82,22 +83,14 @@ function Spinner() {
 function AuthGuard({ children }: { children: ReactNode }) {
   const [location, setLocation] = useLocation();
   const { isAuthenticated, isLoading } = useAuth();
-
-  // Archibald Titan AI embed bypass is ONLY valid on the /bridge route.
-  // Any other route still requires a real VIBA session even if bypass is set.
   const bypassActive = isBypassValid() && location.startsWith("/bridge");
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated && !bypassActive) {
-      setLocation("/login");
-    }
+    if (!isLoading && !isAuthenticated && !bypassActive) setLocation("/login");
   }, [isLoading, isAuthenticated, bypassActive, setLocation]);
 
   if (bypassActive) return <>{children}</>;
-  if (isLoading) return <Spinner />;
-  // Redirect immediately in render — no flash of protected content
-  if (!isAuthenticated) return <Spinner />;
-
+  if (isLoading || !isAuthenticated) return <Spinner />;
   return <>{children}</>;
 }
 
@@ -154,13 +147,13 @@ function GatedRouter() {
         <Route path="/usage-history" component={UsageHistoryPage} />
         <Route path="/budgets" component={BudgetsPage} />
         <Route path="/project-memory" component={ProjectMemoryPage} />
+        <Route path="/app-publisher" component={AppPublisherPage} />
         <Route component={NotFound} />
       </Switch>
     </AuthGuard>
   );
 }
 
-// Handles ?bypass= param at app startup (Archibald Titan AI embed)
 function BypassHandler() {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -178,7 +171,6 @@ function BypassHandler() {
           setBypassValid();
           const cleanUrl = window.location.pathname + window.location.hash;
           window.history.replaceState(null, "", cleanUrl);
-          // Force re-render so AuthGuard picks up the new bypass state
           queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
         }
       })
@@ -193,40 +185,35 @@ function App() {
 
   return (
     <ErrorBoundary>
-    <ThemeProvider>
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <WouterRouter base={basePath}>
-          <BypassHandler />
-          <Switch>
-            {/* Public routes */}
-            <Route path="/login" component={LoginPage} />
-            <Route path="/signup" component={SignUpPage} />
-            <Route path="/forgot-password" component={ForgotPassword} />
-            <Route path="/reset-password" component={ResetPassword} />
-            <Route path="/verify-email" component={VerifyEmail} />
-            <Route path="/pricing" component={Pricing} />
-            <Route path="/checkout/success" component={CheckoutSuccess} />
-            <Route path="/terms" component={Terms} />
-            <Route path="/privacy" component={Privacy} />
-            <Route path="/user-instructions" component={UserInstructions} />
-            {/* Public demo & share — no auth required */}
-            <Route path="/demo/doctor-report" component={DemoDoctorReport} />
-            <Route path="/demo/proof-report" component={DemoProofReport} />
-            <Route path="/demo" component={DemoPage} />
-            <Route path="/share/reports/:shareId" component={ShareReportPage} />
-            {/* Admin — self-gated by ADMIN_TOKEN, no session required */}
-            <Route path="/admin" component={Admin} />
-            {/* Home — public landing page */}
-            <Route path="/" component={Home} />
-            {/* All other routes — gated by AuthGuard */}
-            <Route component={GatedRouter} />
-          </Switch>
-        </WouterRouter>
-        <Toaster />
-      </TooltipProvider>
-    </QueryClientProvider>
-    </ThemeProvider>
+      <ThemeProvider>
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <WouterRouter base={basePath}>
+              <BypassHandler />
+              <Switch>
+                <Route path="/login" component={LoginPage} />
+                <Route path="/signup" component={SignUpPage} />
+                <Route path="/forgot-password" component={ForgotPassword} />
+                <Route path="/reset-password" component={ResetPassword} />
+                <Route path="/verify-email" component={VerifyEmail} />
+                <Route path="/pricing" component={Pricing} />
+                <Route path="/checkout/success" component={CheckoutSuccess} />
+                <Route path="/terms" component={Terms} />
+                <Route path="/privacy" component={Privacy} />
+                <Route path="/user-instructions" component={UserInstructions} />
+                <Route path="/demo/doctor-report" component={DemoDoctorReport} />
+                <Route path="/demo/proof-report" component={DemoProofReport} />
+                <Route path="/demo" component={DemoPage} />
+                <Route path="/share/reports/:shareId" component={ShareReportPage} />
+                <Route path="/admin" component={Admin} />
+                <Route path="/" component={Home} />
+                <Route component={GatedRouter} />
+              </Switch>
+            </WouterRouter>
+            <Toaster />
+          </TooltipProvider>
+        </QueryClientProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 }
