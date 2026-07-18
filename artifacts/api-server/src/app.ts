@@ -51,6 +51,9 @@ const sessionSecret = process.env.SESSION_SECRET;
 if (isProd && (!sessionSecret || sessionSecret === "dev-secret-change-me-in-production")) {
   throw new Error("SESSION_SECRET must be set to a strong random value in production. Refusing to start.");
 }
+if (isProd && !process.env.CREDENTIAL_ENCRYPTION_KEY && !process.env.MASTER_ENCRYPTION_KEY) {
+  throw new Error("CREDENTIAL_ENCRYPTION_KEY or MASTER_ENCRYPTION_KEY must be set in production. Refusing to start without an encrypted credential vault key.");
+}
 
 app.use(session({
   store: new PgStore({ pool, tableName: "user_sessions", createTableIfMissing: false }),
@@ -125,6 +128,34 @@ app.use(["/api/sessions/:id/run-next", "/api/sessions/:id/run-full"], async (req
     }
     logger.warn({ err }, "Credit gate error in dev/test — failing open");
     next();
+  }
+});
+
+// Central ownership gate for every concrete session route. Individual handlers
+// still validate params/body, but this prevents forgotten numeric-ID checks from
+// leaking or mutating another user's session.
+app.use("/api/sessions/:id", requireSession, async (req, res, next): Promise<void> => {
+  if (req.session?.bypass) { next(); return; }
+  const userId = req.session?.userId;
+  const sessionId = Number.parseInt(String(req.params.id ?? ""), 10);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  if (!Number.isFinite(sessionId) || sessionId <= 0) { res.status(400).json({ error: "invalid session id" }); return; }
+
+  try {
+    const { rows } = await pool.query<{ user_id: number | null }>(
+      "SELECT user_id FROM sessions WHERE id = $1",
+      [sessionId],
+    );
+    const owner = rows[0];
+    if (!owner) { res.status(404).json({ error: "Session not found" }); return; }
+    if (owner.user_id !== userId) {
+      res.status(403).json({ error: "forbidden", message: "You do not own this session." });
+      return;
+    }
+    next();
+  } catch (err) {
+    req.log?.error?.({ err, sessionId }, "session ownership guard error");
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
