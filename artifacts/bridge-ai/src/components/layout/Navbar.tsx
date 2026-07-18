@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
-  LayoutDashboard, Plus, Zap, CreditCard, Settings, Sun, Moon,
+  LayoutDashboard, CreditCard, Settings, Sun, Moon,
   ChevronDown, FlaskConical, Terminal, Wrench, Radio, Bot, ClipboardCheck,
   Rocket, ShieldAlert, Activity, ShieldCheck, Globe, FolderInput, Server,
   Plug, FileText, Search, Megaphone, PenTool, Building2,
@@ -146,7 +146,6 @@ export function Navbar() {
           {[{ href: "/dashboard", icon: LayoutDashboard }, { href: "/app-publisher", icon: Smartphone }, { href: "/connections", icon: Plug }, { href: "/settings", icon: Settings }].map(({ href, icon: Icon }) => <Link key={href} href={href}><button className={`flex h-8 w-8 items-center justify-center rounded-lg border ${location.startsWith(href) ? "border-primary/30 bg-primary/10 text-primary" : "border-transparent text-foreground/50"}`}><Icon className="h-4 w-4" /></button></Link>)}
         </nav>
         <button onClick={toggleTheme} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/50 text-foreground/60 hover:bg-white/[0.06]">{theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</button>
-        <Link href="/sessions/new" className="shrink-0"><button className="flex h-9 items-center gap-1.5 rounded-lg border border-primary/40 bg-primary px-4 text-sm font-semibold text-white"><Plus className="h-4 w-4" /><span className="hidden sm:inline">New Session</span><span className="sm:hidden"><Zap className="h-3.5 w-3.5" /></span></button></Link>
       </div>
     </header>
   );
