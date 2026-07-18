@@ -32,10 +32,11 @@ function getRadialPositions(count: number, cx: number, cy: number, radius: numbe
   });
 }
 
-export function OrchestrationCanvas({ vm, height = 420 }: Props) {
+export function OrchestrationCanvas({ vm, height = 520 }: Props) {
   const reducedMotion = useReducedMotion();
   const containerRef = useRef<HTMLDivElement>(null);
-  const minimumHeight = typeof window !== "undefined" && window.innerWidth < 768 ? 320 : 420;
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+  const minimumHeight = isMobile ? 420 : 520;
   const effectiveHeight = Math.max(height, minimumHeight);
   const [size, setSize] = useState<CanvasSize>({ w: 600, h: effectiveHeight });
   const [selectedAgent, setSelectedAgent] = useState<OrchestrationAgent | null>(null);
@@ -53,11 +54,20 @@ export function OrchestrationCanvas({ vm, height = 420 }: Props) {
     return () => ro.disconnect();
   }, [updateSize]);
 
+  const nodeSize = isMobile ? 46 : 54;
+  const coordSize = isMobile ? 66 : 76;
+
+  // Reserve enough room for node labels, status pills, hover motion and the
+  // selected-agent panel. This prevents the radial graph from being clipped.
+  const horizontalSafeZone = isMobile ? 76 : 104;
+  const topSafeZone = isMobile ? 92 : 112;
+  const bottomSafeZone = selectedAgent ? (isMobile ? 170 : 126) : (isMobile ? 112 : 128);
+  const usableHeight = Math.max(180, size.h - topSafeZone - bottomSafeZone);
   const cx = size.w / 2;
-  const cy = size.h / 2;
-  const nodeSize = 52;
-  const coordSize = 72;
-  const radius = Math.max(80, Math.min(cx - 90, cy - 76, 220));
+  const cy = topSafeZone + usableHeight / 2;
+  const maxHorizontalRadius = Math.max(72, size.w / 2 - horizontalSafeZone);
+  const maxVerticalRadius = Math.max(72, usableHeight / 2 - 26);
+  const radius = Math.max(72, Math.min(maxHorizontalRadius, maxVerticalRadius, isMobile ? 142 : 220));
 
   // Demo view models are placeholders only. Never present fabricated agents as real telemetry.
   const visibleAgents = vm.isDemo ? [] : vm.agents;
@@ -74,14 +84,16 @@ export function OrchestrationCanvas({ vm, height = 420 }: Props) {
   return (
     <div
       ref={containerRef}
-      className="relative w-full select-none overflow-hidden"
-      style={{ height: effectiveHeight }}
+      className="relative w-full select-none overflow-visible"
+      style={{ height: effectiveHeight, minHeight: effectiveHeight }}
       aria-label="AI orchestration canvas"
     >
       <svg
-        className="absolute inset-0 pointer-events-none"
+        className="absolute inset-0 pointer-events-none overflow-visible"
         width={size.w}
         height={size.h}
+        viewBox={`0 0 ${size.w} ${size.h}`}
+        preserveAspectRatio="xMidYMid meet"
         aria-hidden="true"
       >
         <defs>
@@ -128,7 +140,7 @@ export function OrchestrationCanvas({ vm, height = 420 }: Props) {
       {nodePositions.map((pos) => (
         <div
           key={pos.agent.id}
-          className="absolute"
+          className="absolute z-10"
           style={{
             left: pos.x,
             top: pos.y,
@@ -145,7 +157,7 @@ export function OrchestrationCanvas({ vm, height = 420 }: Props) {
       ))}
 
       <div
-        className="absolute"
+        className="absolute z-10"
         style={{
           left: cx,
           top: cy,
@@ -156,14 +168,14 @@ export function OrchestrationCanvas({ vm, height = 420 }: Props) {
       </div>
 
       {!hasRealTelemetry && (
-        <div className="absolute inset-x-4 bottom-8 text-center">
+        <div className="absolute inset-x-6 bottom-10 text-center">
           <p className="text-sm font-medium text-white/55">No real orchestration activity yet</p>
           <p className="mt-1 text-xs text-white/30">Start a session to display actual agents, task delegation, provider usage, execution status and measured performance.</p>
         </div>
       )}
 
       {selectedAgent && hasRealTelemetry && (
-        <div className="absolute bottom-3 left-3 right-3 z-20 rounded-xl border border-white/10 bg-[#12151f]/95 p-3 backdrop-blur-sm shadow-2xl">
+        <div className="absolute bottom-3 left-3 right-3 z-30 rounded-xl border border-white/10 bg-[#12151f]/95 p-3 backdrop-blur-sm shadow-2xl">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
               <div
