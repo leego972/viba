@@ -58,13 +58,18 @@ export function OrchestrationCanvas({ vm, height = 420 }: Props) {
   const nodeSize = 52;
   const coordSize = 72;
   const radius = Math.max(80, Math.min(cx - 90, cy - 76, 220));
-  const positions = getRadialPositions(vm.agents.length, cx, cy, radius);
 
-  const nodePositions: NodePosition[] = vm.agents.map((agent, i) => ({
+  // Demo view models are placeholders only. Never present fabricated agents as real telemetry.
+  const visibleAgents = vm.isDemo ? [] : vm.agents;
+  const positions = getRadialPositions(visibleAgents.length, cx, cy, radius);
+
+  const nodePositions: NodePosition[] = visibleAgents.map((agent, i) => ({
     x: positions[i].x,
     y: positions[i].y,
     agent,
   }));
+
+  const hasRealTelemetry = !vm.isDemo && visibleAgents.length > 0;
 
   return (
     <div
@@ -92,7 +97,7 @@ export function OrchestrationCanvas({ vm, height = 420 }: Props) {
           rx={radius * 0.7}
           ry={radius * 0.5}
           fill="url(#canvasGlow)"
-          opacity={0.4}
+          opacity={hasRealTelemetry ? 0.4 : 0.18}
         />
 
         {[0.4, 0.75, 1.05].map((r, i) => (
@@ -147,17 +152,17 @@ export function OrchestrationCanvas({ vm, height = 420 }: Props) {
           transform: "translate(-50%, -50%)",
         }}
       >
-        <CoordinatorNode phase={vm.phase} reducedMotion={reducedMotion} size={coordSize} />
+        <CoordinatorNode phase={hasRealTelemetry ? vm.phase : "idle"} reducedMotion={reducedMotion} size={coordSize} />
       </div>
 
-      {vm.agents.length === 0 && (
+      {!hasRealTelemetry && (
         <div className="absolute inset-x-4 bottom-8 text-center">
           <p className="text-sm font-medium text-white/55">No real orchestration activity yet</p>
-          <p className="mt-1 text-xs text-white/30">Start a session to display actual agents, delegation status, and measured execution data.</p>
+          <p className="mt-1 text-xs text-white/30">Start a session to display actual agents, task delegation, provider usage, execution status and measured performance.</p>
         </div>
       )}
 
-      {selectedAgent && (
+      {selectedAgent && hasRealTelemetry && (
         <div className="absolute bottom-3 left-3 right-3 z-20 rounded-xl border border-white/10 bg-[#12151f]/95 p-3 backdrop-blur-sm shadow-2xl">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
