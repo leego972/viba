@@ -17,6 +17,11 @@ export const usersTable = pgTable("users", {
   creditsPeriodEnd: timestamp("credits_period_end", { withTimezone: true }),
   creditsExhaustedNotifiedAt: timestamp("credits_exhausted_notified_at", { withTimezone: true }),
   lowCreditsNotifiedAt: timestamp("low_credits_notified_at", { withTimezone: true }),
+  autoTopupEnabled: boolean("auto_topup_enabled").notNull().default(false),
+  autoTopupThreshold: integer("auto_topup_threshold").notNull().default(100),
+  autoTopupPackKey: text("auto_topup_pack_key"),
+  planKey: text("plan_key").notNull().default("viba_monthly"),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
