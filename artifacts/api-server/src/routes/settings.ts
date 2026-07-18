@@ -3,7 +3,7 @@ import { db, settingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
 import { GetSettingsResponse, SaveSettingsBody, SaveSettingsResponse } from "@workspace/api-zod";
-import { deleteVibaCredential, logVibaEvent, saveVibaCredential } from "../lib/vibaVault";
+import { deleteVibaCredential, listVibaCredentials, logVibaEvent, saveVibaCredential } from "../lib/vibaVault";
 
 const ALLOWED_SETTINGS_KEYS = new Set([
   "FALLBACK_ALERT_THRESHOLD",
@@ -85,10 +85,16 @@ const PROVIDER_BY_KEY: Record<string, string> = {
   RAILWAY_TOKEN: "railway",
 };
 
+const KEY_BY_PROVIDER = Object.fromEntries(
+  Object.entries(PROVIDER_BY_KEY).map(([key, provider]) => [provider, key]),
+) as Record<string, string>;
+
 const MASKED_KEYS = new Set(["SMTP_PASS", "GITHUB_TOKEN", "VAST_AI_API_KEY", "RAILWAY_TOKEN"]);
 const router: IRouter = Router();
 
-function serializeSetting(s: { id: number; key: string; value: string | null; createdAt: Date; updatedAt: Date }) {
+type SerializableSetting = { id: number; key: string; value: string | null; createdAt: Date; updatedAt: Date };
+
+function serializeSetting(s: SerializableSetting) {
   return {
     ...s,
     createdAt: s.createdAt.toISOString(),
@@ -123,12 +129,49 @@ async function deleteSetting(key: string): Promise<void> {
   await db.delete(settingsTable).where(eq(settingsTable.key, key));
 }
 
-router.get("/settings", async (_req, res): Promise<void> => {
-  const settings = await db.select().from(settingsTable);
+function toDate(value: unknown): Date {
+  if (value instanceof Date) return value;
+  if (typeof value === "string") {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  return new Date();
+}
+
+async function getSafeSettings(userId: number | null) {
+  const [settings, credentials] = await Promise.all([
+    db.select().from(settingsTable),
+    listVibaCredentials(userId),
+  ]);
   const safeSettings = settings.map((s) => serializeSetting({
     ...s,
     value: maskValue(s.key, s.value),
   }));
+
+  const existingKeys = new Set(settings.map((s) => s.key));
+  let syntheticId = -1;
+  for (const credential of credentials) {
+    const provider = String(credential["provider"] ?? "");
+    const kind = String(credential["kind"] ?? "");
+    const status = String(credential["status"] ?? "");
+    const key = KEY_BY_PROVIDER[provider];
+    if (!key || existingKeys.has(key) || kind !== "api_key" || status === "deleted") continue;
+    const updatedAt = toDate(credential["updated_at"]);
+    safeSettings.push(serializeSetting({
+      id: syntheticId--,
+      key,
+      value: "***SET***",
+      createdAt: updatedAt,
+      updatedAt,
+    }));
+    existingKeys.add(key);
+  }
+
+  return safeSettings;
+}
+
+router.get("/settings", async (req, res): Promise<void> => {
+  const safeSettings = await getSafeSettings(currentUserId(req));
   res.json(GetSettingsResponse.parse(safeSettings));
 });
 
@@ -224,11 +267,7 @@ router.post("/settings", async (req, res): Promise<void> => {
     keyResults.push({ key, status: "saved" });
   }
 
-  const allSettings = await db.select().from(settingsTable);
-  const safeSettings = allSettings.map((s) => serializeSetting({
-    ...s,
-    value: maskValue(s.key, s.value),
-  }));
+  const safeSettings = await getSafeSettings(userId);
   res.json(SaveSettingsResponse.parse({ settings: safeSettings, results: keyResults }));
 });
 
