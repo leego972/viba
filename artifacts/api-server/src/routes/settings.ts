@@ -3,6 +3,7 @@ import { db, settingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
 import { GetSettingsResponse, SaveSettingsBody, SaveSettingsResponse } from "@workspace/api-zod";
+import { deleteVibaCredential, logVibaEvent, saveVibaCredential } from "../lib/vibaVault";
 
 const ALLOWED_SETTINGS_KEYS = new Set([
   "FALLBACK_ALERT_THRESHOLD",
@@ -26,6 +27,7 @@ const ALLOWED_SETTINGS_KEYS = new Set([
   "GITHUB_TOKEN",
   "VAST_AI_API_KEY",
   "ELEVENLABS_API_KEY",
+  "RAILWAY_TOKEN",
   "OPENAI_MODEL",
   "ANTHROPIC_MODEL",
   "GEMINI_MODEL",
@@ -35,7 +37,11 @@ const ALLOWED_SETTINGS_KEYS = new Set([
   "GROQ_MODEL",
   "VENICE_MODEL",
   "CUSTOM_MODEL",
+  "RAILWAY_REASONING_MODEL",
   "CUSTOM_ENDPOINT",
+  "VENICE_ENDPOINT",
+  "DEEPSEEK_ENDPOINT",
+  "GITHUB_ENDPOINT",
   "OLLAMA_BASE_URL",
   "OLLAMA_MODEL",
 ]);
@@ -60,21 +66,26 @@ const CLEARABLE_NOTIFICATION_KEYS = [
   "GITHUB_TOKEN",
   "VAST_AI_API_KEY",
   "ELEVENLABS_API_KEY",
+  "RAILWAY_TOKEN",
 ];
 
 const PROVIDER_BY_KEY: Record<string, string> = {
-  OPENAI_API_KEY: "OPENAI",
-  ANTHROPIC_API_KEY: "ANTHROPIC",
-  GEMINI_API_KEY: "GOOGLE",
-  PERPLEXITY_API_KEY: "PERPLEXITY",
-  MISTRAL_API_KEY: "MISTRAL",
-  DEEPSEEK_API_KEY: "DEEPSEEK",
-  GROQ_API_KEY: "GROQ",
-  VENICE_API_KEY: "VENICE",
-  CUSTOM_API_KEY: "CUSTOM",
+  OPENAI_API_KEY: "openai",
+  ANTHROPIC_API_KEY: "anthropic",
+  GEMINI_API_KEY: "google",
+  PERPLEXITY_API_KEY: "perplexity",
+  MISTRAL_API_KEY: "mistral",
+  DEEPSEEK_API_KEY: "deepseek",
+  GROQ_API_KEY: "groq",
+  VENICE_API_KEY: "venice",
+  CUSTOM_API_KEY: "custom",
+  GITHUB_TOKEN: "github",
+  VAST_AI_API_KEY: "vastai",
+  ELEVENLABS_API_KEY: "elevenlabs",
+  RAILWAY_TOKEN: "railway",
 };
 
-const MASKED_KEYS = new Set(["SMTP_PASS", "GITHUB_TOKEN", "VAST_AI_API_KEY"]);
+const MASKED_KEYS = new Set(["SMTP_PASS", "GITHUB_TOKEN", "VAST_AI_API_KEY", "RAILWAY_TOKEN"]);
 const router: IRouter = Router();
 
 function serializeSetting(s: { id: number; key: string; value: string | null; createdAt: Date; updatedAt: Date }) {
@@ -91,6 +102,14 @@ function maskValue(key: string, value: string | null): string | null {
   return value;
 }
 
+function enabledSettingKey(provider: string): string {
+  return `${provider.toUpperCase()}_ENABLED`;
+}
+
+function currentUserId(req: { session?: { userId?: number } }): number | null {
+  return typeof req.session?.userId === "number" ? req.session.userId : null;
+}
+
 async function upsertSetting(key: string, value: string): Promise<void> {
   const [existing] = await db.select().from(settingsTable).where(eq(settingsTable.key, key));
   if (existing) {
@@ -98,6 +117,10 @@ async function upsertSetting(key: string, value: string): Promise<void> {
   } else {
     await db.insert(settingsTable).values({ key, value });
   }
+}
+
+async function deleteSetting(key: string): Promise<void> {
+  await db.delete(settingsTable).where(eq(settingsTable.key, key));
 }
 
 router.get("/settings", async (_req, res): Promise<void> => {
@@ -127,6 +150,7 @@ router.post("/settings", async (req, res): Promise<void> => {
   }
 
   const keyResults: Array<{ key: string; status: "saved" | "skipped" | "deleted" }> = [];
+  const userId = currentUserId(req);
 
   for (const { key, value } of parsed.data.settings) {
     if (value === "***SET***") {
@@ -134,10 +158,23 @@ router.post("/settings", async (req, res): Promise<void> => {
       continue;
     }
 
+    const provider = PROVIDER_BY_KEY[key];
+
     if (value === "" && CLEARABLE_NOTIFICATION_KEYS.includes(key)) {
-      await db.delete(settingsTable).where(eq(settingsTable.key, key));
-      const provider = PROVIDER_BY_KEY[key];
-      if (provider) await upsertSetting(`${provider}_ENABLED`, "false");
+      await deleteSetting(key);
+      if (provider) {
+        await deleteVibaCredential({ userId, provider, kind: "api_key", label: "default" });
+        await upsertSetting(enabledSettingKey(provider), "false");
+        await logVibaEvent({
+          userId,
+          eventType: "credential_deleted",
+          severity: "info",
+          provider,
+          subject: key,
+          status: "deleted",
+          message: `${provider} credential deleted from Settings`,
+        });
+      }
       keyResults.push({ key, status: "deleted" });
       continue;
     }
@@ -155,13 +192,35 @@ router.post("/settings", async (req, res): Promise<void> => {
       }
     }
 
+    if (provider) {
+      await saveVibaCredential({
+        userId,
+        provider,
+        kind: "api_key",
+        value,
+        label: "default",
+        scope: "all",
+        allowedUse: { source: "settings", key },
+      });
+      // Remove legacy plaintext storage for provider secrets. Runtime still has
+      // settingsTable fallback for older deployments, but new Settings saves use
+      // the encrypted vault only.
+      await deleteSetting(key);
+      await upsertSetting(enabledSettingKey(provider), "true");
+      await logVibaEvent({
+        userId,
+        eventType: "credential_saved",
+        severity: "info",
+        provider,
+        subject: key,
+        status: "saved",
+        message: `${provider} credential saved to encrypted vault from Settings`,
+      });
+      keyResults.push({ key, status: "saved" });
+      continue;
+    }
+
     await upsertSetting(key, value);
-
-    // A key entered on Settings is immediately available to every provider-aware
-    // screen and to agentFactory. This also clears stale disabled state.
-    const provider = PROVIDER_BY_KEY[key];
-    if (provider) await upsertSetting(`${provider}_ENABLED`, "true");
-
     keyResults.push({ key, status: "saved" });
   }
 
