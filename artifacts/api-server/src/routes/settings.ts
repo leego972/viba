@@ -4,8 +4,6 @@ import { eq } from "drizzle-orm";
 
 import { GetSettingsResponse, SaveSettingsBody, SaveSettingsResponse } from "@workspace/api-zod";
 
-// Exhaustive whitelist of keys that may be stored via this endpoint.
-// Any key NOT in this set is rejected with 400 Bad Request.
 const ALLOWED_SETTINGS_KEYS = new Set([
   "FALLBACK_ALERT_THRESHOLD",
   "FALLBACK_ALERT_ENABLED",
@@ -64,8 +62,19 @@ const CLEARABLE_NOTIFICATION_KEYS = [
   "ELEVENLABS_API_KEY",
 ];
 
-const MASKED_KEYS = new Set(["SMTP_PASS", "GITHUB_TOKEN", "VAST_AI_API_KEY"]);
+const PROVIDER_BY_KEY: Record<string, string> = {
+  OPENAI_API_KEY: "OPENAI",
+  ANTHROPIC_API_KEY: "ANTHROPIC",
+  GEMINI_API_KEY: "GOOGLE",
+  PERPLEXITY_API_KEY: "PERPLEXITY",
+  MISTRAL_API_KEY: "MISTRAL",
+  DEEPSEEK_API_KEY: "DEEPSEEK",
+  GROQ_API_KEY: "GROQ",
+  VENICE_API_KEY: "VENICE",
+  CUSTOM_API_KEY: "CUSTOM",
+};
 
+const MASKED_KEYS = new Set(["SMTP_PASS", "GITHUB_TOKEN", "VAST_AI_API_KEY"]);
 const router: IRouter = Router();
 
 function serializeSetting(s: { id: number; key: string; value: string | null; createdAt: Date; updatedAt: Date }) {
@@ -82,7 +91,15 @@ function maskValue(key: string, value: string | null): string | null {
   return value;
 }
 
-// GET /settings
+async function upsertSetting(key: string, value: string): Promise<void> {
+  const [existing] = await db.select().from(settingsTable).where(eq(settingsTable.key, key));
+  if (existing) {
+    await db.update(settingsTable).set({ value }).where(eq(settingsTable.key, key));
+  } else {
+    await db.insert(settingsTable).values({ key, value });
+  }
+}
+
 router.get("/settings", async (_req, res): Promise<void> => {
   const settings = await db.select().from(settingsTable);
   const safeSettings = settings.map((s) => serializeSetting({
@@ -92,7 +109,6 @@ router.get("/settings", async (_req, res): Promise<void> => {
   res.json(GetSettingsResponse.parse(safeSettings));
 });
 
-// POST /settings
 router.post("/settings", async (req, res): Promise<void> => {
   const parsed = SaveSettingsBody.safeParse(req.body);
   if (!parsed.success) {
@@ -100,7 +116,6 @@ router.post("/settings", async (req, res): Promise<void> => {
     return;
   }
 
-  // Reject any key not on the explicit whitelist — prevents arbitrary table pollution
   const unknownKeys = parsed.data.settings
     .map((s) => s.key)
     .filter((k) => !ALLOWED_SETTINGS_KEYS.has(k));
@@ -114,26 +129,24 @@ router.post("/settings", async (req, res): Promise<void> => {
   const keyResults: Array<{ key: string; status: "saved" | "skipped" | "deleted" }> = [];
 
   for (const { key, value } of parsed.data.settings) {
-    // Don't update if value is the masked placeholder
     if (value === "***SET***") {
       keyResults.push({ key, status: "skipped" });
       continue;
     }
 
-    // Clearing a clearable key with an empty string explicitly deletes it
     if (value === "" && CLEARABLE_NOTIFICATION_KEYS.includes(key)) {
       await db.delete(settingsTable).where(eq(settingsTable.key, key));
+      const provider = PROVIDER_BY_KEY[key];
+      if (provider) await upsertSetting(`${provider}_ENABLED`, "false");
       keyResults.push({ key, status: "deleted" });
       continue;
     }
 
-    // Non-clearable keys: treat empty string as a no-op to prevent silent data loss
     if (value === "") {
       keyResults.push({ key, status: "skipped" });
       continue;
     }
 
-    // Validate FALLBACK_ALERT_THRESHOLD must be a positive integer
     if (key === "FALLBACK_ALERT_THRESHOLD") {
       const n = parseInt(value, 10);
       if (!/^\d+$/.test(value) || isNaN(n) || n < 1) {
@@ -142,15 +155,13 @@ router.post("/settings", async (req, res): Promise<void> => {
       }
     }
 
-    const [existing] = await db.select().from(settingsTable).where(eq(settingsTable.key, key));
-    if (existing) {
-      await db
-        .update(settingsTable)
-        .set({ value })
-        .where(eq(settingsTable.key, key));
-    } else {
-      await db.insert(settingsTable).values({ key, value });
-    }
+    await upsertSetting(key, value);
+
+    // A key entered on Settings is immediately available to every provider-aware
+    // screen and to agentFactory. This also clears stale disabled state.
+    const provider = PROVIDER_BY_KEY[key];
+    if (provider) await upsertSetting(`${provider}_ENABLED`, "true");
+
     keyResults.push({ key, status: "saved" });
   }
 
