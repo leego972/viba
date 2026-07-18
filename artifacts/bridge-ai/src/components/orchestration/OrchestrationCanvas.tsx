@@ -22,6 +22,7 @@ interface CanvasSize {
 }
 
 function getRadialPositions(count: number, cx: number, cy: number, radius: number): Array<{ x: number; y: number }> {
+  if (count === 0) return [];
   return Array.from({ length: count }, (_, i) => {
     const angle = (2 * Math.PI * i) / count - Math.PI / 2;
     return {
@@ -31,17 +32,19 @@ function getRadialPositions(count: number, cx: number, cy: number, radius: numbe
   });
 }
 
-export function OrchestrationCanvas({ vm, height = 340 }: Props) {
+export function OrchestrationCanvas({ vm, height = 420 }: Props) {
   const reducedMotion = useReducedMotion();
   const containerRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState<CanvasSize>({ w: 600, h: height });
+  const minimumHeight = typeof window !== "undefined" && window.innerWidth < 768 ? 320 : 420;
+  const effectiveHeight = Math.max(height, minimumHeight);
+  const [size, setSize] = useState<CanvasSize>({ w: 600, h: effectiveHeight });
   const [selectedAgent, setSelectedAgent] = useState<OrchestrationAgent | null>(null);
 
   const updateSize = useCallback(() => {
     if (containerRef.current) {
-      setSize({ w: containerRef.current.offsetWidth, h: height });
+      setSize({ w: containerRef.current.offsetWidth, h: effectiveHeight });
     }
-  }, [height]);
+  }, [effectiveHeight]);
 
   useEffect(() => {
     updateSize();
@@ -54,8 +57,7 @@ export function OrchestrationCanvas({ vm, height = 340 }: Props) {
   const cy = size.h / 2;
   const nodeSize = 52;
   const coordSize = 72;
-
-  const radius = Math.min(cx - 80, cy - 60, 180);
+  const radius = Math.max(80, Math.min(cx - 90, cy - 76, 220));
   const positions = getRadialPositions(vm.agents.length, cx, cy, radius);
 
   const nodePositions: NodePosition[] = vm.agents.map((agent, i) => ({
@@ -67,11 +69,10 @@ export function OrchestrationCanvas({ vm, height = 340 }: Props) {
   return (
     <div
       ref={containerRef}
-      className="relative w-full select-none"
-      style={{ height }}
+      className="relative w-full select-none overflow-hidden"
+      style={{ height: effectiveHeight }}
       aria-label="AI orchestration canvas"
     >
-      {/* SVG layer for connections */}
       <svg
         className="absolute inset-0 pointer-events-none"
         width={size.w}
@@ -85,7 +86,6 @@ export function OrchestrationCanvas({ vm, height = 340 }: Props) {
           </radialGradient>
         </defs>
 
-        {/* Background glow at center */}
         <ellipse
           cx={cx}
           cy={cy}
@@ -95,7 +95,6 @@ export function OrchestrationCanvas({ vm, height = 340 }: Props) {
           opacity={0.4}
         />
 
-        {/* Grid rings */}
         {[0.4, 0.75, 1.05].map((r, i) => (
           <circle
             key={i}
@@ -108,7 +107,6 @@ export function OrchestrationCanvas({ vm, height = 340 }: Props) {
           />
         ))}
 
-        {/* Connections */}
         {nodePositions.map((pos) => (
           <AgentConnection
             key={pos.agent.id}
@@ -122,7 +120,6 @@ export function OrchestrationCanvas({ vm, height = 340 }: Props) {
         ))}
       </svg>
 
-      {/* Agent nodes */}
       {nodePositions.map((pos) => (
         <div
           key={pos.agent.id}
@@ -142,7 +139,6 @@ export function OrchestrationCanvas({ vm, height = 340 }: Props) {
         </div>
       ))}
 
-      {/* VIBA coordinator node */}
       <div
         className="absolute"
         style={{
@@ -154,18 +150,24 @@ export function OrchestrationCanvas({ vm, height = 340 }: Props) {
         <CoordinatorNode phase={vm.phase} reducedMotion={reducedMotion} size={coordSize} />
       </div>
 
-      {/* Agent inspector panel */}
+      {vm.agents.length === 0 && (
+        <div className="absolute inset-x-4 bottom-8 text-center">
+          <p className="text-sm font-medium text-white/55">No real orchestration activity yet</p>
+          <p className="mt-1 text-xs text-white/30">Start a session to display actual agents, delegation status, and measured execution data.</p>
+        </div>
+      )}
+
       {selectedAgent && (
-        <div className="absolute bottom-2 left-2 right-2 z-20 rounded-xl border border-white/10 bg-[#12151f]/95 p-3 backdrop-blur-sm shadow-2xl">
+        <div className="absolute bottom-3 left-3 right-3 z-20 rounded-xl border border-white/10 bg-[#12151f]/95 p-3 backdrop-blur-sm shadow-2xl">
           <div className="flex items-start justify-between gap-2">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               <div
                 className="h-3 w-3 rounded-full shrink-0"
                 style={{ background: selectedAgent.color, boxShadow: `0 0 6px ${selectedAgent.color}80` }}
               />
-              <span className="text-sm font-semibold text-white">{selectedAgent.name}</span>
+              <span className="text-sm font-semibold text-white truncate">{selectedAgent.name}</span>
               <span className="text-xs text-white/40">·</span>
-              <span className="text-xs text-white/60">{selectedAgent.role}</span>
+              <span className="text-xs text-white/60 truncate">{selectedAgent.role}</span>
             </div>
             <button
               type="button"
@@ -175,7 +177,11 @@ export function OrchestrationCanvas({ vm, height = 340 }: Props) {
               ✕
             </button>
           </div>
-          <div className="mt-2 grid grid-cols-3 gap-2 text-[10px]">
+          <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px]">
+            <div>
+              <div className="text-white/40 mb-0.5">Provider</div>
+              <div className="font-medium capitalize text-white/75">{selectedAgent.provider}</div>
+            </div>
             <div>
               <div className="text-white/40 mb-0.5">Status</div>
               <div className="font-medium capitalize" style={{ color: selectedAgent.color }}>{selectedAgent.status}</div>
@@ -209,13 +215,6 @@ export function OrchestrationCanvas({ vm, height = 340 }: Props) {
               <div className="text-[9px] text-white/30 mt-0.5">Confidence: {Math.round(selectedAgent.confidence * 100)}%</div>
             </div>
           )}
-        </div>
-      )}
-
-      {/* Demo watermark */}
-      {vm.isDemo && (
-        <div className="absolute top-2 right-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-widest text-amber-400">
-          Demo
         </div>
       )}
     </div>
