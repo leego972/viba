@@ -64,7 +64,14 @@ import CompletionPage, {
 import { useAuth } from "@/hooks/useAuth";
 import { isBypassValid, setBypassValid } from "@/lib/auth";
 
-const queryClient = new QueryClient();
+const isMobileVisibilityAudit = import.meta.env.VITE_MOBILE_AUDIT === "true";
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: isMobileVisibilityAudit ? false : 3,
+    },
+  },
+});
 
 function Spinner() {
   return (
