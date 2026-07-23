@@ -53,14 +53,7 @@ import UserInstructions from "@/pages/user-instructions";
 import DoctorHistory from "@/pages/doctor-history";
 import OwnerActions from "@/pages/owner-actions";
 import SetupAssistant from "@/pages/setup-assistant";
-import CompletionPage, {
-  CollaborationMapPage,
-  DemoDoctorReport,
-  DemoPage,
-  DemoProofReport,
-  SessionTimelinePage,
-  ShareReportPage,
-} from "@/pages/market-completion";
+import { SessionTimelinePage, CollaborationMapPage } from "@/pages/market-completion";
 import { useAuth } from "@/hooks/useAuth";
 import { isBypassValid, setBypassValid } from "@/lib/auth";
 
@@ -115,19 +108,6 @@ function GatedRouter() {
         <Route path="/doctor/history" component={DoctorHistory} />
         <Route path="/owner-actions" component={OwnerActions} />
         <Route path="/setup-assistant" component={SetupAssistant} />
-        <Route path="/connectors" component={CompletionPage} />
-        <Route path="/self-audit" component={CompletionPage} />
-        <Route path="/crews" component={CompletionPage} />
-        <Route path="/production-smoke-test" component={CompletionPage} />
-        <Route path="/mobile-readiness" component={CompletionPage} />
-        <Route path="/team" component={CompletionPage} />
-        <Route path="/usage" component={CompletionPage} />
-        <Route path="/recovery" component={CompletionPage} />
-        <Route path="/doctor/trends" component={CompletionPage} />
-        <Route path="/clients" component={CompletionPage} />
-        <Route path="/security-evidence" component={CompletionPage} />
-        <Route path="/reports/compare" component={CompletionPage} />
-        <Route path="/market-readiness" component={CompletionPage} />
         <Route path="/assisted-browser" component={AssistedBrowserPage} />
         <Route path="/qa-release-gate" component={QAReleaseGatePage} />
         <Route path="/project-import" component={ProjectImportPage} />
@@ -201,10 +181,6 @@ function App() {
                 <Route path="/terms" component={Terms} />
                 <Route path="/privacy" component={Privacy} />
                 <Route path="/user-instructions" component={UserInstructions} />
-                <Route path="/demo/doctor-report" component={DemoDoctorReport} />
-                <Route path="/demo/proof-report" component={DemoProofReport} />
-                <Route path="/demo" component={DemoPage} />
-                <Route path="/share/reports/:shareId" component={ShareReportPage} />
                 <Route path="/admin" component={Admin} />
                 <Route path="/" component={Home} />
                 <Route component={GatedRouter} />
