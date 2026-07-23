@@ -1,9 +1,8 @@
 /**
  * VIBA Tool Action Broker
  *
- * The safe execution layer for all agent tool requests.
- * Agents never call sensitive tools directly — they go through the broker.
- * Every request is checked, logged, and redacted.
+ * Safe execution layer for agent tool requests. A tool is never reported as
+ * executed unless a concrete execution mapping ran successfully.
  */
 import { pool } from "@workspace/db";
 import { getToolById, getAllTools, type ToolDefinition } from "./toolRegistry";
@@ -14,8 +13,10 @@ import { executeTool } from "./tools/registry";
 
 export type BrokerStatus =
   | "ready"
+  | "dry_run_complete"
   | "dry_run_required"
   | "needs_user_approval"
+  | "adapter_required"
   | "missing_credential"
   | "scope_denied"
   | "blocked"
@@ -29,6 +30,7 @@ export interface BrokerInput {
   action: string;
   payload?: Record<string, unknown>;
   requestedByAgent?: string;
+  /** Retained for API compatibility. Unverified client tokens are never trusted. */
   approvalToken?: string | null;
   dryRun?: boolean;
 }
@@ -47,8 +49,6 @@ export interface BrokerResult {
   invocationId?: number;
   rawValuesReturned: false;
 }
-
-// ─── DB ───────────────────────────────────────────────────────────────────────
 
 async function ensureInvocationsTable(): Promise<void> {
   await pool.query(`
@@ -117,28 +117,34 @@ async function logInvocation(input: {
   }
 }
 
-// ─── Credential check ─────────────────────────────────────────────────────────
+const ENV_CREDENTIALS: Record<string, string[]> = {
+  github: ["GITHUB_TOKEN", "GH_TOKEN"],
+  render: ["RENDER_API_KEY"],
+  digitalocean: ["DIGITALOCEAN_ACCESS_TOKEN", "DIGITALOCEAN_TOKEN"],
+  vercel: ["VERCEL_TOKEN"],
+  sevall: ["SEVALL_API_KEY"],
+  railway: ["RAILWAY_TOKEN"],
+  stripe: ["STRIPE_SECRET_KEY"],
+  smtp: ["SMTP_PASS"],
+  openai: ["OPENAI_API_KEY"],
+  anthropic: ["ANTHROPIC_API_KEY"],
+  gemini: ["GEMINI_API_KEY"],
+  groq: ["GROQ_API_KEY"],
+};
 
 async function checkVaultCredential(userId: number, tool: ToolDefinition): Promise<boolean> {
   if (!tool.credentialProvider) return true;
-  // Check env first
-  const envKeys: Record<string, string[]> = {
-    github: ["GITHUB_TOKEN"],
-    railway: ["RAILWAY_TOKEN"],
-    stripe: ["STRIPE_SECRET_KEY"],
-    smtp: ["SMTP_PASS"],
-  };
-  const envNames = envKeys[tool.credentialProvider] ?? [];
-  for (const name of envNames) {
+
+  for (const name of ENV_CREDENTIALS[tool.credentialProvider] ?? []) {
     if (process.env[name]) return true;
   }
-  // Check vault
+
   try {
     const creds = await listVibaCredentials(userId);
     return creds.some(
-      (c) =>
-        String(c["provider"] ?? "").startsWith(tool.credentialProvider ?? "__never__") &&
-        (tool.credentialKind ? c["kind"] === tool.credentialKind : true),
+      (credential) =>
+        String(credential["provider"] ?? "").startsWith(tool.credentialProvider ?? "__never__") &&
+        (tool.credentialKind ? credential["kind"] === tool.credentialKind : true),
     );
   } catch {
     return false;
@@ -148,52 +154,127 @@ async function checkVaultCredential(userId: number, tool: ToolDefinition): Promi
 async function checkByokCredential(userId: number): Promise<boolean> {
   try {
     const creds = await listVibaCredentials(userId);
-    return creds.some((c) => String(c["provider"] ?? "").startsWith("custom_ai__") && c["kind"] === "api_key");
+    return creds.some((credential) =>
+      String(credential["provider"] ?? "").startsWith("custom_ai__") &&
+      credential["kind"] === "api_key",
+    );
   } catch {
     return false;
   }
 }
 
-// ─── Tool status for listing ──────────────────────────────────────────────────
-
 export async function getAvailableTools(userId: number): Promise<Array<{
-  toolId: string; label: string; category: string; riskLevel: string;
-  requiresApproval: boolean; supportsDryRun: boolean; requiresSafeBuild: boolean;
+  toolId: string;
+  label: string;
+  category: string;
+  riskLevel: string;
+  requiresApproval: boolean;
+  supportsDryRun: boolean;
+  requiresSafeBuild: boolean;
+  executionStatus: "live" | "adapter_required" | "approval_workflow_required";
   credentialStatus: "configured" | "missing" | "not_required";
   rawValuesReturned: false;
 }>> {
   await ensureInvocationsTable();
   const tools = getAllTools();
-  const results = await Promise.all(
-    tools.map(async (tool) => {
-      let credentialStatus: "configured" | "missing" | "not_required" = "not_required";
-      if (tool.credentialProvider) {
-        const has = await checkVaultCredential(userId, tool);
-        credentialStatus = has ? "configured" : "missing";
-      }
-      return {
-        toolId: tool.toolId,
-        label: tool.label,
-        category: tool.category,
-        riskLevel: tool.riskLevel,
-        requiresApproval: tool.requiresApproval,
-        supportsDryRun: tool.supportsDryRun,
-        requiresSafeBuild: tool.requiresSafeBuild,
-        credentialStatus,
-        rawValuesReturned: false as const,
-      };
-    }),
-  );
-  return results;
+  return Promise.all(tools.map(async (tool) => {
+    let credentialStatus: "configured" | "missing" | "not_required" = "not_required";
+    if (tool.credentialProvider) {
+      credentialStatus = await checkVaultCredential(userId, tool) ? "configured" : "missing";
+    }
+
+    const executionStatus = !tool.executionName
+      ? "adapter_required"
+      : tool.requiresApproval
+        ? "approval_workflow_required"
+        : "live";
+
+    return {
+      toolId: tool.toolId,
+      label: tool.label,
+      category: tool.category,
+      riskLevel: tool.riskLevel,
+      requiresApproval: tool.requiresApproval,
+      supportsDryRun: tool.supportsDryRun,
+      requiresSafeBuild: tool.requiresSafeBuild,
+      executionStatus,
+      credentialStatus,
+      rawValuesReturned: false as const,
+    };
+  }));
 }
 
-// ─── planToolAction ───────────────────────────────────────────────────────────
+function taskId(input: BrokerInput): string {
+  return String(input.taskId ?? "");
+}
+
+function baseResult(tool: ToolDefinition, status: BrokerStatus, message: string): BrokerResult {
+  return {
+    status,
+    toolId: tool.toolId,
+    label: tool.label,
+    riskLevel: tool.riskLevel,
+    message,
+    requiresDryRun: false,
+    requiresApproval: tool.requiresApproval,
+    requiresSafeBuild: tool.requiresSafeBuild,
+    warnings: [],
+    rawValuesReturned: false,
+  };
+}
 
 export async function planToolAction(input: BrokerInput): Promise<BrokerResult> {
   const tool = getToolById(input.toolId);
   if (!tool) {
-    await logInvocation({ userId: input.userId, taskId: String(input.taskId ?? ""), toolId: input.toolId, agentName: input.requestedByAgent ?? null, riskLevel: "unknown", status: "blocked", dryRun: false, approvalRequired: false, approvedAt: null, payloadRedacted: redactPayload(input.payload), resultRedacted: {}, error: "Tool not found in registry" });
-    return { status: "blocked", toolId: input.toolId, label: input.toolId, riskLevel: "unknown", message: `Tool '${input.toolId}' is not registered in the VIBA tool registry.`, requiresDryRun: false, requiresApproval: false, requiresSafeBuild: false, warnings: [], rawValuesReturned: false };
+    await logInvocation({
+      userId: input.userId,
+      taskId: taskId(input),
+      toolId: input.toolId,
+      agentName: input.requestedByAgent ?? null,
+      riskLevel: "unknown",
+      status: "blocked",
+      dryRun: false,
+      approvalRequired: false,
+      approvedAt: null,
+      payloadRedacted: redactPayload(input.payload),
+      resultRedacted: {},
+      error: "Tool not found in registry",
+    });
+    return {
+      status: "blocked",
+      toolId: input.toolId,
+      label: input.toolId,
+      riskLevel: "unknown",
+      message: `Tool '${input.toolId}' is not registered in the VIBA tool registry.`,
+      requiresDryRun: false,
+      requiresApproval: false,
+      requiresSafeBuild: false,
+      warnings: [],
+      rawValuesReturned: false,
+    };
+  }
+
+  if (!tool.executionName) {
+    const result = baseResult(
+      tool,
+      "adapter_required",
+      `${tool.label} is registered but has no verified execution adapter. It cannot run yet.`,
+    );
+    const id = await logInvocation({
+      userId: input.userId,
+      taskId: taskId(input),
+      toolId: tool.toolId,
+      agentName: input.requestedByAgent ?? null,
+      riskLevel: tool.riskLevel,
+      status: result.status,
+      dryRun: false,
+      approvalRequired: tool.requiresApproval,
+      approvedAt: null,
+      payloadRedacted: redactPayload(input.payload),
+      resultRedacted: {},
+      error: "No verified execution adapter",
+    });
+    return { ...result, invocationId: id ?? undefined };
   }
 
   const [hasVaultCredential, hasByokCredential, planKey] = await Promise.all([
@@ -201,8 +282,12 @@ export async function planToolAction(input: BrokerInput): Promise<BrokerResult> 
     checkByokCredential(input.userId),
     getUserPlan(input.userId),
   ]);
-  const context: PolicyContext = { hasSafeBuildPassed: false, hasByokCredential, hasVaultCredential, planKey };
-
+  const context: PolicyContext = {
+    hasSafeBuildPassed: false,
+    hasByokCredential,
+    hasVaultCredential,
+    planKey,
+  };
   const policy = evaluateToolPolicy(tool, context);
 
   if (!policy.allowed) {
@@ -210,168 +295,193 @@ export async function planToolAction(input: BrokerInput): Promise<BrokerResult> 
       policy.blockedReason?.includes("Upgrade to VIBA Pro");
     const status: BrokerStatus = isUpgradeRequired
       ? "scope_denied"
-      : policy.blockedReason?.includes("credential") ? "missing_credential" : "blocked";
-    const id = await logInvocation({ userId: input.userId, taskId: String(input.taskId ?? ""), toolId: tool.toolId, agentName: input.requestedByAgent ?? null, riskLevel: tool.riskLevel, status, dryRun: false, approvalRequired: policy.requiresApproval, approvedAt: null, payloadRedacted: redactPayload(input.payload), resultRedacted: {}, error: policy.blockedReason });
-    return { status, toolId: tool.toolId, label: tool.label, riskLevel: tool.riskLevel, message: policy.blockedReason ?? "Tool action blocked by policy.", requiresDryRun: policy.requiresDryRun, requiresApproval: policy.requiresApproval, requiresSafeBuild: policy.requiresSafeBuild, warnings: policy.warnings, invocationId: id ?? undefined, rawValuesReturned: false };
+      : policy.blockedReason?.includes("credential")
+        ? "missing_credential"
+        : policy.requiresSafeBuild
+          ? "dry_run_required"
+          : "blocked";
+    const id = await logInvocation({
+      userId: input.userId,
+      taskId: taskId(input),
+      toolId: tool.toolId,
+      agentName: input.requestedByAgent ?? null,
+      riskLevel: tool.riskLevel,
+      status,
+      dryRun: false,
+      approvalRequired: policy.requiresApproval,
+      approvedAt: null,
+      payloadRedacted: redactPayload(input.payload),
+      resultRedacted: {},
+      error: policy.blockedReason,
+    });
+    return {
+      ...baseResult(tool, status, policy.blockedReason ?? "Tool action blocked by policy."),
+      requiresDryRun: policy.requiresDryRun,
+      requiresApproval: policy.requiresApproval,
+      requiresSafeBuild: policy.requiresSafeBuild,
+      warnings: policy.warnings,
+      invocationId: id ?? undefined,
+    };
   }
 
-  let status: BrokerStatus;
-  let message: string;
+  let status: BrokerStatus = "ready";
+  let message = `${tool.label} is ready to execute.`;
 
-  if (policy.requiresSafeBuild) {
-    status = "dry_run_required";
-    message = `${tool.label} requires a passing safe build gate before execution.`;
-  } else if (policy.requiresApproval && !input.approvalToken) {
+  if (policy.requiresApproval) {
     status = "needs_user_approval";
-    message = `${tool.label} (risk: ${tool.riskLevel}) requires user approval before execution.`;
-  } else if (policy.requiresDryRun && !input.dryRun && !input.approvalToken) {
+    message = `${tool.label} is blocked until VIBA has a server-validated, one-time approval workflow. Client-supplied approval tokens are not accepted.`;
+  } else if (policy.requiresDryRun && !input.dryRun) {
     status = "dry_run_required";
-    message = `${tool.label} requires a dry-run before execution. Use POST /api/tools/dry-run first.`;
-  } else {
-    status = "ready";
-    message = `${tool.label} is ready to execute.`;
+    message = `${tool.label} requires a dry-run before execution.`;
   }
 
-  const id = await logInvocation({ userId: input.userId, taskId: String(input.taskId ?? ""), toolId: tool.toolId, agentName: input.requestedByAgent ?? null, riskLevel: tool.riskLevel, status, dryRun: false, approvalRequired: policy.requiresApproval, approvedAt: null, payloadRedacted: redactPayload(input.payload), resultRedacted: {}, error: null });
-  return { status, toolId: tool.toolId, label: tool.label, riskLevel: tool.riskLevel, message, requiresDryRun: policy.requiresDryRun, requiresApproval: policy.requiresApproval, requiresSafeBuild: policy.requiresSafeBuild, warnings: policy.warnings, invocationId: id ?? undefined, rawValuesReturned: false };
-}
+  const id = await logInvocation({
+    userId: input.userId,
+    taskId: taskId(input),
+    toolId: tool.toolId,
+    agentName: input.requestedByAgent ?? null,
+    riskLevel: tool.riskLevel,
+    status,
+    dryRun: false,
+    approvalRequired: policy.requiresApproval,
+    approvedAt: null,
+    payloadRedacted: redactPayload(input.payload),
+    resultRedacted: {},
+    error: status === "ready" ? null : message,
+  });
 
-// ─── dryRunToolAction ─────────────────────────────────────────────────────────
+  return {
+    ...baseResult(tool, status, message),
+    requiresDryRun: policy.requiresDryRun,
+    requiresApproval: policy.requiresApproval,
+    requiresSafeBuild: policy.requiresSafeBuild,
+    warnings: policy.warnings,
+    invocationId: id ?? undefined,
+  };
+}
 
 export async function dryRunToolAction(input: BrokerInput): Promise<BrokerResult> {
   const tool = getToolById(input.toolId);
-  if (!tool) {
+  if (!tool) return planToolAction(input);
+
+  if (!tool.executionName) {
     return planToolAction(input);
   }
   if (!tool.supportsDryRun) {
-    const id = await logInvocation({ userId: input.userId, taskId: String(input.taskId ?? ""), toolId: tool.toolId, agentName: input.requestedByAgent ?? null, riskLevel: tool.riskLevel, status: "blocked", dryRun: true, approvalRequired: false, approvedAt: null, payloadRedacted: redactPayload(input.payload), resultRedacted: {}, error: "Tool does not support dry-run" });
-    return { status: "blocked", toolId: tool.toolId, label: tool.label, riskLevel: tool.riskLevel, message: `${tool.label} does not support dry-run mode.`, requiresDryRun: false, requiresApproval: tool.requiresApproval, requiresSafeBuild: tool.requiresSafeBuild, warnings: [], invocationId: id ?? undefined, rawValuesReturned: false };
+    const result = baseResult(tool, "blocked", `${tool.label} does not support dry-run mode.`);
+    const id = await logInvocation({
+      userId: input.userId,
+      taskId: taskId(input),
+      toolId: tool.toolId,
+      agentName: input.requestedByAgent ?? null,
+      riskLevel: tool.riskLevel,
+      status: result.status,
+      dryRun: true,
+      approvalRequired: tool.requiresApproval,
+      approvedAt: null,
+      payloadRedacted: redactPayload(input.payload),
+      resultRedacted: {},
+      error: "Tool does not support dry-run",
+    });
+    return { ...result, invocationId: id ?? undefined };
   }
 
-  // Dry-run: simulate without mutation, redact everything
   const simulatedResult = {
     mode: "dry_run",
+    executed: false,
     tool: tool.toolId,
     action: input.action,
     payloadKeys: Object.keys(input.payload ?? {}),
-    simulatedOutcome: `${tool.label} would execute with action '${input.action}'. No mutations performed.`,
-    note: "This is a simulation. No external systems were called. No secrets were used.",
+    note: "No external system was called and no mutation occurred.",
   };
-
-  const id = await logInvocation({ userId: input.userId, taskId: String(input.taskId ?? ""), toolId: tool.toolId, agentName: input.requestedByAgent ?? null, riskLevel: tool.riskLevel, status: "executed", dryRun: true, approvalRequired: tool.requiresApproval, approvedAt: null, payloadRedacted: redactPayload(input.payload), resultRedacted: simulatedResult, error: null });
+  const id = await logInvocation({
+    userId: input.userId,
+    taskId: taskId(input),
+    toolId: tool.toolId,
+    agentName: input.requestedByAgent ?? null,
+    riskLevel: tool.riskLevel,
+    status: "dry_run_complete",
+    dryRun: true,
+    approvalRequired: tool.requiresApproval,
+    approvedAt: null,
+    payloadRedacted: redactPayload(input.payload),
+    resultRedacted: simulatedResult,
+    error: null,
+  });
 
   return {
-    status: "executed",
-    toolId: tool.toolId,
-    label: tool.label,
-    riskLevel: tool.riskLevel,
-    message: `Dry-run complete for ${tool.label}. Review the simulated outcome before approving execution.`,
+    ...baseResult(tool, "dry_run_complete", `Dry-run completed for ${tool.label}. No mutation occurred.`),
     dryRunResult: simulatedResult,
-    requiresDryRun: false,
     requiresApproval: tool.requiresApproval,
-    requiresSafeBuild: tool.requiresSafeBuild,
-    warnings: tool.requiresApproval ? [`${tool.label} still requires user approval before live execution.`] : [],
+    warnings: tool.requiresApproval
+      ? ["Live execution remains blocked until a server-validated approval workflow exists."]
+      : [],
     invocationId: id ?? undefined,
-    rawValuesReturned: false,
   };
 }
 
-// ─── executeToolAction ────────────────────────────────────────────────────────
-
 export async function executeToolAction(input: BrokerInput): Promise<BrokerResult> {
   const plan = await planToolAction({ ...input, dryRun: false });
+  if (plan.status !== "ready") return plan;
 
-  // If blocked or missing credential, return immediately
-  if (["blocked", "missing_credential", "scope_denied"].includes(plan.status)) {
-    return plan;
+  const tool = getToolById(input.toolId);
+  if (!tool?.executionName) {
+    return planToolAction(input);
   }
-
-  // If approval required and no approval token, block
-  if (plan.requiresApproval && !input.approvalToken) {
-    const id = await logInvocation({ userId: input.userId, taskId: String(input.taskId ?? ""), toolId: input.toolId, agentName: input.requestedByAgent ?? null, riskLevel: plan.riskLevel, status: "needs_user_approval", dryRun: false, approvalRequired: true, approvedAt: null, payloadRedacted: redactPayload(input.payload), resultRedacted: {}, error: "Approval required but no approval token provided" });
-    return { ...plan, status: "needs_user_approval", invocationId: id ?? undefined };
-  }
-
-  // If safe build required, block
-  if (plan.requiresSafeBuild) {
-    const id = await logInvocation({ userId: input.userId, taskId: String(input.taskId ?? ""), toolId: input.toolId, agentName: input.requestedByAgent ?? null, riskLevel: plan.riskLevel, status: "dry_run_required", dryRun: false, approvalRequired: plan.requiresApproval, approvedAt: null, payloadRedacted: redactPayload(input.payload), resultRedacted: {}, error: "Safe build gate required before execution" });
-    return { ...plan, status: "dry_run_required", invocationId: id ?? undefined };
-  }
-
-  // Execute — call the real VIBA tool execution engine
-  const tool = getToolById(input.toolId)!;
 
   let executionResult: Record<string, unknown>;
   let executionError: string | null = null;
   let executionStatus: BrokerStatus = "executed";
 
-  if (tool.executionName) {
-    // Tool has a concrete execution mapping — call tools/registry directly
-    try {
-      const toolCtx = { userId: input.userId };
-      const res = await executeTool(tool.executionName, input.payload ?? {}, toolCtx);
-      executionResult = {
-        executed: true,
-        toolId: tool.toolId,
-        executionName: tool.executionName,
-        action: input.action,
-        result: res.result.slice(0, 8000),
-        isError: res.isError,
-      };
-      if (res.isError) {
-        executionError = res.result;
-        executionStatus = "failed";
-      }
-    } catch (err) {
-      executionError = err instanceof Error ? err.message : String(err);
+  try {
+    const response = await executeTool(tool.executionName, input.payload ?? {}, { userId: input.userId });
+    executionResult = {
+      executed: !response.isError,
+      toolId: tool.toolId,
+      executionName: tool.executionName,
+      action: input.action,
+      result: response.result.slice(0, 8000),
+      isError: response.isError,
+    };
+    if (response.isError) {
+      executionError = response.result;
       executionStatus = "failed";
-      executionResult = {
-        executed: false,
-        toolId: tool.toolId,
-        action: input.action,
-        error: executionError,
-      };
     }
-  } else {
-    // No execution mapping — this tool requires a native adapter (Railway MCP, Replit, etc.)
-    // Return a clear informational result rather than a silent stub
+  } catch (err) {
+    executionError = err instanceof Error ? err.message : String(err);
+    executionStatus = "failed";
     executionResult = {
       executed: false,
       toolId: tool.toolId,
       action: input.action,
-      note: `${tool.label} requires a native agent integration (Groq + Railway MCP, Replit, or Manus). Assign a tool-capable agent to perform this operation directly.`,
-      suggestion: "Use a Groq, Replit, or Manus agent with canUseTools=true for this task.",
+      error: executionError,
     };
   }
 
   const id = await logInvocation({
-    userId: input.userId, taskId: String(input.taskId ?? ""), toolId: tool.toolId,
-    agentName: input.requestedByAgent ?? null, riskLevel: tool.riskLevel,
-    status: executionStatus, dryRun: false, approvalRequired: tool.requiresApproval,
-    approvedAt: input.approvalToken ? new Date() : null,
+    userId: input.userId,
+    taskId: taskId(input),
+    toolId: tool.toolId,
+    agentName: input.requestedByAgent ?? null,
+    riskLevel: tool.riskLevel,
+    status: executionStatus,
+    dryRun: false,
+    approvalRequired: false,
+    approvedAt: null,
     payloadRedacted: redactPayload(input.payload),
     resultRedacted: redactResult(executionResult),
     error: executionError,
   });
 
-  const message = executionStatus === "failed"
-    ? `${tool.label} encountered an error: ${executionError}`
-    : tool.executionName
-      ? `${tool.label} executed successfully.`
-      : `${tool.label} requires a native agent integration.`;
-
   return {
-    status: executionStatus,
-    toolId: tool.toolId,
-    label: tool.label,
-    riskLevel: tool.riskLevel,
-    message,
+    ...baseResult(
+      tool,
+      executionStatus,
+      executionStatus === "executed"
+        ? `${tool.label} executed successfully.`
+        : `${tool.label} failed: ${executionError ?? "unknown error"}`,
+    ),
     dryRunResult: executionResult,
-    requiresDryRun: false,
-    requiresApproval: false,
-    requiresSafeBuild: false,
-    warnings: plan.warnings,
     invocationId: id ?? undefined,
-    rawValuesReturned: false,
   };
 }
