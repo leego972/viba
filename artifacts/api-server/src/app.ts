@@ -7,6 +7,7 @@ import connectPgSimple from "connect-pg-simple";
 import path from "path";
 import { existsSync } from "fs";
 import router from "./routes";
+import absoluteApiRoutes, { absoluteApiPrefixes } from "./routes/absoluteApiRoutes";
 import authRouter from "./routes/auth";
 import { logger } from "./lib/logger";
 import { createRateLimiter } from "./middlewares/rateLimiter";
@@ -255,6 +256,19 @@ app.get("/structured-data.json", (_req, res) => {
 app.use("/api", apiLimiter, authRouter);
 
 // ── Auth-gated API routes ─────────────────────────────────────────────────────
+const absoluteApiGate = express.Router();
+absoluteApiGate.use(apiLimiter, accessTokenMiddleware, requireSession, absoluteApiRoutes);
+app.use((req, res, next) => {
+  const matchesAbsoluteApiRoute = absoluteApiPrefixes.some(
+    (prefix) => req.path === prefix || req.path.startsWith(`${prefix}/`),
+  );
+  if (!matchesAbsoluteApiRoute) {
+    next();
+    return;
+  }
+  absoluteApiGate(req, res, next);
+});
+
 app.use("/api", apiLimiter, accessTokenMiddleware, requireSession, router);
 
 const distDir = path.resolve(process.cwd(), "artifacts", "bridge-ai", "dist", "public");
