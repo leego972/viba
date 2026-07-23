@@ -1,5 +1,8 @@
 apply plugin: 'com.android.application'
 
+def mobileBundleId = System.getenv("VIBA_MOBILE_BUNDLE_ID") ?: "guru.viba.app"
+def mobileAppName = System.getenv("VIBA_MOBILE_APP_NAME") ?: "VIBA"
+
 android {
     namespace "guru.viba.app"
     compileSdk rootProject.ext.compileSdkVersion
@@ -17,12 +20,16 @@ android {
     }
 
     defaultConfig {
-        applicationId "guru.viba.app"
+        applicationId mobileBundleId
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode Integer.parseInt(System.getenv("VIBA_ANDROID_VERSION_CODE") ?: "1")
         versionName System.getenv("VIBA_APP_VERSION") ?: "1.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        resValue "string", "app_name", mobileAppName
+        resValue "string", "title_activity_main", mobileAppName
+        resValue "string", "package_name", mobileBundleId
+        resValue "string", "custom_url_scheme", mobileBundleId
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platforms/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
