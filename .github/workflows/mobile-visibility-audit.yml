@@ -6,6 +6,9 @@ on:
     paths:
       - "artifacts/bridge-ai/**"
       - ".github/workflows/mobile-visibility-audit.yml"
+  push:
+    branches:
+      - audit/mobile-visibility-20260724
   workflow_dispatch:
 
 permissions:
@@ -54,19 +57,39 @@ jobs:
           exit 1
 
       - name: Run mobile visibility audit
+        id: audit
+        continue-on-error: true
         run: pnpm --filter @workspace/bridge-ai exec playwright test tests/mobile-visibility.spec.ts --config=playwright.config.ts
+
+      - name: Print audit summary
+        if: always()
+        run: |
+          REPORT="artifacts/bridge-ai/test-results/mobile-visibility/report.json"
+          if [ -f "$REPORT" ]; then
+            node -e 'const fs=require("fs");const p=process.argv[1];const r=JSON.parse(fs.readFileSync(p,"utf8"));console.log("MOBILE_AUDIT_SUMMARY="+JSON.stringify(r.summary));for(const i of r.issues.filter(x=>x.severity==="error").slice(0,120)){console.log(`[${i.viewport}] ${i.route} ${i.kind}: ${i.details}`)}' "$REPORT"
+          else
+            echo "Mobile audit report was not created."
+          fi
 
       - name: Print frontend log
         if: always()
         run: cat /tmp/viba-frontend.log || true
+
+      - name: Package audit evidence
+        if: always()
+        run: |
+          cd artifacts/bridge-ai
+          zip -qr mobile-visibility-audit.zip test-results playwright-report 2>/dev/null || zip -qr mobile-visibility-audit.zip test-results
 
       - name: Upload audit evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: mobile-visibility-audit
-          path: |
-            artifacts/bridge-ai/test-results
-            artifacts/bridge-ai/playwright-report
-          if-no-files-found: warn
+          path: artifacts/bridge-ai/mobile-visibility-audit.zip
+          if-no-files-found: error
           retention-days: 14
+
+      - name: Enforce audit result
+        if: steps.audit.outcome == 'failure'
+        run: exit 1
