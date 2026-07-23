@@ -1,9 +1,7 @@
 import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { Mail, Lock, User, ArrowRight, Loader2, Eye, EyeOff, CheckCircle2 } from "lucide-react";
 import SocialLoginButtons from "@/components/SocialLoginButtons";
 import { useLocation } from "wouter";
-
 
 const inputStyle = {
   background: "#f8f6ef",
@@ -18,7 +16,6 @@ const blurStyle = { borderColor: "#cbd5e1", boxShadow: "none" };
 
 export default function SignUpPage() {
   const [, setLocation] = useLocation();
-  const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -29,22 +26,10 @@ export default function SignUpPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  async function openTrialCheckout(): Promise<boolean> {
-    const checkout = await fetch("/api/billing/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-    });
-    if (!checkout.ok) return false;
-    const data = (await checkout.json()) as { url?: string };
-    if (!data.url) return false;
-    window.location.href = data.url;
-    return true;
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     setError(null);
+
     if (password !== confirmPassword) {
       setError("Passwords do not match.");
       return;
@@ -53,25 +38,30 @@ export default function SignUpPage() {
       setError("Password must be at least 8 characters.");
       return;
     }
+
     setLoading(true);
     try {
-      const res = await fetch("/api/auth/register", {
+      const response = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ email: email.trim(), password, name: name.trim() || undefined }),
       });
-      const data = await res.json() as { user?: { email?: string }; error?: string };
-      if (!res.ok) {
+      const data = await response.json() as { error?: string };
+      if (!response.ok) {
         setError(data.error ?? "Could not create account.");
         return;
       }
+
+      // Registration currently creates a temporary server session. Destroy it
+      // immediately so an unverified account cannot be mistaken for a signed-in
+      // user by any cached frontend state.
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      }).catch(() => undefined);
+
       setSuccess(true);
-      queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
-      const opened = await openTrialCheckout();
-      if (!opened) {
-        window.location.href = "/pricing";
-      }
     } catch {
       setError("Could not connect to the server. Please check your connection.");
     } finally {
@@ -81,11 +71,22 @@ export default function SignUpPage() {
 
   if (success) {
     return (
-      <div className="min-h-[100dvh] flex items-center justify-center" style={{ background: "#faf8f2" }}>
-        <div className="text-center space-y-3">
+      <div className="min-h-[100dvh] flex items-center justify-center px-4" style={{ background: "#faf8f2" }}>
+        <div className="w-full max-w-md text-center space-y-4 p-8" style={{ background: "#fefcf7", border: "1px solid #dbd8cc", borderRadius: "4px" }}>
           <CheckCircle2 className="w-14 h-14 mx-auto" style={{ color: "#0d9488" }} />
-          <h2 className="text-xl font-semibold tracking-tight" style={{ color: "#0f172a" }}>Account created</h2>
-          <p className="text-sm" style={{ color: "#64748b" }}>Taking you to your dashboard…</p>
+          <h2 className="text-xl font-semibold tracking-tight" style={{ color: "#0f172a" }}>Check your email</h2>
+          <p className="text-sm leading-6" style={{ color: "#64748b" }}>
+            We sent a verification link to <strong style={{ color: "#334155" }}>{email.trim()}</strong>.
+            Verify your email before signing in, starting a trial, or using VIBA.
+          </p>
+          <button
+            type="button"
+            onClick={() => setLocation("/login")}
+            className="w-full h-10 text-sm font-semibold text-white"
+            style={{ background: "#0d9488", borderRadius: "4px" }}
+          >
+            Go to sign in
+          </button>
         </div>
       </div>
     );
@@ -94,8 +95,6 @@ export default function SignUpPage() {
   return (
     <div className="min-h-[100dvh] flex" style={{ background: "#faf8f2" }}>
       <div className="flex flex-col items-center justify-center w-full p-4">
-
-        {/* Logo */}
         <div className="flex flex-col items-center gap-2 mb-8">
           <img
             src="/viba-logo.png"
@@ -110,7 +109,6 @@ export default function SignUpPage() {
           </span>
         </div>
 
-        {/* Card */}
         <div
           className="w-full max-w-sm p-8 space-y-6"
           style={{ background: "#fefcf7", border: "1px solid #dbd8cc", borderRadius: "4px", boxShadow: "0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)" }}
@@ -158,11 +156,11 @@ export default function SignUpPage() {
                   type="text"
                   placeholder="Your name"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(event) => setName(event.target.value)}
                   className="w-full pl-9 pr-4 py-2.5 text-sm"
                   style={inputStyle}
-                  onFocus={e => Object.assign(e.target.style, focusStyle)}
-                  onBlur={e => Object.assign(e.target.style, blurStyle)}
+                  onFocus={(event) => Object.assign(event.target.style, focusStyle)}
+                  onBlur={(event) => Object.assign(event.target.style, blurStyle)}
                   autoComplete="name"
                   autoFocus
                 />
@@ -180,11 +178,11 @@ export default function SignUpPage() {
                   type="email"
                   placeholder="you@example.com"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(event) => setEmail(event.target.value)}
                   className="w-full pl-9 pr-4 py-2.5 text-sm"
                   style={inputStyle}
-                  onFocus={e => Object.assign(e.target.style, focusStyle)}
-                  onBlur={e => Object.assign(e.target.style, blurStyle)}
+                  onFocus={(event) => Object.assign(event.target.style, focusStyle)}
+                  onBlur={(event) => Object.assign(event.target.style, blurStyle)}
                   required
                   autoComplete="email"
                 />
@@ -202,11 +200,11 @@ export default function SignUpPage() {
                   type={showPassword ? "text" : "password"}
                   placeholder="At least 8 characters"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(event) => setPassword(event.target.value)}
                   className="w-full pl-9 pr-10 py-2.5 text-sm"
                   style={inputStyle}
-                  onFocus={e => Object.assign(e.target.style, focusStyle)}
-                  onBlur={e => Object.assign(e.target.style, blurStyle)}
+                  onFocus={(event) => Object.assign(event.target.style, focusStyle)}
+                  onBlur={(event) => Object.assign(event.target.style, blurStyle)}
                   required
                   autoComplete="new-password"
                 />
@@ -216,6 +214,7 @@ export default function SignUpPage() {
                   className="absolute right-3 top-1/2 -translate-y-1/2"
                   style={{ color: "#94a3b8" }}
                   tabIndex={-1}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -233,11 +232,11 @@ export default function SignUpPage() {
                   type={showConfirm ? "text" : "password"}
                   placeholder="Repeat your password"
                   value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
                   className="w-full pl-9 pr-10 py-2.5 text-sm"
                   style={inputStyle}
-                  onFocus={e => Object.assign(e.target.style, focusStyle)}
-                  onBlur={e => Object.assign(e.target.style, blurStyle)}
+                  onFocus={(event) => Object.assign(event.target.style, focusStyle)}
+                  onBlur={(event) => Object.assign(event.target.style, blurStyle)}
                   required
                   autoComplete="new-password"
                 />
@@ -247,6 +246,7 @@ export default function SignUpPage() {
                   className="absolute right-3 top-1/2 -translate-y-1/2"
                   style={{ color: "#94a3b8" }}
                   tabIndex={-1}
+                  aria-label={showConfirm ? "Hide confirmation password" : "Show confirmation password"}
                 >
                   {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
