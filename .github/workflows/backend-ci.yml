@@ -28,6 +28,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile=false --reporter=silent
 
+      - name: Build workspace type declarations
+        run: pnpm run typecheck:libs
+
       - name: Typecheck Bridge AI frontend
         shell: bash
         run: |
