@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const SRC_ROOT = path.resolve(process.cwd(), "src");
 const APP_PATH = path.join(SRC_ROOT, "App.tsx");
+const NAVBAR_PATH = path.join(SRC_ROOT, "components", "layout", "Navbar.tsx");
 const COMPLETION_PAGE_PATH = path.join(SRC_ROOT, "pages", "market-completion.tsx");
 const ORCHESTRATION_PATH = path.join(SRC_ROOT, "components", "orchestration", "OrchestrationCanvas.tsx");
 
@@ -59,6 +60,21 @@ describe("VIBA UI completeness contract", () => {
       expect(completionSource).toContain(`"${route}":`);
       expect(completionSource).toContain(`ROUTE_WIDGETS["${route}"] =`);
     }
+  });
+
+  it("keeps every static navigation destination connected to an application route", () => {
+    const appSource = read(APP_PATH);
+    const navbarSource = read(NAVBAR_PATH);
+    const appRoutes = new Set(
+      [...appSource.matchAll(/<Route\s+path="([^"]+)"/g)].map((match) => match[1]),
+    );
+    const navRoutes = new Set([
+      ...[...navbarSource.matchAll(/href:\s*"([^"]+)"/g)].map((match) => match[1]),
+      ...[...navbarSource.matchAll(/<Link\s+href="([^"]+)"/g)].map((match) => match[1]),
+    ]);
+
+    const missing = [...navRoutes].filter((route) => !appRoutes.has(route));
+    expect(missing).toEqual([]);
   });
 
   it("keeps the collaboration viewer truthful, motion-safe and event-driven", () => {
