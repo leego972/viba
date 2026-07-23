@@ -16,6 +16,7 @@ import Bridge from "@/pages/bridge";
 import Pricing from "@/pages/pricing";
 import CheckoutSuccess from "@/pages/checkout-success";
 import Admin from "@/pages/admin";
+import AdminProjectsPage from "@/pages/admin-projects";
 import LoginPage from "@/pages/login";
 import SignUpPage from "@/pages/signup";
 import ForgotPassword from "@/pages/forgot-password";
@@ -179,6 +180,7 @@ function App() {
                 <Route path="/terms" component={Terms} />
                 <Route path="/privacy" component={Privacy} />
                 <Route path="/user-instructions" component={UserInstructions} />
+                <Route path="/admin/projects" component={AdminProjectsPage} />
                 <Route path="/admin" component={Admin} />
                 <Route path="/" component={Home} />
                 <Route component={GatedRouter} />
