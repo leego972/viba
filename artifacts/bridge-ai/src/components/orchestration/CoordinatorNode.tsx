@@ -100,15 +100,7 @@ export function CoordinatorNode({
       {!reducedMotion && isWorking && [0, 1, 2].map((index) => (
         <motion.span
           key={index}
-          className="absolute h-1.5 w-1.5 rounded-full"
-          style={{
-            background: color,
-            boxShadow: `0 0 8px ${color}`,
-            left: "50%",
-            top: "50%",
-            marginLeft: -3,
-            marginTop: -3,
-          }}
+          className="absolute inset-0 pointer-events-none"
           animate={{ rotate: 360 }}
           transition={{
             duration: 4.8 + index * 0.7,
@@ -116,9 +108,21 @@ export function CoordinatorNode({
             ease: "linear",
             delay: index * -1.1,
           }}
-          transformTemplate={({ rotate }) => `rotate(${rotate}) translateX(${ringRadius + 1}px)`}
           aria-hidden="true"
-        />
+        >
+          <span
+            className="absolute h-1.5 w-1.5 rounded-full"
+            style={{
+              left: "50%",
+              top: "50%",
+              marginLeft: -3,
+              marginTop: -3,
+              transform: `translateX(${ringRadius + 1}px)`,
+              background: color,
+              boxShadow: `0 0 8px ${color}`,
+            }}
+          />
+        </motion.span>
       ))}
 
       <div
