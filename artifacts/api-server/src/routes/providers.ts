@@ -8,6 +8,11 @@ import {
   listVibaCredentials,
   deleteVibaCredential,
 } from "../lib/vibaVault";
+import {
+  listProviderPreferences,
+  saveProviderPreference,
+  type ProviderPreference,
+} from "../lib/providerPreferences";
 import { validateGithub } from "./credentials";
 
 const router: IRouter = Router();
@@ -22,34 +27,25 @@ interface ProviderDef {
   modelSettingKey: string | null;
   defaultModel: string;
   modelOptions: string[];
-  hasEndpoint: boolean;
   endpointSettingKey: string | null;
   defaultEndpoint: string;
-  adapterType?: string;
-}
-
-interface DynamicProviderMeta {
-  id: string;
-  label: string;
-  description?: string;
-  adapterType?: string;
-  model?: string;
-  endpoint?: string;
+  endpointRequired: boolean;
+  adapterType: string;
 }
 
 const PROVIDER_DEFS: ProviderDef[] = [
-  { id: "openai", label: "OpenAI (ChatGPT)", description: "Powers GPT-4, GPT-4o, and o-series models.", keyEnvVar: "OPENAI_API_KEY", modelSettingKey: "OPENAI_MODEL", defaultModel: "gpt-4.1-mini", modelOptions: ["gpt-4.1-mini", "gpt-4.1", "gpt-4o", "gpt-4o-mini", "o3-mini", "o1-mini"], hasEndpoint: false, endpointSettingKey: null, defaultEndpoint: "", adapterType: "openai" },
-  { id: "anthropic", label: "Anthropic (Claude)", description: "Powers Claude Sonnet, Opus, and Haiku models.", keyEnvVar: "ANTHROPIC_API_KEY", modelSettingKey: "ANTHROPIC_MODEL", defaultModel: "claude-3-5-sonnet-20241022", modelOptions: ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229"], hasEndpoint: false, endpointSettingKey: null, defaultEndpoint: "", adapterType: "anthropic" },
-  { id: "google", label: "Google Gemini", description: "Powers Gemini Flash and Pro models.", keyEnvVar: "GEMINI_API_KEY", modelSettingKey: "GEMINI_MODEL", defaultModel: "gemini-2.0-flash", modelOptions: ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro", "gemini-1.5-flash"], hasEndpoint: false, endpointSettingKey: null, defaultEndpoint: "", adapterType: "gemini" },
-  { id: "perplexity", label: "Perplexity", description: "Web-connected research and citation-backed answers.", keyEnvVar: "PERPLEXITY_API_KEY", modelSettingKey: "PERPLEXITY_MODEL", defaultModel: "sonar", modelOptions: ["sonar", "sonar-pro", "sonar-reasoning", "sonar-reasoning-pro"], hasEndpoint: false, endpointSettingKey: null, defaultEndpoint: "", adapterType: "perplexity" },
-  { id: "groq", label: "Groq", description: "Ultra-fast open-source inference via Groq LPU hardware.", keyEnvVar: "GROQ_API_KEY", modelSettingKey: "GROQ_MODEL", defaultModel: "llama-3.3-70b-versatile", modelOptions: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768", "gemma2-9b-it"], hasEndpoint: false, endpointSettingKey: null, defaultEndpoint: "", adapterType: "groq" },
-  { id: "ollama", label: "Local / Self-hosted (Ollama)", description: "Ollama or any OpenAI-compatible local server.", keyEnvVar: null, modelSettingKey: "OLLAMA_MODEL", defaultModel: "llama3.2", modelOptions: [], hasEndpoint: true, endpointSettingKey: "OLLAMA_BASE_URL", defaultEndpoint: "http://localhost:11434", adapterType: "ollama" },
-  { id: "venice", label: "Venice AI", description: "Privacy-first OpenAI-compatible AI provider.", keyEnvVar: "VENICE_API_KEY", modelSettingKey: "VENICE_MODEL", defaultModel: "llama-3.3-70b", modelOptions: ["llama-3.3-70b", "llama-3.1-405b", "mistral-31-24b", "venice-uncensored", "qwen-2.5-vl", "deepseek-r1-671b"], hasEndpoint: true, endpointSettingKey: "VENICE_ENDPOINT", defaultEndpoint: "https://api.venice.ai/api/v1", adapterType: "openai-compatible" },
-  { id: "mistral", label: "Mistral AI", description: "Mistral and Codestral build and code-review agents.", keyEnvVar: "MISTRAL_API_KEY", modelSettingKey: "MISTRAL_MODEL", defaultModel: "mistral-large-latest", modelOptions: ["mistral-large-latest", "mistral-small-latest", "codestral-latest", "open-mixtral-8x22b", "ministral-8b-latest"], hasEndpoint: false, endpointSettingKey: null, defaultEndpoint: "", adapterType: "openai-compatible" },
-  { id: "deepseek", label: "DeepSeek", description: "DeepSeek research, coding and reasoning models.", keyEnvVar: "DEEPSEEK_API_KEY", modelSettingKey: "DEEPSEEK_MODEL", defaultModel: "deepseek-chat", modelOptions: ["deepseek-chat", "deepseek-reasoner"], hasEndpoint: true, endpointSettingKey: "DEEPSEEK_ENDPOINT", defaultEndpoint: "https://api.deepseek.com", adapterType: "openai-compatible" },
-  { id: "github", label: "GitHub", description: "Repository, file, pull request and issue access.", keyEnvVar: "GITHUB_TOKEN", modelSettingKey: null, defaultModel: "", modelOptions: [], hasEndpoint: true, endpointSettingKey: "GITHUB_ENDPOINT", defaultEndpoint: "https://api.github.com", adapterType: "service-token" },
-  { id: "vastai", label: "Vast.ai", description: "GPU compute marketplace and instance management.", keyEnvVar: "VAST_AI_API_KEY", modelSettingKey: null, defaultModel: "", modelOptions: [], hasEndpoint: false, endpointSettingKey: null, defaultEndpoint: "", adapterType: "service-token" },
-  { id: "custom", label: "Custom / Generic AI", description: "Any OpenAI-compatible or custom AI endpoint.", keyEnvVar: "CUSTOM_API_KEY", modelSettingKey: "CUSTOM_MODEL", defaultModel: "", modelOptions: [], hasEndpoint: true, endpointSettingKey: "CUSTOM_ENDPOINT", defaultEndpoint: "", adapterType: "auto" },
+  { id: "openai", label: "OpenAI", description: "GPT and o-series models.", keyEnvVar: "OPENAI_API_KEY", modelSettingKey: "OPENAI_MODEL", defaultModel: "gpt-4.1-mini", modelOptions: ["gpt-4.1-mini", "gpt-4.1", "gpt-4o", "gpt-4o-mini", "o3-mini"], endpointSettingKey: null, defaultEndpoint: "", endpointRequired: false, adapterType: "openai" },
+  { id: "anthropic", label: "Anthropic", description: "Claude models.", keyEnvVar: "ANTHROPIC_API_KEY", modelSettingKey: "ANTHROPIC_MODEL", defaultModel: "claude-3-5-sonnet-20241022", modelOptions: ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229"], endpointSettingKey: null, defaultEndpoint: "", endpointRequired: false, adapterType: "anthropic" },
+  { id: "google", label: "Google Gemini", description: "Gemini models.", keyEnvVar: "GEMINI_API_KEY", modelSettingKey: "GEMINI_MODEL", defaultModel: "gemini-2.0-flash", modelOptions: ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro", "gemini-1.5-flash"], endpointSettingKey: null, defaultEndpoint: "", endpointRequired: false, adapterType: "gemini" },
+  { id: "perplexity", label: "Perplexity", description: "Web-connected research models.", keyEnvVar: "PERPLEXITY_API_KEY", modelSettingKey: "PERPLEXITY_MODEL", defaultModel: "sonar", modelOptions: ["sonar", "sonar-pro", "sonar-reasoning"], endpointSettingKey: null, defaultEndpoint: "", endpointRequired: false, adapterType: "perplexity" },
+  { id: "groq", label: "Groq", description: "Low-latency hosted inference.", keyEnvVar: "GROQ_API_KEY", modelSettingKey: "GROQ_MODEL", defaultModel: "llama-3.3-70b-versatile", modelOptions: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it"], endpointSettingKey: null, defaultEndpoint: "", endpointRequired: false, adapterType: "groq" },
+  { id: "ollama", label: "Ollama / Self-hosted", description: "A user-supplied Ollama endpoint.", keyEnvVar: null, modelSettingKey: "OLLAMA_MODEL", defaultModel: "llama3.2", modelOptions: [], endpointSettingKey: "OLLAMA_BASE_URL", defaultEndpoint: "", endpointRequired: true, adapterType: "ollama" },
+  { id: "venice", label: "Venice AI", description: "OpenAI-compatible Venice models.", keyEnvVar: "VENICE_API_KEY", modelSettingKey: "VENICE_MODEL", defaultModel: "llama-3.3-70b", modelOptions: ["llama-3.3-70b", "llama-3.1-405b", "mistral-31-24b"], endpointSettingKey: "VENICE_ENDPOINT", defaultEndpoint: "https://api.venice.ai/api/v1", endpointRequired: true, adapterType: "openai-compatible" },
+  { id: "mistral", label: "Mistral AI", description: "Mistral and Codestral models.", keyEnvVar: "MISTRAL_API_KEY", modelSettingKey: "MISTRAL_MODEL", defaultModel: "mistral-large-latest", modelOptions: ["mistral-large-latest", "mistral-small-latest", "codestral-latest"], endpointSettingKey: null, defaultEndpoint: "", endpointRequired: false, adapterType: "mistral" },
+  { id: "deepseek", label: "DeepSeek", description: "DeepSeek chat and reasoning models.", keyEnvVar: "DEEPSEEK_API_KEY", modelSettingKey: "DEEPSEEK_MODEL", defaultModel: "deepseek-chat", modelOptions: ["deepseek-chat", "deepseek-reasoner"], endpointSettingKey: "DEEPSEEK_ENDPOINT", defaultEndpoint: "https://api.deepseek.com", endpointRequired: true, adapterType: "deepseek" },
+  { id: "github", label: "GitHub", description: "Repository access for supervised code workflows.", keyEnvVar: "GITHUB_TOKEN", modelSettingKey: null, defaultModel: "", modelOptions: [], endpointSettingKey: null, defaultEndpoint: "https://api.github.com", endpointRequired: false, adapterType: "service-token" },
+  { id: "vastai", label: "Vast.ai", description: "GPU compute access.", keyEnvVar: "VAST_AI_API_KEY", modelSettingKey: null, defaultModel: "", modelOptions: [], endpointSettingKey: null, defaultEndpoint: "", endpointRequired: false, adapterType: "service-token" },
+  { id: "custom", label: "Custom OpenAI-compatible AI", description: "A user-supplied OpenAI-compatible endpoint.", keyEnvVar: "CUSTOM_API_KEY", modelSettingKey: "CUSTOM_MODEL", defaultModel: "", modelOptions: [], endpointSettingKey: "CUSTOM_ENDPOINT", defaultEndpoint: "", endpointRequired: true, adapterType: "openai-compatible" },
 ];
 
 const FIXED_IDS = new Set(PROVIDER_DEFS.map((provider) => provider.id));
@@ -58,90 +54,63 @@ function normalizeProviderId(value: string): string {
   return value.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
 }
 
-function displayName(id: string): string {
-  return id.split(/[-_.]+/).filter(Boolean).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ") || id;
-}
-
-function metaSettingKey(id: string): string {
-  return `PROVIDER_META__${id}`;
-}
-
-function enabledSettingKey(id: string): string {
-  return `PROVIDER_ENABLED__${id}`;
-}
-
-async function getSettingValue(key: string): Promise<string | null> {
-  const [row] = await db.select().from(settingsTable).where(eq(settingsTable.key, key));
-  return row?.value ?? null;
-}
-
-async function upsertSetting(key: string, value: string): Promise<void> {
-  const [existing] = await db.select().from(settingsTable).where(eq(settingsTable.key, key));
-  if (existing) await db.update(settingsTable).set({ value }).where(eq(settingsTable.key, key));
-  else await db.insert(settingsTable).values({ key, value });
-}
-
-async function deleteSetting(key: string): Promise<void> {
-  await db.delete(settingsTable).where(eq(settingsTable.key, key));
-}
-
 function userId(req: { session?: { userId?: number } }): number | null {
   return typeof req.session?.userId === "number" ? req.session.userId : null;
 }
 
-function parseMeta(raw: string | undefined): DynamicProviderMeta | null {
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as DynamicProviderMeta;
-    return parsed && typeof parsed.id === "string" ? parsed : null;
-  } catch {
-    return null;
-  }
+async function getPlatformSetting(key: string | null): Promise<string | null> {
+  if (!key) return null;
+  const [row] = await db.select().from(settingsTable).where(eq(settingsTable.key, key));
+  return row?.value ?? null;
 }
 
-async function hasFixedKeyConfigured(def: ProviderDef, uid: number | null): Promise<boolean> {
+async function hasCredential(def: ProviderDef, uid: number | null): Promise<boolean> {
   if (!def.keyEnvVar) return true;
-  if (process.env[def.keyEnvVar]) return true;
-  const legacySetting = await getSettingValue(def.keyEnvVar);
-  if (legacySetting) return true;
-  const resolved = await resolveVibaCredential({ userId: uid, provider: def.id, kind: "api_key", envNames: [def.keyEnvVar] });
-  return resolved.source === "vault";
+  if (process.env[def.keyEnvVar]?.trim()) return true;
+  const aliases = def.id === "google" ? ["google", "gemini"] : [def.id];
+  for (const provider of aliases) {
+    const resolved = await resolveVibaCredential({
+      userId: uid,
+      provider,
+      kind: "api_key",
+      envNames: [def.keyEnvVar],
+    });
+    if (resolved.source === "vault") return true;
+  }
+  return false;
 }
 
-async function providerExistsInVault(uid: number | null, id: string): Promise<boolean> {
-  const entries = await listVibaCredentials(uid);
-  return entries.some((entry) => entry.provider === id && entry.kind === "api_key" && entry.status !== "deleted");
+function preferenceMap(preferences: ProviderPreference[]): Map<string, ProviderPreference> {
+  return new Map(preferences.map((preference) => [preference.providerId, preference]));
 }
 
 router.get("/providers", async (req, res): Promise<void> => {
   const uid = userId(req);
-  const [allSettings, credentials] = await Promise.all([
-    db.select().from(settingsTable),
-    listVibaCredentials(uid),
-  ]);
-  const settingsMap = new Map(allSettings.map((setting) => [setting.key, setting.value]));
-  const credentialProviders = new Set(
-    credentials
-      .filter((entry) => entry.kind === "api_key" && entry.status !== "deleted")
-      .map((entry) => entry.provider),
-  );
+  const preferences = preferenceMap(await listProviderPreferences(uid));
 
-  const fixedProviders = await Promise.all(PROVIDER_DEFS.map(async (def) => {
-    const hasKey = await hasFixedKeyConfigured(def, uid);
-    const explicitEnabled = settingsMap.get(enabledSettingKey(def.id)) ?? settingsMap.get(`${def.id.toUpperCase()}_ENABLED`);
-    const enabled = explicitEnabled === undefined ? hasKey : explicitEnabled === "true";
-    const model = settingsMap.get(def.modelSettingKey ?? "") ?? def.defaultModel;
-    const endpoint = def.endpointSettingKey ? settingsMap.get(def.endpointSettingKey) ?? def.defaultEndpoint : undefined;
-    const status: ProviderStatus = !hasKey && def.keyEnvVar !== null ? "not_configured" : enabled ? "configured" : "disabled";
+  const providers = await Promise.all(PROVIDER_DEFS.map(async (def) => {
+    const preference = preferences.get(def.id);
+    const [credentialPresent, platformModel, platformEndpoint] = await Promise.all([
+      hasCredential(def, uid),
+      getPlatformSetting(def.modelSettingKey),
+      getPlatformSetting(def.endpointSettingKey),
+    ]);
+    const model = preference?.model ?? platformModel ?? def.defaultModel;
+    const endpoint = preference?.endpoint ?? platformEndpoint ?? def.defaultEndpoint;
+    const endpointPresent = !def.endpointRequired || Boolean(endpoint);
+    const configured = credentialPresent && endpointPresent;
+    const enabled = preference?.enabled ?? configured;
+    const status: ProviderStatus = !configured ? "not_configured" : enabled ? "configured" : "disabled";
+
     return {
       id: def.id,
       label: def.label,
       description: def.description,
-      hasKey,
+      hasKey: credentialPresent,
       enabled,
       model,
-      endpoint,
-      hasEndpoint: def.hasEndpoint,
+      endpoint: endpoint || undefined,
+      hasEndpoint: def.endpointRequired || Boolean(def.endpointSettingKey),
       defaultModel: def.defaultModel,
       modelOptions: def.modelOptions,
       adapterType: def.adapterType,
@@ -149,38 +118,7 @@ router.get("/providers", async (req, res): Promise<void> => {
     };
   }));
 
-  const dynamicIds = new Set<string>();
-  for (const provider of credentialProviders) if (!FIXED_IDS.has(provider)) dynamicIds.add(provider);
-  for (const [key] of settingsMap) {
-    if (key.startsWith("PROVIDER_META__")) {
-      const id = key.slice("PROVIDER_META__".length);
-      if (id && !FIXED_IDS.has(id)) dynamicIds.add(id);
-    }
-  }
-
-  const dynamicProviders = [...dynamicIds].map((id) => {
-    const meta = parseMeta(settingsMap.get(metaSettingKey(id))) ?? { id, label: displayName(id) };
-    const hasKey = credentialProviders.has(id);
-    const explicitEnabled = settingsMap.get(enabledSettingKey(id));
-    const enabled = explicitEnabled === undefined ? hasKey : explicitEnabled === "true";
-    const status: ProviderStatus = !hasKey ? "not_configured" : enabled ? "configured" : "disabled";
-    return {
-      id,
-      label: meta.label || displayName(id),
-      description: meta.description ?? "User-provided API connection.",
-      hasKey,
-      enabled,
-      model: meta.model ?? "",
-      endpoint: meta.endpoint,
-      hasEndpoint: Boolean(meta.endpoint),
-      defaultModel: meta.model ?? "",
-      modelOptions: [],
-      adapterType: meta.adapterType ?? "auto",
-      status,
-    };
-  });
-
-  const providers = [...fixedProviders, ...dynamicProviders].sort((a, b) => {
+  providers.sort((a, b) => {
     if (a.status === "configured" && b.status !== "configured") return -1;
     if (a.status !== "configured" && b.status === "configured") return 1;
     return a.label.localeCompare(b.label);
@@ -189,134 +127,194 @@ router.get("/providers", async (req, res): Promise<void> => {
   res.json({
     providers,
     configuredProviderIds: providers.filter((provider) => provider.status === "configured").map((provider) => provider.id),
+    unsupportedDynamicProviders: false,
   });
 });
 
 router.post("/providers", async (req, res): Promise<void> => {
-  const body = req.body as { providers?: Array<{ id: string; enabled?: boolean; model?: string }> };
+  const uid = userId(req);
+  const body = req.body as { providers?: Array<{ id?: string; enabled?: boolean; model?: string }> };
+  if (!uid) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
   if (!Array.isArray(body.providers)) {
     res.status(400).json({ error: "providers array is required" });
     return;
   }
+
   const results: Array<{ id: string; ok: boolean; error?: string }> = [];
   for (const item of body.providers) {
-    const id = normalizeProviderId(item.id);
-    if (!id) { results.push({ id: item.id, ok: false, error: "Invalid provider ID" }); continue; }
-    if (item.enabled !== undefined) await upsertSetting(enabledSettingKey(id), String(item.enabled));
-    const fixed = PROVIDER_DEFS.find((provider) => provider.id === id);
-    if (item.model !== undefined) {
-      if (fixed?.modelSettingKey) await upsertSetting(fixed.modelSettingKey, item.model);
-      else {
-        const current = parseMeta(await getSettingValue(metaSettingKey(id)) ?? undefined) ?? { id, label: displayName(id) };
-        await upsertSetting(metaSettingKey(id), JSON.stringify({ ...current, model: item.model }));
-      }
+    const id = normalizeProviderId(String(item.id ?? ""));
+    if (!FIXED_IDS.has(id)) {
+      results.push({ id, ok: false, error: "Provider has no verified VIBA adapter" });
+      continue;
     }
+    await saveProviderPreference({
+      userId: uid,
+      providerId: id,
+      enabled: item.enabled,
+      model: item.model,
+    });
     results.push({ id, ok: true });
   }
-  res.json({ ok: true, results });
+  res.json({ ok: results.every((result) => result.ok), results });
 });
 
 router.patch("/providers/:provider", async (req, res): Promise<void> => {
-  const id = normalizeProviderId(String(req.params["provider"] ?? ""));
-  if (!id) { res.status(400).json({ error: "Invalid provider ID" }); return; }
+  const uid = userId(req);
+  const id = normalizeProviderId(String(req.params.provider ?? ""));
+  if (!uid) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+  if (!FIXED_IDS.has(id)) {
+    res.status(422).json({ error: "Provider has no verified VIBA adapter" });
+    return;
+  }
 
-  const fixed = PROVIDER_DEFS.find((provider) => provider.id === id);
-  const body = req.body as { enabled?: boolean; model?: string; endpoint?: string; key?: string; adapterType?: string; label?: string; description?: string };
+  const def = PROVIDER_DEFS.find((provider) => provider.id === id)!;
+  const body = req.body as { enabled?: boolean; model?: string; endpoint?: string; key?: string };
 
-  if (body.enabled !== undefined) await upsertSetting(enabledSettingKey(id), String(body.enabled));
-
-  if (fixed) {
-    if (body.model !== undefined && fixed.modelSettingKey) await upsertSetting(fixed.modelSettingKey, body.model);
-    if (body.endpoint !== undefined && fixed.endpointSettingKey) await upsertSetting(fixed.endpointSettingKey, body.endpoint);
-  } else {
-    const current = parseMeta(await getSettingValue(metaSettingKey(id)) ?? undefined) ?? { id, label: body.label?.trim() || displayName(id) };
-    const next: DynamicProviderMeta = {
-      ...current,
-      id,
-      label: body.label?.trim() || current.label || displayName(id),
-      description: body.description?.trim() || current.description,
-      adapterType: body.adapterType?.trim() || current.adapterType || "auto",
-      model: body.model?.trim() || current.model,
-      endpoint: body.endpoint?.trim() || current.endpoint,
-    };
-    await upsertSetting(metaSettingKey(id), JSON.stringify(next));
+  try {
+    await saveProviderPreference({
+      userId: uid,
+      providerId: id,
+      enabled: body.enabled,
+      model: body.model,
+      endpoint: body.endpoint,
+    });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Invalid provider preference" });
+    return;
   }
 
   if (body.key !== undefined) {
-    if (body.key.trim() === "") {
-      await deleteVibaCredential({ userId: userId(req), provider: id, kind: "api_key", label: "default" });
+    const key = body.key.trim();
+    const aliases = id === "google" ? ["google", "gemini"] : [id];
+    if (!key) {
+      for (const provider of aliases) {
+        await deleteVibaCredential({ userId: uid, provider, kind: "api_key", label: "default" });
+      }
     } else {
-      await saveVibaCredential({ userId: userId(req), provider: id, kind: "api_key", value: body.key.trim(), label: "default" });
-      await logVibaEvent({ userId: userId(req), eventType: "provider_key_saved", provider: id, status: "saved", message: `${fixed?.label ?? displayName(id)} API key saved to vault.` });
+      await saveVibaCredential({ userId: uid, provider: id, kind: "api_key", value: key, label: "default" });
+      await logVibaEvent({
+        userId: uid,
+        eventType: "provider_key_saved",
+        provider: id,
+        status: "saved",
+        message: `${def.label} API key saved to the encrypted user vault.`,
+      });
     }
   }
 
-  res.json({ ok: true, provider: id, configured: await providerExistsInVault(userId(req), id) || (fixed ? await hasFixedKeyConfigured(fixed, userId(req)) : false) });
+  res.json({ ok: true, provider: id, configured: await hasCredential(def, uid) });
 });
 
 router.post("/providers/:provider/test", async (req, res): Promise<void> => {
-  const id = normalizeProviderId(String(req.params["provider"] ?? ""));
-  const fixed = PROVIDER_DEFS.find((provider) => provider.id === id);
-  const configured = fixed ? await hasFixedKeyConfigured(fixed, userId(req)) : await providerExistsInVault(userId(req), id);
-  if (!configured && fixed?.keyEnvVar !== null) {
-    res.json({ configured: false, message: "No API key configured. Enter your key and save first." });
+  const uid = userId(req);
+  const id = normalizeProviderId(String(req.params.provider ?? ""));
+  const def = PROVIDER_DEFS.find((provider) => provider.id === id);
+  if (!uid) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+  if (!def) {
+    res.status(422).json({ error: "Provider has no verified VIBA adapter" });
+    return;
+  }
+
+  if (!(await hasCredential(def, uid))) {
+    res.status(409).json({ configured: false, reachable: false, message: "No provider credential is configured." });
     return;
   }
 
   if (id === "github") {
-    const token = (await resolveVibaCredential({ userId: userId(req), provider: "github", kind: "api_key", envNames: ["GITHUB_TOKEN"] })).value;
-    if (!token) { res.json({ configured: false, message: "No GitHub token configured." }); return; }
+    const token = (await resolveVibaCredential({ userId: uid, provider: "github", kind: "api_key", envNames: ["GITHUB_TOKEN"] })).value;
+    if (!token) {
+      res.status(409).json({ configured: false, reachable: false, message: "No GitHub token is configured." });
+      return;
+    }
     const result = await validateGithub(token);
-    res.json({ configured: result.ok, reachable: result.ok, message: result.message, details: result.details });
+    res.status(result.ok ? 200 : 502).json({ configured: true, reachable: result.ok, message: result.message, details: result.details });
     return;
   }
 
-  if (id === "vastai") {
-    const { getVastConnectorStatus } = await import("../lib/vastaiConnector");
-    const status = await getVastConnectorStatus();
-    res.json({ configured: status.apiAvailable, reachable: status.apiAvailable, message: status.apiAvailable ? `Vast.ai key is valid. ${status.instanceCount ?? 0} instance(s) on this account.` : status.error ?? "Vast.ai API check failed." });
-    return;
-  }
-
-  res.json({ configured: true, requiresManualValidation: true, message: "API key is present. Live validation occurs during a real session; no paid call was made." });
+  res.status(501).json({
+    configured: true,
+    reachable: null,
+    error: "live_validation_unavailable",
+    message: `${def.label} has a runtime adapter, but this connection-test endpoint does not yet have a verified read-only validator. VIBA will not claim the connection was tested.`,
+  });
 });
 
 router.get("/providers/:provider/keys", async (req, res): Promise<void> => {
-  const id = normalizeProviderId(String(req.params["provider"] ?? ""));
-  if (!id) { res.status(400).json({ error: "Invalid provider ID" }); return; }
+  const id = normalizeProviderId(String(req.params.provider ?? ""));
+  if (!FIXED_IDS.has(id)) {
+    res.status(422).json({ error: "Provider has no verified VIBA adapter" });
+    return;
+  }
   const all = await listVibaCredentials(userId(req));
-  const keys = all.filter((entry) => entry.provider === id && entry.kind === "api_key").map((entry) => ({ label: entry.label, status: entry.status, lastUsedAt: entry.last_used_at ?? null, updatedAt: entry.updated_at }));
+  const aliases = id === "google" ? new Set(["google", "gemini"]) : new Set([id]);
+  const keys = all
+    .filter((entry) => aliases.has(typeof entry.provider === "string" ? entry.provider : "") && entry.kind === "api_key")
+    .map((entry) => ({
+      label: typeof entry.label === "string" ? entry.label : "default",
+      status: typeof entry.status === "string" ? entry.status : "saved",
+      lastUsedAt: entry.last_used_at ?? null,
+      updatedAt: entry.updated_at ?? null,
+    }));
   res.json({ provider: id, keys });
 });
 
 router.post("/providers/:provider/keys", async (req, res): Promise<void> => {
-  const id = normalizeProviderId(String(req.params["provider"] ?? ""));
+  const uid = userId(req);
+  const id = normalizeProviderId(String(req.params.provider ?? ""));
   const body = req.body as { key?: string; label?: string };
   const key = typeof body.key === "string" ? body.key.trim() : "";
   const label = typeof body.label === "string" && body.label.trim() ? body.label.trim().slice(0, 80) : "default";
-  if (!id || !key) { res.status(400).json({ error: "provider and key are required" }); return; }
-  await saveVibaCredential({ userId: userId(req), provider: id, kind: "api_key", value: key, label });
-  await logVibaEvent({ userId: userId(req), eventType: "provider_key_saved", provider: id, status: "saved", message: `${displayName(id)} API key saved with label ${label}.` });
+  if (!uid) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+  if (!FIXED_IDS.has(id) || !key) {
+    res.status(400).json({ error: "A supported provider and key are required" });
+    return;
+  }
+  await saveVibaCredential({ userId: uid, provider: id, kind: "api_key", value: key, label });
+  await logVibaEvent({ userId: uid, eventType: "provider_key_saved", provider: id, status: "saved", message: `${id} API key saved with label ${label}.` });
   res.json({ ok: true, provider: id, label });
 });
 
 router.delete("/providers/:provider/keys/:label", async (req, res): Promise<void> => {
-  const id = normalizeProviderId(String(req.params["provider"] ?? ""));
-  const label = String(req.params["label"] ?? "").trim();
-  if (!id || !label) { res.status(400).json({ error: "provider and label are required" }); return; }
-  const result = await deleteVibaCredential({ userId: userId(req), provider: id, kind: "api_key", label });
-  await logVibaEvent({ userId: userId(req), eventType: "provider_key_deleted", provider: id, status: "deleted", message: `${displayName(id)} API key ${label} removed.` });
-  res.json({ ok: true, deleted: result.deleted, provider: id, label });
+  const uid = userId(req);
+  const id = normalizeProviderId(String(req.params.provider ?? ""));
+  const label = String(req.params.label ?? "").trim();
+  if (!uid) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+  if (!FIXED_IDS.has(id) || !label) {
+    res.status(400).json({ error: "A supported provider and label are required" });
+    return;
+  }
+  const aliases = id === "google" ? ["google", "gemini"] : [id];
+  let deleted = false;
+  for (const provider of aliases) {
+    const result = await deleteVibaCredential({ userId: uid, provider, kind: "api_key", label });
+    deleted = deleted || result.deleted;
+  }
+  await logVibaEvent({ userId: uid, eventType: "provider_key_deleted", provider: id, status: "deleted", message: `${id} API key ${label} removed.` });
+  res.json({ ok: true, deleted, provider: id, label });
 });
 
 router.get("/providers/setting/:key", async (req, res): Promise<void> => {
-  const key = String(req.params["key"] ?? "");
+  const key = String(req.params.key ?? "");
   if (!key || key.length > 64 || /KEY|TOKEN|SECRET|PASSWORD/i.test(key)) {
     res.status(400).json({ error: "Invalid or sensitive setting key" });
     return;
   }
-  const value = await getSettingValue(key);
-  res.json({ key, value });
+  res.json({ key, value: await getPlatformSetting(key) });
 });
 
 export default router;
