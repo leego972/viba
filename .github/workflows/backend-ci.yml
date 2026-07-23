@@ -26,10 +26,24 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile=false
+        run: pnpm install --frozen-lockfile=false --reporter=silent
 
       - name: Typecheck Bridge AI frontend
-        run: pnpm --filter @workspace/bridge-ai run typecheck
+        shell: bash
+        run: |
+          set +e
+          pnpm --filter @workspace/bridge-ai run typecheck > frontend-typecheck.log 2>&1
+          status=$?
+          cat frontend-typecheck.log
+          exit $status
+
+      - name: Upload frontend typecheck diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-typecheck-diagnostics
+          path: frontend-typecheck.log
+          retention-days: 3
 
       - name: Run Bridge AI unit tests
         run: pnpm --filter @workspace/bridge-ai run unit-test
