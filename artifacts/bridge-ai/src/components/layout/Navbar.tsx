@@ -5,8 +5,8 @@ import {
   LayoutDashboard, CreditCard, Settings, Sun, Moon,
   ChevronDown, FlaskConical, Terminal, Wrench, Radio, Bot, ClipboardCheck,
   Rocket, ShieldAlert, Activity, ShieldCheck, Globe, FolderInput, Server,
-  Plug, FileText, Search, Megaphone, PenTool, Building2,
-  AlertTriangle, BarChart3, BrainCircuit, TrendingDown, History, Wallet, BookOpen, Smartphone,
+  Plug, Search, Megaphone, PenTool, Building2,
+  AlertTriangle, BrainCircuit, TrendingDown, History, Wallet, BookOpen, Smartphone,
 } from "lucide-react";
 
 interface DropItem { href: string; label: string; icon: React.ElementType }
@@ -15,14 +15,13 @@ interface NavGroup { label: string; icon: React.ElementType; items: DropItem[]; 
 const GROUPS: NavGroup[] = [
   {
     label: "Diagnostics", icon: AlertTriangle,
-    matchPaths: ["/ui-audit", "/doctor", "/launch-readiness", "/security-center", "/production-ops", "/qa-release-gate", "/market-readiness"],
+    matchPaths: ["/ui-audit", "/doctor", "/launch-readiness", "/security-center", "/production-ops", "/qa-release-gate"],
     items: [
       { href: "/doctor", label: "Doctor", icon: Wrench },
       { href: "/launch-readiness", label: "Launch Readiness", icon: Rocket },
       { href: "/security-center", label: "Security Center", icon: ShieldAlert },
       { href: "/production-ops", label: "Production Ops", icon: Activity },
       { href: "/qa-release-gate", label: "QA Gate", icon: ClipboardCheck },
-      { href: "/market-readiness", label: "Market Readiness", icon: BarChart3 },
     ],
   },
   {
@@ -67,15 +66,6 @@ const GROUPS: NavGroup[] = [
       { href: "/usage-history", label: "Usage History", icon: History },
       { href: "/budgets", label: "Budgets", icon: Wallet },
       { href: "/project-memory", label: "Project Memory", icon: BookOpen },
-    ],
-  },
-  {
-    label: "Reports", icon: FileText,
-    matchPaths: ["/proof-report", "/demo", "/sessions"],
-    items: [
-      { href: "/sessions", label: "Session History", icon: BarChart3 },
-      { href: "/demo/proof-report", label: "Sample Proof Report", icon: FileText },
-      { href: "/demo/doctor-report", label: "Sample Doctor Report", icon: FileText },
     ],
   },
 ];
