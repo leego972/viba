@@ -6,9 +6,6 @@ on:
     paths:
       - "artifacts/bridge-ai/**"
       - ".github/workflows/mobile-visibility-audit.yml"
-  push:
-    branches:
-      - audit/mobile-visibility-20260724
   workflow_dispatch:
 
 permissions:
