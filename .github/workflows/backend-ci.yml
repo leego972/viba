@@ -27,7 +27,26 @@ jobs:
         run: pnpm install --frozen-lockfile=false
 
       - name: Typecheck backend and workspace
-        run: pnpm run typecheck
+        id: typecheck
+        shell: bash
+        run: |
+          set +e
+          pnpm run typecheck 2>&1 | tee typecheck.log
+          status=${PIPESTATUS[0]}
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload typecheck log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: typecheck-log
+          path: typecheck.log
+          retention-days: 7
+
+      - name: Fail on typecheck errors
+        if: steps.typecheck.outputs.exit_code != '0'
+        run: exit 1
 
       - name: Build API server
         run: pnpm --filter @workspace/api-server run build
