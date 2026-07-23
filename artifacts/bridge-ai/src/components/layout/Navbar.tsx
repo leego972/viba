@@ -6,7 +6,7 @@ import {
   ChevronDown, FlaskConical, Terminal, Wrench, Radio, Bot, ClipboardCheck,
   ShieldAlert, Activity, ShieldCheck, Globe, FolderInput, Server,
   Plug, Search, Megaphone, PenTool, Building2,
-  AlertTriangle, BrainCircuit, TrendingDown, History, Wallet, BookOpen, Smartphone,
+  AlertTriangle, BrainCircuit, TrendingDown, History, Wallet, BookOpen, Smartphone, Database,
 } from "lucide-react";
 
 interface DropItem { href: string; label: string; icon: React.ElementType }
@@ -129,10 +129,14 @@ export function Navbar() {
           {GROUPS.map((group) => <DropMenu key={group.label} group={group} location={location} />)}
           <Link href="/billing"><button className={`flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium ${isBilling ? "border-primary/25 bg-primary/10" : "border-transparent text-foreground/55 hover:bg-white/[0.05]"}`}><CreditCard className="h-3.5 w-3.5" />Billing</button></Link>
           <Link href="/settings"><button className={`flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium ${isSettings ? "border-primary/25 bg-primary/10" : "border-transparent text-foreground/55 hover:bg-white/[0.05]"}`}><Settings className="h-3.5 w-3.5" />Settings</button></Link>
-          {isAdmin && <Link href="/admin"><button className="flex h-9 items-center gap-1.5 rounded-lg border border-red-500/25 bg-red-500/10 px-3 text-sm font-medium"><ShieldCheck className="h-3.5 w-3.5" />Admin</button></Link>}
+          {isAdmin && <>
+            <Link href="/admin/projects"><button className="flex h-9 items-center gap-1.5 rounded-lg border border-red-500/25 bg-red-500/10 px-3 text-sm font-medium"><Database className="h-3.5 w-3.5" />Projects</button></Link>
+            <Link href="/admin"><button className="flex h-9 items-center gap-1.5 rounded-lg border border-red-500/25 bg-red-500/10 px-3 text-sm font-medium"><ShieldCheck className="h-3.5 w-3.5" />Admin</button></Link>
+          </>}
         </nav>
         <nav className="flex flex-1 items-center gap-0.5 md:hidden">
           {[{ href: "/dashboard", icon: LayoutDashboard }, { href: "/app-publisher", icon: Smartphone }, { href: "/connections", icon: Plug }, { href: "/settings", icon: Settings }].map(({ href, icon: Icon }) => <Link key={href} href={href}><button className={`flex h-8 w-8 items-center justify-center rounded-lg border ${location.startsWith(href) ? "border-primary/30 bg-primary/10 text-primary" : "border-transparent text-foreground/50"}`}><Icon className="h-4 w-4" /></button></Link>)}
+          {isAdmin && <Link href="/admin/projects"><button className="flex h-8 w-8 items-center justify-center rounded-lg border border-red-500/25 bg-red-500/10"><Database className="h-4 w-4" /></button></Link>}
         </nav>
         <button onClick={toggleTheme} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/50 text-foreground/60 hover:bg-white/[0.06]">{theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</button>
       </div>
