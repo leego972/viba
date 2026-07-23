@@ -58,6 +58,12 @@ jobs:
         if: steps.typecheck.outputs.exit_code != '0'
         run: exit 1
 
+      - name: Run API tests
+        run: pnpm --filter @workspace/api-server run test
+
+      - name: Run Bridge unit tests
+        run: pnpm --filter @workspace/bridge-ai run unit-test
+
       - name: Build API server
         run: pnpm --filter @workspace/api-server run build
 
