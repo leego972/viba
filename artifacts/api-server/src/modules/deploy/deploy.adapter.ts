@@ -4,7 +4,6 @@ import type {
   CreateProjectInput,
   ConnectRepositoryInput,
   CreateDeploymentInput,
-  CreateAddonInput,
   SetEnvVarInput,
   CreateDomainInput,
   RollbackInput,
@@ -38,22 +37,22 @@ export const deployAdapter = {
   },
 
   async connectRepository(input: ConnectRepositoryInput): Promise<void> {
-    return svc.connectGithubRepo(input);
+    return svc.connectGithubRepo({ ...input, autoDeployEnabled: false });
   },
 
   async createDeployment(input: CreateDeploymentInput): Promise<Deployment> {
-    const dep = await svc.createDeployment(input);
-    void svc.runDeploymentPipeline(dep.id);
-    return dep;
+    const deployment = await svc.createDeployment(input);
+    void svc.runDeploymentPipeline(deployment.id);
+    return deployment;
   },
 
   async getDeploymentStatus(deploymentId: string): Promise<Deployment | null> {
-    const [dep] = await db
+    const [deployment] = await db
       .select()
       .from(vibaDeployments)
       .where(eq(vibaDeployments.id, deploymentId))
       .limit(1);
-    return (dep ?? null) as Deployment | null;
+    return (deployment ?? null) as Deployment | null;
   },
 
   async getDeploymentLogs(deploymentId: string): Promise<string[]> {
@@ -62,12 +61,14 @@ export const deployAdapter = {
 
   async redeploy(projectId: string): Promise<Deployment> {
     const last = await svc.getLastSuccessfulDeployment(projectId);
-    return svc.createDeployment({
+    const deployment = await svc.createDeployment({
       projectId,
       triggerType: "MANUAL",
       commitSha: last?.commitSha ?? undefined,
       commitMessage: "Manual redeploy",
     });
+    void svc.runDeploymentPipeline(deployment.id);
+    return deployment;
   },
 
   async rollback(input: RollbackInput): Promise<Deployment> {
@@ -87,8 +88,7 @@ export const deployAdapter = {
   },
 
   async verifyDomain(domainId: string): Promise<{ verified: boolean }> {
-    const verified = await svc.verifyDomain(domainId);
-    return { verified };
+    return { verified: await svc.verifyDomain(domainId) };
   },
 
   async createPostgresAddon(projectId: string): Promise<DeployAddon> {
