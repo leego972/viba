@@ -4,7 +4,7 @@ on:
   push:
     branches: [audit/viba-production-hardening-20260723]
     paths:
-      - .github/viba-project-storage-bundle.b64
+      - .github/viba-project-storage-bundle/**
 
 permissions:
   contents: write
@@ -23,11 +23,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          base64 --decode .github/viba-project-storage-bundle.b64 > /tmp/viba-project-storage-bundle.tgz
+          cat .github/viba-project-storage-bundle/part-* | base64 --decode > /tmp/viba-project-storage-bundle.tgz
           tar -tzf /tmp/viba-project-storage-bundle.tgz | grep -Ev '(^/|(^|/)\.\.(/|$))' >/tmp/viba-bundle-paths.txt
           test "$(wc -l </tmp/viba-bundle-paths.txt)" -eq 15
           tar -xzf /tmp/viba-project-storage-bundle.tgz -C .
-          git rm .github/viba-project-storage-bundle.b64
+          rm -rf .github/viba-project-storage-bundle
           git rm .github/workflows/apply-viba-project-storage.yml
           git config user.name "VIBA Production Audit"
           git config user.email "audit@viba.guru"
