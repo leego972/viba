@@ -17,7 +17,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10.24.0
+          version: 10.26.1
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -30,6 +30,9 @@ jobs:
 
       - name: Typecheck backend and workspace
         run: pnpm run typecheck
+
+      - name: Run Bridge AI unit tests
+        run: pnpm --filter @workspace/bridge-ai run unit-test
 
       - name: Build API server
         run: pnpm --filter @workspace/api-server run build
