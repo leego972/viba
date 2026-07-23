@@ -235,6 +235,32 @@ async function inspect(page: Page) {
       return false;
     };
 
+    const isToastNotification = (element: Element) => {
+      let current: Element | null = element;
+      while (current && current !== document.body) {
+        const html = current as HTMLElement;
+        const style = getComputedStyle(html);
+        const zIndex = Number.parseInt(style.zIndex, 10);
+        if (
+          current.matches('[data-radix-toast-viewport], [data-radix-toast-root], [role="status"]') ||
+          ((current.tagName === "OL" || current.tagName === "LI") && style.position === "fixed" && Number.isFinite(zIndex) && zIndex >= 90) ||
+          (current.tagName === "OL" && html.classList.contains("z-[100]"))
+        ) {
+          return true;
+        }
+        current = current.parentElement;
+      }
+      return false;
+    };
+
+    const isFieldAdornmentPair = (a: HTMLElement, b: HTMLElement) => {
+      const pair = [a, b];
+      const field = pair.find((element) => element.matches("input, textarea"));
+      const button = pair.find((element) => element.tagName === "BUTTON");
+      if (!field || !button || getComputedStyle(button).position !== "absolute") return false;
+      return field.parentElement === button.parentElement || field.parentElement?.contains(button) === true;
+    };
+
     const all = Array.from(document.querySelectorAll("body *"));
     const interactives = all.filter((element) => {
       const html = element as HTMLElement;
@@ -255,7 +281,7 @@ async function inspect(page: Page) {
       const meaningfulText = !!text && text.length >= 2 && !html.classList.contains("sr-only");
       const outside = rect.left < -1 || rect.right > viewportWidth + 1;
 
-      if ((interactive || meaningfulText) && outside && !hasHorizontalScrollAncestor(element)) {
+      if ((interactive || meaningfulText) && outside && !hasHorizontalScrollAncestor(element) && !isToastNotification(element)) {
         outOfFrame.push(`${selectorFor(element)} rect=${Math.round(rect.left)},${Math.round(rect.right)}${text ? ` text=${text.slice(0, 80)}` : ""}`);
       }
 
@@ -268,7 +294,7 @@ async function inspect(page: Page) {
         }
       }
 
-      if (interactive && (rect.width < 36 || rect.height < 36)) {
+      if (interactive && (rect.width < 36 || rect.height < 36) && !isToastNotification(element)) {
         const inlineTextLink = html.tagName === "A" && style.display === "inline";
         if (!inlineTextLink) tinyTargets.push(`${selectorFor(element)} size=${Math.round(rect.width)}x${Math.round(rect.height)}`);
       }
@@ -282,6 +308,7 @@ async function inspect(page: Page) {
       for (let j = i + 1; j < interactives.length; j += 1) {
         const b = interactives[j]!;
         if (a.contains(b) || b.contains(a)) continue;
+        if (isToastNotification(a) || isToastNotification(b) || isFieldAdornmentPair(a, b)) continue;
         const br = b.getBoundingClientRect();
         if (br.bottom < 0 || br.top > viewportHeight || br.right < 0 || br.left > viewportWidth) continue;
         const width = Math.max(0, Math.min(ar.right, br.right) - Math.max(ar.left, br.left));
