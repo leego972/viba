@@ -46,7 +46,6 @@ import AiSavingsPage from "@/pages/ai-savings";
 import UsageHistoryPage from "@/pages/usage-history";
 import BudgetsPage from "@/pages/budgets";
 import ProjectMemoryPage from "@/pages/project-memory";
-import ProjectsPage from "@/pages/projects";
 import AppPublisherPage from "@/pages/app-publisher";
 import Terms from "@/pages/terms";
 import Privacy from "@/pages/privacy";
@@ -159,7 +158,6 @@ function GatedRouter() {
         <Route path="/usage-history" component={UsageHistoryPage} />
         <Route path="/budgets" component={BudgetsPage} />
         <Route path="/project-memory" component={ProjectMemoryPage} />
-        <Route path="/projects" component={ProjectsPage} />
         <Route path="/admin/projects" component={AdminProjectsRoute} />
         <Route path="/admin" component={AdminPageRoute} />
         <Route path="/app-publisher" component={AppPublisherPage} />
