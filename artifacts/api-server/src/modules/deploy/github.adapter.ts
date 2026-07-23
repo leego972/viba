@@ -159,10 +159,12 @@ export async function listInstallationRepos(
   }));
 }
 
-export function buildInstallUrl(): string {
+export function buildInstallUrl(state?: string): string {
   const cfg = getConfig();
   const base = `https://github.com/apps/${cfg.clientId}/installations/new`;
-  return `${base}?redirect_uri=${encodeURIComponent(cfg.callbackUrl)}`;
+  const params = new URLSearchParams({ redirect_uri: cfg.callbackUrl });
+  if (state) params.set("state", state);
+  return `${base}?${params.toString()}`;
 }
 
 export function verifyWebhookSignature(
