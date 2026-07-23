@@ -17,6 +17,7 @@ jobs:
     timeout-minutes: 25
     env:
       CI: "true"
+      VITE_MOBILE_AUDIT: "true"
       MOBILE_AUDIT_BASE_URL: http://127.0.0.1:4173
       MOBILE_AUDIT_PROTECTED: "true"
     steps:
