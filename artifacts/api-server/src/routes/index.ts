@@ -41,6 +41,7 @@ import accountRouter from "./account";
 import fileBuildSafetyRouter from "./fileBuildSafety";
 import vastaiConnectorRouter from "./vastaiConnector";
 import appPublisherRouter from "./appPublisher";
+import userProjectsRouter from "./userProjects";
 
 const router: IRouter = Router();
 
@@ -86,5 +87,6 @@ router.use(accountRouter);
 router.use(fileBuildSafetyRouter);
 router.use(vastaiConnectorRouter);
 router.use(appPublisherRouter);
+router.use(userProjectsRouter);
 
 export default router;
