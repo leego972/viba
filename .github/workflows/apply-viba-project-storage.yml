@@ -1,0 +1,35 @@
+name: Apply VIBA Project Storage Integration
+
+on:
+  push:
+    branches: [audit/viba-production-hardening-20260723]
+    paths:
+      - .github/viba-project-storage-patch/**
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/viba-production-hardening-20260723
+          fetch-depth: 0
+
+      - name: Apply reviewed integration patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/viba-project-storage-patch/part-* > /tmp/viba-project-storage.patch
+          git apply --check /tmp/viba-project-storage.patch
+          git apply /tmp/viba-project-storage.patch
+          rm -rf .github/viba-project-storage-patch
+          git rm .github/workflows/apply-viba-project-storage.yml
+          git config user.name "VIBA Production Audit"
+          git config user.email "audit@viba.guru"
+          git add -A
+          git commit -m "product: persist user builds and complete project admin UI"
+          git push origin HEAD:audit/viba-production-hardening-20260723
