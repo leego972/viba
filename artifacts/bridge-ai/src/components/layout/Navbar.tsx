@@ -26,9 +26,8 @@ const GROUPS: NavGroup[] = [
   },
   {
     label: "Command", icon: Terminal,
-    matchPaths: ["/projects", "/workbench", "/agent-console", "/tool-console", "/bridge", "/assisted-browser"],
+    matchPaths: ["/workbench", "/agent-console", "/tool-console", "/bridge", "/assisted-browser"],
     items: [
-      { href: "/projects", label: "My Projects", icon: FolderInput },
       { href: "/workbench", label: "Workbench", icon: FlaskConical },
       { href: "/agent-console", label: "Agent Console", icon: Terminal },
       { href: "/tool-console", label: "Tool Console", icon: Wrench },
