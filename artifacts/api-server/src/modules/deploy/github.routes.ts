@@ -35,32 +35,30 @@ function timingSafeEqual(a: string, b: string): boolean {
   return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }
 
-async function requireAdminSession(req: Request, res: Response, next: NextFunction): Promise<void> {
+async function assertAdminSession(req: Request, res: Response): Promise<boolean> {
   const userId = req.session?.userId;
   if (!userId) {
     res.status(401).json({ error: "Authentication required" });
-    return;
+    return false;
   }
 
   try {
     if (!(await isAdminUserId(userId))) {
       res.status(403).json({ error: "Administrator access required" });
-      return;
+      return false;
     }
-    next();
+    return true;
   } catch (err) {
     logger.error({ err, userId }, "GitHub deploy admin-session check failed");
     res.status(503).json({ error: "Administrator access could not be verified" });
+    return false;
   }
 }
 
 router.get(
   "/install",
   asyncHandler(async (req, res) => {
-    await new Promise<void>((resolve, reject) => {
-      requireAdminSession(req, res, (err?: unknown) => err ? reject(err) : resolve());
-    });
-    if (res.headersSent) return;
+    if (!(await assertAdminSession(req, res))) return;
 
     if (!isGitHubAppConfigured()) {
       res.status(503).json({ error: "GitHub App not configured. Set GITHUB_APP_* env vars." });
@@ -79,10 +77,7 @@ router.get(
 router.get(
   "/callback",
   asyncHandler(async (req, res) => {
-    await new Promise<void>((resolve, reject) => {
-      requireAdminSession(req, res, (err?: unknown) => err ? reject(err) : resolve());
-    });
-    if (res.headersSent) return;
+    if (!(await assertAdminSession(req, res))) return;
 
     const { code, installation_id, state } = req.query as Record<string, string>;
     const expectedState = req.session.githubDeployOauthState;
@@ -166,8 +161,7 @@ router.post(
       return;
     }
 
-    const valid = verifyWebhookSignature(rawBody, signature);
-    if (!valid) {
+    if (!verifyWebhookSignature(rawBody, signature)) {
       res.status(401).json({ error: "Invalid signature" });
       return;
     }
@@ -309,10 +303,7 @@ router.post(
 router.get(
   "/installations",
   asyncHandler(async (req, res) => {
-    await new Promise<void>((resolve, reject) => {
-      requireAdminSession(req, res, (err?: unknown) => err ? reject(err) : resolve());
-    });
-    if (res.headersSent) return;
+    if (!(await assertAdminSession(req, res))) return;
     const rows = await db.select().from(githubInstallations);
     res.json(rows);
   }),
@@ -321,10 +312,7 @@ router.get(
 router.get(
   "/repos",
   asyncHandler(async (req, res) => {
-    await new Promise<void>((resolve, reject) => {
-      requireAdminSession(req, res, (err?: unknown) => err ? reject(err) : resolve());
-    });
-    if (res.headersSent) return;
+    if (!(await assertAdminSession(req, res))) return;
 
     const { installationId } = req.query as { installationId?: string };
     if (installationId) {
