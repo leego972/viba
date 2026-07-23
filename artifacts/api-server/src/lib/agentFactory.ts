@@ -57,6 +57,13 @@ function isValidKey(key: string | null): key is string {
 }
 
 export function buildMockAdapter(agent: Agent): AgentAdapter {
+  if (!isSimulationAllowed()) {
+    throw new ProviderConfigurationError(
+      agent.provider,
+      `A live ${agent.provider} call failed or was unavailable. VIBA will not replace it with fabricated output.`,
+    );
+  }
+
   const provider = agent.provider.toLowerCase();
   if (provider === "anthropic") return new ClaudeMockAdapter(String(agent.id), agent.name, agent.role);
   if (provider === "google") return new GeminiMockAdapter(String(agent.id), agent.name, agent.role);
