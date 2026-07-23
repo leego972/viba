@@ -16,6 +16,7 @@ import Bridge from "@/pages/bridge";
 import Pricing from "@/pages/pricing";
 import CheckoutSuccess from "@/pages/checkout-success";
 import Admin from "@/pages/admin";
+import AdminProjectsPage from "@/pages/admin-projects";
 import LoginPage from "@/pages/login";
 import SignUpPage from "@/pages/signup";
 import ForgotPassword from "@/pages/forgot-password";
@@ -35,7 +36,6 @@ import DoctorPage from "@/pages/doctor";
 import AssistedBrowserPage from "@/pages/assisted-browser";
 import OnboardingPage from "@/pages/onboarding";
 import ConnectionsPage from "@/pages/connections";
-import LaunchReadinessPage from "@/pages/launch-readiness";
 import SeoDashboardPage from "@/pages/seo-dashboard";
 import AdvertisingDashboardPage from "@/pages/advertising-dashboard";
 import ContentCreatorPage from "@/pages/content-creator";
@@ -53,15 +53,9 @@ import UserInstructions from "@/pages/user-instructions";
 import DoctorHistory from "@/pages/doctor-history";
 import OwnerActions from "@/pages/owner-actions";
 import SetupAssistant from "@/pages/setup-assistant";
-import CompletionPage, {
-  CollaborationMapPage,
-  DemoDoctorReport,
-  DemoPage,
-  DemoProofReport,
-  SessionTimelinePage,
-  ShareReportPage,
-} from "@/pages/market-completion";
+import { SessionTimelinePage, CollaborationMapPage } from "@/pages/market-completion";
 import { useAuth } from "@/hooks/useAuth";
+import { useAdminAccess } from "@/hooks/useAdminAccess";
 import { isBypassValid, setBypassValid } from "@/lib/auth";
 
 const queryClient = new QueryClient();
@@ -94,6 +88,37 @@ function AuthGuard({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+function AdminGuard({ children }: { children: ReactNode }) {
+  const [, setLocation] = useLocation();
+  const { isAuthenticated, isLoading } = useAuth();
+  const { isAdmin, isLoading: isAdminLoading } = useAdminAccess(isAuthenticated);
+
+  useEffect(() => {
+    if (isLoading || isAdminLoading) return;
+    if (!isAuthenticated) {
+      setLocation("/login");
+      return;
+    }
+    if (!isAdmin) setLocation("/dashboard");
+  }, [isLoading, isAdminLoading, isAuthenticated, isAdmin, setLocation]);
+
+  if (isLoading || isAdminLoading || !isAuthenticated || !isAdmin) return <Spinner />;
+
+  if (!sessionStorage.getItem("viba_admin_token")) {
+    sessionStorage.setItem("viba_admin_token", "session-admin");
+    window.dispatchEvent(new Event("storage"));
+  }
+  return <>{children}</>;
+}
+
+function AdminPageRoute() {
+  return <AdminGuard><Admin /></AdminGuard>;
+}
+
+function AdminProjectsRoute() {
+  return <AdminGuard><AdminProjectsPage /></AdminGuard>;
+}
+
 function GatedRouter() {
   return (
     <AuthGuard>
@@ -115,19 +140,6 @@ function GatedRouter() {
         <Route path="/doctor/history" component={DoctorHistory} />
         <Route path="/owner-actions" component={OwnerActions} />
         <Route path="/setup-assistant" component={SetupAssistant} />
-        <Route path="/connectors" component={CompletionPage} />
-        <Route path="/self-audit" component={CompletionPage} />
-        <Route path="/crews" component={CompletionPage} />
-        <Route path="/production-smoke-test" component={CompletionPage} />
-        <Route path="/mobile-readiness" component={CompletionPage} />
-        <Route path="/team" component={CompletionPage} />
-        <Route path="/usage" component={CompletionPage} />
-        <Route path="/recovery" component={CompletionPage} />
-        <Route path="/doctor/trends" component={CompletionPage} />
-        <Route path="/clients" component={CompletionPage} />
-        <Route path="/security-evidence" component={CompletionPage} />
-        <Route path="/reports/compare" component={CompletionPage} />
-        <Route path="/market-readiness" component={CompletionPage} />
         <Route path="/assisted-browser" component={AssistedBrowserPage} />
         <Route path="/qa-release-gate" component={QAReleaseGatePage} />
         <Route path="/project-import" component={ProjectImportPage} />
@@ -136,7 +148,6 @@ function GatedRouter() {
         <Route path="/domain-setup" component={DomainSetupPage} />
         <Route path="/onboarding" component={OnboardingPage} />
         <Route path="/connections" component={ConnectionsPage} />
-        <Route path="/launch-readiness" component={LaunchReadinessPage} />
         <Route path="/seo" component={SeoDashboardPage} />
         <Route path="/advertising" component={AdvertisingDashboardPage} />
         <Route path="/content-creator" component={ContentCreatorPage} />
@@ -147,6 +158,8 @@ function GatedRouter() {
         <Route path="/usage-history" component={UsageHistoryPage} />
         <Route path="/budgets" component={BudgetsPage} />
         <Route path="/project-memory" component={ProjectMemoryPage} />
+        <Route path="/admin/projects" component={AdminProjectsRoute} />
+        <Route path="/admin" component={AdminPageRoute} />
         <Route path="/app-publisher" component={AppPublisherPage} />
         <Route component={NotFound} />
       </Switch>
@@ -201,11 +214,6 @@ function App() {
                 <Route path="/terms" component={Terms} />
                 <Route path="/privacy" component={Privacy} />
                 <Route path="/user-instructions" component={UserInstructions} />
-                <Route path="/demo/doctor-report" component={DemoDoctorReport} />
-                <Route path="/demo/proof-report" component={DemoProofReport} />
-                <Route path="/demo" component={DemoPage} />
-                <Route path="/share/reports/:shareId" component={ShareReportPage} />
-                <Route path="/admin" component={Admin} />
                 <Route path="/" component={Home} />
                 <Route component={GatedRouter} />
               </Switch>

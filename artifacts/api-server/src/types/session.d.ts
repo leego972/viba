@@ -5,5 +5,6 @@ declare module "express-session" {
     userId?: number;
     email?: string;
     bypass?: boolean;
+    githubDeployOauthState?: string;
   }
 }

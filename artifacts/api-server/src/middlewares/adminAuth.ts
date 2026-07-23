@@ -18,27 +18,46 @@ function timingSafeEqual(a: string, b: string): boolean {
 }
 
 /**
- * Middleware: requires a valid ADMIN_TOKEN bearer token.
- * Returns 503 if ADMIN_TOKEN env var is not set (misconfigured server).
- * Returns 401 if token is missing or wrong.
- *
- * TEST_BYPASS_ADMIN=1 lets integration tests call admin routes without a real
- * token. Only active when NODE_ENV=test.
+ * Require either a verified signed-in administrator session or the configured
+ * administrator bearer token. The database-backed identity lookup is loaded
+ * only when a real session is present so isolated middleware tests do not need
+ * a database merely to exercise token and confirmation behaviour.
  */
-export const requireAdmin: RequestHandler = (req, res, next) => {
-  if (process.env.NODE_ENV === "test" && process.env.TEST_BYPASS_ADMIN === "1") { next(); return; }
+export const requireAdmin: RequestHandler = async (req, res, next) => {
+  if (process.env.NODE_ENV === "test" && process.env.TEST_BYPASS_ADMIN === "1") {
+    next();
+    return;
+  }
+
+  const sessionUserId = req.session?.userId;
+  if (typeof sessionUserId === "number" && sessionUserId > 0) {
+    try {
+      const { isAdminUserId } = await import("../lib/adminAccess");
+      if (await isAdminUserId(sessionUserId)) {
+        next();
+        return;
+      }
+    } catch (error) {
+      req.log?.error?.({ error, sessionUserId }, "admin session verification failed");
+      res.status(503).json({ error: "Administrator access could not be verified" });
+      return;
+    }
+  }
+
   if (!ADMIN_TOKEN) {
     res.status(503).json({
-      error: "Admin not configured — set ADMIN_TOKEN environment variable on the server",
+      error: "Admin not configured — set ADMIN_TOKEN or VIBA_ADMIN_EMAILS on the server",
     });
     return;
   }
+
   const auth = req.headers["authorization"] ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
   if (!token || !timingSafeEqual(token, ADMIN_TOKEN)) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
+
   next();
 };
 

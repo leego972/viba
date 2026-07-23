@@ -1,4 +1,4 @@
-import { getAllTools } from "./toolRegistry";
+import { getAllTools, type ToolDefinition } from "./toolRegistry";
 import { getAllBuilderTools } from "./builderToolbox";
 
 export type CapabilityStatus =
@@ -29,52 +29,68 @@ const PLANNING_PREFIXES = [
   "report.evidence.generate",
 ];
 
-const KNOWN_ADAPTER_REQUIRED = new Set([
-  "build.safe_build",
-  "railway.deploy.trigger",
-  "railway.env.write",
-  "render.env.write",
-  "render.deploy.trigger",
-  "digitalocean.env.write",
-  "digitalocean.deploy.trigger",
-  "vercel.env.write",
-  "vercel.deploy.trigger",
-  "sevall.env.write",
-  "sevall.deploy.trigger",
-]);
-
 function isPlanningTool(toolId: string): boolean {
   return PLANNING_PREFIXES.some((prefix) => toolId.startsWith(prefix));
 }
 
-function statusFor(toolId: string, credentialProvider: string | null): CapabilityStatus {
-  if (isPlanningTool(toolId)) return "planning_only";
-  if (KNOWN_ADAPTER_REQUIRED.has(toolId)) return "adapter_required";
-  if (credentialProvider) return "credential_required";
+function hasExecutionAdapter(tool: unknown): tool is ToolDefinition & { executionName: string } {
+  return typeof tool === "object" && tool !== null &&
+    "executionName" in tool && typeof (tool as { executionName?: unknown }).executionName === "string" &&
+    Boolean((tool as { executionName?: string }).executionName);
+}
+
+function statusFor(tool: {
+  toolId: string;
+  credentialProvider: string | null;
+  requiresApproval: boolean;
+}, adapterPresent: boolean): CapabilityStatus {
+  if (isPlanningTool(tool.toolId)) return "planning_only";
+  if (!adapterPresent) return "adapter_required";
+  if (tool.requiresApproval) return "external_setup_required";
+  if (tool.credentialProvider) return "credential_required";
   return "executable";
 }
 
-function missingFor(status: CapabilityStatus, credentialProvider: string | null): string[] {
-  if (status === "planning_only") return ["Live mutation tool if the plan must change code or infrastructure."];
-  if (status === "credential_required") return [`${credentialProvider} credential configured server-side or in VIBA vault.`];
-  if (status === "adapter_required") return ["Live adapter implementation", "tests", "safe-build proof", "staging smoke test"];
-  if (status === "external_setup_required") return ["External provider setup and verification"];
-  return [];
+function missingFor(
+  status: CapabilityStatus,
+  credentialProvider: string | null,
+  requiresApproval: boolean,
+): string[] {
+  switch (status) {
+    case "planning_only":
+      return ["A verified live mutation adapter is required before the generated plan can change code or infrastructure."];
+    case "credential_required":
+      return [`A ${credentialProvider ?? "provider"} credential configured server-side or in the VIBA vault.`];
+    case "adapter_required":
+      return ["Concrete execution adapter", "automated tests", "safe-build proof", "staging smoke test"];
+    case "external_setup_required":
+      return requiresApproval
+        ? ["Server-validated one-time approval workflow", "replay protection", "audit proof"]
+        : ["External provider setup and verification"];
+    case "executable":
+      return [];
+  }
 }
 
 function claimFor(status: CapabilityStatus): string {
   switch (status) {
-    case "planning_only": return "Can generate a structured plan/spec/checklist now. Does not mutate production or code by itself.";
-    case "credential_required": return "Can run only after the required credential exists and policy gates pass.";
-    case "adapter_required": return "Registered or planned, but must not be advertised as live until the adapter and checks pass.";
-    case "external_setup_required": return "Requires external provider setup before execution.";
-    case "executable": return "Can execute through the current broker path, subject to policy checks.";
+    case "planning_only":
+      return "Generates a structured plan, specification, checklist, or prompt. It does not mutate code or production.";
+    case "credential_required":
+      return "Has a concrete execution adapter and can run after the required credential is configured and policy checks pass.";
+    case "adapter_required":
+      return "Registered in the catalogue but not live. It has no verified execution adapter and must not be advertised as executable.";
+    case "external_setup_required":
+      return "The execution adapter exists, but live use remains blocked until the required secure approval or external setup is completed.";
+    case "executable":
+      return "Executes through a concrete broker adapter and is still subject to authentication, policy, and error checks.";
   }
 }
 
 export function getToolCapabilityMatrix(): CapabilityRecord[] {
   const all = [...getAllTools(), ...getAllBuilderTools()];
   const seen = new Set<string>();
+
   return all
     .filter((tool) => {
       if (seen.has(tool.toolId)) return false;
@@ -82,7 +98,7 @@ export function getToolCapabilityMatrix(): CapabilityRecord[] {
       return true;
     })
     .map((tool) => {
-      const status = statusFor(tool.toolId, tool.credentialProvider);
+      const status = statusFor(tool, hasExecutionAdapter(tool));
       return {
         toolId: tool.toolId,
         label: tool.label,
@@ -93,7 +109,7 @@ export function getToolCapabilityMatrix(): CapabilityRecord[] {
         requiresApproval: tool.requiresApproval,
         requiresSafeBuild: tool.requiresSafeBuild,
         truthfulClaim: claimFor(status),
-        missingForFullExecution: missingFor(status, tool.credentialProvider),
+        missingForFullExecution: missingFor(status, tool.credentialProvider, tool.requiresApproval),
         rawValuesReturned: false,
       };
     });
@@ -108,7 +124,7 @@ export function getCapabilitySummary(): Record<string, unknown> {
   return {
     counts,
     totalTools: matrix.length,
-    truthfulAdvertisingRule: "Only tools with status executable, planning_only, or credential_required may be shown as available. Tools marked adapter_required must be shown as not live yet.",
+    truthfulAdvertisingRule: "Only executable tools may be described as live actions. planning_only tools must be labelled as plans. credential_required, adapter_required, and external_setup_required tools must display their blocking condition.",
     rawValuesReturned: false,
   };
 }

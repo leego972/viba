@@ -1,18 +1,21 @@
 import { pool } from "@workspace/db";
 
-const BUILT_IN_ADMIN_EMAILS = ["brobroplzcheck@gmail.com"];
 const ADMIN_FULL_ACCESS_CREDITS = 999_999_999;
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
+/**
+ * Administrator identities must be configured in Render, never committed to
+ * the public repository. Set VIBA_ADMIN_EMAILS to a comma-separated allow-list.
+ */
 export function getAdminEmails(): string[] {
   const envEmails = (process.env.VIBA_ADMIN_EMAILS ?? process.env.ADMIN_EMAILS ?? "")
     .split(",")
     .map(normalizeEmail)
     .filter(Boolean);
-  return [...new Set([...BUILT_IN_ADMIN_EMAILS.map(normalizeEmail), ...envEmails])];
+  return [...new Set(envEmails)];
 }
 
 export function isAdminEmail(email: string | null | undefined): boolean {
@@ -23,7 +26,7 @@ export function isAdminEmail(email: string | null | undefined): boolean {
 export async function getUserEmailById(userId: number): Promise<string | null> {
   if (!Number.isFinite(userId) || userId <= 0) return null;
   const { rows } = await pool.query<{ email: string }>(
-    `SELECT email FROM users WHERE id = $1`,
+    `SELECT email FROM users WHERE id = $1 AND deleted_at IS NULL`,
     [userId],
   );
   return rows[0]?.email ?? null;
@@ -35,7 +38,8 @@ async function ensureAdminFullAccess(userId: number): Promise<void> {
        SET subscription_status = 'active',
            credits_remaining = GREATEST(credits_remaining, $1),
            updated_at = NOW()
-     WHERE id = $2`,
+     WHERE id = $2
+       AND deleted_at IS NULL`,
     [ADMIN_FULL_ACCESS_CREDITS, userId],
   );
 }

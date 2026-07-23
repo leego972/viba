@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { Request, Response, NextFunction } from "express";
-import { db, githubInstallations, githubRepositories, projectGithubConnections, vibaDeployProjects } from "@workspace/db";
+import { db, githubInstallations, githubRepositories, projectGithubConnections } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import crypto from "crypto";
 import {
@@ -15,6 +15,7 @@ import {
 } from "./github.adapter";
 import { createDeployment, runDeploymentPipeline } from "./deploy.service";
 import { logger } from "../../lib/logger";
+import { isAdminUserId } from "../../lib/adminAccess";
 
 const router = Router();
 
@@ -26,29 +27,76 @@ function asyncHandler(
   };
 }
 
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) {
+    crypto.timingSafeEqual(Buffer.from(a), Buffer.from(a));
+    return false;
+  }
+  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
+
+async function assertAdminSession(req: Request, res: Response): Promise<boolean> {
+  const userId = req.session?.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Authentication required" });
+    return false;
+  }
+
+  try {
+    if (!(await isAdminUserId(userId))) {
+      res.status(403).json({ error: "Administrator access required" });
+      return false;
+    }
+    return true;
+  } catch (err) {
+    logger.error({ err, userId }, "GitHub deploy admin-session check failed");
+    res.status(503).json({ error: "Administrator access could not be verified" });
+    return false;
+  }
+}
+
 router.get(
   "/install",
-  (req, res) => {
+  asyncHandler(async (req, res) => {
+    if (!(await assertAdminSession(req, res))) return;
+
     if (!isGitHubAppConfigured()) {
       res.status(503).json({ error: "GitHub App not configured. Set GITHUB_APP_* env vars." });
       return;
     }
-    res.redirect(buildInstallUrl());
-  },
+
+    const state = crypto.randomBytes(32).toString("hex");
+    req.session.githubDeployOauthState = state;
+    await new Promise<void>((resolve, reject) => {
+      req.session.save((err) => err ? reject(err) : resolve());
+    });
+    res.redirect(buildInstallUrl(state));
+  }),
 );
 
 router.get(
   "/callback",
   asyncHandler(async (req, res) => {
-    const { code, installation_id, setup_action } = req.query as Record<string, string>;
+    if (!(await assertAdminSession(req, res))) return;
+
+    const { code, installation_id, state } = req.query as Record<string, string>;
+    const expectedState = req.session.githubDeployOauthState;
 
     if (!code) {
       res.status(400).json({ error: "Missing code parameter" });
       return;
     }
+    if (!state || !expectedState || !timingSafeEqual(state, expectedState)) {
+      res.status(403).json({ error: "Invalid or expired GitHub installation state" });
+      return;
+    }
+
+    delete req.session.githubDeployOauthState;
+    await new Promise<void>((resolve, reject) => {
+      req.session.save((err) => err ? reject(err) : resolve());
+    });
 
     const { accessToken } = await exchangeCodeForToken(code);
-
     const installations = await listInstallations(accessToken);
 
     for (const inst of installations) {
@@ -91,11 +139,16 @@ router.get(
       }
     }
 
-    const publicUrl = process.env.PUBLIC_VIBA_DEPLOY_URL ?? "";
-    res.redirect(`${publicUrl}/deploy?github_connected=1&installation_id=${installation_id ?? ""}`);
+    const publicUrl = (process.env.PUBLIC_VIBA_DEPLOY_URL ?? process.env.PUBLIC_ORIGIN ?? "").replace(/\/$/, "");
+    const destination = `${publicUrl}/deploy?github_connected=1&installation_id=${encodeURIComponent(installation_id ?? "")}`;
+    res.redirect(destination);
   }),
 );
 
+/**
+ * Webhooks remain publicly reachable, but every payload must pass GitHub's
+ * HMAC signature verification before any data is read or changed.
+ */
 router.post(
   "/webhook",
   asyncHandler(async (req, res) => {
@@ -108,8 +161,7 @@ router.post(
       return;
     }
 
-    const valid = verifyWebhookSignature(rawBody, signature);
-    if (!valid) {
+    if (!verifyWebhookSignature(rawBody, signature)) {
       res.status(401).json({ error: "Invalid signature" });
       return;
     }
@@ -192,7 +244,6 @@ router.post(
       const pushedBranch = extractBranchFromRef(payload.ref);
       const repoFullName = payload.repository.full_name;
       const commitSha = payload.after;
-      const installationId = payload.installation?.id;
 
       const repoRows = await db
         .select()
@@ -252,6 +303,7 @@ router.post(
 router.get(
   "/installations",
   asyncHandler(async (req, res) => {
+    if (!(await assertAdminSession(req, res))) return;
     const rows = await db.select().from(githubInstallations);
     res.json(rows);
   }),
@@ -260,9 +312,16 @@ router.get(
 router.get(
   "/repos",
   asyncHandler(async (req, res) => {
+    if (!(await assertAdminSession(req, res))) return;
+
     const { installationId } = req.query as { installationId?: string };
     if (installationId) {
-      const repos = await listInstallationRepos(parseInt(installationId, 10));
+      const parsedInstallationId = Number.parseInt(installationId, 10);
+      if (!Number.isFinite(parsedInstallationId) || parsedInstallationId <= 0) {
+        res.status(400).json({ error: "Invalid installationId" });
+        return;
+      }
+      const repos = await listInstallationRepos(parsedInstallationId);
       res.json(repos);
     } else {
       const rows = await db.select().from(githubRepositories);
