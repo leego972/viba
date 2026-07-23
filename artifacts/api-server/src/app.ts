@@ -16,6 +16,7 @@ import { requireAdmin } from "./middlewares/adminAuth";
 import { accessTokenMiddleware } from "./middlewares/accessToken";
 import { webhookHandler } from "./routes/stripeWebhook";
 import adminRouter from "./routes/admin";
+import adminProjectsRouter from "./routes/adminProjects";
 import { pool } from "@workspace/db";
 import { getBillingStatus, isStripeConfigured } from "./lib/billing";
 import { sendLowCreditsWarningIfNeeded } from "./lib/billingEmail";
@@ -103,11 +104,6 @@ app.use(
 );
 app.use(express.urlencoded({ limit: "512kb", extended: true }));
 
-/**
- * Browser CSRF defence. SameSite=Lax is the primary control; this additional
- * origin check rejects cross-origin browser mutations while still allowing
- * signed webhooks and non-browser clients that do not send an Origin header.
- */
 app.use((req, res, next) => {
   if (!isProd || ["GET", "HEAD", "OPTIONS"].includes(req.method)) {
     next();
@@ -129,6 +125,7 @@ app.use((req, res, next) => {
 
 app.post("/api/sessions/:id/run-next", agentLimiter);
 app.post("/api/sessions/:id/run-full", agentLimiter);
+app.use("/api/admin/projects", apiLimiter, requireAdmin, adminProjectsRouter);
 app.use("/api/admin", apiLimiter, requireAdmin, adminRouter);
 
 app.get("/api/healthz", (_req, res) => { res.json({ status: "ok" }); });
@@ -203,8 +200,6 @@ app.post("/api/sessions/:id/safety-vote", apiLimiter, requireSession, (_req, res
   });
 });
 
-// ── Public SEO / crawler routes (no auth required) ───────────────────────────
-
 const SITE_URL = configuredPublicOrigin || "https://viba.guru";
 
 app.get("/robots.txt", (_req, res) => {
@@ -252,10 +247,8 @@ app.get("/structured-data.json", (_req, res) => {
   res.json(generateStructuredData());
 });
 
-// ── Auth routes (exempt from ACCESS_TOKEN gate — login/register must always work) ──
 app.use("/api", apiLimiter, authRouter);
 
-// ── Auth-gated API routes ─────────────────────────────────────────────────────
 const absoluteApiGate = express.Router();
 absoluteApiGate.use(apiLimiter, accessTokenMiddleware, requireSession, absoluteApiRoutes);
 app.use((req, res, next) => {
