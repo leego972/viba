@@ -130,22 +130,35 @@ export function Navbar() {
   const isBilling = location.startsWith("/billing") || location.startsWith("/pricing");
   const isSettings = location === "/settings";
 
+  const mobileItems = [
+    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/app-publisher", label: "Publish Apps", icon: Smartphone },
+    { href: "/connections", label: "Connections", icon: Plug },
+    { href: "/settings", label: "Settings", icon: Settings },
+  ];
+
   return (
     <header className="sticky top-0 z-50 w-full border-b border-white/[0.06] bg-background/90 backdrop-blur-xl">
       <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
-      <div className="container flex h-[60px] max-w-screen-2xl items-center gap-1.5 px-3 sm:gap-3 sm:px-4">
-        <Link href="/" className="flex shrink-0 items-center"><img src={`${import.meta.env.BASE_URL}viba-logo.png`} alt="VIBA" className="h-10 w-auto object-contain sm:h-14" /></Link>
-        <nav className="hidden min-w-0 flex-1 items-center gap-0.5 md:flex">
+      <div className="container flex h-[60px] max-w-screen-2xl items-center gap-1 px-2 min-[360px]:gap-1.5 min-[360px]:px-3 sm:gap-3 sm:px-4">
+        <Link href="/" className="flex min-w-0 shrink items-center xl:shrink-0"><img src={`${import.meta.env.BASE_URL}viba-logo.png`} alt="VIBA" className="h-9 w-auto max-w-[68px] object-contain min-[360px]:h-10 min-[360px]:max-w-[82px] sm:h-14 sm:max-w-none" /></Link>
+        <nav className="hidden min-w-0 flex-1 items-center gap-0.5 xl:flex">
           <Link href="/dashboard"><button className={`flex h-9 items-center gap-1.5 rounded-lg border px-3.5 text-sm font-medium ${isDashboard ? "border-primary/25 bg-primary/10" : "border-transparent text-foreground/55 hover:bg-white/[0.05]"}`}><LayoutDashboard className="h-3.5 w-3.5" />Dashboard</button></Link>
           {GROUPS.map((group) => <DropMenu key={group.label} group={group} location={location} />)}
           <Link href="/billing"><button className={`flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium ${isBilling ? "border-primary/25 bg-primary/10" : "border-transparent text-foreground/55 hover:bg-white/[0.05]"}`}><CreditCard className="h-3.5 w-3.5" />Billing</button></Link>
           <Link href="/settings"><button className={`flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium ${isSettings ? "border-primary/25 bg-primary/10" : "border-transparent text-foreground/55 hover:bg-white/[0.05]"}`}><Settings className="h-3.5 w-3.5" />Settings</button></Link>
           {isAdmin && <Link href="/admin"><button className="flex h-9 items-center gap-1.5 rounded-lg border border-red-500/25 bg-red-500/10 px-3 text-sm font-medium"><ShieldCheck className="h-3.5 w-3.5" />Admin</button></Link>}
         </nav>
-        <nav className="flex flex-1 items-center gap-0.5 md:hidden">
-          {[{ href: "/dashboard", icon: LayoutDashboard }, { href: "/app-publisher", icon: Smartphone }, { href: "/connections", icon: Plug }, { href: "/settings", icon: Settings }].map(({ href, icon: Icon }) => <Link key={href} href={href}><button className={`flex h-8 w-8 items-center justify-center rounded-lg border ${location.startsWith(href) ? "border-primary/30 bg-primary/10 text-primary" : "border-transparent text-foreground/50"}`}><Icon className="h-4 w-4" /></button></Link>)}
+        <nav className="flex min-w-0 flex-1 items-center justify-end gap-0 xl:hidden" aria-label="Primary navigation">
+          {mobileItems.map(({ href, label, icon: Icon }) => (
+            <Link key={href} href={href} aria-label={label}>
+              <span className={`flex h-9 w-9 items-center justify-center rounded-lg border min-[360px]:h-10 min-[360px]:w-10 ${location.startsWith(href) ? "border-primary/30 bg-primary/10 text-primary" : "border-transparent text-foreground/50"}`}>
+                <Icon className="h-4 w-4" aria-hidden="true" />
+              </span>
+            </Link>
+          ))}
         </nav>
-        <button onClick={toggleTheme} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/50 text-foreground/60 hover:bg-white/[0.06]">{theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</button>
+        <button onClick={toggleTheme} aria-label={theme === "dark" ? "Use light theme" : "Use dark theme"} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/50 text-foreground/60 hover:bg-white/[0.06] min-[360px]:h-10 min-[360px]:w-10">{theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</button>
       </div>
     </header>
   );
