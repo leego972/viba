@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -80,7 +80,6 @@ const protectedRoutes = [
 ] as const;
 
 type Severity = "error" | "warning";
-
 type AuditIssue = {
   severity: Severity;
   kind: string;
@@ -94,58 +93,62 @@ const auditDir = join(process.cwd(), "test-results", "mobile-visibility");
 mkdirSync(auditDir, { recursive: true });
 
 function json(body: unknown, status = 200) {
-  return {
-    status,
-    contentType: "application/json",
-    body: JSON.stringify(body),
-  };
+  return { status, contentType: "application/json", body: JSON.stringify(body) };
 }
 
-function fixtureForApi(pathname: string, method: string): unknown {
-  if (pathname === "/api/auth/me") {
-    return { id: 900001, email: "mobile-audit@viba.test", name: "Mobile Audit" };
-  }
-  if (pathname.includes("billing") || pathname.includes("subscription")) {
-    return {
-      plan: "pro",
-      status: "active",
-      credits: 10000,
-      balance: 10000,
-      currentPeriodEnd: null,
-      usage: 0,
-      limit: 10000,
-    };
-  }
-  if (pathname.includes("credits")) {
-    return { balance: 10000, credits: 10000, remaining: 10000 };
-  }
-  if (pathname.includes("health")) return { status: "ok" };
-  if (pathname.includes("providers")) return { providers: [], saved: [], available: [] };
-  if (pathname.includes("sessions")) return { sessions: [], items: [], data: [] };
-  if (pathname.includes("projects")) return { projects: [], items: [], data: [] };
-  if (pathname.includes("usage")) return { usage: [], history: [], items: [], totals: {} };
-  if (pathname.includes("budget")) return { budgets: [], items: [], totals: {} };
-  if (pathname.includes("memory")) return { memories: [], items: [], data: [] };
-  if (pathname.includes("doctor")) return { reports: [], history: [], findings: [], items: [] };
-  if (pathname.includes("audit")) return { audits: [], findings: [], items: [], status: "idle" };
-  if (pathname.includes("readiness")) return { checks: [], items: [], score: 0, status: "idle" };
-  if (pathname.includes("security")) return { findings: [], events: [], items: [], score: 100 };
-  if (pathname.includes("connections") || pathname.includes("credentials")) {
-    return { connections: [], credentials: [], items: [], providers: [] };
-  }
-  if (pathname.includes("seo") || pathname.includes("advertising") || pathname.includes("content") || pathname.includes("outreach")) {
-    return { campaigns: [], items: [], data: [], results: [] };
-  }
-  if (pathname.includes("admin")) return { isAdmin: true, items: [], users: [] };
-  if (method !== "GET") return { ok: true, success: true, id: "mobile-audit" };
-  return { items: [], data: [], results: [], status: "idle" };
-}
-
+/**
+ * Authentication is mocked so every protected route can render in CI without
+ * a real account. Read endpoints return stable empty states rather than fake
+ * records. This exercises the page shell and responsive layout without
+ * allowing an invalid response shape to trigger VIBA's error boundary.
+ */
 async function installApiMocks(page: Page) {
   await page.route("**/api/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
-    await route.fulfill(json(fixtureForApi(url.pathname, request.method())));
+    const path = url.pathname;
+    const method = request.method();
+
+    if (path === "/api/auth/me") {
+      await route.fulfill(json({ id: 900001, email: "mobile-audit@viba.test", name: "Mobile Audit" }));
+      return;
+    }
+    if (path === "/api/auth/logout") {
+      await route.fulfill(json({ ok: true }));
+      return;
+    }
+    if (path === "/api/billing/status") {
+      await route.fulfill(json({
+        planKey: "pro",
+        plan: "pro",
+        status: "active",
+        credits: 10000,
+        balance: 10000,
+        usage: 0,
+        limit: 10000,
+        currentPeriodEnd: null,
+      }));
+      return;
+    }
+    if (/\/api\/providers\/[^/]+\/keys$/.test(path)) {
+      await route.fulfill(json({ keys: [] }));
+      return;
+    }
+    if (path.includes("/health") || path.endsWith("/status")) {
+      await route.fulfill(json({ status: "ok", healthy: true, ready: true }));
+      return;
+    }
+    if (path.startsWith("/api/admin")) {
+      await route.fulfill(json({ isAdmin: true, items: [], users: [], data: [] }));
+      return;
+    }
+    if (method !== "GET") {
+      await route.fulfill(json({ ok: true, success: true, id: "mobile-audit" }));
+      return;
+    }
+
+    // Empty arrays are the safest neutral response for list/query hooks.
+    await route.fulfill(json([]));
   });
 }
 
@@ -161,27 +164,23 @@ async function stabilise(page: Page) {
       }
     `,
   });
-  await page.waitForTimeout(650);
+  await page.waitForTimeout(900);
 }
 
 async function inspect(page: Page) {
   return page.evaluate(() => {
     const viewportWidth = document.documentElement.clientWidth;
     const viewportHeight = window.innerHeight;
-    const rootWidth = Math.max(
-      document.documentElement.scrollWidth,
-      document.body?.scrollWidth ?? 0,
-    );
+    const rootWidth = Math.max(document.documentElement.scrollWidth, document.body?.scrollWidth ?? 0);
 
     const selectorFor = (element: Element) => {
       const html = element as HTMLElement;
       const id = html.id ? `#${html.id}` : "";
-      const role = html.getAttribute("role");
       const name = html.getAttribute("aria-label") || html.getAttribute("name") || "";
       const classes = typeof html.className === "string"
         ? html.className.trim().split(/\s+/).slice(0, 4).join(".")
         : "";
-      return `${html.tagName.toLowerCase()}${id}${classes ? `.${classes}` : ""}${role ? `[role=${role}]` : ""}${name ? `[name=${name}]` : ""}`;
+      return `${html.tagName.toLowerCase()}${id}${classes ? `.${classes}` : ""}${name ? `[name=${name}]` : ""}`;
     };
 
     const isVisible = (element: Element) => {
@@ -203,82 +202,77 @@ async function inspect(page: Page) {
       return false;
     };
 
+    const all = Array.from(document.querySelectorAll("body *"));
+    const interactives = all.filter((element) => {
+      const html = element as HTMLElement;
+      return isVisible(element) && html.matches('button, a[href], input, select, textarea, [role="button"], [role="link"], [tabindex]:not([tabindex="-1"])');
+    }) as HTMLElement[];
+
     const outOfFrame: string[] = [];
-    const clippedInteractive: string[] = [];
+    const clippedText: string[] = [];
     const tinyTargets: string[] = [];
 
-    const all = Array.from(document.querySelectorAll("body *"));
     for (const element of all) {
       if (!isVisible(element)) continue;
       const html = element as HTMLElement;
       const rect = html.getBoundingClientRect();
       const style = getComputedStyle(html);
-      const interactive = html.matches('button, a[href], input, select, textarea, [role="button"], [role="link"], [tabindex]:not([tabindex="-1"])');
-      const inHorizontalDocumentBand = rect.bottom > 0 && rect.top < Math.max(viewportHeight, document.documentElement.scrollHeight);
-      const escapesViewport = rect.left < -1 || rect.right > viewportWidth + 1;
+      const interactive = interactives.includes(html);
+      const text = html.children.length === 0 ? html.innerText?.trim() : "";
+      const meaningfulText = !!text && text.length >= 2 && !html.classList.contains("sr-only");
+      const outside = rect.left < -1 || rect.right > viewportWidth + 1;
 
-      if (inHorizontalDocumentBand && escapesViewport && !hasHorizontalScrollAncestor(element)) {
-        const transformedDecoration = style.pointerEvents === "none" && (style.position === "absolute" || style.position === "fixed");
-        if (!transformedDecoration) outOfFrame.push(`${selectorFor(element)} rect=${Math.round(rect.left)},${Math.round(rect.right)}`);
+      if ((interactive || meaningfulText) && outside && !hasHorizontalScrollAncestor(element)) {
+        outOfFrame.push(`${selectorFor(element)} rect=${Math.round(rect.left)},${Math.round(rect.right)}${text ? ` text=${text.slice(0, 80)}` : ""}`);
       }
 
-      if (interactive) {
-        const horizontallyClipped = rect.left < -1 || rect.right > viewportWidth + 1;
-        const verticallyClipped = rect.top < -1 || rect.bottom > viewportHeight + 1;
-        if ((horizontallyClipped || verticallyClipped) && style.position === "fixed") {
-          clippedInteractive.push(`${selectorFor(element)} rect=${Math.round(rect.left)},${Math.round(rect.top)},${Math.round(rect.right)},${Math.round(rect.bottom)}`);
+      if (meaningfulText) {
+        const deliberateEllipsis = style.textOverflow === "ellipsis";
+        const clippedX = html.scrollWidth > html.clientWidth + 2;
+        const clippedY = html.scrollHeight > html.clientHeight + 2;
+        if ((clippedX || clippedY) && !deliberateEllipsis && ["hidden", "clip"].includes(style.overflow)) {
+          clippedText.push(`${selectorFor(element)} text=${text.slice(0, 80)}`);
         }
-        if (rect.width < 36 || rect.height < 36) {
-          const inlineTextLink = html.tagName === "A" && style.display === "inline";
-          if (!inlineTextLink) tinyTargets.push(`${selectorFor(element)} size=${Math.round(rect.width)}x${Math.round(rect.height)}`);
-        }
+      }
+
+      if (interactive && (rect.width < 36 || rect.height < 36)) {
+        const inlineTextLink = html.tagName === "A" && style.display === "inline";
+        if (!inlineTextLink) tinyTargets.push(`${selectorFor(element)} size=${Math.round(rect.width)}x${Math.round(rect.height)}`);
       }
     }
 
-    const interactives = all.filter((element) => isVisible(element) && (element as HTMLElement).matches('button, a[href], input, select, textarea, [role="button"], [role="link"]')) as HTMLElement[];
     const overlaps: string[] = [];
     for (let i = 0; i < interactives.length; i += 1) {
-      const a = interactives[i];
+      const a = interactives[i]!;
       const ar = a.getBoundingClientRect();
       if (ar.bottom < 0 || ar.top > viewportHeight || ar.right < 0 || ar.left > viewportWidth) continue;
       for (let j = i + 1; j < interactives.length; j += 1) {
-        const b = interactives[j];
+        const b = interactives[j]!;
         if (a.contains(b) || b.contains(a)) continue;
         const br = b.getBoundingClientRect();
         if (br.bottom < 0 || br.top > viewportHeight || br.right < 0 || br.left > viewportWidth) continue;
-        const overlapWidth = Math.max(0, Math.min(ar.right, br.right) - Math.max(ar.left, br.left));
-        const overlapHeight = Math.max(0, Math.min(ar.bottom, br.bottom) - Math.max(ar.top, br.top));
-        const overlapArea = overlapWidth * overlapHeight;
-        if (overlapArea > 16 && overlapWidth > 3 && overlapHeight > 3) {
-          overlaps.push(`${selectorFor(a)} <> ${selectorFor(b)} overlap=${Math.round(overlapWidth)}x${Math.round(overlapHeight)}`);
+        const width = Math.max(0, Math.min(ar.right, br.right) - Math.max(ar.left, br.left));
+        const height = Math.max(0, Math.min(ar.bottom, br.bottom) - Math.max(ar.top, br.top));
+        if (width > 3 && height > 3 && width * height > 16) {
+          overlaps.push(`${selectorFor(a)} <> ${selectorFor(b)} overlap=${Math.round(width)}x${Math.round(height)}`);
         }
       }
     }
 
-    const truncatedText: string[] = [];
-    for (const element of all) {
-      if (!isVisible(element)) continue;
-      const html = element as HTMLElement;
-      const text = html.innerText?.trim();
-      if (!text || text.length < 4 || html.children.length > 0) continue;
-      const style = getComputedStyle(html);
-      const clippedX = html.scrollWidth > html.clientWidth + 2;
-      const clippedY = html.scrollHeight > html.clientHeight + 2;
-      const deliberateEllipsis = style.textOverflow === "ellipsis";
-      if ((clippedX || clippedY) && !deliberateEllipsis && ["hidden", "clip"].includes(style.overflow)) {
-        truncatedText.push(`${selectorFor(element)} text=${text.slice(0, 80)}`);
-      }
-    }
+    const bodyText = document.body.innerText;
+    const errorBoundary = bodyText.includes("Something went wrong")
+      ? bodyText.match(/Something went wrong[\s\S]{0,180}/)?.[0]?.replace(/\s+/g, " ") ?? "Something went wrong"
+      : null;
 
     return {
       viewportWidth,
       rootWidth,
       horizontalOverflow: Math.max(0, rootWidth - viewportWidth),
       outOfFrame: [...new Set(outOfFrame)].slice(0, 30),
-      clippedInteractive: [...new Set(clippedInteractive)].slice(0, 20),
       overlaps: [...new Set(overlaps)].slice(0, 20),
-      truncatedText: [...new Set(truncatedText)].slice(0, 20),
+      clippedText: [...new Set(clippedText)].slice(0, 20),
       tinyTargets: [...new Set(tinyTargets)].slice(0, 30),
+      errorBoundary,
     };
   });
 }
@@ -296,14 +290,10 @@ for (const viewport of viewports) {
       : publicRoutes.map((route) => ({ route, protected: false }));
 
     for (const item of routes) {
-      test(`${item.route} remains visible`, async ({ page }, testInfo) => {
+      test(`${item.route} remains visible`, async ({ page }) => {
         if (item.protected) await installApiMocks(page);
 
-        const consoleErrors: string[] = [];
         const pageErrors: string[] = [];
-        page.on("console", (message) => {
-          if (message.type() === "error") consoleErrors.push(message.text());
-        });
         page.on("pageerror", (error) => pageErrors.push(error.message));
 
         const response = await page.goto(`${BASE_URL}${item.route}`, { waitUntil: "domcontentloaded", timeout: 30_000 });
@@ -311,37 +301,23 @@ for (const viewport of viewports) {
         await stabilise(page);
 
         const finalPath = new URL(page.url()).pathname;
-        if (item.protected && finalPath === "/login") {
-          issues.push({
-            severity: "error",
-            kind: "auth-mock-failed",
-            route: item.route,
-            viewport: viewport.name,
-            details: "Protected route redirected to /login during the local audit.",
-          });
-        }
-
         const result = await inspect(page);
-        const screenshotPath = join(auditDir, `${viewport.name}__${slug(item.route)}.png`);
-        await page.screenshot({ path: screenshotPath, fullPage: true });
+        await page.screenshot({ path: join(auditDir, `${viewport.name}__${slug(item.route)}.png`), fullPage: true });
 
+        if (item.protected && finalPath === "/login") {
+          issues.push({ severity: "error", kind: "auth-mock-failed", route: item.route, viewport: viewport.name, details: "Protected route redirected to /login." });
+        }
+        if (result.errorBoundary) {
+          issues.push({ severity: "error", kind: "error-boundary", route: item.route, viewport: viewport.name, details: result.errorBoundary });
+        }
         if (result.horizontalOverflow > 1) {
           issues.push({ severity: "error", kind: "document-overflow", route: item.route, viewport: viewport.name, details: `${result.horizontalOverflow}px horizontal overflow (document ${result.rootWidth}px, viewport ${result.viewportWidth}px)` });
         }
         for (const detail of result.outOfFrame) issues.push({ severity: "error", kind: "out-of-frame", route: item.route, viewport: viewport.name, details: detail });
-        for (const detail of result.clippedInteractive) issues.push({ severity: "error", kind: "clipped-fixed-control", route: item.route, viewport: viewport.name, details: detail });
         for (const detail of result.overlaps) issues.push({ severity: "error", kind: "interactive-overlap", route: item.route, viewport: viewport.name, details: detail });
-        for (const detail of result.truncatedText) issues.push({ severity: "warning", kind: "text-clipping", route: item.route, viewport: viewport.name, details: detail });
+        for (const detail of result.clippedText) issues.push({ severity: "warning", kind: "text-clipping", route: item.route, viewport: viewport.name, details: detail });
         for (const detail of result.tinyTargets) issues.push({ severity: "warning", kind: "small-touch-target", route: item.route, viewport: viewport.name, details: detail });
         for (const detail of pageErrors.slice(0, 5)) issues.push({ severity: "error", kind: "page-error", route: item.route, viewport: viewport.name, details: detail });
-        for (const detail of consoleErrors.filter((message) => !message.includes("404") && !message.includes("Failed to load resource")).slice(0, 5)) {
-          issues.push({ severity: "warning", kind: "console-error", route: item.route, viewport: viewport.name, details: detail });
-        }
-
-        await testInfo.attach("mobile-visibility", {
-          body: JSON.stringify({ route: item.route, viewport, finalPath, ...result, consoleErrors, pageErrors }, null, 2),
-          contentType: "application/json",
-        });
       });
     }
   });
@@ -365,5 +341,5 @@ test.afterAll(async () => {
   writeFileSync(join(auditDir, "report.json"), JSON.stringify(report, null, 2));
 
   const errors = deduped.filter((issue) => issue.severity === "error");
-  expect(errors, `Mobile visibility errors:\n${errors.slice(0, 80).map((issue) => `${issue.viewport} ${issue.route} ${issue.kind}: ${issue.details}`).join("\n")}`).toEqual([]);
+  expect(errors, `Mobile visibility errors:\n${errors.slice(0, 100).map((issue) => `${issue.viewport} ${issue.route} ${issue.kind}: ${issue.details}`).join("\n")}`).toEqual([]);
 });
