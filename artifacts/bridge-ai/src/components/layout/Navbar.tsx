@@ -4,7 +4,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import {
   LayoutDashboard, CreditCard, Settings, Sun, Moon,
   ChevronDown, FlaskConical, Terminal, Wrench, Radio, Bot, ClipboardCheck,
-  Rocket, ShieldAlert, Activity, ShieldCheck, Globe, FolderInput, Server,
+  ShieldAlert, Activity, ShieldCheck, Globe, FolderInput, Server,
   Plug, Search, Megaphone, PenTool, Building2,
   AlertTriangle, BrainCircuit, TrendingDown, History, Wallet, BookOpen, Smartphone,
 } from "lucide-react";
@@ -15,10 +15,9 @@ interface NavGroup { label: string; icon: React.ElementType; items: DropItem[]; 
 const GROUPS: NavGroup[] = [
   {
     label: "Diagnostics", icon: AlertTriangle,
-    matchPaths: ["/ui-audit", "/doctor", "/launch-readiness", "/security-center", "/production-ops", "/qa-release-gate"],
+    matchPaths: ["/doctor", "/security-center", "/production-ops", "/qa-release-gate"],
     items: [
       { href: "/doctor", label: "Doctor", icon: Wrench },
-      { href: "/launch-readiness", label: "Launch Readiness", icon: Rocket },
       { href: "/security-center", label: "Security Center", icon: ShieldAlert },
       { href: "/production-ops", label: "Production Ops", icon: Activity },
       { href: "/qa-release-gate", label: "QA Gate", icon: ClipboardCheck },
