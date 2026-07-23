@@ -35,7 +35,6 @@ import DoctorPage from "@/pages/doctor";
 import AssistedBrowserPage from "@/pages/assisted-browser";
 import OnboardingPage from "@/pages/onboarding";
 import ConnectionsPage from "@/pages/connections";
-import LaunchReadinessPage from "@/pages/launch-readiness";
 import SeoDashboardPage from "@/pages/seo-dashboard";
 import AdvertisingDashboardPage from "@/pages/advertising-dashboard";
 import ContentCreatorPage from "@/pages/content-creator";
@@ -116,7 +115,6 @@ function GatedRouter() {
         <Route path="/domain-setup" component={DomainSetupPage} />
         <Route path="/onboarding" component={OnboardingPage} />
         <Route path="/connections" component={ConnectionsPage} />
-        <Route path="/launch-readiness" component={LaunchReadinessPage} />
         <Route path="/seo" component={SeoDashboardPage} />
         <Route path="/advertising" component={AdvertisingDashboardPage} />
         <Route path="/content-creator" component={ContentCreatorPage} />
