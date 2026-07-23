@@ -141,17 +141,17 @@ export default function DemoProofReport() {
         </div>
 
         {/* Header */}
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+        <div className="flex flex-wrap items-start gap-3">
+          <div className="h-10 w-10 shrink-0 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
             <FileText className="h-5 w-5 text-primary" />
           </div>
-          <div>
-            <h1 className="text-xl font-semibold">Session Proof Report</h1>
-            <p className="text-sm text-muted-foreground">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl font-semibold leading-tight">Session Proof Report</h1>
+            <p className="text-sm text-muted-foreground break-words">
               {SESSION.id} · {new Date(SESSION.startedAt).toLocaleString()}
             </p>
           </div>
-          <Badge className="ml-auto text-xs bg-zinc-500/10 text-zinc-400 border-zinc-500/25">Simulation mode</Badge>
+          <Badge className="ml-[52px] shrink-0 text-xs bg-zinc-500/10 text-zinc-400 border-zinc-500/25 sm:ml-auto">Simulation mode</Badge>
         </div>
 
         {/* Session meta */}
