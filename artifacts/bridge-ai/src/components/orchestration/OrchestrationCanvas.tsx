@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { OrchestrationAgent, OrchestrationViewModel } from "@/lib/orchestrationViewModel";
 import { PHASE_LABELS } from "@/lib/orchestrationViewModel";
+import { buildOrchestrationLayout } from "@/lib/orchestrationLayout";
 import { useReducedMotion } from "@/lib/motionPreferences";
 import { AgentConnection } from "./AgentConnection";
 import { AgentNode } from "./AgentNode";
@@ -21,18 +22,6 @@ interface NodePosition {
 interface CanvasSize {
   w: number;
   h: number;
-}
-
-function getRadialPositions(count: number, cx: number, cy: number, radius: number): Array<{ x: number; y: number }> {
-  if (count === 0) return [];
-  if (count === 1) return [{ x: cx, y: cy - radius }];
-  return Array.from({ length: count }, (_, index) => {
-    const angle = (2 * Math.PI * index) / count - Math.PI / 2;
-    return {
-      x: cx + radius * Math.cos(angle),
-      y: cy + radius * Math.sin(angle),
-    };
-  });
 }
 
 function formatElapsed(milliseconds: number): string {
@@ -56,6 +45,7 @@ function clampText(value: string, length: number): string {
 export function OrchestrationCanvas({ vm, height = 520 }: Props) {
   const reducedMotion = useReducedMotion();
   const containerRef = useRef<HTMLDivElement>(null);
+  const visibleAgents = vm.isDemo ? [] : vm.agents;
   const [size, setSize] = useState<CanvasSize>({ w: 700, h: Math.max(height, 500) });
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [pageVisible, setPageVisible] = useState(() =>
@@ -63,7 +53,9 @@ export function OrchestrationCanvas({ vm, height = 520 }: Props) {
   );
 
   const isMobile = size.w < 640;
-  const minimumHeight = isMobile ? 460 : 500;
+  const minimumHeight = visibleAgents.length > 8
+    ? (isMobile ? 620 : 580)
+    : (isMobile ? 460 : 500);
   const effectiveHeight = Math.max(height, minimumHeight);
   const animationsEnabled = !reducedMotion && pageVisible;
 
@@ -86,7 +78,6 @@ export function OrchestrationCanvas({ vm, height = 520 }: Props) {
     return () => document.removeEventListener("visibilitychange", onVisibilityChange);
   }, []);
 
-  const visibleAgents = vm.isDemo ? [] : vm.agents;
   const hasRealTelemetry = !vm.isDemo && visibleAgents.length > 0;
   const activeAgents = visibleAgents.filter((agent) => agent.status === "working" || agent.status === "reviewing");
   const latestEvent = vm.events.at(-1);
@@ -108,19 +99,19 @@ export function OrchestrationCanvas({ vm, height = 520 }: Props) {
 
   const nodeSize = isMobile ? 48 : 58;
   const coordinatorSize = isMobile ? 70 : 80;
-  const horizontalSafeZone = isMobile ? 82 : 118;
-  const topSafeZone = isMobile ? 104 : 110;
-  const bottomSafeZone = selectedAgent ? (isMobile ? 178 : 132) : 94;
-  const usableHeight = Math.max(190, size.h - topSafeZone - bottomSafeZone);
-  const cx = size.w / 2;
-  const cy = topSafeZone + usableHeight / 2;
-  const maxHorizontalRadius = Math.max(78, size.w / 2 - horizontalSafeZone);
-  const maxVerticalRadius = Math.max(78, usableHeight / 2 - 28);
-  const radius = Math.max(78, Math.min(maxHorizontalRadius, maxVerticalRadius, isMobile ? 148 : 224));
-  const radialPositions = getRadialPositions(visibleAgents.length, cx, cy, radius);
+  const layout = buildOrchestrationLayout({
+    width: size.w,
+    height: size.h,
+    count: visibleAgents.length,
+    mobile: isMobile,
+    detailsOpen: selectedAgent !== null,
+  });
+  const cx = layout.centerX;
+  const cy = layout.centerY;
+  const radius = layout.radius;
   const nodePositions: NodePosition[] = visibleAgents.map((agent, index) => ({
-    x: radialPositions[index].x,
-    y: radialPositions[index].y,
+    x: layout.points[index].x,
+    y: layout.points[index].y,
     agent,
   }));
 
@@ -319,8 +310,8 @@ export function OrchestrationCanvas({ vm, height = 520 }: Props) {
             <div className="mt-2 grid grid-cols-2 gap-2 border-t border-white/5 pt-2 text-[10px] sm:grid-cols-4">
               <div><span className="text-white/32">Provider</span><div className="mt-0.5 truncate capitalize text-white/72">{selectedAgent.provider}</div></div>
               <div><span className="text-white/32">Status</span><div className="mt-0.5 capitalize" style={{ color: selectedAgent.color }}>{selectedAgent.status}</div></div>
-              <div><span className="text-white/32">Cost</span><div className="mt-0.5 text-emerald-400">{selectedAgent.cost === undefined ? "Live total" : `$${selectedAgent.cost.toFixed(4)}`}</div></div>
-              <div><span className="text-white/32">Latency</span><div className="mt-0.5 text-white/72">{selectedAgent.latencyMs ? `${selectedAgent.latencyMs}ms` : "Measuring"}</div></div>
+              <div><span className="text-white/32">Cost</span><div className="mt-0.5 text-white/60">{selectedAgent.cost === undefined ? "Not reported" : `$${selectedAgent.cost.toFixed(4)}`}</div></div>
+              <div><span className="text-white/32">Latency</span><div className="mt-0.5 text-white/60">{selectedAgent.latencyMs ? `${selectedAgent.latencyMs}ms` : "Not reported"}</div></div>
             </div>
           </motion.div>
         ) : hasRealTelemetry ? (
