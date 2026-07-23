@@ -1,0 +1,72 @@
+name: Mobile Visibility Audit
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "artifacts/bridge-ai/**"
+      - ".github/workflows/mobile-visibility-audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mobile-visibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CI: "true"
+      MOBILE_AUDIT_BASE_URL: http://127.0.0.1:4173
+      MOBILE_AUDIT_PROTECTED: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.26.1 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm --filter @workspace/bridge-ai exec playwright install --with-deps chromium
+
+      - name: Start VIBA frontend
+        run: |
+          pnpm --filter @workspace/bridge-ai dev --host 127.0.0.1 --port 4173 > /tmp/viba-frontend.log 2>&1 &
+          echo $! > /tmp/viba-frontend.pid
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then
+              echo "Frontend ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/viba-frontend.log
+          exit 1
+
+      - name: Run mobile visibility audit
+        run: pnpm --filter @workspace/bridge-ai exec playwright test tests/mobile-visibility.spec.ts --config=playwright.config.ts
+
+      - name: Print frontend log
+        if: always()
+        run: cat /tmp/viba-frontend.log || true
+
+      - name: Upload audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-visibility-audit
+          path: |
+            artifacts/bridge-ai/test-results
+            artifacts/bridge-ai/playwright-report
+          if-no-files-found: warn
+          retention-days: 14
