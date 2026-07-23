@@ -59,10 +59,48 @@ jobs:
         run: exit 1
 
       - name: Run API tests
-        run: pnpm --filter @workspace/api-server run test
+        id: api_tests
+        shell: bash
+        run: |
+          set +e
+          pnpm --filter @workspace/api-server run test 2>&1 | tee api-tests.log
+          status=${PIPESTATUS[0]}
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload API test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-test-log
+          path: api-tests.log
+          retention-days: 7
+
+      - name: Fail on API test errors
+        if: steps.api_tests.outputs.exit_code != '0'
+        run: exit 1
 
       - name: Run Bridge unit tests
-        run: pnpm --filter @workspace/bridge-ai run unit-test
+        id: bridge_tests
+        shell: bash
+        run: |
+          set +e
+          pnpm --filter @workspace/bridge-ai run unit-test 2>&1 | tee bridge-tests.log
+          status=${PIPESTATUS[0]}
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload Bridge test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bridge-test-log
+          path: bridge-tests.log
+          retention-days: 7
+
+      - name: Fail on Bridge test errors
+        if: steps.bridge_tests.outputs.exit_code != '0'
+        run: exit 1
 
       - name: Build API server
         run: pnpm --filter @workspace/api-server run build
