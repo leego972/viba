@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
 import sessionsRouter from "./sessions";
+import sessionSecurityBoundary from "../middlewares/sessionSecurityBoundary";
 import settingsRouter from "./settings";
 import statsRouter from "./stats";
 import circuitStatusRouter from "./circuitStatus";
@@ -65,6 +66,7 @@ router.use(healthRouter);
 router.use(sessionAccessRouter);
 router.use(coreDefaultsRouter);
 router.use(backgroundSessionsRouter);
+router.use(sessionSecurityBoundary);
 router.use(sessionsRouter);
 router.use(attachmentsRouter);
 router.use(selfRepairAutoRouter);
