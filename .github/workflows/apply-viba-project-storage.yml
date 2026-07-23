@@ -4,7 +4,7 @@ on:
   push:
     branches: [audit/viba-production-hardening-20260723]
     paths:
-      - .github/viba-project-storage-patch/**
+      - .github/viba-project-storage-bundle.b64
 
 permissions:
   contents: write
@@ -19,14 +19,15 @@ jobs:
           ref: audit/viba-production-hardening-20260723
           fetch-depth: 0
 
-      - name: Apply reviewed integration patch
+      - name: Install reviewed integration bundle
         shell: bash
         run: |
           set -euo pipefail
-          cat .github/viba-project-storage-patch/part-* > /tmp/viba-project-storage.patch
-          git apply --check /tmp/viba-project-storage.patch
-          git apply /tmp/viba-project-storage.patch
-          rm -rf .github/viba-project-storage-patch
+          base64 --decode .github/viba-project-storage-bundle.b64 > /tmp/viba-project-storage-bundle.tgz
+          tar -tzf /tmp/viba-project-storage-bundle.tgz | grep -Ev '(^/|(^|/)\.\.(/|$))' >/tmp/viba-bundle-paths.txt
+          test "$(wc -l </tmp/viba-bundle-paths.txt)" -eq 15
+          tar -xzf /tmp/viba-project-storage-bundle.tgz -C .
+          git rm .github/viba-project-storage-bundle.b64
           git rm .github/workflows/apply-viba-project-storage.yml
           git config user.name "VIBA Production Audit"
           git config user.email "audit@viba.guru"
