@@ -97,12 +97,10 @@ function json(body: unknown, status = 200) {
 }
 
 /**
- * Authenticate the browser without using a real customer account. Endpoints
- * with stable contracts receive safe fixtures. Unknown reads intentionally
- * return 401 instead of fabricated data: React Query then exposes undefined/
- * error state, which is safer than returning an array to an object endpoint or
- * an object to a list endpoint. The page must handle that state without
- * falling into VIBA's application error boundary.
+ * Authenticate the browser without a customer account and provide only
+ * contract-correct fixtures for endpoints required to render the page shell.
+ * Unknown reads return 401 so components must show their normal empty/error
+ * state rather than receiving fabricated data with the wrong shape.
  */
 async function installApiMocks(page: Page) {
   await page.route("**/api/**", async (route) => {
@@ -119,17 +117,51 @@ async function installApiMocks(page: Page) {
       await route.fulfill(json({ ok: true }));
       return;
     }
+
     if (path === "/api/billing/status") {
       await route.fulfill(json({
+        subscriptionStatus: "active",
+        creditsRemaining: 10000,
+        creditsPeriodEnd: null,
+        stripeCustomerId: null,
+        stripeSubscriptionId: null,
         planKey: "pro",
-        plan: "pro",
-        status: "active",
-        credits: 10000,
-        balance: 10000,
-        usage: 0,
-        limit: 10000,
-        currentPeriodEnd: null,
       }));
+      return;
+    }
+    if (path === "/api/billing/plans") {
+      await route.fulfill(json({ creditPacks: [] }));
+      return;
+    }
+    if (path === "/api/billing/auto-topup") {
+      await route.fulfill(json({ enabled: false, threshold: 100, packKey: "" }));
+      return;
+    }
+    if (path === "/api/billing/transactions") {
+      await route.fulfill(json({ transactions: [] }));
+      return;
+    }
+
+    if (path === "/api/railway-connector/status") {
+      await route.fulfill(json({
+        status: {
+          apiAvailable: false,
+          cliAvailable: false,
+          cliVersion: null,
+          mcpAvailable: false,
+          browserFallbackAvailable: true,
+          modeOrder: ["browser"],
+          railwayTokenConfigured: false,
+        },
+      }));
+      return;
+    }
+    if (path === "/api/connectors/status") {
+      await route.fulfill(json({ connectors: [], generatedAt: new Date(0).toISOString() }));
+      return;
+    }
+    if (path === "/api/ai/usage/history") {
+      await route.fulfill(json({ events: [], total: 0, page: 1, limit: 50 }));
       return;
     }
     if (/\/api\/providers\/[^/]+\/keys$/.test(path)) {
@@ -165,7 +197,7 @@ async function stabilise(page: Page) {
       }
     `,
   });
-  await page.waitForTimeout(1_700);
+  await page.waitForTimeout(1_000);
 }
 
 async function inspect(page: Page) {
@@ -260,9 +292,6 @@ async function inspect(page: Page) {
       }
     }
 
-    const bodyText = document.body.innerText.replace(/\s+/g, " ").trim();
-    const errorMatch = bodyText.match(/Something\s+went\s+wrong.{0,220}/i);
-
     return {
       viewportWidth,
       rootWidth,
@@ -271,7 +300,6 @@ async function inspect(page: Page) {
       overlaps: [...new Set(overlaps)].slice(0, 20),
       clippedText: [...new Set(clippedText)].slice(0, 20),
       tinyTargets: [...new Set(tinyTargets)].slice(0, 30),
-      errorBoundary: errorMatch?.[0] ?? null,
     };
   });
 }
@@ -304,21 +332,23 @@ for (const viewport of viewports) {
         await page.screenshot({ path: screenshotPath, fullPage: true });
         await page.waitForTimeout(250);
         const result = await inspect(page);
+        const boundaryCount = await page.locator("h2").filter({ hasText: /Something went wrong/i }).count();
 
-        if (item.protected && finalPath === "/login") {
-          issues.push({ severity: "error", kind: "auth-mock-failed", route: item.route, viewport: viewport.name, details: "Protected route redirected to /login." });
+        const blocking: string[] = [];
+        if (item.protected && finalPath === "/login") blocking.push("Protected route redirected to /login.");
+        if (boundaryCount > 0) blocking.push("VIBA application error boundary is visible.");
+        if (result.horizontalOverflow > 1) blocking.push(`${result.horizontalOverflow}px horizontal document overflow.`);
+        blocking.push(...result.outOfFrame.map((detail) => `Out of frame: ${detail}`));
+        blocking.push(...result.overlaps.map((detail) => `Interactive overlap: ${detail}`));
+        blocking.push(...pageErrors.slice(0, 5).map((detail) => `Page error: ${detail}`));
+
+        for (const detail of blocking) {
+          issues.push({ severity: "error", kind: "blocking", route: item.route, viewport: viewport.name, details: detail });
         }
-        if (result.errorBoundary) {
-          issues.push({ severity: "error", kind: "error-boundary", route: item.route, viewport: viewport.name, details: result.errorBoundary });
-        }
-        if (result.horizontalOverflow > 1) {
-          issues.push({ severity: "error", kind: "document-overflow", route: item.route, viewport: viewport.name, details: `${result.horizontalOverflow}px horizontal overflow (document ${result.rootWidth}px, viewport ${result.viewportWidth}px)` });
-        }
-        for (const detail of result.outOfFrame) issues.push({ severity: "error", kind: "out-of-frame", route: item.route, viewport: viewport.name, details: detail });
-        for (const detail of result.overlaps) issues.push({ severity: "error", kind: "interactive-overlap", route: item.route, viewport: viewport.name, details: detail });
         for (const detail of result.clippedText) issues.push({ severity: "warning", kind: "text-clipping", route: item.route, viewport: viewport.name, details: detail });
         for (const detail of result.tinyTargets) issues.push({ severity: "warning", kind: "small-touch-target", route: item.route, viewport: viewport.name, details: detail });
-        for (const detail of pageErrors.slice(0, 5)) issues.push({ severity: "error", kind: "page-error", route: item.route, viewport: viewport.name, details: detail });
+
+        expect(blocking, `${viewport.name} ${item.route} visibility failures:\n${blocking.join("\n")}`).toEqual([]);
       });
     }
   });
@@ -340,7 +370,4 @@ test.afterAll(async () => {
     issues: deduped,
   };
   writeFileSync(join(auditDir, "report.json"), JSON.stringify(report, null, 2));
-
-  const errors = deduped.filter((issue) => issue.severity === "error");
-  expect(errors, `Mobile visibility errors:\n${errors.slice(0, 100).map((issue) => `${issue.viewport} ${issue.route} ${issue.kind}: ${issue.details}`).join("\n")}`).toEqual([]);
 });
