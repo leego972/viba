@@ -14,6 +14,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Package audit source
+        run: git archive --format=zip --output=viba-source.zip HEAD
+
+      - name: Upload audit source
+        uses: actions/upload-artifact@v4
+        with:
+          name: viba-audit-source
+          path: viba-source.zip
+          retention-days: 2
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
