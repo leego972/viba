@@ -1,6 +1,5 @@
 import type { RequestHandler } from "express";
 import crypto from "node:crypto";
-import { isAdminUserId } from "../lib/adminAccess";
 
 const ADMIN_TOKEN =
   process.env["ADMIN_TOKEN"]?.trim() ||
@@ -20,8 +19,9 @@ function timingSafeEqual(a: string, b: string): boolean {
 
 /**
  * Require either a verified signed-in administrator session or the configured
- * administrator bearer token. The session path is what the normal VIBA admin
- * UI uses; the token remains available for emergency/operator access.
+ * administrator bearer token. The database-backed identity lookup is loaded
+ * only when a real session is present so isolated middleware tests do not need
+ * a database merely to exercise token and confirmation behaviour.
  */
 export const requireAdmin: RequestHandler = async (req, res, next) => {
   if (process.env.NODE_ENV === "test" && process.env.TEST_BYPASS_ADMIN === "1") {
@@ -32,6 +32,7 @@ export const requireAdmin: RequestHandler = async (req, res, next) => {
   const sessionUserId = req.session?.userId;
   if (typeof sessionUserId === "number" && sessionUserId > 0) {
     try {
+      const { isAdminUserId } = await import("../lib/adminAccess");
       if (await isAdminUserId(sessionUserId)) {
         next();
         return;
