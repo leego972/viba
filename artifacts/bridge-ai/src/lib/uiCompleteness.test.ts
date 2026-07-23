@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 const SRC_ROOT = path.resolve(process.cwd(), "src");
@@ -18,6 +19,36 @@ function listTsxFiles(directory: string): string[] {
 
 function read(filePath: string): string {
   return fs.readFileSync(filePath, "utf8");
+}
+
+function jsxTagName(name: ts.JsxTagNameExpression): string {
+  return name.getText().replace(/\s+/g, "");
+}
+
+function hasAttribute(attributes: ts.JsxAttributes, names: string[]): boolean {
+  return attributes.properties.some(
+    (property) => ts.isJsxAttribute(property) && names.includes(property.name.getText()),
+  );
+}
+
+function hasActionableAncestor(node: ts.Node): boolean {
+  let current: ts.Node | undefined = node.parent;
+  while (current) {
+    if (ts.isJsxElement(current)) {
+      const name = jsxTagName(current.openingElement.tagName);
+      if (name === "Link" || name === "form" || name.endsWith("Trigger")) return true;
+    }
+    current = current.parent;
+  }
+  return false;
+}
+
+function buttonType(attributes: ts.JsxAttributes): string | null {
+  for (const property of attributes.properties) {
+    if (!ts.isJsxAttribute(property) || property.name.getText() !== "type") continue;
+    if (property.initializer && ts.isStringLiteral(property.initializer)) return property.initializer.text;
+  }
+  return null;
 }
 
 describe("VIBA UI completeness contract", () => {
@@ -44,6 +75,44 @@ describe("VIBA UI completeness contract", () => {
           violations.push(`${path.relative(SRC_ROOT, filePath)} matched ${pattern}`);
         }
       }
+    }
+
+    expect(violations).toEqual([]);
+  });
+
+  it("contains no inert native buttons in operational pages and components", () => {
+    const files = listTsxFiles(SRC_ROOT).filter((filePath) =>
+      !filePath.includes(`${path.sep}components${path.sep}ui${path.sep}`),
+    );
+    const violations: string[] = [];
+
+    for (const filePath of files) {
+      const sourceText = read(filePath);
+      const sourceFile = ts.createSourceFile(
+        filePath,
+        sourceText,
+        ts.ScriptTarget.Latest,
+        true,
+        ts.ScriptKind.TSX,
+      );
+
+      const inspect = (node: ts.Node) => {
+        if (ts.isJsxElement(node) && jsxTagName(node.openingElement.tagName) === "button") {
+          const attributes = node.openingElement.attributes;
+          const type = buttonType(attributes);
+          const actionable =
+            hasAttribute(attributes, ["onClick", "onMouseDown", "onPointerDown", "formAction"]) ||
+            type === "submit" ||
+            type === "reset" ||
+            hasActionableAncestor(node);
+          if (!actionable) {
+            const position = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+            violations.push(`${path.relative(SRC_ROOT, filePath)}:${position.line + 1}`);
+          }
+        }
+        ts.forEachChild(node, inspect);
+      };
+      inspect(sourceFile);
     }
 
     expect(violations).toEqual([]);
