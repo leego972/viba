@@ -97,10 +97,12 @@ function json(body: unknown, status = 200) {
 }
 
 /**
- * Authentication is mocked so every protected route can render in CI without
- * a real account. Read endpoints return stable empty states rather than fake
- * records. This exercises the page shell and responsive layout without
- * allowing an invalid response shape to trigger VIBA's error boundary.
+ * Authenticate the browser without using a real customer account. Endpoints
+ * with stable contracts receive safe fixtures. Unknown reads intentionally
+ * return 401 instead of fabricated data: React Query then exposes undefined/
+ * error state, which is safer than returning an array to an object endpoint or
+ * an object to a list endpoint. The page must handle that state without
+ * falling into VIBA's application error boundary.
  */
 async function installApiMocks(page: Page) {
   await page.route("**/api/**", async (route) => {
@@ -147,8 +149,7 @@ async function installApiMocks(page: Page) {
       return;
     }
 
-    // Empty arrays are the safest neutral response for list/query hooks.
-    await route.fulfill(json([]));
+    await route.fulfill(json({ error: "Unavailable in isolated mobile audit" }, 401));
   });
 }
 
@@ -164,7 +165,7 @@ async function stabilise(page: Page) {
       }
     `,
   });
-  await page.waitForTimeout(900);
+  await page.waitForTimeout(1_700);
 }
 
 async function inspect(page: Page) {
@@ -259,10 +260,8 @@ async function inspect(page: Page) {
       }
     }
 
-    const bodyText = document.body.innerText;
-    const errorBoundary = bodyText.includes("Something went wrong")
-      ? bodyText.match(/Something went wrong[\s\S]{0,180}/)?.[0]?.replace(/\s+/g, " ") ?? "Something went wrong"
-      : null;
+    const bodyText = document.body.innerText.replace(/\s+/g, " ").trim();
+    const errorMatch = bodyText.match(/Something\s+went\s+wrong.{0,220}/i);
 
     return {
       viewportWidth,
@@ -272,7 +271,7 @@ async function inspect(page: Page) {
       overlaps: [...new Set(overlaps)].slice(0, 20),
       clippedText: [...new Set(clippedText)].slice(0, 20),
       tinyTargets: [...new Set(tinyTargets)].slice(0, 30),
-      errorBoundary,
+      errorBoundary: errorMatch?.[0] ?? null,
     };
   });
 }
@@ -301,8 +300,10 @@ for (const viewport of viewports) {
         await stabilise(page);
 
         const finalPath = new URL(page.url()).pathname;
+        const screenshotPath = join(auditDir, `${viewport.name}__${slug(item.route)}.png`);
+        await page.screenshot({ path: screenshotPath, fullPage: true });
+        await page.waitForTimeout(250);
         const result = await inspect(page);
-        await page.screenshot({ path: join(auditDir, `${viewport.name}__${slug(item.route)}.png`), fullPage: true });
 
         if (item.protected && finalPath === "/login") {
           issues.push({ severity: "error", kind: "auth-mock-failed", route: item.route, viewport: viewport.name, details: "Protected route redirected to /login." });
