@@ -1,14 +1,34 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  DollarSign,
+  Info,
+  Loader2,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Trash2, DollarSign, AlertTriangle, Info, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface Budget {
@@ -35,12 +55,21 @@ interface Subscription {
   active: boolean;
 }
 
+interface NewSubscription {
+  provider: string;
+  displayName: string;
+  monthlyCostUsd: number;
+  includedUsageDescription: string;
+  renewalDay: string;
+  prioritise: boolean;
+}
+
 const DEFAULTS: Budget = {
   monthly_budget_usd: null,
   warn_threshold_usd: null,
   hard_limit_usd: null,
   premium_approval_threshold_usd: 0.25,
-  require_approval_above_usd: 1.0,
+  require_approval_above_usd: 1,
   auto_economy_at_percent: 80,
   block_premium_at_limit: true,
   allow_multi_model: false,
@@ -48,54 +77,104 @@ const DEFAULTS: Budget = {
   use_existing_first: true,
 };
 
+const EMPTY_SUBSCRIPTION: NewSubscription = {
+  provider: "",
+  displayName: "",
+  monthlyCostUsd: 0,
+  includedUsageDescription: "",
+  renewalDay: "",
+  prioritise: false,
+};
+
 const COMMON_PROVIDERS = [
-  { value: "chatgpt",     label: "ChatGPT (OpenAI)" },
-  { value: "claude",      label: "Claude (Anthropic)" },
-  { value: "gemini",      label: "Gemini (Google)" },
-  { value: "cursor",      label: "Cursor" },
-  { value: "replit",      label: "Replit" },
-  { value: "groq",        label: "Groq" },
-  { value: "openrouter",  label: "OpenRouter" },
-  { value: "perplexity",  label: "Perplexity" },
-  { value: "copilot",     label: "GitHub Copilot" },
-  { value: "other",       label: "Other" },
+  { value: "chatgpt", label: "ChatGPT (OpenAI)" },
+  { value: "claude", label: "Claude (Anthropic)" },
+  { value: "gemini", label: "Gemini (Google)" },
+  { value: "cursor", label: "Cursor" },
+  { value: "replit", label: "Replit" },
+  { value: "groq", label: "Groq" },
+  { value: "openrouter", label: "OpenRouter" },
+  { value: "perplexity", label: "Perplexity" },
+  { value: "copilot", label: "GitHub Copilot" },
+  { value: "other", label: "Other" },
 ];
 
+async function requestJson<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
+  const response = await fetch(input, init);
+  const text = await response.text();
+  let body: unknown;
+
+  if (text) {
+    try {
+      body = JSON.parse(text);
+    } catch {
+      body = text;
+    }
+  }
+
+  if (!response.ok) {
+    const message =
+      typeof body === "object" && body !== null && "error" in body
+        ? String((body as { error?: unknown }).error ?? `Request failed (${response.status})`)
+        : `Request failed (${response.status})`;
+    throw new Error(message);
+  }
+
+  return body as T;
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
 function SkeletonField() {
-  return <div className="h-9 rounded-md bg-muted/40 animate-pulse" />;
+  return <div className="h-9 animate-pulse rounded-md bg-muted/40" />;
 }
 
 export default function BudgetsPage() {
   const { toast } = useToast();
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
 
-  const { data: budgetData, isLoading: budgetLoading } = useQuery<{ budget: Budget | null }>({
+  const {
+    data: budgetData,
+    isLoading: budgetLoading,
+    isError: budgetFailed,
+    error: budgetQueryError,
+    refetch: refetchBudget,
+  } = useQuery<{ budget: Budget | null }>({
     queryKey: ["/api/ai/budgets"],
-    queryFn: () => fetch("/api/ai/budgets", { credentials: "include" }).then(r => r.json()),
+    queryFn: () =>
+      requestJson<{ budget: Budget | null }>("/api/ai/budgets", {
+        credentials: "include",
+      }),
   });
 
-  const { data: subsData } = useQuery<{ subscriptions: Subscription[] }>({
+  const {
+    data: subscriptionsData,
+    isError: subscriptionsFailed,
+    error: subscriptionsQueryError,
+    refetch: refetchSubscriptions,
+  } = useQuery<{ subscriptions: Subscription[] }>({
     queryKey: ["/api/ai/subscriptions"],
-    queryFn: () => fetch("/api/ai/subscriptions", { credentials: "include" }).then(r => r.json()),
+    queryFn: () =>
+      requestJson<{ subscriptions: Subscription[] }>("/api/ai/subscriptions", {
+        credentials: "include",
+      }),
   });
 
   const [form, setForm] = useState<Budget>(DEFAULTS);
   const [formReady, setFormReady] = useState(false);
-  const [newSub, setNewSub] = useState({
-    provider: "", displayName: "", monthlyCostUsd: 0,
-    includedUsageDescription: "", renewalDay: "", prioritise: false,
-  });
+  const [newSubscription, setNewSubscription] = useState<NewSubscription>(EMPTY_SUBSCRIPTION);
 
   useEffect(() => {
-    if (!budgetLoading) {
-      setForm(budgetData?.budget ?? DEFAULTS);
-      setFormReady(true);
-    }
-  }, [budgetData, budgetLoading]);
+    if (budgetLoading || budgetFailed) return;
+    setForm(budgetData?.budget ?? DEFAULTS);
+    setFormReady(true);
+  }, [budgetData, budgetFailed, budgetLoading]);
 
   const saveBudget = useMutation({
     mutationFn: () =>
-      fetch("/api/ai/budgets", {
+      requestJson<{ ok: boolean }>("/api/ai/budgets", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -111,58 +190,106 @@ export default function BudgetsPage() {
           qualityMode: form.quality_mode,
           useExistingFirst: form.use_existing_first,
         }),
-      }).then(r => r.json()),
+      }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/ai/budgets"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/ai/budgets"] });
       toast({ title: "Budget settings saved" });
     },
-    onError: () => toast({ title: "Failed to save budget", variant: "destructive" }),
+    onError: (error) =>
+      toast({
+        title: "Budget settings were not saved",
+        description: errorMessage(error, "The server rejected the update."),
+        variant: "destructive",
+      }),
   });
 
-  const addSub = useMutation({
+  const addSubscription = useMutation({
     mutationFn: () =>
-      fetch("/api/ai/subscriptions", {
+      requestJson<{ ok: boolean }>("/api/ai/subscriptions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          provider: newSub.provider,
-          displayName: newSub.displayName,
-          monthlyCostUsd: newSub.monthlyCostUsd,
-          includedUsageDescription: newSub.includedUsageDescription || undefined,
-          renewalDay: newSub.renewalDay ? Number(newSub.renewalDay) : undefined,
-          prioritise: newSub.prioritise,
+          provider: newSubscription.provider,
+          displayName: newSubscription.displayName.trim(),
+          monthlyCostUsd: newSubscription.monthlyCostUsd,
+          includedUsageDescription:
+            newSubscription.includedUsageDescription.trim() || undefined,
+          renewalDay: newSubscription.renewalDay
+            ? Number(newSubscription.renewalDay)
+            : undefined,
+          prioritise: newSubscription.prioritise,
         }),
-      }).then(r => r.json()),
+      }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/ai/subscriptions"] });
-      setNewSub({ provider: "", displayName: "", monthlyCostUsd: 0, includedUsageDescription: "", renewalDay: "", prioritise: false });
+      queryClient.invalidateQueries({ queryKey: ["/api/ai/subscriptions"] });
+      setNewSubscription(EMPTY_SUBSCRIPTION);
       toast({ title: "Subscription added" });
     },
-    onError: () => toast({ title: "Failed to add subscription", variant: "destructive" }),
+    onError: (error) =>
+      toast({
+        title: "Subscription was not added",
+        description: errorMessage(error, "The server rejected the subscription."),
+        variant: "destructive",
+      }),
   });
 
-  const deleteSub = useMutation({
+  const deleteSubscription = useMutation({
     mutationFn: (id: number) =>
-      fetch(`/api/ai/subscriptions/${id}`, { method: "DELETE", credentials: "include" }),
+      requestJson<{ ok?: boolean }>(`/api/ai/subscriptions/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+      }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/ai/subscriptions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/ai/subscriptions"] });
       toast({ title: "Subscription removed" });
     },
+    onError: (error) =>
+      toast({
+        title: "Subscription was not removed",
+        description: errorMessage(error, "The server rejected the removal."),
+        variant: "destructive",
+      }),
   });
 
-  const subs = subsData?.subscriptions ?? [];
-  const totalMonthlyAiCost = subs.reduce((acc, s) => acc + s.monthly_cost_usd, 0);
+  const subscriptions = subscriptionsData?.subscriptions ?? [];
+  const totalMonthlyAiCost = subscriptions.reduce(
+    (total, subscription) => total + subscription.monthly_cost_usd,
+    0,
+  );
 
-  const numericField = (label: string, field: keyof Budget, placeholder: string, isPercent = false) => (
+  const warningExceedsHardLimit =
+    form.warn_threshold_usd !== null &&
+    form.hard_limit_usd !== null &&
+    form.warn_threshold_usd > form.hard_limit_usd;
+  const economyPercentInvalid =
+    form.auto_economy_at_percent < 1 || form.auto_economy_at_percent > 100;
+  const formInvalid = warningExceedsHardLimit || economyPercentInvalid;
+
+  const numericField = (
+    label: string,
+    field: keyof Budget,
+    placeholder: string,
+    isPercent = false,
+  ) => (
     <div key={field}>
-      <Label className="text-xs mb-1.5 block">{label}</Label>
-      {!formReady ? <SkeletonField /> : (
+      <Label className="mb-1.5 block text-xs">{label}</Label>
+      {!formReady ? (
+        <SkeletonField />
+      ) : (
         <Input
-          type="number" min={0} step={isPercent ? 1 : 0.01}
+          type="number"
+          min={isPercent ? 1 : 0}
+          max={isPercent ? 100 : undefined}
+          step={isPercent ? 1 : 0.01}
           placeholder={placeholder}
           value={(form[field] as number | null) ?? ""}
-          onChange={e => setForm(f => ({ ...f, [field]: e.target.value ? Number(e.target.value) : null }))}
+          onChange={(event) =>
+            setForm((current) => ({
+              ...current,
+              [field]: event.target.value ? Number(event.target.value) : null,
+            }))
+          }
           className="h-9 text-sm"
         />
       )}
@@ -171,56 +298,102 @@ export default function BudgetsPage() {
 
   return (
     <AppLayout>
-      <div className="container max-w-4xl py-8 space-y-8">
+      <div className="container max-w-4xl space-y-8 py-8">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Budgets & Subscriptions</h1>
-          <p className="text-muted-foreground mt-1">
+          <p className="mt-1 text-muted-foreground">
             Set spending limits, approval thresholds, and track your existing AI subscriptions.
           </p>
         </div>
 
-        {/* Budget controls */}
+        {budgetFailed && (
+          <div
+            className="flex flex-col gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4 sm:flex-row sm:items-center sm:justify-between"
+            role="alert"
+          >
+            <div className="flex min-w-0 items-start gap-2">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+              <div>
+                <p className="text-sm font-medium">Budget settings could not be loaded</p>
+                <p className="text-xs text-muted-foreground">
+                  {errorMessage(budgetQueryError, "The server did not return the current settings.")}
+                </p>
+              </div>
+            </div>
+            <Button type="button" size="sm" variant="outline" onClick={() => refetchBudget()}>
+              Retry
+            </Button>
+          </div>
+        )}
+
         <Card className="border-border/50">
           <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-base">
               <DollarSign className="h-4 w-4 text-primary" /> Budget Controls
             </CardTitle>
-            <CardDescription>VIBA enforces these limits automatically across all AI task routing.</CardDescription>
+            <CardDescription>
+              VIBA enforces these limits automatically across all AI task routing.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-
-            {/* Spending limits */}
             <div>
-              <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wide">Monthly spending limits</p>
-              <div className="grid sm:grid-cols-3 gap-4">
+              <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Monthly spending limits
+              </p>
+              <div className="grid gap-4 sm:grid-cols-3">
                 {numericField("Monthly budget (USD)", "monthly_budget_usd", "No limit")}
                 {numericField("Warn at (USD)", "warn_threshold_usd", "e.g. 40")}
                 {numericField("Hard limit (USD)", "hard_limit_usd", "e.g. 50")}
               </div>
-              <p className="text-xs text-muted-foreground/60 mt-2">
-                Leave blank to set no limit. Hard limit blocks all premium AI once reached.
+              <p className="mt-2 text-xs text-muted-foreground/60">
+                Leave blank for no limit. At the hard limit, premium-model spending stops;
+                compatible economy routing may continue.
               </p>
             </div>
 
-            {/* Approval thresholds */}
             <div>
-              <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wide">Approval thresholds</p>
-              <div className="grid sm:grid-cols-2 gap-4">
-                {numericField("Warn before tasks above ($)", "premium_approval_threshold_usd", "e.g. 0.25")}
-                {numericField("Require approval above ($)", "require_approval_above_usd", "e.g. 1.00")}
+              <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Approval thresholds
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {numericField(
+                  "Warn before tasks above ($)",
+                  "premium_approval_threshold_usd",
+                  "e.g. 0.25",
+                )}
+                {numericField(
+                  "Require approval above ($)",
+                  "require_approval_above_usd",
+                  "e.g. 1.00",
+                )}
               </div>
             </div>
 
-            {/* Auto-behaviour */}
             <div>
-              <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wide">Automatic behaviour</p>
-              <div className="grid sm:grid-cols-2 gap-4 mb-4">
-                {numericField("Switch to Economy at (% of budget used)", "auto_economy_at_percent", "e.g. 80", true)}
+              <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Automatic behaviour
+              </p>
+              <div className="mb-4 grid gap-4 sm:grid-cols-2">
+                {numericField(
+                  "Switch to Economy at (% of budget used)",
+                  "auto_economy_at_percent",
+                  "e.g. 80",
+                  true,
+                )}
                 <div>
-                  <Label className="text-xs mb-1.5 block">Default quality mode</Label>
-                  {!formReady ? <SkeletonField /> : (
-                    <Select value={form.quality_mode} onValueChange={v => setForm(f => ({ ...f, quality_mode: v }))}>
-                      <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                  <Label className="mb-1.5 block text-xs">Default quality mode</Label>
+                  {!formReady ? (
+                    <SkeletonField />
+                  ) : (
+                    <Select
+                      value={form.quality_mode}
+                      onValueChange={(value) =>
+                        setForm((current) => ({ ...current, quality_mode: value }))
+                      }
+                    >
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="economy">Economy — minimise cost</SelectItem>
                         <SelectItem value="balanced">Balanced — cost + quality</SelectItem>
@@ -234,33 +407,40 @@ export default function BudgetsPage() {
               <div className="space-y-3">
                 {[
                   {
-                    id: "block_premium", field: "block_premium_at_limit" as keyof Budget,
-                    label: "Block premium models at budget limit",
-                    desc: "When the hard limit is reached, automatically route to economy models instead of blocking entirely.",
+                    id: "block_premium",
+                    field: "block_premium_at_limit" as keyof Budget,
+                    label: "Stop premium-model calls at the hard limit",
+                    desc: "Prevents additional premium-model spend after the hard limit. Economy models can still be used when they are suitable.",
                   },
                   {
-                    id: "allow_multi", field: "allow_multi_model" as keyof Budget,
+                    id: "allow_multi",
+                    field: "allow_multi_model" as keyof Budget,
                     label: "Allow multi-model execution",
                     desc: "Permit VIBA to use multiple models in parallel for complex tasks when Maximum Quality mode is active.",
                   },
                   {
-                    id: "use_existing", field: "use_existing_first" as keyof Budget,
+                    id: "use_existing",
+                    field: "use_existing_first" as keyof Budget,
                     label: "Use my existing AI subscriptions first",
-                    desc: "Prefer providers you already pay for (listed below) before routing to additional services.",
+                    desc: "Prefer providers you already pay for before routing to additional paid services.",
                   },
                 ].map(({ id, field, label, desc }) => (
                   <div key={id} className="flex items-start gap-3">
                     {!formReady ? (
-                      <div className="h-5 w-9 rounded-full bg-muted/40 animate-pulse shrink-0 mt-0.5" />
+                      <div className="mt-0.5 h-5 w-9 shrink-0 animate-pulse rounded-full bg-muted/40" />
                     ) : (
                       <Switch
                         id={id}
                         checked={Boolean(form[field])}
-                        onCheckedChange={v => setForm(f => ({ ...f, [field]: v }))}
+                        onCheckedChange={(value) =>
+                          setForm((current) => ({ ...current, [field]: value }))
+                        }
                       />
                     )}
                     <div>
-                      <Label htmlFor={id} className="text-sm font-medium cursor-pointer">{label}</Label>
+                      <Label htmlFor={id} className="cursor-pointer text-sm font-medium">
+                        {label}
+                      </Label>
                       <p className="text-xs text-muted-foreground">{desc}</p>
                     </div>
                   </div>
@@ -268,128 +448,220 @@ export default function BudgetsPage() {
               </div>
             </div>
 
+            {(warningExceedsHardLimit || economyPercentInvalid) && (
+              <div className="flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300" role="alert">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>
+                  {warningExceedsHardLimit
+                    ? "The warning amount cannot be higher than the hard limit."
+                    : "The Economy switch point must be between 1% and 100%."}
+                </span>
+              </div>
+            )}
+
             <Button
+              type="button"
               size="sm"
               onClick={() => saveBudget.mutate()}
-              disabled={saveBudget.isPending || !formReady}
+              disabled={saveBudget.isPending || !formReady || formInvalid}
             >
-              {saveBudget.isPending
-                ? <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                : <CheckCircle2 className="h-4 w-4 mr-2" />}
+              {saveBudget.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="mr-2 h-4 w-4" />
+              )}
               Save Budget Settings
             </Button>
           </CardContent>
         </Card>
 
-        {/* AI subscriptions */}
         <Card className="border-border/50">
           <CardHeader>
             <CardTitle className="text-base">AI Services You Already Pay For</CardTitle>
             <CardDescription>
-              Record your existing subscriptions so VIBA can route to them first and avoid unnecessary API spend.
+              Record your existing subscriptions so VIBA can route to them first and avoid
+              unnecessary API spend.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
+            {subscriptionsFailed && (
+              <div
+                className="flex flex-col gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 sm:flex-row sm:items-center sm:justify-between"
+                role="alert"
+              >
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                  <p className="text-xs text-muted-foreground">
+                    {errorMessage(
+                      subscriptionsQueryError,
+                      "Subscriptions could not be loaded.",
+                    )}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => refetchSubscriptions()}
+                >
+                  Retry
+                </Button>
+              </div>
+            )}
 
-            {subs.length > 0 && (
+            {subscriptions.length > 0 && (
               <div className="space-y-1">
-                {subs.map(s => (
+                {subscriptions.map((subscription) => (
                   <div
-                    key={s.id}
-                    className="flex items-center justify-between py-3 border-b border-border/30 last:border-0 gap-3"
+                    key={subscription.id}
+                    className="flex items-center justify-between gap-3 border-b border-border/30 py-3 last:border-0"
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-medium">{s.display_name}</p>
-                        {s.prioritise && (
-                          <Badge className="text-[10px] bg-primary/15 text-primary border border-primary/25 px-1.5 py-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-medium">{subscription.display_name}</p>
+                        {subscription.prioritise && (
+                          <Badge className="border border-primary/25 bg-primary/15 px-1.5 py-0 text-[10px] text-primary">
                             Prioritised
                           </Badge>
                         )}
                       </div>
-                      {s.included_usage_description && (
-                        <p className="text-xs text-muted-foreground mt-0.5">{s.included_usage_description}</p>
+                      {subscription.included_usage_description && (
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {subscription.included_usage_description}
+                        </p>
                       )}
-                      {s.renewal_day && (
-                        <p className="text-[10px] text-muted-foreground/60 mt-0.5">Renews on day {s.renewal_day} of the month</p>
+                      {subscription.renewal_day && (
+                        <p className="mt-0.5 text-[10px] text-muted-foreground/60">
+                          Renews on day {subscription.renewal_day} of the month
+                        </p>
                       )}
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      <p className="text-sm font-medium">${s.monthly_cost_usd.toFixed(2)}/mo</p>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <p className="text-sm font-medium">
+                        ${subscription.monthly_cost_usd.toFixed(2)}/mo
+                      </p>
                       <Button
-                        variant="ghost" size="sm"
-                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                        onClick={() => deleteSub.mutate(s.id)}
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => deleteSubscription.mutate(subscription.id)}
+                        disabled={deleteSubscription.isPending}
+                        aria-label={`Remove ${subscription.display_name}`}
                         title="Remove subscription"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        {deleteSubscription.isPending &&
+                        deleteSubscription.variables === subscription.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5" />
+                        )}
                       </Button>
                     </div>
                   </div>
                 ))}
                 <div className="flex items-center justify-between pt-2">
-                  <p className="text-xs text-muted-foreground">Total monthly AI subscriptions</p>
+                  <p className="text-xs text-muted-foreground">
+                    Total monthly AI subscriptions
+                  </p>
                   <p className="text-sm font-bold">${totalMonthlyAiCost.toFixed(2)}/mo</p>
                 </div>
               </div>
             )}
 
-            {/* Add subscription form */}
-            <div className="rounded-xl border border-dashed border-border/50 p-4 space-y-4">
-              <p className="text-sm font-medium">{subs.length === 0 ? "Add your first subscription" : "Add another subscription"}</p>
-              <div className="grid sm:grid-cols-2 gap-3">
+            <div className="space-y-4 rounded-xl border border-dashed border-border/50 p-4">
+              <p className="text-sm font-medium">
+                {subscriptions.length === 0
+                  ? "Add your first subscription"
+                  : "Add another subscription"}
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <Label className="text-xs mb-1.5 block">Provider</Label>
+                  <Label className="mb-1.5 block text-xs">Provider</Label>
                   <Select
-                    value={newSub.provider}
-                    onValueChange={v => {
-                      const found = COMMON_PROVIDERS.find(p => p.value === v);
-                      setNewSub(s => ({ ...s, provider: v, displayName: s.displayName || (found?.label ?? v) }));
+                    value={newSubscription.provider}
+                    onValueChange={(value) => {
+                      const found = COMMON_PROVIDERS.find(
+                        (provider) => provider.value === value,
+                      );
+                      setNewSubscription((current) => ({
+                        ...current,
+                        provider: value,
+                        displayName: current.displayName || found?.label || value,
+                      }));
                     }}
                   >
                     <SelectTrigger className="h-9 text-sm">
                       <SelectValue placeholder="Select provider" />
                     </SelectTrigger>
                     <SelectContent>
-                      {COMMON_PROVIDERS.map(p => (
-                        <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                      {COMMON_PROVIDERS.map((provider) => (
+                        <SelectItem key={provider.value} value={provider.value}>
+                          {provider.label}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-xs mb-1.5 block">Display name</Label>
+                  <Label className="mb-1.5 block text-xs">Display name</Label>
                   <Input
                     placeholder="e.g. ChatGPT Plus"
-                    value={newSub.displayName}
-                    onChange={e => setNewSub(s => ({ ...s, displayName: e.target.value }))}
+                    value={newSubscription.displayName}
+                    onChange={(event) =>
+                      setNewSubscription((current) => ({
+                        ...current,
+                        displayName: event.target.value,
+                      }))
+                    }
                     className="h-9 text-sm"
                   />
                 </div>
                 <div>
-                  <Label className="text-xs mb-1.5 block">Monthly cost (USD)</Label>
+                  <Label className="mb-1.5 block text-xs">Monthly cost (USD)</Label>
                   <Input
-                    type="number" min={0} step={0.01} placeholder="20"
-                    value={newSub.monthlyCostUsd || ""}
-                    onChange={e => setNewSub(s => ({ ...s, monthlyCostUsd: Number(e.target.value) }))}
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    placeholder="20"
+                    value={newSubscription.monthlyCostUsd || ""}
+                    onChange={(event) =>
+                      setNewSubscription((current) => ({
+                        ...current,
+                        monthlyCostUsd: Number(event.target.value),
+                      }))
+                    }
                     className="h-9 text-sm"
                   />
                 </div>
                 <div>
-                  <Label className="text-xs mb-1.5 block">Renewal day of month</Label>
+                  <Label className="mb-1.5 block text-xs">Renewal day of month</Label>
                   <Input
-                    type="number" min={1} max={31} placeholder="e.g. 1"
-                    value={newSub.renewalDay}
-                    onChange={e => setNewSub(s => ({ ...s, renewalDay: e.target.value }))}
+                    type="number"
+                    min={1}
+                    max={31}
+                    placeholder="e.g. 1"
+                    value={newSubscription.renewalDay}
+                    onChange={(event) =>
+                      setNewSubscription((current) => ({
+                        ...current,
+                        renewalDay: event.target.value,
+                      }))
+                    }
                     className="h-9 text-sm"
                   />
                 </div>
                 <div className="sm:col-span-2">
-                  <Label className="text-xs mb-1.5 block">What's included</Label>
+                  <Label className="mb-1.5 block text-xs">What is included</Label>
                   <Input
                     placeholder="e.g. GPT-4o access, 40 messages / 3 hours"
-                    value={newSub.includedUsageDescription}
-                    onChange={e => setNewSub(s => ({ ...s, includedUsageDescription: e.target.value }))}
+                    value={newSubscription.includedUsageDescription}
+                    onChange={(event) =>
+                      setNewSubscription((current) => ({
+                        ...current,
+                        includedUsageDescription: event.target.value,
+                      }))
+                    }
                     className="h-9 text-sm"
                   />
                 </div>
@@ -397,39 +669,53 @@ export default function BudgetsPage() {
               <div className="flex items-center gap-3">
                 <Switch
                   id="prioritiseSub"
-                  checked={newSub.prioritise}
-                  onCheckedChange={v => setNewSub(s => ({ ...s, prioritise: v }))}
+                  checked={newSubscription.prioritise}
+                  onCheckedChange={(value) =>
+                    setNewSubscription((current) => ({
+                      ...current,
+                      prioritise: value,
+                    }))
+                  }
                 />
-                <Label htmlFor="prioritiseSub" className="text-xs cursor-pointer">
+                <Label htmlFor="prioritiseSub" className="cursor-pointer text-xs">
                   Prioritise this provider in VIBA routing
                 </Label>
               </div>
               <Button
+                type="button"
                 size="sm"
-                onClick={() => addSub.mutate()}
-                disabled={!newSub.provider || !newSub.displayName.trim() || addSub.isPending}
+                onClick={() => addSubscription.mutate()}
+                disabled={
+                  !newSubscription.provider ||
+                  !newSubscription.displayName.trim() ||
+                  addSubscription.isPending
+                }
               >
-                {addSub.isPending
-                  ? <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  : <Plus className="h-4 w-4 mr-2" />}
+                {addSubscription.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Plus className="mr-2 h-4 w-4" />
+                )}
                 Add Subscription
               </Button>
             </div>
 
-            {subs.length > 0 && (
-              <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/20 rounded-lg px-3 py-2">
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-400/70" />
+            {subscriptions.length > 0 && (
+              <div className="flex items-start gap-2 rounded-lg bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400/70" />
                 <span>
-                  VIBA tracks usage routed through it only — this does not reflect your full usage with each provider.
-                  Do not cancel a subscription based solely on these figures; check usage directly with each provider.
+                  VIBA tracks usage routed through it only. This does not reflect your full usage
+                  with each provider. Check the provider directly before changing or cancelling a
+                  subscription.
                 </span>
               </div>
             )}
 
-            {subs.length === 0 && (
-              <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/10 rounded-lg px-3 py-2">
-                <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-primary/60" />
-                Adding your subscriptions helps VIBA route tasks to providers you already have access to — reducing unnecessary API spend.
+            {subscriptions.length === 0 && !subscriptionsFailed && (
+              <div className="flex items-start gap-2 rounded-lg bg-muted/10 px-3 py-2 text-xs text-muted-foreground">
+                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary/60" />
+                Adding subscriptions helps VIBA route tasks to services you already pay for and
+                reduce unnecessary API spend.
               </div>
             )}
           </CardContent>
