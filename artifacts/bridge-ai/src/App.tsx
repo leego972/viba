@@ -46,6 +46,7 @@ import AiSavingsPage from "@/pages/ai-savings";
 import UsageHistoryPage from "@/pages/usage-history";
 import BudgetsPage from "@/pages/budgets";
 import ProjectMemoryPage from "@/pages/project-memory";
+import ProjectsPage from "@/pages/projects";
 import AppPublisherPage from "@/pages/app-publisher";
 import Terms from "@/pages/terms";
 import Privacy from "@/pages/privacy";
@@ -55,6 +56,7 @@ import OwnerActions from "@/pages/owner-actions";
 import SetupAssistant from "@/pages/setup-assistant";
 import { SessionTimelinePage, CollaborationMapPage } from "@/pages/market-completion";
 import { useAuth } from "@/hooks/useAuth";
+import { useAdminAccess } from "@/hooks/useAdminAccess";
 import { isBypassValid, setBypassValid } from "@/lib/auth";
 
 const queryClient = new QueryClient();
@@ -85,6 +87,37 @@ function AuthGuard({ children }: { children: ReactNode }) {
   if (bypassActive) return <>{children}</>;
   if (isLoading || !isAuthenticated) return <Spinner />;
   return <>{children}</>;
+}
+
+function AdminGuard({ children }: { children: ReactNode }) {
+  const [, setLocation] = useLocation();
+  const { isAuthenticated, isLoading } = useAuth();
+  const { isAdmin, isLoading: isAdminLoading } = useAdminAccess(isAuthenticated);
+
+  useEffect(() => {
+    if (isLoading || isAdminLoading) return;
+    if (!isAuthenticated) {
+      setLocation("/login");
+      return;
+    }
+    if (!isAdmin) setLocation("/dashboard");
+  }, [isLoading, isAdminLoading, isAuthenticated, isAdmin, setLocation]);
+
+  if (isLoading || isAdminLoading || !isAuthenticated || !isAdmin) return <Spinner />;
+
+  if (!sessionStorage.getItem("viba_admin_token")) {
+    sessionStorage.setItem("viba_admin_token", "session-admin");
+    window.dispatchEvent(new Event("storage"));
+  }
+  return <>{children}</>;
+}
+
+function AdminPageRoute() {
+  return <AdminGuard><Admin /></AdminGuard>;
+}
+
+function AdminProjectsRoute() {
+  return <AdminGuard><AdminProjectsPage /></AdminGuard>;
 }
 
 function GatedRouter() {
@@ -126,6 +159,9 @@ function GatedRouter() {
         <Route path="/usage-history" component={UsageHistoryPage} />
         <Route path="/budgets" component={BudgetsPage} />
         <Route path="/project-memory" component={ProjectMemoryPage} />
+        <Route path="/projects" component={ProjectsPage} />
+        <Route path="/admin/projects" component={AdminProjectsRoute} />
+        <Route path="/admin" component={AdminPageRoute} />
         <Route path="/app-publisher" component={AppPublisherPage} />
         <Route component={NotFound} />
       </Switch>
@@ -180,8 +216,6 @@ function App() {
                 <Route path="/terms" component={Terms} />
                 <Route path="/privacy" component={Privacy} />
                 <Route path="/user-instructions" component={UserInstructions} />
-                <Route path="/admin/projects" component={AdminProjectsPage} />
-                <Route path="/admin" component={Admin} />
                 <Route path="/" component={Home} />
                 <Route component={GatedRouter} />
               </Switch>
