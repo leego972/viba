@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { Check, Pause, X } from "lucide-react";
 import type { OrchestrationAgent } from "@/lib/orchestrationViewModel";
 import { STATUS_COLORS } from "@/lib/orchestrationViewModel";
 
@@ -7,6 +8,8 @@ interface Props {
   reducedMotion: boolean;
   onClick?: () => void;
   size?: number;
+  highlighted?: boolean;
+  selected?: boolean;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -20,38 +23,80 @@ const STATUS_LABELS: Record<string, string> = {
   paused:    "Paused",
 };
 
-export function AgentNode({ agent, reducedMotion, onClick, size = 52 }: Props) {
+export function AgentNode({
+  agent,
+  reducedMotion,
+  onClick,
+  size = 52,
+  highlighted = false,
+  selected = false,
+}: Props) {
   const statusColor = STATUS_COLORS[agent.status] ?? "#6b7280";
   const isActive = agent.status === "working" || agent.status === "reviewing";
   const isIdle = agent.status === "idle" || agent.status === "queued";
+  const isComplete = agent.status === "complete";
+  const isFailed = agent.status === "failed";
+  const isPaused = agent.status === "paused";
+
+  const coreContent = isComplete
+    ? <Check className="h-4 w-4" />
+    : isFailed
+      ? <X className="h-4 w-4" />
+      : isPaused
+        ? <Pause className="h-3.5 w-3.5" />
+        : <span className="text-[11px] font-bold">{agent.name.charAt(0).toUpperCase()}</span>;
 
   return (
     <motion.button
       type="button"
-      className="relative flex flex-col items-center group cursor-pointer focus:outline-none"
-      style={{ width: size + 40 }}
+      className="relative flex flex-col items-center group cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#090b10] rounded-xl"
+      style={{ width: size + 52 }}
       onClick={onClick}
-      whileHover={reducedMotion ? {} : { scale: 1.06 }}
+      aria-label={`${agent.name}, ${agent.role}, ${STATUS_LABELS[agent.status] ?? agent.status}`}
+      initial={reducedMotion ? false : { opacity: 0, scale: 0.82, y: 6 }}
+      animate={{
+        opacity: 1,
+        scale: highlighted && !reducedMotion ? 1.06 : 1,
+        y: 0,
+      }}
+      transition={{ type: "spring", stiffness: 260, damping: 22 }}
+      whileHover={reducedMotion ? {} : { scale: highlighted ? 1.09 : 1.05, y: -2 }}
       whileTap={reducedMotion ? {} : { scale: 0.97 }}
     >
-      {/* Active working glow */}
       {isActive && !reducedMotion && (
         <motion.div
-          className="absolute rounded-full"
+          className="absolute rounded-full pointer-events-none"
           style={{
-            width: size + 16,
-            height: size + 16,
-            top: -8,
+            width: size + 24,
+            height: size + 24,
+            top: -12,
             left: "50%",
             x: "-50%",
-            background: `radial-gradient(circle, ${agent.color}50 0%, transparent 70%)`,
+            background: `radial-gradient(circle, ${agent.color}52 0%, ${agent.color}12 42%, transparent 72%)`,
           }}
-          animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
-          transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
+          animate={{ scale: [0.94, 1.16, 0.94], opacity: [0.45, 0.9, 0.45] }}
+          transition={{ duration: highlighted ? 1.1 : 1.65, repeat: Infinity, ease: "easeInOut" }}
         />
       )}
 
-      {/* Idle breathing — very gentle, signals the node is alive */}
+      {highlighted && !reducedMotion && (
+        <motion.div
+          className="absolute rounded-full border pointer-events-none"
+          style={{
+            width: size + 18,
+            height: size + 18,
+            top: -9,
+            left: "50%",
+            x: "-50%",
+            borderColor: `${agent.color}75`,
+            boxShadow: `0 0 18px ${agent.color}45`,
+          }}
+          initial={{ scale: 0.75, opacity: 0 }}
+          animate={{ scale: [0.86, 1.2], opacity: [0.9, 0] }}
+          transition={{ duration: 1.35, repeat: Infinity, ease: "easeOut" }}
+        />
+      )}
+
       {isIdle && !reducedMotion && (
         <motion.div
           className="absolute rounded-full pointer-events-none"
@@ -63,61 +108,78 @@ export function AgentNode({ agent, reducedMotion, onClick, size = 52 }: Props) {
             x: "-50%",
             background: `radial-gradient(circle, ${agent.color}18 0%, transparent 70%)`,
           }}
-          animate={{ opacity: [0.3, 0.7, 0.3] }}
-          transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut" }}
+          animate={{ opacity: [0.22, 0.5, 0.22] }}
+          transition={{ duration: 3.4, repeat: Infinity, ease: "easeInOut" }}
         />
       )}
 
-      {/* Node circle */}
-      <div
-        className="relative z-10 flex items-center justify-center rounded-full border text-xs font-bold text-white transition-shadow"
+      {isActive && !reducedMotion && (
+        <motion.div
+          className="absolute rounded-full border border-dashed pointer-events-none"
+          style={{
+            width: size + 10,
+            height: size + 10,
+            top: -5,
+            left: "50%",
+            x: "-50%",
+            borderColor: `${agent.color}55`,
+          }}
+          animate={{ rotate: 360 }}
+          transition={{ duration: agent.status === "reviewing" ? 5.5 : 7.5, repeat: Infinity, ease: "linear" }}
+        />
+      )}
+
+      <motion.div
+        className="relative z-10 flex items-center justify-center rounded-full border text-xs font-bold text-white"
         style={{
           width: size,
           height: size,
-          background: `radial-gradient(circle at 35% 35%, ${agent.color}35 0%, #0f1117 100%)`,
-          borderColor: agent.color + "80",
-          boxShadow: isActive
-            ? `0 0 14px ${agent.color}60, inset 0 0 10px ${agent.color}15`
-            : `0 0 6px ${agent.color}25`,
+          color: agent.color,
+          background: `radial-gradient(circle at 35% 30%, ${agent.color}42 0%, #111520 55%, #090b10 100%)`,
+          borderColor: selected ? agent.color : `${agent.color}82`,
+          boxShadow: selected
+            ? `0 0 0 2px ${agent.color}35, 0 0 22px ${agent.color}70, inset 0 0 13px ${agent.color}17`
+            : isActive
+              ? `0 0 16px ${agent.color}62, inset 0 0 12px ${agent.color}16`
+              : `0 0 7px ${agent.color}2f`,
         }}
+        animate={isComplete && !reducedMotion ? { scale: [1, 1.12, 1] } : {}}
+        transition={{ duration: 0.5, ease: "easeOut" }}
       >
-        <span className="text-[11px] font-bold" style={{ color: agent.color }}>
-          {agent.name.charAt(0).toUpperCase()}
-        </span>
-      </div>
+        {coreContent}
+      </motion.div>
 
-      {/* Status dot */}
       <motion.div
-        className="absolute top-0 right-1 z-20 rounded-full border-2 border-[#0a0b0f]"
-        style={{ width: 10, height: 10, background: statusColor }}
-        animate={isActive && !reducedMotion ? { scale: [1, 1.3, 1] } : {}}
-        transition={{ duration: 0.8, repeat: Infinity }}
+        className="absolute top-0 right-2 z-20 rounded-full border-2 border-[#090b10]"
+        style={{ width: 10, height: 10, background: statusColor, boxShadow: `0 0 8px ${statusColor}75` }}
+        animate={isActive && !reducedMotion ? { scale: [1, 1.34, 1] } : {}}
+        transition={{ duration: 0.85, repeat: Infinity, ease: "easeInOut" }}
       />
 
-      {/* Name + Role */}
-      <div className="mt-1.5 text-center leading-tight">
-        <div className="text-[9px] font-semibold text-white/90 truncate max-w-[56px]">{agent.name}</div>
-        <div className="text-[8px] text-white/40 truncate max-w-[56px]">{agent.role}</div>
+      <div className="mt-1.5 text-center leading-tight min-w-0">
+        <div className="text-[9px] font-semibold text-white/90 truncate max-w-[74px]">{agent.name}</div>
+        <div className="text-[8px] text-white/42 truncate max-w-[74px]">{agent.role}</div>
       </div>
 
-      {/* Status label */}
       <div
-        className="mt-0.5 rounded-full px-1.5 py-0.5 text-[7px] font-semibold uppercase tracking-wider"
-        style={{ background: statusColor + "20", color: statusColor }}
+        className="mt-1 rounded-full px-2 py-0.5 text-[7px] font-semibold uppercase tracking-[0.12em]"
+        style={{ background: `${statusColor}18`, color: statusColor, border: `1px solid ${statusColor}22` }}
       >
         {STATUS_LABELS[agent.status] ?? agent.status}
       </div>
 
-      {/* Tooltip on hover */}
       {agent.taskSummary && (
-        <div className="pointer-events-none absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-50 w-48 rounded-lg border border-white/10 bg-[#1a1d2e] p-2 text-[9px] text-white/70 opacity-0 group-hover:opacity-100 transition-opacity shadow-xl">
-          <div className="font-semibold text-white/90 mb-0.5">{agent.role}</div>
-          <div>{agent.taskSummary}</div>
-          {agent.cost !== undefined && agent.cost > 0 && (
-            <div className="mt-1 text-emerald-400">Cost: ${agent.cost.toFixed(4)}</div>
-          )}
-          {agent.latencyMs !== undefined && agent.latencyMs > 0 && (
-            <div className="text-white/40">Latency: {agent.latencyMs}ms</div>
+        <div className="pointer-events-none absolute bottom-full mb-3 left-1/2 -translate-x-1/2 z-50 w-52 rounded-xl border border-white/10 bg-[#11141d]/98 p-2.5 text-[9px] text-white/68 opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all shadow-2xl backdrop-blur-xl">
+          <div className="flex items-center gap-1.5 font-semibold text-white/92 mb-1">
+            <span className="h-1.5 w-1.5 rounded-full" style={{ background: statusColor, boxShadow: `0 0 6px ${statusColor}` }} />
+            {agent.role}
+          </div>
+          <div className="leading-relaxed">{agent.taskSummary}</div>
+          {(agent.cost !== undefined || (agent.latencyMs !== undefined && agent.latencyMs > 0)) && (
+            <div className="mt-2 flex items-center gap-3 border-t border-white/5 pt-1.5 text-[8px]">
+              {agent.cost !== undefined && agent.cost > 0 && <span className="text-emerald-400">${agent.cost.toFixed(4)}</span>}
+              {agent.latencyMs !== undefined && agent.latencyMs > 0 && <span className="text-white/38">{agent.latencyMs}ms</span>}
+            </div>
           )}
         </div>
       )}
