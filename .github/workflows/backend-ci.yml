@@ -48,11 +48,17 @@ jobs:
           path: frontend-typecheck.log
           retention-days: 3
 
+      - name: Typecheck mobile wrapper configuration
+        run: pnpm --filter @workspace/bridge-ai exec tsc --noEmit --skipLibCheck --moduleResolution bundler --module esnext --target es2022 capacitor.config.ts
+
       - name: Run Bridge AI unit tests
         run: pnpm --filter @workspace/bridge-ai run unit-test
 
       - name: Build Bridge AI frontend
         run: pnpm --filter @workspace/bridge-ai run build
+
+      - name: Run recent API regression tests
+        run: pnpm --filter @workspace/api-server exec vitest run --config vitest.config.ts src/routes/appPublisher.test.ts src/recentBuildContracts.test.ts
 
       - name: Typecheck backend and workspace
         shell: bash
