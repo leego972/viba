@@ -1,8 +1,8 @@
 import { Router, type IRouter } from "express";
 import { db, settingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-
 import { GetSettingsResponse, SaveSettingsBody, SaveSettingsResponse } from "@workspace/api-zod";
+import { requireOwnerAdmin } from "../middlewares/requireOwnerAdmin";
 
 const ALLOWED_SETTINGS_KEYS = new Set([
   "FALLBACK_ALERT_THRESHOLD",
@@ -40,14 +40,9 @@ const ALLOWED_SETTINGS_KEYS = new Set([
   "OLLAMA_MODEL",
 ]);
 
-const CLEARABLE_NOTIFICATION_KEYS = [
+const SECRET_SETTING_KEYS = new Set([
   "NOTIFICATION_WEBHOOK_URL",
-  "NOTIFICATION_EMAIL",
-  "SMTP_HOST",
-  "SMTP_PORT",
-  "SMTP_USER",
   "SMTP_PASS",
-  "SMTP_FROM",
   "OPENAI_API_KEY",
   "ANTHROPIC_API_KEY",
   "GEMINI_API_KEY",
@@ -60,7 +55,7 @@ const CLEARABLE_NOTIFICATION_KEYS = [
   "GITHUB_TOKEN",
   "VAST_AI_API_KEY",
   "ELEVENLABS_API_KEY",
-];
+]);
 
 const PROVIDER_BY_KEY: Record<string, string> = {
   OPENAI_API_KEY: "OPENAI",
@@ -74,27 +69,26 @@ const PROVIDER_BY_KEY: Record<string, string> = {
   CUSTOM_API_KEY: "CUSTOM",
 };
 
-const MASKED_KEYS = new Set(["SMTP_PASS", "GITHUB_TOKEN", "VAST_AI_API_KEY"]);
 const router: IRouter = Router();
+router.use(requireOwnerAdmin);
 
-function serializeSetting(s: { id: number; key: string; value: string | null; createdAt: Date; updatedAt: Date }) {
+function serializeSetting(setting: { id: number; key: string; value: string | null; createdAt: Date; updatedAt: Date }) {
   return {
-    ...s,
-    createdAt: s.createdAt.toISOString(),
-    updatedAt: s.updatedAt.toISOString(),
+    ...setting,
+    createdAt: setting.createdAt.toISOString(),
+    updatedAt: setting.updatedAt.toISOString(),
   };
 }
 
 function maskValue(key: string, value: string | null): string | null {
   if (!value) return value;
-  if (key.toLowerCase().includes("api_key") || MASKED_KEYS.has(key)) return "***SET***";
-  return value;
+  return SECRET_SETTING_KEYS.has(key) ? "***SET***" : value;
 }
 
 async function upsertSetting(key: string, value: string): Promise<void> {
   const [existing] = await db.select().from(settingsTable).where(eq(settingsTable.key, key));
   if (existing) {
-    await db.update(settingsTable).set({ value }).where(eq(settingsTable.key, key));
+    await db.update(settingsTable).set({ value, updatedAt: new Date() }).where(eq(settingsTable.key, key));
   } else {
     await db.insert(settingsTable).values({ key, value });
   }
@@ -102,9 +96,9 @@ async function upsertSetting(key: string, value: string): Promise<void> {
 
 router.get("/settings", async (_req, res): Promise<void> => {
   const settings = await db.select().from(settingsTable);
-  const safeSettings = settings.map((s) => serializeSetting({
-    ...s,
-    value: maskValue(s.key, s.value),
+  const safeSettings = settings.map((setting) => serializeSetting({
+    ...setting,
+    value: maskValue(setting.key, setting.value),
   }));
   res.json(GetSettingsResponse.parse(safeSettings));
 });
@@ -117,11 +111,22 @@ router.post("/settings", async (req, res): Promise<void> => {
   }
 
   const unknownKeys = parsed.data.settings
-    .map((s) => s.key)
-    .filter((k) => !ALLOWED_SETTINGS_KEYS.has(k));
+    .map((setting) => setting.key)
+    .filter((key) => !ALLOWED_SETTINGS_KEYS.has(key));
   if (unknownKeys.length > 0) {
     res.status(400).json({
-      error: `Unknown settings key(s): ${unknownKeys.join(", ")}. Only recognised configuration keys are accepted.`,
+      error: `Unknown settings key(s): ${unknownKeys.join(", ")}.`,
+    });
+    return;
+  }
+
+  const plaintextSecret = parsed.data.settings.find(
+    ({ key, value }) => SECRET_SETTING_KEYS.has(key) && value !== "" && value !== "***SET***",
+  );
+  if (plaintextSecret) {
+    res.status(400).json({
+      error: `${plaintextSecret.key} cannot be stored in the plaintext settings table. Put platform secrets in Render environment variables or customer provider keys in the encrypted VIBA Vault.`,
+      code: "PLAINTEXT_SECRET_REJECTED",
     });
     return;
   }
@@ -134,7 +139,7 @@ router.post("/settings", async (req, res): Promise<void> => {
       continue;
     }
 
-    if (value === "" && CLEARABLE_NOTIFICATION_KEYS.includes(key)) {
+    if (value === "") {
       await db.delete(settingsTable).where(eq(settingsTable.key, key));
       const provider = PROVIDER_BY_KEY[key];
       if (provider) await upsertSetting(`${provider}_ENABLED`, "false");
@@ -142,33 +147,22 @@ router.post("/settings", async (req, res): Promise<void> => {
       continue;
     }
 
-    if (value === "") {
-      keyResults.push({ key, status: "skipped" });
-      continue;
-    }
-
     if (key === "FALLBACK_ALERT_THRESHOLD") {
-      const n = parseInt(value, 10);
-      if (!/^\d+$/.test(value) || isNaN(n) || n < 1) {
-        res.status(400).json({ error: "FALLBACK_ALERT_THRESHOLD must be a positive whole number (e.g. 5)." });
+      const threshold = Number.parseInt(value, 10);
+      if (!/^\d+$/.test(value) || Number.isNaN(threshold) || threshold < 1) {
+        res.status(400).json({ error: "FALLBACK_ALERT_THRESHOLD must be a positive whole number." });
         return;
       }
     }
 
     await upsertSetting(key, value);
-
-    // A key entered on Settings is immediately available to every provider-aware
-    // screen and to agentFactory. This also clears stale disabled state.
-    const provider = PROVIDER_BY_KEY[key];
-    if (provider) await upsertSetting(`${provider}_ENABLED`, "true");
-
     keyResults.push({ key, status: "saved" });
   }
 
   const allSettings = await db.select().from(settingsTable);
-  const safeSettings = allSettings.map((s) => serializeSetting({
-    ...s,
-    value: maskValue(s.key, s.value),
+  const safeSettings = allSettings.map((setting) => serializeSetting({
+    ...setting,
+    value: maskValue(setting.key, setting.value),
   }));
   res.json(SaveSettingsResponse.parse({ settings: safeSettings, results: keyResults }));
 });
