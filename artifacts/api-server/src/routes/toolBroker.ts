@@ -1,14 +1,7 @@
 /**
  * VIBA Tool Broker API Routes
  *
- * Mounted by app.ts under /api.
- * GET  /api/tools                 — list all tools with credential status
- * GET  /api/tools/:toolId         — single tool definition
- * POST /api/tools/plan            — plan a tool action (no mutation)
- * POST /api/tools/dry-run         — simulate a tool action (no mutation)
- * POST /api/tools/execute         — execute a tool action (all guards applied)
- * GET  /api/tools/invocations     — recent invocation log (user-scoped)
- * GET  /api/tools/invocations/:id — single invocation
+ * Mounted under /api after verified-session authentication.
  */
 import { Router } from "express";
 import { z } from "zod/v4";
@@ -19,31 +12,14 @@ import {
   dryRunToolAction,
   executeToolAction,
 } from "../lib/toolActionBroker";
-import { getToolById, type ToolDefinition } from "../lib/toolRegistry";
-import { getSecurityHardeningToolById } from "../lib/securityToolPack";
+import { getToolById } from "../lib/toolRegistry";
+import {
+  getToolCapabilityMatrix,
+  getCapabilitySummary,
+  routeJobToToolSequence,
+} from "../lib/toolCapabilityMatrix";
 
 const router = Router();
-
-const ARTIFACT_DELIVERY_TOOL: ToolDefinition = {
-  toolId: "artifact.deliver",
-  label: "Artifacts: Deliver Document/File/ZIP to User",
-  category: "storage",
-  description: "Create a system-generated document, file, or ZIP bundle and attach it to an assistant chat message for the user to download. This is assistant-to-user delivery, not user upload.",
-  riskLevel: "low",
-  permissionsRequired: ["login_required"],
-  credentialProvider: null,
-  credentialKind: null,
-  supportsDryRun: true,
-  requiresApproval: false,
-  requiresSafeBuild: false,
-  outputsSecretValues: false,
-};
-
-function brokerToolById(toolId: string): ToolDefinition | undefined {
-  return toolId === ARTIFACT_DELIVERY_TOOL.toolId
-    ? ARTIFACT_DELIVERY_TOOL
-    : getSecurityHardeningToolById(toolId) ?? getToolById(toolId);
-}
 
 function userId(req: { session?: { userId?: number } }): number {
   return typeof req.session?.userId === "number" ? req.session.userId : 0;
@@ -55,18 +31,36 @@ const ToolActionSchema = z.object({
   taskId: z.union([z.string(), z.number()]).optional().nullable(),
   payload: z.record(z.string(), z.unknown()).optional(),
   requestedByAgent: z.string().optional(),
-  approvalToken: z.string().optional().nullable(),
 });
 
 router.get("/tools", async (req, res): Promise<void> => {
-  const uid = userId(req);
-  const tools = await getAvailableTools(uid);
+  const tools = await getAvailableTools(userId(req));
   res.json({ tools, rawValuesReturned: false });
+});
+
+router.get("/tools/capabilities", (_req, res): void => {
+  res.json({ capabilities: getToolCapabilityMatrix(), rawValuesReturned: false });
+});
+
+router.get("/tools/capabilities/summary", (_req, res): void => {
+  res.json(getCapabilitySummary());
+});
+
+router.get("/tools/route-job", (req, res): void => {
+  const jobType = String(req.query["type"] ?? "").trim();
+  if (!jobType) {
+    res.status(400).json({ error: "Query parameter 'type' is required" });
+    return;
+  }
+  res.json(routeJobToToolSequence(jobType));
 });
 
 router.get("/tools/invocations", async (req, res): Promise<void> => {
   const uid = userId(req);
-  const limit = Math.min(Number(req.query["limit"] ?? 50), 200);
+  const requestedLimit = Number(req.query["limit"] ?? 50);
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.max(1, Math.min(Math.trunc(requestedLimit), 200))
+    : 50;
   const taskId = req.query["task_id"] as string | undefined;
 
   try {
@@ -89,7 +83,7 @@ router.get("/tools/invocations", async (req, res): Promise<void> => {
     const { rows } = await pool.query<Record<string, unknown>>(queryText, params);
     const invocations = rows.map((row) => ({
       ...row,
-      toolLabel: brokerToolById(String(row["tool_id"] ?? ""))?.label ?? row["tool_id"],
+      toolLabel: getToolById(String(row["tool_id"] ?? ""))?.label ?? row["tool_id"],
       rawValuesReturned: false,
     }));
     res.json({ invocations, rawValuesReturned: false });
@@ -101,7 +95,7 @@ router.get("/tools/invocations", async (req, res): Promise<void> => {
 router.get("/tools/invocations/:id", async (req, res): Promise<void> => {
   const uid = userId(req);
   const id = Number(req.params["id"]);
-  if (isNaN(id)) {
+  if (!Number.isInteger(id) || id <= 0) {
     res.status(400).json({ error: "Invalid invocation id" });
     return;
   }
@@ -117,53 +111,65 @@ router.get("/tools/invocations/:id", async (req, res): Promise<void> => {
       return;
     }
     const row = rows[0];
-    res.json({ invocation: { ...row, toolLabel: brokerToolById(String(row["tool_id"] ?? ""))?.label ?? row["tool_id"], rawValuesReturned: false } });
+    res.json({
+      invocation: {
+        ...row,
+        toolLabel: getToolById(String(row["tool_id"] ?? ""))?.label ?? row["tool_id"],
+        rawValuesReturned: false,
+      },
+    });
   } catch {
     res.status(500).json({ error: "Failed to fetch invocation" });
   }
 });
 
+/** Dynamic tool lookup must remain below all fixed /tools/* routes. */
 router.get("/tools/:toolId", (req, res): void => {
   const toolId = req.params["toolId"] as string;
-  const tool = brokerToolById(toolId);
+  const tool = getToolById(toolId);
   if (!tool) {
     res.status(404).json({ error: `Tool '${toolId}' not found in registry` });
     return;
   }
-  res.json({ tool, rawValuesReturned: false });
+  const capability = getToolCapabilityMatrix().find((item) => item.toolId === toolId) ?? null;
+  res.json({ tool, capability, rawValuesReturned: false });
 });
 
 router.post("/tools/plan", async (req, res): Promise<void> => {
-  const uid = userId(req);
   const parsed = ToolActionSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid request", issues: parsed.error.issues });
     return;
   }
-  const result = await planToolAction({ userId: uid, ...parsed.data });
-  res.json(result);
+  res.json(await planToolAction({ userId: userId(req), ...parsed.data }));
 });
 
 router.post("/tools/dry-run", async (req, res): Promise<void> => {
-  const uid = userId(req);
   const parsed = ToolActionSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid request", issues: parsed.error.issues });
     return;
   }
-  const result = await dryRunToolAction({ userId: uid, dryRun: true, ...parsed.data });
-  res.json(result);
+  res.json(await dryRunToolAction({ userId: userId(req), dryRun: true, ...parsed.data }));
 });
 
 router.post("/tools/execute", async (req, res): Promise<void> => {
-  const uid = userId(req);
   const parsed = ToolActionSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid request", issues: parsed.error.issues });
     return;
   }
-  const result = await executeToolAction({ userId: uid, ...parsed.data });
-  res.json(result);
+  const result = await executeToolAction({ userId: userId(req), ...parsed.data });
+  const httpStatus = result.status === "executed"
+    ? 200
+    : result.status === "failed"
+      ? 502
+      : result.status === "missing_credential"
+        ? 409
+        : result.status === "scope_denied"
+          ? 403
+          : 422;
+  res.status(httpStatus).json(result);
 });
 
 export default router;
