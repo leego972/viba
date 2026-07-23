@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useAdminAccess } from "@/hooks/useAdminAccess";
 import {
   LayoutDashboard, CreditCard, Settings, Sun, Moon,
   ChevronDown, FlaskConical, Terminal, Wrench, Radio, Bot, ClipboardCheck,
@@ -25,8 +26,9 @@ const GROUPS: NavGroup[] = [
   },
   {
     label: "Command", icon: Terminal,
-    matchPaths: ["/workbench", "/agent-console", "/tool-console", "/bridge", "/assisted-browser"],
+    matchPaths: ["/projects", "/workbench", "/agent-console", "/tool-console", "/bridge", "/assisted-browser"],
     items: [
+      { href: "/projects", label: "My Projects", icon: FolderInput },
       { href: "/workbench", label: "Workbench", icon: FlaskConical },
       { href: "/agent-console", label: "Agent Console", icon: Terminal },
       { href: "/tool-console", label: "Tool Console", icon: Wrench },
@@ -106,14 +108,7 @@ function DropMenu({ group, location }: { group: NavGroup; location: string }) {
 export function Navbar() {
   const [location] = useLocation();
   const { theme, toggleTheme } = useTheme();
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  useEffect(() => {
-    const check = () => setIsAdmin(!!sessionStorage.getItem("viba_admin_token"));
-    check();
-    window.addEventListener("storage", check);
-    return () => window.removeEventListener("storage", check);
-  }, []);
+  const { isAdmin } = useAdminAccess(true);
 
   const isDashboard = location.startsWith("/dashboard") || location.startsWith("/sessions");
   const isBilling = location.startsWith("/billing") || location.startsWith("/pricing");
