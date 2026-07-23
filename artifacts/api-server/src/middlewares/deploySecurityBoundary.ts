@@ -80,8 +80,6 @@ router.use((req, res, next): void => {
     res.status(401).json({ error: "Authentication required" });
     return;
   }
-  // The legacy deployment routes expect req.user.id. Populate it exclusively
-  // from the verified server-side session, never from request input.
   setLegacyUser(req, owner);
   next();
 });
@@ -90,7 +88,7 @@ router.post("/projects/:projectId/connect-github", (req, res, next): void => {
   if (req.body?.autoDeployEnabled === true) {
     res.status(422).json({
       error: "autonomous_deploy_disabled",
-      message: "Push-triggered deployments are disabled. VIBA may prepare deployment records, but a signed-in user must start each deployment manually.",
+      message: "Push-triggered deployments are disabled. A signed-in user must start each deployment manually.",
     });
     return;
   }
@@ -98,16 +96,25 @@ router.post("/projects/:projectId/connect-github", (req, res, next): void => {
   next();
 });
 
-router.use("/projects/:projectId", async (req, res, next): Promise<void> => {
+router.use("/projects/:projectId/env/:envId", async (req, res, next): Promise<void> => {
   try {
     const owner = ownerId(req)!;
-    if (!(await ownsProject(String(req.params.projectId), owner))) {
-      res.status(404).json({ error: "Project not found" });
+    const projectId = String(req.params.projectId);
+    const envId = String(req.params.envId);
+    if (!(await ownsProject(projectId, owner)) || !(await ownsEnvVar(envId, projectId, owner))) {
+      res.status(404).json({ error: "Environment variable not found" });
       return;
     }
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
 
-    if (req.params.envId && !(await ownsEnvVar(String(req.params.envId), String(req.params.projectId), owner))) {
-      res.status(404).json({ error: "Environment variable not found" });
+router.use("/projects/:projectId", async (req, res, next): Promise<void> => {
+  try {
+    if (!(await ownsProject(String(req.params.projectId), ownerId(req)!))) {
+      res.status(404).json({ error: "Project not found" });
       return;
     }
     next();
