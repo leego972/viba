@@ -26,17 +26,56 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile=false --reporter=silent
 
-      # The repository currently contains pre-existing strict TypeScript debt.
-      # Keep reporting it, but do not prevent the deployable bundles from being
-      # built and verified until that separate cleanup is completed.
-      - name: Typecheck backend and workspace (diagnostic)
-        continue-on-error: true
-        run: pnpm run typecheck
+      - name: Build workspace type declarations
+        run: pnpm run typecheck:libs
 
-      - name: Build API server
-        run: pnpm --filter @workspace/api-server run build
+      - name: Typecheck Bridge AI frontend
+        shell: bash
+        run: |
+          set +e
+          pnpm --filter @workspace/bridge-ai run typecheck > frontend-typecheck.log 2>&1
+          status=$?
+          cat frontend-typecheck.log
+          exit $status
+
+      - name: Upload frontend typecheck diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-typecheck-diagnostics
+          path: frontend-typecheck.log
+          retention-days: 3
+
+      - name: Typecheck mobile wrapper configuration
+        run: pnpm --filter @workspace/bridge-ai exec tsc --noEmit --skipLibCheck --moduleResolution bundler --module esnext --target es2022 capacitor.config.ts
+
+      - name: Run Bridge AI unit tests
+        run: pnpm --filter @workspace/bridge-ai run unit-test
 
       - name: Build Bridge AI frontend
         run: pnpm --filter @workspace/bridge-ai run build
+
+      - name: Run recent API regression tests
+        run: pnpm --filter @workspace/api-server exec vitest run --config vitest.config.ts src/routes/appPublisher.test.ts src/recentBuildContracts.test.ts
+
+      - name: Typecheck backend and workspace
+        shell: bash
+        run: |
+          set +e
+          pnpm run typecheck > workspace-typecheck.log 2>&1
+          status=$?
+          cat workspace-typecheck.log
+          exit $status
+
+      - name: Upload workspace typecheck diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workspace-typecheck-diagnostics
+          path: workspace-typecheck.log
+          retention-days: 3
+
+      - name: Build API server
+        run: pnpm --filter @workspace/api-server run build
