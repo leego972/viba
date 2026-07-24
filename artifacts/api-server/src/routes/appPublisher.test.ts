@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { buildWorkflowInputs, validatePublisherInput } from "./appPublisher";
+import { buildWorkflowInputs, validatePublisherInput, type PublisherInput } from "./appPublisher";
 
-const validRequest = {
+const validRequest: PublisherInput = {
   platforms: ["android", "apple"],
   websiteUrl: "https://studio.example.com/app",
   appName: "Studio App",
