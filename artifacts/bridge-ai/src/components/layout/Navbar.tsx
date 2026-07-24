@@ -159,9 +159,9 @@ export function Navbar() {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-white/[0.06] bg-background/92 backdrop-blur-xl">
       <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
-      <div className="container flex h-[60px] max-w-screen-2xl items-center gap-2 px-3 sm:px-4">
-        <Link href="/" className="flex shrink-0 items-center">
-          <img src={`${import.meta.env.BASE_URL}viba-logo.png`} alt="VIBA" className="h-10 w-auto object-contain xl:h-14" />
+      <div className="container flex h-[60px] max-w-screen-2xl items-center gap-1 px-2 min-[360px]:gap-1.5 min-[360px]:px-3 sm:gap-3 sm:px-4">
+        <Link href="/" className="flex min-w-0 shrink items-center xl:shrink-0">
+          <img src={`${import.meta.env.BASE_URL}viba-logo.png`} alt="VIBA" className="h-9 w-auto max-w-[68px] object-contain min-[360px]:h-10 min-[360px]:max-w-[82px] sm:h-14 sm:max-w-none" />
         </Link>
 
         <nav className="hidden min-w-0 flex-1 items-center gap-0.5 xl:flex" aria-label="Main navigation">
@@ -172,9 +172,9 @@ export function Navbar() {
           {isAdmin && <Link href="/admin"><button type="button" className="flex h-9 items-center gap-1.5 rounded-lg border border-red-500/25 bg-red-500/10 px-3 text-sm font-medium"><ShieldCheck className="h-3.5 w-3.5" />Admin</button></Link>}
         </nav>
 
-        <div className="ml-auto flex items-center gap-1 xl:hidden">
+        <div className="ml-auto flex items-center gap-0.5 min-[360px]:gap-1 xl:hidden">
           <Link href="/dashboard">
-            <button type="button" aria-label="Dashboard" title="Dashboard" className={`flex h-9 w-9 items-center justify-center rounded-lg border ${isDashboard ? "border-primary/30 bg-primary/10 text-primary" : "border-transparent text-foreground/55"}`}>
+            <button type="button" aria-label="Dashboard" title="Dashboard" className={`flex h-9 w-9 items-center justify-center rounded-lg border min-[360px]:h-10 min-[360px]:w-10 ${isDashboard ? "border-primary/30 bg-primary/10 text-primary" : "border-transparent text-foreground/55"}`}>
               <LayoutDashboard className="h-4 w-4" />
             </button>
           </Link>
@@ -183,7 +183,7 @@ export function Navbar() {
             onClick={() => setMobileOpen((value) => !value)}
             aria-label={mobileOpen ? "Close navigation" : "Open navigation"}
             aria-expanded={mobileOpen}
-            className={`flex h-9 w-9 items-center justify-center rounded-lg border ${mobileOpen ? "border-primary/30 bg-primary/10 text-primary" : "border-border/40 text-foreground/60"}`}
+            className={`flex h-9 w-9 items-center justify-center rounded-lg border min-[360px]:h-10 min-[360px]:w-10 ${mobileOpen ? "border-primary/30 bg-primary/10 text-primary" : "border-border/40 text-foreground/60"}`}
           >
             {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
           </button>
@@ -194,7 +194,7 @@ export function Navbar() {
           onClick={toggleTheme}
           aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
           title={theme === "dark" ? "Light mode" : "Dark mode"}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/50 text-foreground/60 hover:bg-white/[0.06]"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/50 text-foreground/60 hover:bg-white/[0.06] min-[360px]:h-10 min-[360px]:w-10"
         >
           {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>

@@ -1,0 +1,119 @@
+/*
+ * Shared viewport guardrails for the VIBA web application.
+ *
+ * Keep these rules conservative. They prevent accidental document overflow,
+ * clipped dialogs and unreadable controls without disabling intentional
+ * horizontal scrolling inside tables, code blocks and dedicated scrollers.
+ */
+
+html,
+body,
+#root {
+  width: 100%;
+  max-width: 100%;
+}
+
+body {
+  overflow-x: clip;
+}
+
+img,
+svg,
+canvas,
+video,
+iframe {
+  max-width: 100%;
+}
+
+input,
+textarea,
+select,
+button {
+  max-width: 100%;
+}
+
+pre {
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+code,
+kbd,
+samp,
+a,
+p,
+li,
+dd,
+[data-mobile-wrap] {
+  overflow-wrap: anywhere;
+}
+
+[role="dialog"],
+[role="alertdialog"] {
+  max-width: min(calc(100vw - 2rem), 48rem);
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Radix popovers and menus should never open wider than the device. */
+[data-radix-popper-content-wrapper] {
+  max-width: calc(100vw - 1rem) !important;
+}
+
+[data-radix-popper-content-wrapper] > * {
+  max-width: 100%;
+}
+
+@media (max-width: 767px) {
+  /* Flex/grid children otherwise default to min-width:auto and can push the page. */
+  .flex > *,
+  .grid > * {
+    min-width: 0;
+  }
+
+  .container {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  /* Prevent iOS form focus zoom and preserve readable field text. */
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+
+  /* Finished CTAs must remain fully visible even with longer translated text. */
+  .viba-primary-button,
+  .viba-secondary-button {
+    width: 100%;
+    min-height: 3rem;
+    height: auto;
+    justify-content: center;
+    padding: 0.75rem 1rem;
+    text-align: center;
+    white-space: normal;
+  }
+
+  /* Common action headers can wrap instead of forcing controls outside cards. */
+  .flex.items-center.justify-between {
+    flex-wrap: wrap;
+    row-gap: 0.75rem;
+  }
+
+  .recharts-responsive-container,
+  .recharts-wrapper,
+  .recharts-surface {
+    max-width: 100% !important;
+  }
+}
+
+@media (max-width: 359px) {
+  /* Two equal cards are not usable on 320px devices after page padding. */
+  .grid.grid-cols-2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
