@@ -91,18 +91,27 @@ async function resolveApiKey(
   return process.env[envKey] ?? "";
 }
 
+export function resolveProviderEnabledSetting(
+  canonicalValue: string | null,
+  legacyValue: string | null,
+): boolean {
+  const selected = canonicalValue ?? legacyValue;
+  if (selected === null) return true;
+  return selected === "true";
+}
+
 /**
- * Checks the user's Connections-page enable/disable toggle for a provider
- * (`${PROVIDER}_ENABLED` in the settings table). This is distinct from
- * whether a key is configured — it's whether the user wants that key
- * actually used for running agents/tasks right now.
- * Undefined (never explicitly toggled) defaults to enabled, matching the
- * Connections page's own default-enabled-when-key-present behavior.
+ * Checks the canonical Connections-page toggle first, then the old
+ * `${PROVIDER}_ENABLED` key for backward compatibility. This keeps the UI,
+ * Settings page and live agent runtime on one source of truth.
  */
 async function isProviderEnabled(provider: string): Promise<boolean> {
-  const enabledSetting = await getSetting(`${provider.toUpperCase()}_ENABLED`);
-  if (enabledSetting === null) return true;
-  return enabledSetting === "true";
+  const normalized = provider.toLowerCase();
+  const [canonicalValue, legacyValue] = await Promise.all([
+    getSetting(`PROVIDER_ENABLED__${normalized}`),
+    getSetting(`${normalized.toUpperCase()}_ENABLED`),
+  ]);
+  return resolveProviderEnabledSetting(canonicalValue, legacyValue);
 }
 
 export async function buildAdapter(agent: Agent, userId?: number | null): Promise<AgentAdapter> {

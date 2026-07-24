@@ -63,15 +63,15 @@ const CLEARABLE_NOTIFICATION_KEYS = [
 ];
 
 const PROVIDER_BY_KEY: Record<string, string> = {
-  OPENAI_API_KEY: "OPENAI",
-  ANTHROPIC_API_KEY: "ANTHROPIC",
-  GEMINI_API_KEY: "GOOGLE",
-  PERPLEXITY_API_KEY: "PERPLEXITY",
-  MISTRAL_API_KEY: "MISTRAL",
-  DEEPSEEK_API_KEY: "DEEPSEEK",
-  GROQ_API_KEY: "GROQ",
-  VENICE_API_KEY: "VENICE",
-  CUSTOM_API_KEY: "CUSTOM",
+  OPENAI_API_KEY: "openai",
+  ANTHROPIC_API_KEY: "anthropic",
+  GEMINI_API_KEY: "google",
+  PERPLEXITY_API_KEY: "perplexity",
+  MISTRAL_API_KEY: "mistral",
+  DEEPSEEK_API_KEY: "deepseek",
+  GROQ_API_KEY: "groq",
+  VENICE_API_KEY: "venice",
+  CUSTOM_API_KEY: "custom",
 };
 
 const MASKED_KEYS = new Set(["SMTP_PASS", "GITHUB_TOKEN", "VAST_AI_API_KEY"]);
@@ -91,6 +91,10 @@ function maskValue(key: string, value: string | null): string | null {
   return value;
 }
 
+function enabledSettingKey(provider: string): string {
+  return `PROVIDER_ENABLED__${provider.toLowerCase()}`;
+}
+
 async function upsertSetting(key: string, value: string): Promise<void> {
   const [existing] = await db.select().from(settingsTable).where(eq(settingsTable.key, key));
   if (existing) {
@@ -98,6 +102,15 @@ async function upsertSetting(key: string, value: string): Promise<void> {
   } else {
     await db.insert(settingsTable).values({ key, value });
   }
+}
+
+async function deleteSetting(key: string): Promise<void> {
+  await db.delete(settingsTable).where(eq(settingsTable.key, key));
+}
+
+async function setProviderEnabled(provider: string, enabled: boolean): Promise<void> {
+  await upsertSetting(enabledSettingKey(provider), String(enabled));
+  await deleteSetting(`${provider.toUpperCase()}_ENABLED`);
 }
 
 router.get("/settings", async (_req, res): Promise<void> => {
@@ -135,9 +148,9 @@ router.post("/settings", async (req, res): Promise<void> => {
     }
 
     if (value === "" && CLEARABLE_NOTIFICATION_KEYS.includes(key)) {
-      await db.delete(settingsTable).where(eq(settingsTable.key, key));
+      await deleteSetting(key);
       const provider = PROVIDER_BY_KEY[key];
-      if (provider) await upsertSetting(`${provider}_ENABLED`, "false");
+      if (provider) await setProviderEnabled(provider, false);
       keyResults.push({ key, status: "deleted" });
       continue;
     }
@@ -157,10 +170,8 @@ router.post("/settings", async (req, res): Promise<void> => {
 
     await upsertSetting(key, value);
 
-    // A key entered on Settings is immediately available to every provider-aware
-    // screen and to agentFactory. This also clears stale disabled state.
     const provider = PROVIDER_BY_KEY[key];
-    if (provider) await upsertSetting(`${provider}_ENABLED`, "true");
+    if (provider) await setProviderEnabled(provider, true);
 
     keyResults.push({ key, status: "saved" });
   }
