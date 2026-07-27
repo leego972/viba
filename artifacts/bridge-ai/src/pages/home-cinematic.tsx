@@ -5,28 +5,83 @@ import {
   Check,
   ChevronRight,
   CircleAlert,
+  CloudOff,
   Code2,
   GitBranch,
+  KeyRound,
   Network,
   Play,
   RefreshCw,
   ShieldCheck,
   Sparkles,
   TerminalSquare,
+  TimerReset,
+  Unplug,
   Zap,
 } from "lucide-react";
 import { useAuth, useLogout } from "@/hooks/useAuth";
 import "./home-cinematic.css";
+import "./home-cinematic-incidents.css";
 
 type Scene = "idle" | "planning" | "disconnect" | "repair" | "verify" | "complete";
+type NodeId = "strategy" | "research" | "code" | "browser" | "deploy" | "verify";
+
+type Incident = {
+  id: string;
+  label: string;
+  shortLabel: string;
+  detail: string;
+  resolution: string;
+  affectedNode: NodeId;
+  icon: typeof CircleAlert;
+};
 
 const SCENES: Array<{ id: Scene; label: string; detail: string; duration: number }> = [
-  { id: "idle", label: "System ready", detail: "Waiting for your instruction", duration: 2600 },
-  { id: "planning", label: "Planning", detail: "Decomposing the request across specialists", duration: 3400 },
-  { id: "disconnect", label: "Pathway interrupted", detail: "Provider timeout detected", duration: 2700 },
-  { id: "repair", label: "Self-repair", detail: "Rerouting work through a verified pathway", duration: 3200 },
-  { id: "verify", label: "Verification", detail: "Reconciling outputs and validating evidence", duration: 3200 },
-  { id: "complete", label: "All as One", detail: "One coordinated, verified result", duration: 3600 },
+  { id: "idle", label: "System ready", detail: "Waiting for your instruction", duration: 2400 },
+  { id: "planning", label: "Planning", detail: "Decomposing the request across specialists", duration: 3200 },
+  { id: "disconnect", label: "Incident detected", detail: "A critical pathway has stopped responding", duration: 2700 },
+  { id: "repair", label: "Self-repair", detail: "Isolating the failure and activating an alternate route", duration: 3100 },
+  { id: "verify", label: "Verification", detail: "Testing the replacement pathway before continuing", duration: 3000 },
+  { id: "complete", label: "All as One", detail: "One coordinated, verified result", duration: 3400 },
+];
+
+const INCIDENTS: Incident[] = [
+  {
+    id: "provider-timeout",
+    label: "Provider timeout",
+    shortLabel: "API TIMEOUT",
+    detail: "The browser provider stopped responding during execution.",
+    resolution: "Traffic rerouted through an available provider",
+    affectedNode: "browser",
+    icon: TimerReset,
+  },
+  {
+    id: "credential-failure",
+    label: "Credential rejected",
+    shortLabel: "AUTH FAILED",
+    detail: "A deployment credential was rejected before release.",
+    resolution: "Secure fallback credential verified",
+    affectedNode: "deploy",
+    icon: KeyRound,
+  },
+  {
+    id: "dependency-conflict",
+    label: "Dependency conflict",
+    shortLabel: "BUILD BLOCKED",
+    detail: "Two required packages returned incompatible versions.",
+    resolution: "Compatible dependency path selected and tested",
+    affectedNode: "code",
+    icon: Unplug,
+  },
+  {
+    id: "source-offline",
+    label: "Research source offline",
+    shortLabel: "SOURCE LOST",
+    detail: "A primary evidence source became unavailable mid-task.",
+    resolution: "Evidence recovered from an independent source",
+    affectedNode: "research",
+    icon: CloudOff,
+  },
 ];
 
 const EXAMPLES = [
@@ -36,7 +91,7 @@ const EXAMPLES = [
   "Connect my tools and automate the workflow",
 ];
 
-const NODES = [
+const NODES: Array<{ id: NodeId; label: string; x: number; y: number }> = [
   { id: "strategy", label: "Strategy", x: 13, y: 24 },
   { id: "research", label: "Research", x: 16, y: 72 },
   { id: "code", label: "Code", x: 82, y: 20 },
@@ -45,12 +100,14 @@ const NODES = [
   { id: "verify", label: "Verify", x: 45, y: 91 },
 ];
 
-function BrainNetwork({ scene }: { scene: Scene }) {
+function BrainNetwork({ scene, incident }: { scene: Scene; incident: Incident }) {
   const repairActive = scene === "repair" || scene === "verify" || scene === "complete";
+  const failureActive = scene === "disconnect";
   const isBusy = scene !== "idle";
+  const IncidentIcon = incident.icon;
 
   return (
-    <div className={`viba-network viba-scene-${scene}`} aria-label={`VIBA orchestration visualisation: ${scene}`}>
+    <div className={`viba-network viba-scene-${scene}`} aria-label={`VIBA orchestration visualisation: ${scene}. ${incident.label}`}>
       <div className="viba-grid" />
       <div className="viba-aurora viba-aurora-one" />
       <div className="viba-aurora viba-aurora-two" />
@@ -97,18 +154,18 @@ function BrainNetwork({ scene }: { scene: Scene }) {
       </div>
 
       {NODES.map((node, index) => {
-        const disconnected = node.id === "browser" && scene === "disconnect";
-        const recovering = node.id === "browser" && scene === "repair";
+        const affected = node.id === incident.affectedNode && failureActive;
+        const restored = node.id === incident.affectedNode && (scene === "repair" || scene === "verify");
         return (
           <div
             key={node.id}
-            className={`viba-agent-node ${disconnected ? "is-disconnected" : ""} ${recovering ? "is-recovering" : ""}`}
+            className={`viba-agent-node ${affected ? "is-affected" : ""} ${restored ? "is-restored" : ""}`}
             style={{ left: `${node.x}%`, top: `${node.y}%`, animationDelay: `${index * -0.7}s` }}
           >
             <div className="viba-node-ring" />
-            <div className="viba-node-dot">{disconnected ? <CircleAlert /> : recovering ? <RefreshCw /> : <Sparkles />}</div>
+            <div className="viba-node-dot">{affected ? <IncidentIcon /> : restored ? <RefreshCw /> : <Sparkles />}</div>
             <span>{node.label}</span>
-            <small>{disconnected ? "OFFLINE" : recovering ? "REROUTING" : isBusy ? "ACTIVE" : "STANDBY"}</small>
+            <small>{affected ? "INTERRUPTED" : restored ? "RESTORED" : isBusy ? "ACTIVE" : "STANDBY"}</small>
           </div>
         );
       })}
@@ -116,8 +173,10 @@ function BrainNetwork({ scene }: { scene: Scene }) {
       <div className="viba-packet viba-packet-one" />
       <div className="viba-packet viba-packet-two" />
       <div className="viba-packet viba-packet-three" />
-      <div className="viba-error-shock"><CircleAlert /><span>API PATH LOST</span></div>
+      <div className="viba-error-shock"><CircleAlert /><span>PATHWAY LOST</span></div>
       <div className="viba-repair-label"><GitBranch /><span>NEW PATH VERIFIED</span></div>
+      <div className="viba-incident-badge"><IncidentIcon /><span>{incident.shortLabel}</span></div>
+      <div className="viba-incident-resolution"><ShieldCheck /><span>{incident.resolution}</span></div>
       <div className="viba-complete-wave" />
       <div className="viba-complete-message"><Check /><strong>ALL AS ONE</strong><span>Orchestration complete</span></div>
     </div>
@@ -128,13 +187,19 @@ export default function CinematicHome() {
   const { isAuthenticated } = useAuth();
   const logout = useLogout();
   const [sceneIndex, setSceneIndex] = useState(0);
+  const [incidentIndex, setIncidentIndex] = useState(0);
   const [instruction, setInstruction] = useState("");
   const [manualRun, setManualRun] = useState(false);
   const scene = SCENES[sceneIndex];
+  const incident = INCIDENTS[incidentIndex];
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      setSceneIndex((current) => (current + 1) % SCENES.length);
+      setSceneIndex((current) => {
+        const next = (current + 1) % SCENES.length;
+        if (next === 0) setIncidentIndex((active) => (active + 1) % INCIDENTS.length);
+        return next;
+      });
     }, manualRun ? Math.max(1800, scene.duration - 700) : scene.duration);
     return () => window.clearTimeout(timer);
   }, [sceneIndex, manualRun, scene.duration]);
@@ -146,6 +211,12 @@ export default function CinematicHome() {
     if (!instruction.trim()) setInstruction(EXAMPLES[0]);
     setManualRun(true);
     setSceneIndex(1);
+  }
+
+  function selectIncident(index: number) {
+    setIncidentIndex(index);
+    setManualRun(true);
+    setSceneIndex(2);
   }
 
   return (
@@ -190,6 +261,16 @@ export default function CinematicHome() {
               </div>
             </form>
 
+            <div className="viba-incident-deck" aria-label="Failure scenarios">
+              {INCIDENTS.map((item, index) => (
+                <button key={item.id} type="button" className={`viba-incident-button ${index === incidentIndex ? "is-active" : ""}`} onClick={() => selectIncident(index)}>
+                  <small>SIMULATE {String(index + 1).padStart(2, "0")}</small>
+                  <strong>{item.label}</strong>
+                  <i />
+                </button>
+              ))}
+            </div>
+
             <div className="viba-proof-row">
               <span><ShieldCheck />Evidence-aware verification</span>
               <span><Network />Automatic rerouting</span>
@@ -198,10 +279,10 @@ export default function CinematicHome() {
           </div>
 
           <div className="viba-hero-stage">
-            <BrainNetwork scene={scene.id} />
+            <BrainNetwork scene={scene.id} incident={incident} />
             <div className="viba-stage-status">
               <div className="viba-status-icon">{scene.id === "disconnect" ? <CircleAlert /> : scene.id === "repair" ? <RefreshCw /> : scene.id === "complete" ? <Check /> : <Sparkles />}</div>
-              <div><small>LIVE ORCHESTRATION</small><strong>{scene.label}</strong><span>{scene.detail}</span></div>
+              <div><small>LIVE ORCHESTRATION</small><strong>{scene.label}</strong><span>{scene.id === "disconnect" ? incident.detail : scene.id === "repair" ? incident.resolution : scene.detail}</span></div>
               <div className="viba-scene-count">0{sceneIndex + 1}<small>/0{SCENES.length}</small></div>
               <div className="viba-progress"><i style={{ width: `${progress}%` }} /></div>
             </div>
