@@ -1,5 +1,9 @@
-/* VIBA orchestration UI polish
-   Scoped to the live collaboration canvas to avoid changing unrelated pages. */
+/* VIBA orchestration UI polish */
+
+/* Replace the legacy raster logo everywhere it is currently referenced. */
+img[src$="viba-logo.png"] {
+  content: url("/viba-brain-logo.svg");
+}
 
 [aria-label="Live AI collaboration viewer"] {
   border: 1px solid rgba(255, 255, 255, 0.075);
@@ -32,13 +36,15 @@
   box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.7);
 }
 
-/* Keep the live header readable without competing with the agent graph. */
 [aria-label="Live AI collaboration viewer"] > div:nth-of-type(3) {
   gap: 0.45rem;
 }
 
-/* Reduce visual noise and expensive blur on smaller screens. */
 @media (max-width: 639px) {
+  img[src$="viba-logo.png"] {
+    max-width: 132px;
+  }
+
   [aria-label="Live AI collaboration viewer"] {
     border-radius: 12px;
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
