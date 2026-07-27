@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import {
   ArrowRight,
@@ -14,16 +14,18 @@ import {
   RefreshCw,
   ShieldCheck,
   Sparkles,
-  TerminalSquare,
+  SquareTerminal,
   TimerReset,
   Unplug,
   Zap,
 } from "lucide-react";
 import { useAuth, useLogout } from "@/hooks/useAuth";
 import CinematicNeuralCanvas from "@/components/CinematicNeuralCanvas";
+import LiveOrchestrationPanel from "@/components/LiveOrchestrationPanel";
 import "./home-cinematic.css";
 import "./home-cinematic-incidents.css";
 import "./home-cinematic-v2.css";
+import "./home-cinematic-live.css";
 
 type Scene = "idle" | "planning" | "disconnect" | "repair" | "verify" | "complete";
 type NodeId = "strategy" | "research" | "code" | "browser" | "deploy" | "verify";
@@ -55,10 +57,10 @@ const INCIDENTS: Incident[] = [
 ];
 
 const EXAMPLES = [
-  "Build and deploy a SaaS platform",
-  "Audit my repository and repair the errors",
-  "Research the market and create a launch plan",
-  "Connect my tools and automate the workflow",
+  "Audit my repository, find the highest-risk bugs and repair them",
+  "Review my unfinished app and tell me what blocks production",
+  "Test my frontend, API and deployment flow before release",
+  "Inspect my codebase and finish the broken integration",
 ];
 
 const NODES: Array<{ id: NodeId; label: string; x: number; y: number }> = [
@@ -173,7 +175,7 @@ export default function CinematicHome() {
     <div className="viba-cinematic-page">
       <header className="viba-cinematic-nav">
         <Link href="/" className="viba-brand-lockup" aria-label="VIBA home"><img src={`${import.meta.env.BASE_URL}viba-brain-logo.svg`} alt="" /><div><strong>V.I.B.A.</strong><span>All as One</span></div></Link>
-        <nav><a href="#orchestration">Orchestration</a><a href="#resilience">Resilience</a><Link href="/pricing">Pricing</Link></nav>
+        <nav><a href="#orchestration">Orchestration</a><a href="#live-network">Execution map</a><a href="#resilience">Resilience</a><Link href="/pricing">Pricing</Link></nav>
         <div className="viba-nav-actions">{isAuthenticated ? <button className="viba-nav-link" onClick={() => void logout()}>Sign out</button> : <Link href="/login" className="viba-nav-link">Sign in</Link>}<Link href={isAuthenticated ? "/dashboard" : "/signup"} className="viba-nav-primary">{isAuthenticated ? "Dashboard" : "Enter VIBA"}<ArrowRight /></Link></div>
       </header>
 
@@ -185,8 +187,8 @@ export default function CinematicHome() {
             <p className="viba-hero-lead">Give V.I.B.A. one objective. It plans the work, activates the right intelligences, connects the tools, detects broken pathways and keeps moving until the result is complete.</p>
 
             <form className="viba-command" onSubmit={runDemo}>
-              <div className="viba-command-top"><TerminalSquare /><span>Give V.I.B.A. an objective</span><kbd>LIVE DEMO</kbd></div>
-              <div className="viba-command-entry"><input value={instruction} onChange={(event) => setInstruction(event.target.value)} placeholder="Build and deploy a SaaS platform…" aria-label="Instruction" /><button type="submit"><Play />Orchestrate</button></div>
+              <div className="viba-command-top"><SquareTerminal /><span>Give V.I.B.A. an objective</span><kbd>LIVE DEMO</kbd></div>
+              <div className="viba-command-entry"><input value={instruction} onChange={(event) => setInstruction(event.target.value)} placeholder="Audit my repository and repair the highest-risk errors…" aria-label="Instruction" /><button type="submit"><Play />Orchestrate</button></div>
               <div className="viba-example-row">{EXAMPLES.slice(0, 3).map((example) => <button type="button" key={example} onClick={() => setInstruction(example)}>{example}<ChevronRight /></button>)}</div>
             </form>
 
@@ -200,7 +202,9 @@ export default function CinematicHome() {
           </div>
         </section>
 
-        <section className="viba-signal-strip"><div><strong>300</strong><span>live neural particles</span></div><div><strong>6</strong><span>specialist pathways</span></div><div><strong>∞</strong><span>automatic reroutes</span></div><div><strong>1</strong><span>verified final result</span></div></section>
+        <section className="viba-signal-strip"><div><strong>300</strong><span>live neural particles</span></div><div><strong>7</strong><span>production task types</span></div><div><strong>∞</strong><span>automatic reroutes</span></div><div><strong>1</strong><span>verified final result</span></div></section>
+
+        <LiveOrchestrationPanel instruction={instruction} scene={scene.id} />
 
         <section className="viba-story" id="resilience">
           <div className="viba-story-heading"><span>BUILT FOR REAL WORK</span><h2>It gets interesting when something breaks.</h2><p>Perfect demos are forgettable. V.I.B.A. is designed for the point where providers time out, credentials fail, dependencies conflict and deployments stop.</p></div>
