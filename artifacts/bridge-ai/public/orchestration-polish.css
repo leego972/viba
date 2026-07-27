@@ -1,0 +1,72 @@
+/* VIBA orchestration UI polish */
+
+/* Replace the legacy raster logo everywhere it is currently referenced. */
+img[src$="viba-logo.png"] {
+  content: url("/viba-brain-logo.svg");
+}
+
+[aria-label="Live AI collaboration viewer"] {
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-radius: 14px;
+  box-shadow:
+    0 18px 50px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.025);
+  isolation: isolate;
+}
+
+[aria-label="Live AI collaboration viewer"]::after {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.018), transparent 28%);
+  content: "";
+  pointer-events: none;
+}
+
+[aria-label="Live AI collaboration viewer"] > * {
+  position: relative;
+}
+
+[aria-label="Live AI collaboration viewer"] button {
+  outline: none;
+}
+
+[aria-label="Live AI collaboration viewer"] button:focus-visible {
+  box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.7);
+}
+
+[aria-label="Live AI collaboration viewer"] > div:nth-of-type(3) {
+  gap: 0.45rem;
+}
+
+@media (max-width: 639px) {
+  img[src$="viba-logo.png"] {
+    max-width: 132px;
+  }
+
+  [aria-label="Live AI collaboration viewer"] {
+    border-radius: 12px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
+  }
+
+  [aria-label="Live AI collaboration viewer"] [class*="backdrop-blur"] {
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+  }
+
+  [aria-label="Live AI collaboration viewer"] [class*="tracking-"] {
+    letter-spacing: 0.08em;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [aria-label="Live AI collaboration viewer"] *,
+  [aria-label="Live AI collaboration viewer"] *::before,
+  [aria-label="Live AI collaboration viewer"] *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
