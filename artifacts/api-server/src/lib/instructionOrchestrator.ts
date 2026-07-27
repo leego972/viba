@@ -40,7 +40,7 @@ function includesAny(text: string, phrases: string[]): boolean {
 }
 
 function includesWord(text: string, words: string[]): boolean {
-  return words.some((word) => new RegExp(`\\b${word.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}\\b`, "i").test(text));
+  return words.some((word) => new RegExp(`\\b${word}\\b`, "i").test(text));
 }
 
 function inferToolRequirements(type: string, instruction: string): string[] {
@@ -62,7 +62,7 @@ function inferToolRequirements(type: string, instruction: string): string[] {
   if (includesWord(lower, ["browser", "click", "form", "login", "screenshot"]) || includesAny(lower, ["website check", "ui check"])) {
     requirements.add("browser");
   }
-  if (includesWord(lower, ["upload", "download", "file", "storage", "bucket"]) || includesWord(lower, ["r2"])) {
+  if (includesWord(lower, ["upload", "download", "file", "storage", "bucket", "r2"])) {
     requirements.add("storage");
   }
 
@@ -112,9 +112,7 @@ export function planInstruction(instruction: string): InstructionPlan {
     }, cleaned);
   }
 
-  if (
-    includesWord(lower, ["design", "creative", "brand", "logo", "copy", "advert", "ux", "ui", "landing", "visual"])
-  ) {
+  if (includesWord(lower, ["design", "creative", "brand", "logo", "copy", "advert", "ux", "ui", "landing", "visual"])) {
     addUniqueTask(tasks, {
       title: "Creative and UX Direction",
       type: "creative_direction",
@@ -123,9 +121,7 @@ export function planInstruction(instruction: string): InstructionPlan {
     }, cleaned);
   }
 
-  if (
-    includesWord(lower, ["build", "code", "repo", "backend", "frontend", "api", "database", "fix", "debug", "implement", "wire", "connect", "integration", "orchestrator", "system"])
-  ) {
+  if (includesWord(lower, ["build", "code", "repo", "backend", "frontend", "api", "database", "fix", "debug", "implement", "wire", "connect", "integration", "orchestrator", "system"])) {
     addUniqueTask(tasks, {
       title: "Build and Implementation",
       type: "build",
@@ -134,9 +130,7 @@ export function planInstruction(instruction: string): InstructionPlan {
     }, cleaned);
   }
 
-  if (
-    includesWord(lower, ["review", "audit", "test", "qa", "bug", "error", "security", "check", "validate", "verify"])
-  ) {
+  if (includesWord(lower, ["review", "audit", "test", "qa", "bug", "error", "security", "check", "validate", "verify"])) {
     addUniqueTask(tasks, {
       title: "Review and Validation",
       type: "code_review",
