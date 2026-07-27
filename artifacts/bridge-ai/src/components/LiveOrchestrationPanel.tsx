@@ -47,7 +47,7 @@ function inferProductionTasks(instruction: string): ProductionTask[] {
 }
 
 export default function LiveOrchestrationPanel({ instruction, scene }: { instruction: string; scene: Scene }) {
-  const objective = instruction.trim() || "Build and deploy a SaaS platform";
+  const objective = instruction.trim() || "Audit my repository, identify production blockers and repair the highest-risk issues";
   const selectedTasks = useMemo(() => inferProductionTasks(objective), [objective]);
   const toolRequirements = useMemo(() => [...new Set(selectedTasks.flatMap((task) => task.tools))], [selectedTasks]);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
