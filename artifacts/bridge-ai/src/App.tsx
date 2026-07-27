@@ -9,6 +9,7 @@ import NotFound from "@/pages/not-found";
 import Home from "@/pages/home-cinematic";
 import Dashboard from "@/pages/dashboard";
 import NewSession from "@/pages/new-session";
+import RepositoryAuditPage from "@/pages/repository-audit";
 import SessionWorkspace from "@/pages/session-workspace";
 import Settings from "@/pages/settings";
 import Workbench from "@/pages/workbench";
@@ -93,7 +94,10 @@ function AuthGuard({ children }: { children: ReactNode }) {
   const bypassActive = isBypassValid() && location.startsWith("/bridge");
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated && !bypassActive) setLocation("/login");
+    if (!isLoading && !isAuthenticated && !bypassActive) {
+      const returnTo = `${window.location.pathname}${window.location.search}`;
+      setLocation(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+    }
   }, [isLoading, isAuthenticated, bypassActive, setLocation]);
 
   if (bypassActive) return <>{children}</>;
@@ -107,6 +111,7 @@ function GatedRouter() {
       <Switch>
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/sessions/new" component={NewSession} />
+        <Route path="/repository-audit" component={RepositoryAuditPage} />
         <Route path="/sessions/:id/timeline" component={SessionTimelinePage} />
         <Route path="/sessions/:id/map" component={CollaborationMapPage} />
         <Route path="/sessions/:id" component={SessionWorkspace} />

@@ -91,13 +91,12 @@ export default function CinematicHome() {
     event.preventDefault();
     const objective = instruction.trim() || EXAMPLES[0];
     const repo = repoUrl.trim();
-    if (repo && !isValidGithubRepo(repo)) { setRepoError("Enter a valid GitHub repository URL."); return; }
+    if (!repo || !isValidGithubRepo(repo)) { setRepoError("Enter a valid GitHub repository URL."); return; }
     setRepoError(""); setInstruction(objective); setManualRun(true); setSceneIndex(1);
-    const params = new URLSearchParams({ goal: objective, template: "code-review" });
-    if (repo) params.set("repo", repo);
-    const nextPath = `/sessions/new?${params.toString()}`;
+    const params = new URLSearchParams({ goal: objective, repo });
+    const nextPath = `/repository-audit?${params.toString()}`;
     try { localStorage.setItem("viba_pending_repo_audit", JSON.stringify({ goal: objective, repo, createdAt: new Date().toISOString() })); } catch {}
-    window.setTimeout(() => navigate(isAuthenticated ? nextPath : `/signup?next=${encodeURIComponent(nextPath)}`), 650);
+    window.setTimeout(() => navigate(isAuthenticated ? nextPath : `/login?returnTo=${encodeURIComponent(nextPath)}`), 650);
   }
 
   function selectIncident(index: number) { setIncidentIndex(index); setManualRun(true); setSceneIndex(2); }
