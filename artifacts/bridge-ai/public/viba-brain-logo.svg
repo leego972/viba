@@ -1,0 +1,60 @@
+<svg width="520" height="160" viewBox="0 0 520 160" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">V.I.B.A brain orchestration logo</title>
+  <desc id="desc">A glowing neural brain and orchestration network beside the V.I.B.A wordmark.</desc>
+  <defs>
+    <linearGradient id="g" x1="20" y1="18" x2="148" y2="142" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22D3EE"/>
+      <stop offset="0.48" stop-color="#6366F1"/>
+      <stop offset="1" stop-color="#A855F7"/>
+    </linearGradient>
+    <linearGradient id="word" x1="180" y1="42" x2="490" y2="122" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#111827"/>
+      <stop offset="1" stop-color="#4F46E5"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <g transform="translate(12 10)">
+    <circle cx="70" cy="70" r="57" fill="#0B1020" stroke="url(#g)" stroke-width="2.5"/>
+    <circle cx="70" cy="70" r="47" fill="url(#g)" fill-opacity="0.08"/>
+
+    <g stroke="url(#g)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)">
+      <path d="M68 35C56 25 39 31 39 46C27 48 23 64 33 72C24 83 31 98 44 99C46 113 61 118 70 107"/>
+      <path d="M72 35C84 25 101 31 101 46C113 48 117 64 107 72C116 83 109 98 96 99C94 113 79 118 70 107"/>
+      <path d="M70 35V107"/>
+      <path d="M45 53C55 52 61 58 61 67"/>
+      <path d="M95 53C85 52 79 58 79 67"/>
+      <path d="M42 84C53 82 60 88 60 98"/>
+      <path d="M98 84C87 82 80 88 80 98"/>
+    </g>
+
+    <g fill="#22D3EE" filter="url(#glow)">
+      <circle cx="39" cy="46" r="3.6"/>
+      <circle cx="33" cy="72" r="3.6"/>
+      <circle cx="44" cy="99" r="3.6"/>
+      <circle cx="101" cy="46" r="3.6"/>
+      <circle cx="107" cy="72" r="3.6"/>
+      <circle cx="96" cy="99" r="3.6"/>
+      <circle cx="70" cy="70" r="4.2"/>
+    </g>
+
+    <g stroke="url(#g)" stroke-width="2" stroke-linecap="round" opacity="0.95">
+      <path d="M15 70H31"/><path d="M109 70H125"/>
+      <path d="M25 30L39 43"/><path d="M115 30L101 43"/>
+      <path d="M25 110L44 99"/><path d="M115 110L96 99"/>
+    </g>
+    <g fill="#A855F7" filter="url(#glow)">
+      <circle cx="15" cy="70" r="4"/><circle cx="125" cy="70" r="4"/>
+      <circle cx="25" cy="30" r="4"/><circle cx="115" cy="30" r="4"/>
+      <circle cx="25" cy="110" r="4"/><circle cx="115" cy="110" r="4"/>
+    </g>
+  </g>
+
+  <g>
+    <text x="170" y="91" font-family="Inter, Arial, sans-serif" font-size="62" font-weight="800" letter-spacing="4" fill="url(#word)">V.I.B.A</text>
+    <text x="174" y="120" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="600" letter-spacing="3.2" fill="#6B7280">VIRTUAL INTELLIGENCE BUSINESS ASSISTANT</text>
+  </g>
+</svg>
