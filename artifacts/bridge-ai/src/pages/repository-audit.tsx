@@ -62,9 +62,9 @@ export default function RepositoryAuditPage() {
     }
 
     const agents: CreateSessionBody["agents"] = [
-      { name: "ChatGPT", provider: "OpenAI", role: "Strategist", isMock: !configured.has("OPENAI_API_KEY"), canUseTools: true, credentialLabel: "default" },
-      { name: "Claude", provider: "Anthropic", role: "Code Reviewer", isMock: !configured.has("ANTHROPIC_API_KEY"), canUseTools: true, credentialLabel: "default" },
-      { name: "Groq", provider: "Groq", role: "Final QA", isMock: !configured.has("GROQ_API_KEY"), canUseTools: true, credentialLabel: "default" },
+      { name: "ChatGPT", provider: "OpenAI", role: "Strategist", isMock: !configured.has("OPENAI_API_KEY"), canUseTools: true },
+      { name: "Claude", provider: "Anthropic", role: "Code Reviewer", isMock: !configured.has("ANTHROPIC_API_KEY"), canUseTools: true },
+      { name: "Groq", provider: "Groq", role: "Final QA", isMock: !configured.has("GROQ_API_KEY"), canUseTools: true },
     ];
 
     const data: CreateSessionBody = {
