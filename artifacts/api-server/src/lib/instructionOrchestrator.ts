@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { routeTask } from "./taskRouter";
 import { logVibaEvent } from "./vibaVault";
 
-type PlannedTask = {
+export type PlannedTask = {
   title: string;
   type: string;
   description: string;
@@ -34,28 +34,35 @@ function cleanInstruction(input: unknown): string {
   return typeof input === "string" ? input.trim() : "";
 }
 
-function includesAny(text: string, words: string[]): boolean {
+function includesAny(text: string, phrases: string[]): boolean {
   const lower = text.toLowerCase();
-  return words.some((word) => lower.includes(word));
+  return phrases.some((phrase) => lower.includes(phrase));
+}
+
+function includesWord(text: string, words: string[]): boolean {
+  return words.some((word) => new RegExp(`\\b${word.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}\\b`, "i").test(text));
 }
 
 function inferToolRequirements(type: string, instruction: string): string[] {
   const requirements = new Set<string>();
   const lower = instruction.toLowerCase();
 
-  if (type === "research" || includesAny(lower, ["latest", "current", "website", "web", "online", "source", "price"])) {
-    requirements.add("web_search");
-  }
-  if (includesAny(lower, ["github", "repository", "repo", "branch", "commit", "pull request", "codebase"])) {
+  const needsCurrentWeb =
+    type === "research" ||
+    includesWord(lower, ["latest", "online", "website", "web"]) ||
+    includesAny(lower, ["current price", "current pricing", "current news", "current market", "public source"]);
+
+  if (needsCurrentWeb) requirements.add("web_search");
+  if (includesWord(lower, ["github", "repository", "repo", "branch", "commit", "codebase"]) || includesAny(lower, ["pull request"])) {
     requirements.add("github");
   }
-  if (includesAny(lower, ["render", "deploy", "deployment", "production", "environment variable", "env var"])) {
+  if (includesWord(lower, ["render", "deploy", "deployment", "production"]) || includesAny(lower, ["environment variable", "env var"])) {
     requirements.add("deployment");
   }
-  if (includesAny(lower, ["browser", "click", "form", "login", "screenshot", "website check", "ui check"])) {
+  if (includesWord(lower, ["browser", "click", "form", "login", "screenshot"]) || includesAny(lower, ["website check", "ui check"])) {
     requirements.add("browser");
   }
-  if (includesAny(lower, ["upload", "download", "file", "storage", "r2", "bucket"])) {
+  if (includesWord(lower, ["upload", "download", "file", "storage", "bucket"]) || includesWord(lower, ["r2"])) {
     requirements.add("storage");
   }
 
@@ -64,13 +71,17 @@ function inferToolRequirements(type: string, instruction: string): string[] {
 
 function estimateComplexity(instruction: string, candidateCount: number): InstructionPlan["complexity"] {
   const wordCount = instruction.split(/\s+/).filter(Boolean).length;
-  const explicitMultiStep = /\b(first|then|after that|also|and then|step \d|multiple|full audit|entire|complete system)\b/i.test(instruction);
+  const explicitMultiStep = /\b(first|then|after that|and then|step \d+|multiple steps?|full audit|entire system|complete system)\b/i.test(instruction);
   if (candidateCount >= 4 || wordCount > 90 || explicitMultiStep) return "complex";
   if (candidateCount >= 2 || wordCount > 35) return "standard";
   return "simple";
 }
 
-function addUniqueTask(tasks: PlannedTask[], task: Omit<PlannedTask, "toolRequirements">, instruction: string): void {
+function addUniqueTask(
+  tasks: PlannedTask[],
+  task: Omit<PlannedTask, "toolRequirements">,
+  instruction: string,
+): void {
   if (tasks.some((existing) => existing.type === task.type)) return;
   tasks.push({
     ...task,
@@ -81,58 +92,69 @@ function addUniqueTask(tasks: PlannedTask[], task: Omit<PlannedTask, "toolRequir
 /**
  * Produce the smallest useful execution plan.
  *
- * The previous planner created a task for every matching keyword and always
- * appended a separate final-QA call. That made mixed instructions expensive
- * even when one capable agent could complete them. This planner deduplicates
- * work and adds a merge step only when multiple specialist outputs exist.
+ * Work is deduplicated by task type, and a separate synthesis task is added
+ * only when multiple specialist outputs need to be merged.
  */
 export function planInstruction(instruction: string): InstructionPlan {
+  const cleaned = cleanInstruction(instruction);
   const tasks: PlannedTask[] = [];
-  const lower = instruction.toLowerCase();
+  const lower = cleaned.toLowerCase();
 
-  if (includesAny(lower, ["research", "lookup", "look up", "find", "compare", "price", "pricing", "competitor", "market", "latest", "current", "web"])) {
+  if (
+    includesWord(lower, ["research", "lookup", "find", "compare", "price", "pricing", "competitor", "market", "latest", "web"]) ||
+    includesAny(lower, ["look up", "public source", "current price", "current pricing", "current news", "current market"])
+  ) {
     addUniqueTask(tasks, {
       title: "Research and Evidence Gathering",
       type: "research",
       phase: "discover",
-      description: `Gather only the evidence needed to complete this instruction, use current sources when required, and avoid repeating facts already available in session context: ${instruction}`,
-    }, instruction);
+      description: `Gather only the evidence needed to complete this instruction, use current sources when required, and avoid repeating facts already available in session context: ${cleaned}`,
+    }, cleaned);
   }
 
-  if (includesAny(lower, ["design", "creative", "brand", "logo", "copy", "advert", " ux", " ui", "landing", "visual"])) {
+  if (
+    includesWord(lower, ["design", "creative", "brand", "logo", "copy", "advert", "ux", "ui", "landing", "visual"])
+  ) {
     addUniqueTask(tasks, {
       title: "Creative and UX Direction",
       type: "creative_direction",
       phase: "create",
-      description: `Create the required original creative, UX, copy, or brand output. Reuse approved project context and do not generate alternate directions unless requested: ${instruction}`,
-    }, instruction);
+      description: `Create the required original creative, UX, copy, or brand output. Reuse approved project context and do not generate alternate directions unless requested: ${cleaned}`,
+    }, cleaned);
   }
 
-  if (includesAny(lower, ["build", "code", "repo", "backend", "frontend", "api", "database", "fix", "debug", "implement", "wire", "connect", "integration", "orchestrator", "system"])) {
+  if (
+    includesWord(lower, ["build", "code", "repo", "backend", "frontend", "api", "database", "fix", "debug", "implement", "wire", "connect", "integration", "orchestrator", "system"])
+  ) {
     addUniqueTask(tasks, {
       title: "Build and Implementation",
       type: "build",
       phase: "create",
-      description: `Implement the requested technical work with the smallest safe change set. Inspect existing code before creating new abstractions and use available tools directly when permitted: ${instruction}`,
-    }, instruction);
+      description: `Implement the requested technical work with the smallest safe change set. Inspect existing code before creating new abstractions and use available tools directly when permitted: ${cleaned}`,
+    }, cleaned);
   }
 
-  if (includesAny(lower, ["review", "audit", "test", "qa", "bug", "error", "security", "check", "validate", "verify"])) {
+  if (
+    includesWord(lower, ["review", "audit", "test", "qa", "bug", "error", "security", "check", "validate", "verify"])
+  ) {
     addUniqueTask(tasks, {
       title: "Review and Validation",
       type: "code_review",
       phase: "verify",
-      description: `Validate the relevant work, run the available checks, identify concrete defects, and fix or report only substantiated issues: ${instruction}`,
-    }, instruction);
+      description: `Validate the relevant work, run the available checks, identify concrete defects, and fix or report only substantiated issues: ${cleaned}`,
+    }, cleaned);
   }
 
-  if (includesAny(lower, ["deploy", "render", "railway", "docker", "release", "production", "environment", "env vars", "github", "pull request", "commit"])) {
+  if (
+    includesWord(lower, ["deploy", "render", "railway", "docker", "release", "production", "environment", "github", "commit"]) ||
+    includesAny(lower, ["env vars", "pull request"])
+  ) {
     addUniqueTask(tasks, {
       title: "Deployment and Connector Check",
       type: "deployment_approval",
       phase: "verify",
-      description: `Check the relevant deployment, connector, environment, repository, and release requirements. Do not mutate production without the required approval: ${instruction}`,
-    }, instruction);
+      description: `Check the relevant deployment, connector, environment, repository, and release requirements. Do not mutate production without the required approval: ${cleaned}`,
+    }, cleaned);
   }
 
   if (tasks.length === 0) {
@@ -140,34 +162,32 @@ export function planInstruction(instruction: string): InstructionPlan {
       title: "Complete User Instruction",
       type: "planning",
       phase: "create",
-      description: `Understand and complete the instruction directly. Ask the user only when a genuinely required value cannot be discovered from available context or tools: ${instruction}`,
-    }, instruction);
+      description: `Understand and complete the instruction directly. Ask the user only when a genuinely required value cannot be discovered from available context or tools: ${cleaned}`,
+    }, cleaned);
   }
 
-  const complexity = estimateComplexity(instruction, tasks.length);
+  const complexity = estimateComplexity(cleaned, tasks.length);
+  const specialistTaskCount = tasks.length;
 
-  // A separate synthesiser is useful only when two or more specialists produce
-  // independent outputs. Single-task instructions return directly from the
-  // assigned agent, saving one full model call.
-  if (tasks.length > 1) {
+  if (specialistTaskCount > 1) {
     tasks.push({
       title: "Final Merge and User Answer",
       type: "final_qa",
       phase: "deliver",
       toolRequirements: [],
-      description: `Merge the specialist outputs into one direct answer. Remove duplication, resolve conflicts using evidence, state any unverified limitation, and do not repeat internal process commentary. Original instruction: ${instruction}`,
+      description: `Merge the specialist outputs into one direct answer. Remove duplication, resolve conflicts using evidence, state any unverified limitation, and do not repeat internal process commentary. Original instruction: ${cleaned}`,
     });
   }
 
   return {
     complexity,
-    executionMode: tasks.length === 1 ? "single_agent" : "multi_agent",
+    executionMode: specialistTaskCount === 1 ? "single_agent" : "multi_agent",
     estimatedAgentCalls: tasks.length,
     tasks,
   };
 }
 
-/** Backward-compatible export used by existing tests and callers. */
+/** Existing callers receive the same task-array shape. */
 export function decomposeInstruction(instruction: string): PlannedTask[] {
   return planInstruction(instruction).tasks;
 }
@@ -242,8 +262,8 @@ export async function orchestrateUserInstruction(input: { sessionId: number; con
     role: "assistant",
     provider: "viba",
     content: plan.executionMode === "single_agent"
-      ? `VIBA selected one best-fit agent for a direct execution path, avoiding an unnecessary synthesis call.`
-      : `VIBA created a ${plan.complexity} ${plan.tasks.length}-phase execution plan and assigned each phase to the best available specialist.`,
+      ? "VIBA selected one best-fit agent for a direct execution path, avoiding an unnecessary synthesis call."
+      : `VIBA created a ${plan.complexity} ${plan.tasks.length}-task execution plan and assigned each task to the best available specialist.`,
     taskId: null,
     agentName: "VIBA Orchestrator",
     agentRole: "Coordinator",
