@@ -129,3 +129,30 @@ select {
 img[alt="VIBA"] {
   filter: drop-shadow(0 0 0.6px #000) drop-shadow(0.8px 0 #000) drop-shadow(-0.8px 0 #000) drop-shadow(0 0.8px #000) drop-shadow(0 -0.8px #000);
 }
+
+/* Keep the orchestration canvas and its empty state inside compact viewports. */
+@media (max-width: 900px) {
+  [aria-label="Live AI collaboration viewer"] {
+    width: calc(100vw - 2rem) !important;
+    max-width: calc(100vw - 2rem) !important;
+    margin-inline: auto !important;
+  }
+
+  [aria-label="Live AI collaboration viewer"] > div.absolute.inset-x-6.bottom-10 {
+    display: none !important;
+  }
+}
+
+/* Keep the infrastructure-vault action inside the narrow iPhone SE viewport. */
+@media (max-width: 380px) {
+  a[href="/credentials"] {
+    max-width: 100% !important;
+    min-width: 0 !important;
+    white-space: normal !important;
+    text-align: center;
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+    font-size: 0.75rem !important;
+    line-height: 1.2 !important;
+  }
+}

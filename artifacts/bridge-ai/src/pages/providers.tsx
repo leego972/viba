@@ -1,104 +1,143 @@
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Cpu, CheckCircle2, XCircle, MinusCircle, Zap, Save, RefreshCw, AlertTriangle, Key, Globe, Eye, EyeOff, Info,
-} from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, KeyRound, Loader2, Pencil, Plus, RefreshCw, ServerCog, Trash2, XCircle } from "lucide-react";
 
-interface ProviderInfo {
+type ProviderStatus = "not_configured" | "configured" | "disabled";
+
+type ProviderInfo = {
   id: string;
   label: string;
   description: string;
   hasKey: boolean;
   enabled: boolean;
-  model: string;
-  endpoint?: string;
-  hasEndpoint: boolean;
-  defaultModel: string;
-  modelOptions: string[];
-  status: "not_configured" | "configured" | "disabled";
-}
+  status: ProviderStatus;
+  sourceIds: string[];
+};
 
-interface ProviderLocalState {
-  enabled: boolean;
-  model: string;
-  endpoint: string;
-  keyInput: string;
-  showKey: boolean;
-  saving: boolean;
+type SavedKey = {
+  providerId: string;
+  label: string;
+  status: string;
+  updatedAt?: string | null;
+};
+
+type TestState = {
   testing: boolean;
-  testResult: string | null;
-  testOk: boolean | null;
-  dirty: boolean;
+  ok: boolean | null;
+  reachable: boolean;
+  message: string;
+};
+
+const CANONICAL_PROVIDER: Record<string, string> = { gemini: "google" };
+const INFRA_IDS = new Set(["github", "railway", "render", "vercel", "vastai"]);
+
+const PROVIDER_MARKS: Record<string, { icon?: string; fallback: string; glow: string }> = {
+  openai: { icon: "https://cdn.simpleicons.org/openai/FFFFFF", fallback: "OA", glow: "from-emerald-400/25 to-cyan-400/10" },
+  anthropic: { icon: "https://cdn.simpleicons.org/anthropic/FFFFFF", fallback: "CL", glow: "from-orange-400/25 to-amber-300/10" },
+  google: { icon: "https://cdn.simpleicons.org/googlegemini/FFFFFF", fallback: "G", glow: "from-blue-400/25 to-fuchsia-400/10" },
+  groq: { icon: "https://cdn.simpleicons.org/groq/FFFFFF", fallback: "GQ", glow: "from-rose-400/25 to-orange-400/10" },
+  venice: { fallback: "V", glow: "from-violet-400/30 to-fuchsia-400/10" },
+  mistral: { icon: "https://cdn.simpleicons.org/mistralai/FFFFFF", fallback: "M", glow: "from-orange-400/25 to-red-400/10" },
+  deepseek: { fallback: "DS", glow: "from-blue-500/30 to-cyan-400/10" },
+  perplexity: { icon: "https://cdn.simpleicons.org/perplexity/FFFFFF", fallback: "P", glow: "from-cyan-400/25 to-teal-400/10" },
+  ollama: { icon: "https://cdn.simpleicons.org/ollama/FFFFFF", fallback: "O", glow: "from-zinc-300/20 to-zinc-500/10" },
+  custom: { fallback: "AI", glow: "from-indigo-400/25 to-purple-400/10" },
+  github: { icon: "https://cdn.simpleicons.org/github/FFFFFF", fallback: "GH", glow: "from-zinc-300/20 to-zinc-500/10" },
+  railway: { icon: "https://cdn.simpleicons.org/railway/FFFFFF", fallback: "RW", glow: "from-violet-400/25 to-indigo-500/10" },
+  render: { icon: "https://cdn.simpleicons.org/render/FFFFFF", fallback: "R", glow: "from-cyan-400/25 to-emerald-400/10" },
+  vercel: { icon: "https://cdn.simpleicons.org/vercel/FFFFFF", fallback: "▲", glow: "from-zinc-200/20 to-zinc-500/10" },
+  vastai: { fallback: "VAST", glow: "from-red-400/25 to-orange-400/10" },
+};
+
+const INFRASTRUCTURE = [
+  { id: "github", label: "GitHub", detail: "Repositories, branches, pull requests and source access." },
+  { id: "railway", label: "Railway", detail: "Deployment, environment variables and service operations." },
+  { id: "render", label: "Render", detail: "VIBA production deployment, logs and service management." },
+  { id: "vercel", label: "Vercel", detail: "Frontend deployment and project delivery." },
+  { id: "vastai", label: "Vast.ai", detail: "GPU compute and AI workload infrastructure." },
+];
+
+function canonicalId(id: string): string {
+  return CANONICAL_PROVIDER[id] ?? id;
 }
 
-function statusBadge(status: ProviderInfo["status"]) {
-  if (status === "configured") {
-    return (
-      <Badge className="gap-1 bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/15">
-        <CheckCircle2 className="h-3 w-3" /> Configured
-      </Badge>
-    );
+function mergeProviders(input: Omit<ProviderInfo, "sourceIds">[]): ProviderInfo[] {
+  const merged = new Map<string, ProviderInfo>();
+  for (const provider of input) {
+    const id = canonicalId(provider.id);
+    const existing = merged.get(id);
+    if (!existing) {
+      merged.set(id, { ...provider, id, label: id === "google" ? "Google Gemini" : provider.label, sourceIds: [provider.id] });
+      continue;
+    }
+    existing.sourceIds = Array.from(new Set([...existing.sourceIds, provider.id]));
+    existing.hasKey = existing.hasKey || provider.hasKey;
+    existing.enabled = existing.enabled || provider.enabled;
+    existing.status = existing.hasKey ? (existing.enabled ? "configured" : "disabled") : "not_configured";
   }
-  if (status === "disabled") {
-    return (
-      <Badge className="gap-1 bg-zinc-500/15 text-zinc-400 border-zinc-500/30 hover:bg-zinc-500/15">
-        <MinusCircle className="h-3 w-3" /> Disabled
-      </Badge>
-    );
-  }
+  return [...merged.values()].sort((a, b) => {
+    if (a.hasKey !== b.hasKey) return a.hasKey ? -1 : 1;
+    return a.label.localeCompare(b.label);
+  });
+}
+
+function ProviderMark({ id, size = "large" }: { id: string; size?: "small" | "large" }) {
+  const mark = PROVIDER_MARKS[id] ?? { fallback: id.slice(0, 2).toUpperCase(), glow: "from-indigo-400/25 to-cyan-400/10" };
+  const classes = size === "large" ? "h-14 w-14 rounded-2xl" : "h-11 w-11 rounded-xl";
   return (
-    <Badge className="gap-1 bg-amber-500/15 text-amber-400 border-amber-500/30 hover:bg-amber-500/15">
-      <XCircle className="h-3 w-3" /> Not configured
-    </Badge>
+    <div className={`${classes} relative shrink-0 overflow-hidden border border-white/10 bg-gradient-to-br ${mark.glow} shadow-[0_0_30px_rgba(90,120,255,0.12)]`}>
+      <div className="absolute inset-0 bg-[#080b14]/78" />
+      <div className="relative flex h-full w-full items-center justify-center p-3">
+        {mark.icon ? (
+          <img src={mark.icon} alt="" className="h-full w-full object-contain" onError={(event) => { event.currentTarget.style.display = "none"; }} />
+        ) : (
+          <span className="text-xs font-black tracking-tight text-white">{mark.fallback}</span>
+        )}
+      </div>
+    </div>
   );
+}
+
+function StatusBadge({ provider, test }: { provider: ProviderInfo; test?: TestState }) {
+  if (test?.reachable) {
+    return <Badge className="border-emerald-400/35 bg-emerald-400/10 text-emerald-200"><CheckCircle2 className="mr-1 h-3 w-3" /> Verified</Badge>;
+  }
+  if (provider.hasKey && provider.enabled) {
+    return <Badge className="border-cyan-400/35 bg-cyan-400/10 text-cyan-100"><KeyRound className="mr-1 h-3 w-3" /> Key saved</Badge>;
+  }
+  if (provider.hasKey) return <Badge className="border-white/10 bg-white/5 text-zinc-300">Saved · disabled</Badge>;
+  return <Badge variant="outline" className="border-white/10 text-zinc-400"><XCircle className="mr-1 h-3 w-3" /> Not saved</Badge>;
 }
 
 export default function ProvidersPage() {
   const { toast } = useToast();
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [loading, setLoading] = useState(true);
-  const [localState, setLocalState] = useState<Record<string, ProviderLocalState>>({});
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [keyName, setKeyName] = useState("default");
+  const [keyValue, setKeyValue] = useState("");
+  const [showValue, setShowValue] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [savedKeys, setSavedKeys] = useState<Record<string, SavedKey[]>>({});
+  const [tests, setTests] = useState<Record<string, TestState>>({});
 
   const fetchProviders = useCallback(async () => {
+    setLoading(true);
     try {
-      const res = await fetch("/api/providers", { credentials: "include" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json() as { providers: ProviderInfo[] };
-      setProviders(data.providers);
-      setLocalState((prev) => {
-        const next: Record<string, ProviderLocalState> = {};
-        for (const p of data.providers) {
-          next[p.id] = prev[p.id] ?? {
-            enabled: p.enabled,
-            model: p.model,
-            endpoint: p.endpoint ?? "",
-            keyInput: "",
-            showKey: false,
-            saving: false,
-            testing: false,
-            testResult: null,
-            testOk: null,
-            dirty: false,
-          };
-        }
-        return next;
-      });
+      const response = await fetch("/api/providers", { credentials: "include" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = (await response.json()) as { providers: Omit<ProviderInfo, "sourceIds">[] };
+      setProviders(mergeProviders(payload.providers).filter((provider) => !INFRA_IDS.has(provider.id)));
     } catch {
-      toast({ title: "Failed to load providers", variant: "destructive" });
+      toast({ title: "Could not load AI providers", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -106,245 +145,181 @@ export default function ProvidersPage() {
 
   useEffect(() => { void fetchProviders(); }, [fetchProviders]);
 
-  function updateLocal(id: string, patch: Partial<ProviderLocalState>) {
-    setLocalState((prev) => ({
-      ...prev,
-      [id]: { ...prev[id]!, ...patch, dirty: true },
+  const openProvider = useMemo(() => providers.find((provider) => provider.id === openId), [providers, openId]);
+
+  async function loadKeys(provider: ProviderInfo) {
+    const results = await Promise.all(provider.sourceIds.map(async (sourceId) => {
+      const response = await fetch(`/api/providers/${sourceId}/keys`, { credentials: "include" });
+      if (!response.ok) return [] as SavedKey[];
+      const payload = (await response.json()) as { keys: Array<Omit<SavedKey, "providerId">> };
+      return payload.keys.filter((key) => key.status !== "deleted").map((key) => ({ ...key, providerId: sourceId }));
     }));
+    setSavedKeys((previous) => ({ ...previous, [provider.id]: results.flat() }));
   }
 
-  async function save(provider: ProviderInfo) {
-    const ls = localState[provider.id];
-    if (!ls) return;
-    setLocalState((prev) => ({ ...prev, [provider.id]: { ...prev[provider.id]!, saving: true } }));
-    try {
-      const body: Record<string, unknown> = {
-        enabled: ls.enabled,
-        model: ls.model,
-      };
-      if (provider.hasEndpoint) body["endpoint"] = ls.endpoint;
-      if (ls.keyInput.trim()) body["key"] = ls.keyInput.trim();
+  async function beginEdit(provider: ProviderInfo) {
+    const next = openId === provider.id ? null : provider.id;
+    setOpenId(next);
+    setKeyName("default");
+    setKeyValue("");
+    setShowValue(false);
+    if (next) await loadKeys(provider);
+  }
 
-      const res = await fetch(`/api/providers/${provider.id}`, {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+  async function saveKey(provider: ProviderInfo) {
+    const name = keyName.trim();
+    const value = keyValue.trim();
+    if (!name || !value) {
+      toast({ title: "Name and value are required", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/providers/${provider.id}/keys`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: name, key: value }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      toast({ title: `${provider.label} saved`, description: "Provider settings updated." });
-      setLocalState((prev) => ({
-        ...prev,
-        [provider.id]: { ...prev[provider.id]!, keyInput: "", dirty: false, saving: false },
-      }));
-      await fetchProviders();
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      await fetch(`/api/providers/${provider.id}`, {
+        method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: true }),
+      });
+      setKeyValue("");
+      toast({ title: `${provider.label} API saved`, description: `Saved securely as “${name}”.` });
+      await Promise.all([loadKeys(provider), fetchProviders()]);
     } catch {
-      toast({ title: "Save failed", variant: "destructive" });
-      setLocalState((prev) => ({ ...prev, [provider.id]: { ...prev[provider.id]!, saving: false } }));
+      toast({ title: "API key was not saved", variant: "destructive" });
+    } finally {
+      setSaving(false);
     }
   }
 
-  async function testConnection(provider: ProviderInfo) {
-    setLocalState((prev) => ({ ...prev, [provider.id]: { ...prev[provider.id]!, testing: true, testResult: null, testOk: null } }));
-    try {
-      const res = await fetch(`/api/providers/${provider.id}/test`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-      });
-      const data = await res.json() as { configured?: boolean; reachable?: boolean; message?: string };
-      const ok = !!(data.configured);
-      setLocalState((prev) => ({
-        ...prev,
-        [provider.id]: { ...prev[provider.id]!, testing: false, testResult: data.message ?? "Unknown result", testOk: ok },
-      }));
-    } catch {
-      setLocalState((prev) => ({
-        ...prev,
-        [provider.id]: { ...prev[provider.id]!, testing: false, testResult: "Connection test failed", testOk: false },
-      }));
+  async function deleteKey(provider: ProviderInfo, key: SavedKey) {
+    const response = await fetch(`/api/providers/${key.providerId}/keys/${encodeURIComponent(key.label)}`, { method: "DELETE", credentials: "include" });
+    if (!response.ok) {
+      toast({ title: "Could not delete API key", variant: "destructive" });
+      return;
     }
+    await Promise.all([loadKeys(provider), fetchProviders()]);
   }
 
-  if (loading) {
-    return (
-      <AppLayout>
-        <div className="flex items-center justify-center h-64">
-          <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
-      </AppLayout>
-    );
+  async function setEnabled(provider: ProviderInfo, enabled: boolean) {
+    const response = await fetch(`/api/providers/${provider.id}`, {
+      method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled }),
+    });
+    if (!response.ok) {
+      toast({ title: "Provider state was not updated", variant: "destructive" });
+      return;
+    }
+    await fetchProviders();
+  }
+
+  async function testProvider(provider: ProviderInfo) {
+    setTests((previous) => ({ ...previous, [provider.id]: { testing: true, ok: null, reachable: false, message: "Testing…" } }));
+    try {
+      const response = await fetch(`/api/providers/${provider.id}/test`, { method: "POST", credentials: "include" });
+      const payload = (await response.json()) as { configured?: boolean; reachable?: boolean; message?: string };
+      setTests((previous) => ({ ...previous, [provider.id]: { testing: false, ok: Boolean(payload.configured), reachable: Boolean(payload.reachable), message: payload.message ?? "No result returned." } }));
+    } catch {
+      setTests((previous) => ({ ...previous, [provider.id]: { testing: false, ok: false, reachable: false, message: "Connection test failed." } }));
+    }
   }
 
   return (
     <AppLayout>
-      <div className="max-w-4xl mx-auto px-4 py-8 space-y-8">
-        {/* Header */}
-        <div className="space-y-1">
-          <div className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-              <Cpu className="h-4.5 w-4.5 text-primary" />
-            </div>
-            <h1 className="text-2xl font-semibold tracking-tight">AI Providers</h1>
+      <div className="mx-auto max-w-6xl space-y-8 px-4 py-6 sm:py-8">
+        <section className="relative overflow-hidden rounded-3xl border border-cyan-300/15 bg-[radial-gradient(circle_at_12%_15%,rgba(66,225,255,0.16),transparent_32%),radial-gradient(circle_at_90%_5%,rgba(143,91,255,0.18),transparent_30%),linear-gradient(135deg,#0b1020,#060812)] p-6 shadow-2xl sm:p-8">
+          <div className="absolute right-5 top-1/2 hidden h-36 w-36 -translate-y-1/2 items-center justify-center rounded-full border border-cyan-300/15 bg-cyan-300/5 shadow-[0_0_70px_rgba(67,215,255,0.18)] sm:flex">
+            <img src={`${import.meta.env.BASE_URL}viba-brain-logo.svg`} alt="VIBA brain" className="h-24 w-24 drop-shadow-[0_0_25px_rgba(99,229,255,0.65)]" />
           </div>
-          <p className="text-sm text-muted-foreground pl-12">
-            Configure API keys, models, and connection settings for each provider.
-          </p>
-        </div>
+          <div className="relative max-w-3xl sm:pr-44">
+            <div className="mb-3 text-xs font-black uppercase tracking-[0.28em] text-cyan-200">VIBA Neural Connections</div>
+            <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl">AI Brains</h1>
+            <p className="mt-3 text-sm leading-6 text-zinc-200 sm:text-base">Add and manage the language-model APIs that VIBA can use for strategy, research, building, review and orchestration. Each credential is stored by name and value.</p>
+          </div>
+        </section>
 
-        {/* Warning banner */}
-        <div className="flex items-start gap-3 rounded-xl border border-amber-500/25 bg-amber-500/8 px-4 py-3">
-          <AlertTriangle className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
-          <p className="text-sm text-amber-200/80">
-            <span className="font-medium text-amber-300">Live provider execution is off by default.</span>{" "}
-            Enabling a provider here makes it available for sessions to select — it does not automatically execute paid calls.
-            Each session still requires explicit budget approval before any live provider is invoked.
-          </p>
-        </div>
-
-        {/* Provider cards */}
-        <div className="grid grid-cols-1 gap-5">
-          {providers.map((provider) => {
-            const ls = localState[provider.id];
-            if (!ls) return null;
-            return (
-              <Card key={provider.id} className="border-white/[0.08] bg-white/[0.03] backdrop-blur-sm">
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-0.5">
-                      <CardTitle className="text-base font-medium flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <span>{provider.label}</span>
-                        {statusBadge(provider.status)}
-                      </CardTitle>
-                      <CardDescription className="text-xs">{provider.description}</CardDescription>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-xs text-muted-foreground">{ls.enabled ? "Enabled" : "Disabled"}</span>
-                      <Switch
-                        checked={ls.enabled}
-                        onCheckedChange={(v) => updateLocal(provider.id, { enabled: v })}
-                      />
-                    </div>
-                  </div>
-                </CardHeader>
-
-                <CardContent className="space-y-4">
-                  {/* API Key field */}
-                  {provider.hasKey !== undefined && provider.id !== "ollama" && (
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium flex items-center gap-1.5">
-                        <Key className="h-3 w-3" />
-                        API Key
-                        {provider.hasKey && (
-                          <span className="text-emerald-400 text-[11px] font-normal">● Configured</span>
-                        )}
-                      </Label>
-                      <div className="relative">
-                        <Input
-                          type={ls.showKey ? "text" : "password"}
-                          placeholder={provider.hasKey ? "Enter new key to replace (leave blank to keep current)" : "Paste your API key…"}
-                          value={ls.keyInput}
-                          onChange={(e) => updateLocal(provider.id, { keyInput: e.target.value })}
-                          className="pr-9 font-mono text-xs bg-background/50"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => updateLocal(provider.id, { showKey: !ls.showKey })}
-                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        >
-                          {ls.showKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                        </button>
+        {loading ? (
+          <div className="flex min-h-48 items-center justify-center"><RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+        ) : (
+          <section className="grid gap-4 lg:grid-cols-2">
+            {providers.map((provider) => {
+              const test = tests[provider.id];
+              const keys = savedKeys[provider.id] ?? [];
+              const isOpen = openId === provider.id;
+              return (
+                <Card key={provider.id} className="overflow-hidden border-white/10 bg-gradient-to-br from-white/[0.055] to-white/[0.02] shadow-xl backdrop-blur-xl">
+                  <CardHeader className="p-4 sm:p-5">
+                    <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <ProviderMark id={provider.id} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <CardTitle className="break-normal text-base leading-tight text-foreground sm:text-lg">{provider.label}</CardTitle>
+                            <StatusBadge provider={provider} test={test} />
+                          </div>
+                          <CardDescription className="mt-1.5 break-words leading-5">{provider.description}</CardDescription>
+                        </div>
+                      </div>
+                      <div className="flex w-full items-center justify-between gap-2 border-t border-white/5 pt-3 sm:w-auto sm:justify-end sm:border-0 sm:pt-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">{provider.enabled ? "Enabled" : "Disabled"}</span>
+                          <Switch checked={provider.enabled} disabled={!provider.hasKey} onCheckedChange={(enabled) => void setEnabled(provider, enabled)} aria-label={`${provider.enabled ? "Disable" : "Enable"} ${provider.label}`} />
+                        </div>
+                        <Button variant="outline" size="sm" onClick={() => void beginEdit(provider)} className="border-white/10 bg-white/5">
+                          {provider.hasKey ? <Pencil className="mr-1.5 h-3.5 w-3.5" /> : <Plus className="mr-1.5 h-3.5 w-3.5" />}
+                          {provider.hasKey ? "Edit APIs" : "Add API"}
+                        </Button>
                       </div>
                     </div>
-                  )}
+                  </CardHeader>
 
-                  {/* Model selection */}
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">Model</Label>
-                    {provider.modelOptions.length > 0 ? (
-                      <Select value={ls.model} onValueChange={(v) => updateLocal(provider.id, { model: v })}>
-                        <SelectTrigger className="h-9 text-xs bg-background/50">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {provider.modelOptions.map((m) => (
-                            <SelectItem key={m} value={m} className="text-xs">{m}</SelectItem>
+                  {isOpen && openProvider && (
+                    <CardContent className="space-y-5 border-t border-white/10 bg-black/15 p-4 sm:p-5">
+                      {keys.length > 0 && (
+                        <div className="space-y-2">
+                          <Label>Saved APIs</Label>
+                          {keys.map((key) => (
+                            <div key={`${key.providerId}:${key.label}`} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 px-3 py-2.5">
+                              <div className="min-w-0"><div className="truncate text-sm font-semibold">{key.label}</div><div className="text-xs text-muted-foreground">Value encrypted and stored</div></div>
+                              <Button variant="ghost" size="icon" onClick={() => void deleteKey(provider, key)} aria-label={`Delete ${key.label}`}><Trash2 className="h-4 w-4" /></Button>
+                            </div>
                           ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <Input
-                        placeholder={provider.defaultModel || "e.g. llama3, mistral"}
-                        value={ls.model}
-                        onChange={(e) => updateLocal(provider.id, { model: e.target.value })}
-                        className="h-9 text-xs bg-background/50"
-                      />
-                    )}
-                  </div>
-
-                  {/* Endpoint (local/custom providers) */}
-                  {provider.hasEndpoint && (
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium flex items-center gap-1.5">
-                        <Globe className="h-3 w-3" />
-                        Endpoint URL
-                      </Label>
-                      <Input
-                        placeholder={provider.id === "ollama" ? "http://localhost:11434" : "https://your-provider.example.com/v1"}
-                        value={ls.endpoint}
-                        onChange={(e) => updateLocal(provider.id, { endpoint: e.target.value })}
-                        className="h-9 text-xs font-mono bg-background/50"
-                      />
-                      {provider.id === "ollama" && (
-                        <div className="flex items-start gap-2 rounded-lg border border-blue-500/20 bg-blue-500/6 px-2.5 py-2">
-                          <Info className="h-3.5 w-3.5 text-blue-400 mt-0.5 shrink-0" />
-                          <p className="text-[11px] text-blue-300/80 leading-relaxed">
-                            This URL is tested from the <strong className="text-blue-300/95">VIBA server</strong>, not your browser. To use Ollama on your own machine, expose it with a tunnel (e.g.{" "}
-                            <code className="bg-blue-500/15 px-1 rounded">cloudflared tunnel</code>) and paste the public URL here.
-                          </p>
                         </div>
                       )}
-                    </div>
+
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-1.5"><Label htmlFor={`api-name-${provider.id}`}>Name</Label><Input id={`api-name-${provider.id}`} value={keyName} onChange={(event) => setKeyName(event.target.value)} placeholder="e.g. Main account" autoComplete="off" /></div>
+                        <div className="space-y-1.5"><Label htmlFor={`api-value-${provider.id}`}>Value</Label><div className="relative"><Input id={`api-value-${provider.id}`} type={showValue ? "text" : "password"} value={keyValue} onChange={(event) => setKeyValue(event.target.value)} placeholder="Paste API key" className="pr-10 font-mono" autoComplete="new-password" /><button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowValue((visible) => !visible)} aria-label={showValue ? "Hide API value" : "Show API value"}>{showValue ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button></div></div>
+                      </div>
+
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <Button onClick={() => void saveKey(provider)} disabled={saving || !keyName.trim() || !keyValue.trim()}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save API</Button>
+                        {provider.hasKey && <Button variant="outline" onClick={() => void testProvider(provider)} disabled={test?.testing}>{test?.testing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Verify connection</Button>}
+                      </div>
+                      {test?.message && <div className={`rounded-lg border px-3 py-2 text-sm ${test.ok ? "border-emerald-500/30 bg-emerald-500/8" : "border-destructive/30 bg-destructive/8"}`}>{test.message}</div>}
+                    </CardContent>
                   )}
+                </Card>
+              );
+            })}
+          </section>
+        )}
 
-                  {/* Test result */}
-                  {ls.testResult && (
-                    <div className={`rounded-lg px-3 py-2 text-xs border ${
-                      ls.testOk
-                        ? "bg-emerald-500/8 border-emerald-500/25 text-emerald-300"
-                        : "bg-red-500/8 border-red-500/25 text-red-300"
-                    }`}>
-                      {ls.testResult}
-                    </div>
-                  )}
-                </CardContent>
-
-                <CardFooter className="pt-0 flex items-center justify-between gap-3">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => testConnection(provider)}
-                    disabled={ls.testing}
-                    className="h-8 text-xs gap-1.5"
-                  >
-                    {ls.testing ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
-                    Test connection
-                  </Button>
-
-                  <Button
-                    size="sm"
-                    onClick={() => save(provider)}
-                    disabled={ls.saving || !ls.dirty}
-                    className="h-8 text-xs gap-1.5"
-                  >
-                    {ls.saving ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-                    Save settings
-                  </Button>
-                </CardFooter>
-              </Card>
-            );
-          })}
-        </div>
+        <section className="space-y-4 rounded-3xl border border-violet-300/15 bg-[linear-gradient(135deg,rgba(72,52,120,0.16),rgba(7,9,16,0.65))] p-5 sm:p-7">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-violet-300/20 bg-violet-300/10"><ServerCog className="h-6 w-6 text-violet-200" /></div>
+            <div><h2 className="text-xl font-black">Deployment & Infrastructure</h2><p className="mt-1 text-sm leading-6 text-muted-foreground">These services are tools and infrastructure. They are not AI brains and cannot be assigned reasoning roles.</p></div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            {INFRASTRUCTURE.map((service) => (
+              <div key={service.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                <ProviderMark id={service.id} size="small" />
+                <div className="mt-3 font-bold">{service.label}</div>
+                <div className="mt-1 text-xs leading-5 text-muted-foreground">{service.detail}</div>
+              </div>
+            ))}
+          </div>
+          <Button asChild variant="outline" className="border-violet-300/20 bg-violet-300/5"><Link href="/credentials">Manage infrastructure credentials in Vault</Link></Button>
+        </section>
       </div>
     </AppLayout>
   );
