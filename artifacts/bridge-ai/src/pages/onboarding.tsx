@@ -28,7 +28,7 @@ export default function OnboardingPage() {
   function startTask() {
     if (!goal.trim()) {
       toast({
-        title: "Tell VIBA what to do",
+        title: "Enter a task",
         description: "A short description is enough. VIBA will work out the steps.",
         variant: "destructive",
       });
@@ -48,7 +48,7 @@ export default function OnboardingPage() {
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
             <Bot className="h-6 w-6 text-primary" />
           </div>
-          <h1 className="text-3xl font-semibold tracking-tight">What should VIBA accomplish?</h1>
+          <h1 className="text-3xl font-semibold tracking-tight">Enter a new task</h1>
           <p className="mt-2 text-muted-foreground">
             Describe the outcome. VIBA will plan the work, choose agents and tools, and ask only when approval is needed.
           </p>
@@ -56,7 +56,7 @@ export default function OnboardingPage() {
 
         <div className="space-y-5 rounded-2xl border border-border/60 bg-card p-5 shadow-sm sm:p-7">
           <div className="space-y-2">
-            <Label htmlFor="goal">Your task</Label>
+            <Label htmlFor="goal">Task description</Label>
             <Textarea
               id="goal"
               autoFocus
