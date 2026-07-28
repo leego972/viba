@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link } from "wouter";
 import { OnboardingModal, useOnboarding } from "@/components/OnboardingModal";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { assetUrl, empty } from "@/lib/assets";
 import {
   useListSessions,
   useGetStats,
@@ -704,9 +705,13 @@ export default function Dashboard() {
                   <p className="text-xs text-white/30">No sessions match your filter.</p>
                 ) : (
                   <div className="space-y-3">
-                    <div className="h-12 w-12 mx-auto rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
-                      <Activity className="h-6 w-6 text-primary/60" />
-                    </div>
+                    <img
+                      src={assetUrl(empty.noTasks)}
+                      width={empty.noTasks.width}
+                      height={empty.noTasks.height}
+                      alt=""
+                      className="mx-auto h-12 w-12 object-contain opacity-80"
+                    />
                     <p className="text-sm font-medium text-white/60">No sessions yet</p>
                     <p className="text-xs text-white/30">Start your first AI orchestration session</p>
                     <Link href="/sessions/new">
