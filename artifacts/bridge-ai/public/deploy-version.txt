@@ -1,0 +1,2 @@
+VIBA_CONCISE_HOME_2026-07-28
+main_expected_commit=378cdc9220eb12a26cf6cc9d9da378b7a5aa9b82
