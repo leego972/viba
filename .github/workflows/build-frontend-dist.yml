@@ -1,6 +1,16 @@
 name: Build frontend dist
 
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'artifacts/bridge-ai/src/**'
+      - 'artifacts/bridge-ai/public/**'
+      - 'artifacts/bridge-ai/index.html'
+      - 'artifacts/bridge-ai/package.json'
+      - 'artifacts/bridge-ai/vite.config.ts'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/build-frontend-dist.yml'
   push:
     branches: [main]
     paths:
@@ -17,23 +27,22 @@ permissions:
   contents: write
 
 concurrency:
-  group: build-frontend-dist-main
+  group: build-frontend-dist-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build-and-commit:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout main
+      - name: Checkout source
         uses: actions/checkout@v4
         with:
-          ref: main
           fetch-depth: 0
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10.24.0
+          version: 10.26.1
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -47,13 +56,15 @@ jobs:
       - name: Build current frontend
         run: pnpm --filter @workspace/bridge-ai run build
 
-      - name: Verify concise homepage bundle
+      - name: Verify generated frontend
         run: |
           test -f artifacts/bridge-ai/dist/public/index.html
-          grep -R "Know what is broken" artifacts/bridge-ai/dist/public >/dev/null
           test -f artifacts/bridge-ai/dist/public/deploy-version.txt
+          grep -R "Know what is broken" artifacts/bridge-ai/dist/public >/dev/null
+          find artifacts/bridge-ai/dist/public -maxdepth 3 -type f -print
 
-      - name: Commit generated frontend
+      - name: Commit generated frontend to main
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
