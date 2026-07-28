@@ -60,6 +60,10 @@ import projectMemoryRouter from "./projectMemory";
 import fileBuildSafetyRouter from "./fileBuildSafety";
 import vastaiConnectorRouter from "./vastaiConnector";
 import appPublisherRouter from "./appPublisher";
+import googlePlayCredentialOwnershipRouter from "./googlePlayCredentialOwnership";
+import googlePlayPublisherRouter from "./googlePlayPublisher";
+import googlePlaySelfSetupRouter from "./googlePlaySelfSetup";
+import googlePlaySigningRouter from "./googlePlaySigning";
 
 const router: IRouter = Router();
 
@@ -124,5 +128,9 @@ router.use(projectMemoryRouter);
 router.use(fileBuildSafetyRouter);
 router.use(vastaiConnectorRouter);
 router.use(appPublisherRouter);
+router.use(googlePlayCredentialOwnershipRouter);
+router.use(googlePlayPublisherRouter);
+router.use(googlePlaySelfSetupRouter);
+router.use(googlePlaySigningRouter);
 
 export default router;
