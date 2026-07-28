@@ -130,11 +130,26 @@ img[alt="VIBA"] {
   filter: drop-shadow(0 0 0.6px #000) drop-shadow(0.8px 0 #000) drop-shadow(-0.8px 0 #000) drop-shadow(0 0.8px #000) drop-shadow(0 -0.8px #000);
 }
 
-/* The onboarding dialog covers the dashboard on first launch. Hide the underlying
-   orchestration empty-state copy on compact viewports so it cannot sit outside the
-   visible canvas or be announced behind the modal. Desktop keeps the guidance. */
+/* Compact viewport safety: the first-run onboarding dialog covers the dashboard.
+   Suppress only the underlying orchestration empty-state copy so it cannot render
+   outside the visible canvas or be announced behind the modal. */
 @media (max-width: 900px) {
-  [aria-label="Live AI collaboration viewer"] > .absolute.inset-x-6.bottom-10.z-20.text-center {
-    display: none;
+  [aria-label="Live AI collaboration viewer"] p[class*="text-white"],
+  [aria-label="Live AI collaboration viewer"] p[class*="max-w-md"] {
+    display: none !important;
+  }
+}
+
+/* Keep the infrastructure-vault action inside the narrow iPhone SE viewport. */
+@media (max-width: 380px) {
+  a[href="/credentials"] {
+    max-width: 100% !important;
+    min-width: 0 !important;
+    white-space: normal !important;
+    text-align: center;
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+    font-size: 0.75rem !important;
+    line-height: 1.2 !important;
   }
 }
