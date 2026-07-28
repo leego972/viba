@@ -3,7 +3,10 @@ import { createCipheriv, createDecipheriv, createHash, createSign, randomBytes }
 import { pool } from "@workspace/db";
 
 const router = Router();
-const json = (res: Response, status: number, value: unknown) => res.status(status).json(value);
+
+function send(res: Response, status: number, value: unknown): void {
+  res.status(status).json(value);
+}
 
 function userId(req: Request): number {
   const id = req.session?.userId;
@@ -137,7 +140,7 @@ async function googleFetch(token: string, url: string, init: RequestInit = {}): 
   return data;
 }
 
-router.get("/play-publisher/overview", async (req, res) => {
+router.get("/play-publisher/overview", async (req, res): Promise<void> => {
   try {
     await ensureSchema();
     const uid = userId(req);
@@ -147,45 +150,67 @@ router.get("/play-publisher/overview", async (req, res) => {
       pool.query("SELECT * FROM play_publisher_jobs WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100", [uid]),
     ]);
     res.json({ connections: connections.rows, apps: apps.rows, jobs: jobs.rows });
-  } catch (error) { json(res, 500, { error: error instanceof Error ? error.message : "Unknown error" }); }
+  } catch (error) {
+    send(res, 500, { error: error instanceof Error ? error.message : "Unknown error" });
+  }
 });
 
-router.post("/play-publisher/connections", async (req, res) => {
+router.post("/play-publisher/connections", async (req, res): Promise<void> => {
   try {
     await ensureSchema();
     const uid = userId(req);
     const { name, serviceAccountJson } = req.body as { name?: string; serviceAccountJson?: string };
-    if (!serviceAccountJson) return json(res, 400, { error: "serviceAccountJson is required" });
+    if (!serviceAccountJson) {
+      send(res, 400, { error: "serviceAccountJson is required" });
+      return;
+    }
     const parsed = JSON.parse(serviceAccountJson) as { client_email?: string; private_key?: string };
-    if (!parsed.client_email || !parsed.private_key) return json(res, 400, { error: "Invalid service account JSON" });
+    if (!parsed.client_email || !parsed.private_key) {
+      send(res, 400, { error: "Invalid service account JSON" });
+      return;
+    }
     await accessToken(serviceAccountJson);
     const result = await pool.query(
       "INSERT INTO play_publisher_connections(user_id,name,service_account_email,encrypted_service_account) VALUES($1,$2,$3,$4) RETURNING id,name,service_account_email,status,created_at",
       [uid, (name ?? "Google Play").slice(0, 120), parsed.client_email, encrypt(serviceAccountJson)],
     );
     res.status(201).json(result.rows[0]);
-  } catch (error) { json(res, 400, { error: error instanceof Error ? error.message : "Connection failed" }); }
+  } catch (error) {
+    send(res, 400, { error: error instanceof Error ? error.message : "Connection failed" });
+  }
 });
 
-router.post("/play-publisher/apps", async (req, res) => {
+router.post("/play-publisher/apps", async (req, res): Promise<void> => {
   try {
     await ensureSchema();
     const uid = userId(req);
     const b = req.body as Record<string, unknown>;
-    if (!b.name || !b.packageName || !b.repositoryUrl) return json(res, 400, { error: "name, packageName and repositoryUrl are required" });
-    const result = await pool.query(`INSERT INTO play_publisher_apps
-      (user_id,connection_id,name,package_name,repository_url,branch,project_path,framework,version_code,version_name,target_sdk,privacy_policy_url)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`, [uid, b.connectionId ?? null, b.name, b.packageName, b.repositoryUrl, b.branch ?? "main", b.projectPath ?? ".", b.framework ?? "capacitor", b.versionCode ?? 1, b.versionName ?? "1.0.0", b.targetSdk ?? null, b.privacyPolicyUrl ?? null]);
+    if (!b.name || !b.packageName || !b.repositoryUrl) {
+      send(res, 400, { error: "name, packageName and repositoryUrl are required" });
+      return;
+    }
+    const result = await pool.query(
+      `INSERT INTO play_publisher_apps
+        (user_id,connection_id,name,package_name,repository_url,branch,project_path,framework,version_code,version_name,target_sdk,privacy_policy_url)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+      [uid, b.connectionId ?? null, b.name, b.packageName, b.repositoryUrl, b.branch ?? "main", b.projectPath ?? ".", b.framework ?? "capacitor", b.versionCode ?? 1, b.versionName ?? "1.0.0", b.targetSdk ?? null, b.privacyPolicyUrl ?? null],
+    );
     res.status(201).json(result.rows[0]);
-  } catch (error) { json(res, 400, { error: error instanceof Error ? error.message : "Create failed" }); }
+  } catch (error) {
+    send(res, 400, { error: error instanceof Error ? error.message : "Create failed" });
+  }
 });
 
-router.post("/play-publisher/apps/:id/audit", async (req, res) => {
+router.post("/play-publisher/apps/:id/audit", async (req, res): Promise<void> => {
   try {
     await ensureSchema();
-    const uid = userId(req); const appId = Number(req.params.id);
+    const uid = userId(req);
+    const appId = Number(req.params.id);
     const app = (await pool.query("SELECT * FROM play_publisher_apps WHERE id=$1 AND user_id=$2", [appId, uid])).rows[0];
-    if (!app) return json(res, 404, { error: "App not found" });
+    if (!app) {
+      send(res, 404, { error: "App not found" });
+      return;
+    }
     const checks = [
       { key: "package", status: /^[a-zA-Z][\w]*(\.[a-zA-Z][\w]*)+$/.test(app.package_name) ? "passed" : "failed", message: app.package_name },
       { key: "repository", status: /^https:\/\//.test(app.repository_url) ? "passed" : "failed", message: app.repository_url },
@@ -194,48 +219,97 @@ router.post("/play-publisher/apps/:id/audit", async (req, res) => {
       { key: "connection", status: app.connection_id ? "passed" : "failed", message: app.connection_id ? "Google Play connected" : "Connect Google Play" },
     ];
     const status = checks.some(c => c.status === "failed") ? "failed" : checks.some(c => c.status === "warning") ? "warning" : "passed";
-    const job = await pool.query("INSERT INTO play_publisher_jobs(user_id,app_id,kind,status,input,output,completed_at) VALUES($1,$2,'audit',$3,$4,$5,NOW()) RETURNING *", [uid, appId, status, { repositoryUrl: app.repository_url, branch: app.branch, projectPath: app.project_path }, { checks }]);
+    const job = await pool.query(
+      "INSERT INTO play_publisher_jobs(user_id,app_id,kind,status,input,output,completed_at) VALUES($1,$2,'audit',$3,$4,$5,NOW()) RETURNING *",
+      [uid, appId, status, { repositoryUrl: app.repository_url, branch: app.branch, projectPath: app.project_path }, { checks }],
+    );
     await pool.query("UPDATE play_publisher_apps SET status=$1,updated_at=NOW() WHERE id=$2", [status === "passed" ? "ready" : "needs_attention", appId]);
     res.status(201).json(job.rows[0]);
-  } catch (error) { json(res, 500, { error: error instanceof Error ? error.message : "Audit failed" }); }
+  } catch (error) {
+    send(res, 500, { error: error instanceof Error ? error.message : "Audit failed" });
+  }
 });
 
-router.post("/play-publisher/apps/:id/builds", async (req, res) => {
+router.post("/play-publisher/apps/:id/builds", async (req, res): Promise<void> => {
   try {
     await ensureSchema();
-    const uid = userId(req); const appId = Number(req.params.id);
+    const uid = userId(req);
+    const appId = Number(req.params.id);
     const owned = await pool.query("SELECT id FROM play_publisher_apps WHERE id=$1 AND user_id=$2", [appId, uid]);
-    if (!owned.rows[0]) return json(res, 404, { error: "App not found" });
-    const result = await pool.query("INSERT INTO play_publisher_jobs(user_id,app_id,kind,status,input) VALUES($1,$2,'build','queued',$3) RETURNING *", [uid, appId, req.body ?? {}]);
+    if (!owned.rows[0]) {
+      send(res, 404, { error: "App not found" });
+      return;
+    }
+    const result = await pool.query(
+      "INSERT INTO play_publisher_jobs(user_id,app_id,kind,status,input) VALUES($1,$2,'build','queued',$3) RETURNING *",
+      [uid, appId, req.body ?? {}],
+    );
     res.status(202).json(result.rows[0]);
-  } catch (error) { json(res, 500, { error: error instanceof Error ? error.message : "Build queue failed" }); }
+  } catch (error) {
+    send(res, 500, { error: error instanceof Error ? error.message : "Build queue failed" });
+  }
 });
 
-router.post("/play-publisher/jobs/:id/complete", async (req, res) => {
+router.post("/play-publisher/jobs/:id/complete", async (req, res): Promise<void> => {
   try {
     await ensureSchema();
-    const uid = userId(req); const jobId = Number(req.params.id);
-    const { status, artifactUrl, sha256, output, error } = req.body as any;
-    const result = await pool.query(`UPDATE play_publisher_jobs SET status=$1,artifact_url=$2,artifact_sha256=$3,output=$4,error=$5,completed_at=NOW()
-      WHERE id=$6 AND user_id=$7 AND kind='build' RETURNING *`, [status, artifactUrl ?? null, sha256 ?? null, output ?? {}, error ?? null, jobId, uid]);
-    if (!result.rows[0]) return json(res, 404, { error: "Build job not found" });
+    const uid = userId(req);
+    const jobId = Number(req.params.id);
+    const { status, artifactUrl, sha256, output, error } = req.body as Record<string, unknown>;
+    const result = await pool.query(
+      `UPDATE play_publisher_jobs SET status=$1,artifact_url=$2,artifact_sha256=$3,output=$4,error=$5,completed_at=NOW()
+       WHERE id=$6 AND user_id=$7 AND kind='build' RETURNING *`,
+      [status, artifactUrl ?? null, sha256 ?? null, output ?? {}, error ?? null, jobId, uid],
+    );
+    if (!result.rows[0]) {
+      send(res, 404, { error: "Build job not found" });
+      return;
+    }
     res.json(result.rows[0]);
-  } catch (error) { json(res, 500, { error: error instanceof Error ? error.message : "Update failed" }); }
+  } catch (error) {
+    send(res, 500, { error: error instanceof Error ? error.message : "Update failed" });
+  }
 });
 
-router.post("/play-publisher/apps/:id/releases", async (req, res) => {
+router.post("/play-publisher/apps/:id/releases", async (req, res): Promise<void> => {
   try {
     await ensureSchema();
-    const uid = userId(req); const appId = Number(req.params.id);
-    const { buildJobId, track = "internal", rolloutPercent = 100, approveProduction = false } = req.body as any;
-    if (track === "production" && approveProduction !== true) return json(res, 409, { error: "Production release requires explicit approveProduction=true" });
-    const app = (await pool.query(`SELECT a.*,c.encrypted_service_account FROM play_publisher_apps a JOIN play_publisher_connections c ON c.id=a.connection_id
-      WHERE a.id=$1 AND a.user_id=$2 AND c.user_id=$2`, [appId, uid])).rows[0];
-    if (!app) return json(res, 404, { error: "App or Google connection not found" });
-    const build = (await pool.query("SELECT * FROM play_publisher_jobs WHERE id=$1 AND app_id=$2 AND user_id=$3 AND kind='build' AND status='completed'", [buildJobId, appId, uid])).rows[0];
-    if (!build?.artifact_url) return json(res, 400, { error: "A completed build with artifactUrl is required" });
+    const uid = userId(req);
+    const appId = Number(req.params.id);
+    const { buildJobId, track = "internal", rolloutPercent = 100, approveProduction = false } = req.body as {
+      buildJobId?: number;
+      track?: string;
+      rolloutPercent?: number;
+      approveProduction?: boolean;
+    };
+    if (track === "production" && approveProduction !== true) {
+      send(res, 409, { error: "Production release requires explicit approveProduction=true" });
+      return;
+    }
+    const app = (await pool.query(
+      `SELECT a.*,c.encrypted_service_account FROM play_publisher_apps a
+       JOIN play_publisher_connections c ON c.id=a.connection_id
+       WHERE a.id=$1 AND a.user_id=$2 AND c.user_id=$2`,
+      [appId, uid],
+    )).rows[0];
+    if (!app) {
+      send(res, 404, { error: "App or Google connection not found" });
+      return;
+    }
+    const build = (await pool.query(
+      "SELECT * FROM play_publisher_jobs WHERE id=$1 AND app_id=$2 AND user_id=$3 AND kind='build' AND status='completed'",
+      [buildJobId, appId, uid],
+    )).rows[0];
+    if (!build?.artifact_url) {
+      send(res, 400, { error: "A completed build with artifactUrl is required" });
+      return;
+    }
 
-    const release = (await pool.query("INSERT INTO play_publisher_jobs(user_id,app_id,kind,status,requested_track,rollout_percent,input,approved_at) VALUES($1,$2,'release','running',$3,$4,$5,NOW()) RETURNING *", [uid, appId, track, rolloutPercent, { buildJobId }])).rows[0];
+    const release = (await pool.query(
+      "INSERT INTO play_publisher_jobs(user_id,app_id,kind,status,requested_track,rollout_percent,input,approved_at) VALUES($1,$2,'release','running',$3,$4,$5,NOW()) RETURNING *",
+      [uid, appId, track, rolloutPercent, { buildJobId }],
+    )).rows[0];
+
     try {
       const token = await accessToken(decrypt(app.encrypted_service_account));
       const base = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(app.package_name)}`;
@@ -243,19 +317,47 @@ router.post("/play-publisher/apps/:id/releases", async (req, res) => {
       const artifact = await fetch(build.artifact_url);
       if (!artifact.ok) throw new Error(`Unable to download build artifact (${artifact.status})`);
       const bytes = Buffer.from(await artifact.arrayBuffer());
-      if (build.artifact_sha256 && createHash("sha256").update(bytes).digest("hex") !== build.artifact_sha256) throw new Error("Artifact SHA-256 mismatch");
-      const bundle = await googleFetch(token, `https://androidpublisher.googleapis.com/upload/androidpublisher/v3/applications/${encodeURIComponent(app.package_name)}/edits/${edit.id}/bundles?uploadType=media`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: bytes });
-      const trackBody = { releases: [{ name: app.version_name, versionCodes: [String(bundle.versionCode)], status: track === "production" && rolloutPercent < 100 ? "inProgress" : "completed", ...(track === "production" && rolloutPercent < 100 ? { userFraction: rolloutPercent / 100 } : {}) }] };
-      await googleFetch(token, `${base}/edits/${edit.id}/tracks/${encodeURIComponent(track)}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(trackBody) });
+      if (build.artifact_sha256 && createHash("sha256").update(bytes).digest("hex") !== build.artifact_sha256) {
+        throw new Error("Artifact SHA-256 mismatch");
+      }
+      const bundle = await googleFetch(
+        token,
+        `https://androidpublisher.googleapis.com/upload/androidpublisher/v3/applications/${encodeURIComponent(app.package_name)}/edits/${edit.id}/bundles?uploadType=media`,
+        { method: "POST", headers: { "content-type": "application/octet-stream" }, body: bytes },
+      );
+      const trackBody = {
+        releases: [{
+          name: app.version_name,
+          versionCodes: [String(bundle.versionCode)],
+          status: track === "production" && rolloutPercent < 100 ? "inProgress" : "completed",
+          ...(track === "production" && rolloutPercent < 100 ? { userFraction: rolloutPercent / 100 } : {}),
+        }],
+      };
+      await googleFetch(token, `${base}/edits/${edit.id}/tracks/${encodeURIComponent(track)}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(trackBody),
+      });
       await googleFetch(token, `${base}/edits/${edit.id}:commit`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
-      const done = await pool.query("UPDATE play_publisher_jobs SET status='completed',google_edit_id=$1,google_version_code=$2,output=$3,completed_at=NOW() WHERE id=$4 RETURNING *", [edit.id, bundle.versionCode, { track, rolloutPercent }, release.id]);
-      await pool.query("INSERT INTO play_publisher_audit_logs(user_id,app_id,action,details) VALUES($1,$2,'release_committed',$3)", [uid, appId, { track, rolloutPercent, versionCode: bundle.versionCode }]);
+      const done = await pool.query(
+        "UPDATE play_publisher_jobs SET status='completed',google_edit_id=$1,google_version_code=$2,output=$3,completed_at=NOW() WHERE id=$4 RETURNING *",
+        [edit.id, bundle.versionCode, { track, rolloutPercent }, release.id],
+      );
+      await pool.query(
+        "INSERT INTO play_publisher_audit_logs(user_id,app_id,action,details) VALUES($1,$2,'release_committed',$3)",
+        [uid, appId, { track, rolloutPercent, versionCode: bundle.versionCode }],
+      );
       res.status(201).json(done.rows[0]);
     } catch (error) {
-      await pool.query("UPDATE play_publisher_jobs SET status='failed',error=$1,completed_at=NOW() WHERE id=$2", [error instanceof Error ? error.message : "Release failed", release.id]);
+      await pool.query(
+        "UPDATE play_publisher_jobs SET status='failed',error=$1,completed_at=NOW() WHERE id=$2",
+        [error instanceof Error ? error.message : "Release failed", release.id],
+      );
       throw error;
     }
-  } catch (error) { json(res, 500, { error: error instanceof Error ? error.message : "Release failed" }); }
+  } catch (error) {
+    send(res, 500, { error: error instanceof Error ? error.message : "Release failed" });
+  }
 });
 
 export default router;
