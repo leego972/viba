@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-const pagePath = fileURLToPath(new URL("./home-cinematic.tsx", import.meta.url));
-const cssPath = fileURLToPath(new URL("./home-cinematic-repo.css", import.meta.url));
-const page = readFileSync(pagePath, "utf8");
-const css = readFileSync(cssPath, "utf8");
+const readSibling = (name: string) => readFileSync(fileURLToPath(new URL(name, import.meta.url)), "utf8");
+const page = readSibling("./home-cinematic.tsx");
+const conciseCss = readSibling("./home-cinematic-repo.css");
+const motionCss = readSibling("./home-cinematic-live.css");
 
 describe("public landing page contract", () => {
   it("keeps the homepage concise instead of restoring the removed long-form sections", () => {
@@ -35,11 +35,11 @@ describe("public landing page contract", () => {
   });
 
   it("puts the visual first on mobile and prevents horizontal page overflow", () => {
-    expect(css).toContain(".viba-concise-hero .viba-hero-stage{order:-1");
-    expect(css).toContain(".viba-concise-home main{overflow:hidden}");
+    expect(conciseCss).toContain(".viba-concise-hero .viba-hero-stage{order:-1");
+    expect(conciseCss).toContain(".viba-concise-home main{overflow:hidden}");
   });
 
-  it("supports reduced-motion users", () => {
-    expect(css).toContain("@media(prefers-reduced-motion:reduce)");
+  it("retains reduced-motion handling in the imported landing-page styles", () => {
+    expect(motionCss).toContain("@media(prefers-reduced-motion:reduce)");
   });
 });
