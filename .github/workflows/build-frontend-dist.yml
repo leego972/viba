@@ -1,0 +1,66 @@
+name: Build frontend dist
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'artifacts/bridge-ai/src/**'
+      - 'artifacts/bridge-ai/public/**'
+      - 'artifacts/bridge-ai/index.html'
+      - 'artifacts/bridge-ai/package.json'
+      - 'artifacts/bridge-ai/vite.config.ts'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/build-frontend-dist.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-frontend-dist-main
+  cancel-in-progress: true
+
+jobs:
+  build-and-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.24.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.1
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile --prod=false
+
+      - name: Build current frontend
+        run: pnpm --filter @workspace/bridge-ai run build
+
+      - name: Verify concise homepage bundle
+        run: |
+          test -f artifacts/bridge-ai/dist/public/index.html
+          grep -R "Know what is broken" artifacts/bridge-ai/dist/public >/dev/null
+          test -f artifacts/bridge-ai/dist/public/deploy-version.txt
+
+      - name: Commit generated frontend
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f artifacts/bridge-ai/dist
+          if git diff --cached --quiet; then
+            echo "Frontend dist already current"
+            exit 0
+          fi
+          git commit -m "build: refresh production frontend dist [skip ci]"
+          git push origin HEAD:main
