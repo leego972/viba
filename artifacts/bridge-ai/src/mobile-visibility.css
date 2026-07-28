@@ -67,6 +67,16 @@ dd,
   max-width: 100%;
 }
 
+@media (max-width: 900px) {
+  /* The onboarding dialog sits above this dashboard canvas. Keep the underlying
+     empty-state copy hidden on compact viewports so it cannot extend beyond the
+     canvas or be announced behind the modal. */
+  [aria-label="Live AI collaboration viewer"] p.text-sm.font-medium,
+  [aria-label="Live AI collaboration viewer"] p[class*="max-w-md"] {
+    display: none !important;
+  }
+}
+
 @media (max-width: 767px) {
   /* Flex/grid children otherwise default to min-width:auto and can push the page. */
   .flex > *,
@@ -108,6 +118,21 @@ dd,
   .recharts-wrapper,
   .recharts-surface {
     max-width: 100% !important;
+  }
+}
+
+@media (max-width: 380px) {
+  /* Keep the infrastructure hand-off action inside the iPhone SE viewport. */
+  a[href="/credentials"] {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    height: auto !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    text-align: center;
+    padding: 0.75rem !important;
+    line-height: 1.25 !important;
   }
 }
 

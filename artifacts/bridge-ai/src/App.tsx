@@ -48,6 +48,7 @@ import UsageHistoryPage from "@/pages/usage-history";
 import BudgetsPage from "@/pages/budgets";
 import ProjectMemoryPage from "@/pages/project-memory";
 import AppPublisherPage from "@/pages/app-publisher";
+import PlayPublisherPage from "@/pages/play-publisher";
 import Terms from "@/pages/terms";
 import Privacy from "@/pages/privacy";
 import UserInstructions from "@/pages/user-instructions";
@@ -160,6 +161,7 @@ function GatedRouter() {
         <Route path="/budgets" component={BudgetsPage} />
         <Route path="/project-memory" component={ProjectMemoryPage} />
         <Route path="/app-publisher" component={AppPublisherPage} />
+        <Route path="/play-publisher" component={PlayPublisherPage} />
         <Route component={NotFound} />
       </Switch>
     </AuthGuard>
