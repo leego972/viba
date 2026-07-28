@@ -42,7 +42,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10.24.0
+          version: 10.26.1
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -60,7 +60,8 @@ jobs:
         run: |
           test -f artifacts/bridge-ai/dist/public/index.html
           test -f artifacts/bridge-ai/dist/public/deploy-version.txt
-          find artifacts/bridge-ai/dist/public -type f -maxdepth 3 -print
+          grep -R "Know what is broken" artifacts/bridge-ai/dist/public >/dev/null
+          find artifacts/bridge-ai/dist/public -maxdepth 3 -type f -print
 
       - name: Commit generated frontend to main
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
