@@ -130,12 +130,15 @@ img[alt="VIBA"] {
   filter: drop-shadow(0 0 0.6px #000) drop-shadow(0.8px 0 #000) drop-shadow(-0.8px 0 #000) drop-shadow(0 0.8px #000) drop-shadow(0 -0.8px #000);
 }
 
-/* Compact viewport safety: the first-run onboarding dialog covers the dashboard.
-   Suppress only the underlying orchestration empty-state copy so it cannot render
-   outside the visible canvas or be announced behind the modal. */
+/* Keep the orchestration canvas and its empty state inside compact viewports. */
 @media (max-width: 900px) {
-  [aria-label="Live AI collaboration viewer"] p[class*="text-white"],
-  [aria-label="Live AI collaboration viewer"] p[class*="max-w-md"] {
+  [aria-label="Live AI collaboration viewer"] {
+    width: calc(100vw - 2rem) !important;
+    max-width: calc(100vw - 2rem) !important;
+    margin-inline: auto !important;
+  }
+
+  [aria-label="Live AI collaboration viewer"] > div.absolute.inset-x-6.bottom-10 {
     display: none !important;
   }
 }
