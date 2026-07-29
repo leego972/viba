@@ -21,18 +21,16 @@ function isActive(pathname: string, href: string): boolean {
 
 export function MobileShell({ children }: MobileShellProps) {
   const [location] = useLocation();
-  const isSession = location.startsWith("/sessions/") && location !== "/sessions/new";
 
   return (
     <div className="viba-mobile-shell">
       <header className="viba-mobile-appbar" aria-label="Mobile app navigation">
         <Link href="/dashboard" className="viba-mobile-brand" aria-label="Go to VIBA dashboard">
-          <img src="/viba-logo.png" alt="" aria-hidden="true" />
-          <span>{isSession ? "Live Session" : "VIBA"}</span>
+          <img src="/viba-logo.png" alt="VIBA" className="h-12 w-auto max-w-[92px] object-contain" />
         </Link>
         <nav className="viba-mobile-actions" aria-label="Quick actions">
           <CreditBalancePill compact className="viba-mobile-credit" />
-          <Link href="/sessions/new" className="viba-mobile-action" aria-label="Start new session">
+          <Link href="/sessions/new" className="viba-mobile-action whitespace-nowrap" aria-label="Start new session">
             New
           </Link>
           <Link href="/billing" className="viba-mobile-action" aria-label="Open billing">
