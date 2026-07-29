@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 import "./mobile-visibility.css";
+import "./production-ui-polish.css";
 import { ElevenLabsSettingsField } from "./components/ElevenLabsSettingsField";
 
 const rootEl = document.getElementById("root");
