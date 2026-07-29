@@ -1,0 +1,180 @@
+/* Shared production polish for the authenticated application. */
+
+.viba-app-shell {
+  isolation: isolate;
+}
+
+.viba-app-visual-system {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.viba-app-background-pattern {
+  position: absolute;
+  inset: 0;
+  background-repeat: repeat;
+  background-size: 220px auto;
+  opacity: 0.055;
+  mix-blend-mode: screen;
+  mask-image: linear-gradient(to bottom, black 0%, rgba(0,0,0,.7) 48%, transparent 100%);
+}
+
+.viba-app-background-glow {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 88% 10%, rgba(99, 102, 241, .14), transparent 28%),
+    radial-gradient(circle at 10% 36%, rgba(34, 211, 238, .075), transparent 26%),
+    linear-gradient(to bottom, transparent 0%, hsl(var(--background) / .42) 55%, hsl(var(--background)) 100%);
+}
+
+.viba-app-context-art {
+  position: absolute;
+  top: 88px;
+  right: clamp(-90px, -4vw, -24px);
+  width: clamp(180px, 22vw, 360px);
+  height: auto;
+  max-height: 320px;
+  object-fit: contain;
+  opacity: .09;
+  filter: saturate(1.15) drop-shadow(0 0 38px rgba(99, 102, 241, .2));
+  transform: rotate(-2deg);
+}
+
+[data-visual-theme="security"] .viba-app-context-art,
+[data-visual-theme="connections"] .viba-app-context-art,
+[data-visual-theme="deployment"] .viba-app-context-art {
+  opacity: .11;
+}
+
+.viba-app-content > * {
+  min-width: 0;
+}
+
+/* Prevent common flex/grid clipping and accidental horizontal overflow. */
+.viba-app-content :where(.flex, .grid) > * {
+  min-width: 0;
+}
+
+.viba-app-content :where(h1, h2, h3, h4, h5, h6, p, li, dd, dt, label, legend) {
+  overflow-wrap: anywhere;
+}
+
+.viba-app-content :where(pre, code, kbd, samp) {
+  max-width: 100%;
+}
+
+.viba-app-content pre {
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.viba-app-content :where(table) {
+  width: 100%;
+}
+
+.viba-app-content :where([class*="overflow-x-auto"], [class*="table-container"]) {
+  scrollbar-gutter: stable;
+}
+
+/* Buttons and button-like links keep labels readable at every breakpoint. */
+.viba-app-shell :where(button, [role="button"], a[class*="button"], a[class*="btn"]) {
+  min-width: 0;
+  max-width: 100%;
+  line-height: 1.15;
+  text-align: center;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.viba-app-shell :where(button, [role="button"]) > :where(span, strong) {
+  min-width: 0;
+}
+
+.viba-app-shell :where(button:not([aria-label]), a[class*="button"], a[class*="btn"]) {
+  white-space: nowrap;
+}
+
+.viba-app-shell :where(button, [role="button"], a[class*="button"], a[class*="btn"]):focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+.viba-app-shell :where(button, [role="button"], a[class*="button"], a[class*="btn"]):disabled {
+  cursor: not-allowed;
+  opacity: .58;
+}
+
+/* Cards and panels receive a consistent professional surface. */
+.viba-app-content :where([class*="rounded-xl"], [class*="rounded-2xl"])[class*="border"] {
+  box-shadow: 0 18px 50px rgba(2, 6, 23, .08);
+}
+
+.dark .viba-app-content :where([class*="rounded-xl"], [class*="rounded-2xl"])[class*="border"] {
+  box-shadow: 0 18px 50px rgba(2, 6, 23, .24);
+}
+
+.viba-app-content :where(input, textarea, select) {
+  max-width: 100%;
+}
+
+.viba-app-content textarea {
+  resize: vertical;
+}
+
+.viba-app-content img {
+  max-width: 100%;
+}
+
+/* Long URLs, repository names and tokens must never escape cards. */
+.viba-app-content :where(a[href^="http"], [data-long-value]) {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Shared empty-state treatment allows the production illustrations to remain visible. */
+.viba-empty-state-art {
+  width: clamp(104px, 15vw, 170px);
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 18px 32px rgba(79, 70, 229, .16));
+}
+
+@media (max-width: 900px) {
+  .viba-app-context-art {
+    top: 76px;
+    right: -72px;
+    width: 220px;
+    opacity: .055;
+  }
+
+  .viba-app-background-pattern {
+    background-size: 170px auto;
+    opacity: .04;
+  }
+}
+
+@media (max-width: 640px) {
+  .viba-app-context-art {
+    display: none;
+  }
+
+  .viba-app-content :where(h1) {
+    text-wrap: balance;
+  }
+
+  .viba-app-shell :where(button, [role="button"], a[class*="button"], a[class*="btn"]) {
+    min-height: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viba-app-shell *,
+  .viba-app-shell *::before,
+  .viba-app-shell *::after {
+    scroll-behavior: auto !important;
+  }
+}
