@@ -18,7 +18,7 @@ import {
   Unplug,
   Zap,
 } from "lucide-react";
-import { assetUrl, agents, execution, type AssetRef } from "@/lib/assets";
+import { assetUrl, agents, execution, hero, type AssetRef } from "@/lib/assets";
 import { useAuth, useLogout } from "@/hooks/useAuth";
 import CinematicNeuralCanvas from "@/components/CinematicNeuralCanvas";
 import "./home-cinematic.css";
@@ -116,7 +116,7 @@ function BrainNetwork({ scene, incident }: { scene: Scene; incident: Incident })
       </svg>
       <div className="viba-brain-shell">
         <div className="viba-brain-halo" />
-        <div className="viba-brain-core"><img src={`${import.meta.env.BASE_URL}viba-brain-logo.svg`} alt="VIBA orchestration brain" /><div className="viba-core-scan" /><div className="viba-core-flare" /></div>
+        <div className="viba-brain-core"><img src={assetUrl(hero.brain)} width={hero.brain.width} height={hero.brain.height} alt="VIBA orchestration brain" /><div className="viba-core-scan" /><div className="viba-core-flare" /></div>
         <div className="viba-core-caption"><span>V.I.B.A.</span><small>{scene === "complete" ? "VERIFIED" : isBusy ? "ORCHESTRATING" : "READY"}</small></div>
       </div>
       {NODES.map((node, index) => {

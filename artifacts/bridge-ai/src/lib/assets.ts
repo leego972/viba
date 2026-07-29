@@ -151,6 +151,7 @@ export const hero = {
   builtForImpact: asset("/assets/hero/built-for-impact.webp", 138, 146),
   endlessPossibilities: asset("/assets/hero/endless-possibilities.webp", 291, 222),
   limitlessPlatform: asset("/assets/hero/limitless-platform.webp", 494, 392),
+  brain: asset("/assets/hero/viba-brain-hero.webp", 1254, 1254),
 } as const;
 
 // ── Backgrounds, patterns, gradients, overlays and effects ─────────────
