@@ -10,10 +10,11 @@
 @media(max-width:720px){.viba-cinematic-nav{min-height:82px!important}.viba-cinematic-nav .viba-brand-lockup{gap:11px!important}.viba-cinematic-nav .viba-brand-lockup img{width:64px!important;height:64px!important;flex-basis:64px}.viba-cinematic-nav .viba-brand-lockup strong{font-size:1.15rem!important}.viba-cinematic-nav .viba-brand-lockup span{font-size:.68rem!important}.viba-nav-primary{font-size:.78rem!important}}
 
 /* Header cleanup: no wordmark text, bigger logo, compact non-wrapping CTA */
-.viba-cinematic-nav{min-height:84px!important;height:auto!important}
-.viba-cinematic-nav .viba-brand-lockup{gap:12px!important}
-.viba-cinematic-nav .viba-brand-lockup img{width:64px!important;height:64px!important;flex:0 0 64px!important}
+.viba-cinematic-nav{min-height:100px!important;height:auto!important}
+.viba-cinematic-nav .viba-brand-lockup{gap:14px!important}
+.viba-cinematic-nav .viba-brand-lockup img{width:96px!important;height:96px!important;flex:0 0 96px!important;filter:drop-shadow(0 0 22px rgba(83,231,255,.72)) drop-shadow(0 0 48px rgba(126,92,255,.38))!important}
 .viba-nav-tagline{font-size:.72rem!important;font-weight:800!important;letter-spacing:.2em!important;text-transform:uppercase!important;color:#d8e3ff!important;white-space:nowrap!important}
+.viba-nav-actions{margin-left:auto!important}
 .viba-nav-primary{height:36px!important;padding:0 14px!important;font-size:.72rem!important;white-space:nowrap!important;gap:6px!important}
 .viba-nav-primary svg{width:12px!important;flex:0 0 auto!important}
 @media(max-width:720px){
