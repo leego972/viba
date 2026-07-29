@@ -188,7 +188,7 @@ export default function CinematicHome() {
   return (
     <div className="viba-cinematic-page viba-concise-home">
       <header className="viba-cinematic-nav">
-        <Link href="/" className="viba-brand-lockup" aria-label="VIBA home"><img src={`${import.meta.env.BASE_URL}viba-brain-logo.svg`} alt="" /><div><strong>V.I.B.A.</strong><span>All as One</span></div></Link>
+        <Link href="/" className="viba-brand-lockup" aria-label="VIBA home"><img src={`${import.meta.env.BASE_URL}viba-brain-logo.svg`} alt="VIBA" /><span className="viba-nav-tagline">All as One</span></Link>
         <nav><a href="#audit">Repository audit</a><Link href="/pricing">Pricing</Link></nav>
         <div className="viba-nav-actions">{isAuthenticated ? <button className="viba-nav-link" onClick={() => void logout()}>Sign out</button> : <Link href="/login" className="viba-nav-link">Sign in</Link>}<Link href={isAuthenticated ? "/dashboard" : "/signup"} className="viba-nav-primary">{isAuthenticated ? "Dashboard" : "Enter VIBA"}<ArrowRight /></Link></div>
       </header>
