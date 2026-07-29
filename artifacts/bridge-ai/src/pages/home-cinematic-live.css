@@ -1,9 +1,23 @@
 /* The current concise landing page does not render the legacy live-panel classes.
-   This file now owns the cinematic centrepiece layering. */
+   This file owns the cinematic centrepiece layering and header brand sizing. */
+
+/* Primary VIBA header logo: deliberately larger on desktop and mobile. */
+.viba-cinematic-nav .viba-brand-lockup > img {
+  width: 78px !important;
+  height: 78px !important;
+  max-width: none !important;
+  flex: 0 0 78px !important;
+  object-fit: contain !important;
+}
+
+.viba-cinematic-nav {
+  min-height: 92px !important;
+  height: 92px !important;
+}
 
 .viba-network .viba-brain-shell {
-  width: 54% !important;
-  z-index: 1 !important;
+  width: 62% !important;
+  z-index: 3 !important;
   pointer-events: none;
 }
 
@@ -16,29 +30,31 @@
 .viba-network .viba-brain-core {
   width: 100% !important;
   height: 100% !important;
-  overflow: hidden;
+  overflow: visible !important;
   border: 0 !important;
-  border-radius: 50% !important;
-  background: #02040b !important;
-  box-shadow: 0 0 54px rgba(30, 143, 255, .34), 0 0 105px rgba(79, 74, 255, .2) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
 .viba-network .viba-brain-core img {
-  display: block;
+  display: block !important;
+  visibility: visible !important;
   width: 100% !important;
   height: 100% !important;
-  object-fit: cover !important;
-  opacity: .92;
-  filter: saturate(1.08) contrast(1.08) drop-shadow(0 0 20px rgba(31, 161, 255, .6)) !important;
+  max-width: none !important;
+  object-fit: contain !important;
+  opacity: 1 !important;
+  filter: saturate(1.15) contrast(1.1) drop-shadow(0 0 28px rgba(31, 161, 255, .8)) !important;
   animation: viba-brain-drift 5.5s ease-in-out infinite;
 }
 
 .viba-network .viba-core-scan,
 .viba-network .viba-core-flare {
-  z-index: 2;
+  z-index: 4;
 }
 
-/* Keep every existing path, node, label and status graphic above the brain. */
+/* Background atmosphere remains behind the brain. */
 .viba-network .viba-grid,
 .viba-network .viba-aurora,
 .viba-network .viba-orbit,
@@ -46,6 +62,7 @@
   z-index: 2;
 }
 
+/* Existing orchestration lines and nodes remain above the brain. */
 .viba-network .viba-paths {
   z-index: 4 !important;
 }
@@ -67,12 +84,19 @@
 }
 
 @media (max-width: 720px) {
-  .viba-network .viba-brain-shell {
-    width: 61% !important;
+  .viba-cinematic-nav {
+    min-height: 82px !important;
+    height: 82px !important;
   }
 
-  .viba-network .viba-brain-core img {
-    opacity: .86;
+  .viba-cinematic-nav .viba-brand-lockup > img {
+    width: 68px !important;
+    height: 68px !important;
+    flex-basis: 68px !important;
+  }
+
+  .viba-network .viba-brain-shell {
+    width: 72% !important;
   }
 }
 
