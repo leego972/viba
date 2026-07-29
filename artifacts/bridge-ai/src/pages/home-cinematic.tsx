@@ -18,6 +18,7 @@ import {
   Unplug,
   Zap,
 } from "lucide-react";
+import { assetUrl, agents, execution, type AssetRef } from "@/lib/assets";
 import { useAuth, useLogout } from "@/hooks/useAuth";
 import CinematicNeuralCanvas from "@/components/CinematicNeuralCanvas";
 import "./home-cinematic.css";
@@ -69,6 +70,15 @@ const NODES: Array<{ id: NodeId; label: string; x: number; y: number }> = [
   { id: "verify", label: "Verify", x: 45, y: 91 },
 ];
 
+const NODE_ICON: Record<NodeId, AssetRef> = {
+  strategy: execution.plan,
+  research: execution.review,
+  code: agents.developer,
+  browser: agents.designer,
+  deploy: agents.deploymentAgent,
+  verify: execution.verify,
+};
+
 function isValidGithubRepo(value: string): boolean {
   return /^https?:\/\/github\.com\/[^/\s]+\/[^/\s?#]+(?:\.git)?(?:[/?#].*)?$/i.test(value.trim());
 }
@@ -112,7 +122,7 @@ function BrainNetwork({ scene, incident }: { scene: Scene; incident: Incident })
       {NODES.map((node, index) => {
         const affected = node.id === incident.affectedNode && failureActive;
         const restored = node.id === incident.affectedNode && (scene === "repair" || scene === "verify");
-        return <div key={node.id} className={`viba-agent-node ${affected ? "is-affected" : ""} ${restored ? "is-restored" : ""}`} style={{ left: `${node.x}%`, top: `${node.y}%`, animationDelay: `${index * -0.7}s` }}><div className="viba-node-ring" /><div className="viba-node-dot">{affected ? <IncidentIcon /> : restored ? <RefreshCw /> : <Sparkles />}</div><span>{node.label}</span><small>{affected ? "BLOCKED" : restored ? "RESTORED" : isBusy ? "ACTIVE" : "STANDBY"}</small></div>;
+        return <div key={node.id} className={`viba-agent-node ${affected ? "is-affected" : ""} ${restored ? "is-restored" : ""}`} style={{ left: `${node.x}%`, top: `${node.y}%`, animationDelay: `${index * -0.7}s` }}><div className="viba-node-ring" /><div className="viba-node-dot">{affected ? <IncidentIcon /> : restored ? <RefreshCw /> : <img src={assetUrl(NODE_ICON[node.id])} width={20} height={20} alt="" style={{ width: 20, height: 20, objectFit: "contain" }} />}</div><span>{node.label}</span><small>{affected ? "BLOCKED" : restored ? "RESTORED" : isBusy ? "ACTIVE" : "STANDBY"}</small></div>;
       })}
       <div className="viba-packet viba-packet-one" /><div className="viba-packet viba-packet-two" /><div className="viba-packet viba-packet-three" />
       <div className="viba-error-shock"><CircleAlert /><span>PATHWAY LOST</span></div>
