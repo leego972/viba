@@ -1,0 +1,69 @@
+/* Global VIBA identity treatment — applies across public, authenticated and mobile layouts. */
+
+:root {
+  --viba-logo-glow: drop-shadow(0 0 5px rgba(255,255,255,.95))
+    drop-shadow(0 0 14px rgba(52, 211, 255, .95))
+    drop-shadow(0 0 30px rgba(72, 90, 255, .78));
+}
+
+/* Authenticated application navbar: every internal page uses this header. */
+header.sticky a[href="/"] > img[alt="VIBA"] {
+  width: auto !important;
+  height: 66px !important;
+  max-width: 150px !important;
+  object-fit: contain !important;
+  filter: brightness(1.22) contrast(1.18) saturate(1.28) var(--viba-logo-glow) !important;
+  transform: scale(1.08);
+  transform-origin: left center;
+}
+
+/* Public landing-page header. */
+.viba-cinematic-nav .viba-brand-lockup > img[alt="VIBA"] {
+  width: auto !important;
+  height: 82px !important;
+  max-width: 190px !important;
+  object-fit: contain !important;
+  filter: brightness(1.25) contrast(1.2) saturate(1.3) var(--viba-logo-glow) !important;
+  transform: scale(1.08);
+  transform-origin: left center;
+}
+
+/* Public and legal-page footers. */
+.viba-cinematic-footer .viba-brand-lockup > img,
+footer img[alt="VIBA"] {
+  width: auto !important;
+  height: 76px !important;
+  max-width: 180px !important;
+  flex-basis: auto !important;
+  object-fit: contain !important;
+  filter: brightness(1.2) contrast(1.18) saturate(1.25) var(--viba-logo-glow) !important;
+}
+
+/* Shared brain artwork used on the landing page and internal content pages. */
+img[alt="VIBA orchestration brain"],
+img[alt="VIBA electric blue orchestration brain"] {
+  opacity: 1 !important;
+  filter: brightness(1.24) contrast(1.2) saturate(1.32)
+    drop-shadow(0 0 8px rgba(255,255,255,.72))
+    drop-shadow(0 0 28px rgba(42,190,255,.95))
+    drop-shadow(0 0 64px rgba(67,79,255,.72)) !important;
+}
+
+@media (max-width: 720px) {
+  header.sticky a[href="/"] > img[alt="VIBA"] {
+    height: 54px !important;
+    max-width: 118px !important;
+    transform: scale(1.04);
+  }
+
+  .viba-cinematic-nav .viba-brand-lockup > img[alt="VIBA"] {
+    height: 68px !important;
+    max-width: 150px !important;
+  }
+
+  .viba-cinematic-footer .viba-brand-lockup > img,
+  footer img[alt="VIBA"] {
+    height: 64px !important;
+    max-width: 145px !important;
+  }
+}
