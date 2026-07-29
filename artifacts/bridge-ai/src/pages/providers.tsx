@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, Eye, EyeOff, KeyRound, Loader2, Pencil, Plus, RefreshCw, ServerCog, Trash2, XCircle } from "lucide-react";
+import { assetUrl, providerCategoryIcon } from "@/lib/assets";
 
 type ProviderStatus = "not_configured" | "configured" | "disabled";
 
@@ -39,21 +40,21 @@ type TestState = {
 const CANONICAL_PROVIDER: Record<string, string> = { gemini: "google" };
 const INFRA_IDS = new Set(["github", "railway", "render", "vercel", "vastai"]);
 
-const PROVIDER_MARKS: Record<string, { icon?: string; fallback: string; glow: string }> = {
-  openai: { icon: "https://cdn.simpleicons.org/openai/FFFFFF", fallback: "OA", glow: "from-emerald-400/25 to-cyan-400/10" },
-  anthropic: { icon: "https://cdn.simpleicons.org/anthropic/FFFFFF", fallback: "CL", glow: "from-orange-400/25 to-amber-300/10" },
-  google: { icon: "https://cdn.simpleicons.org/googlegemini/FFFFFF", fallback: "G", glow: "from-blue-400/25 to-fuchsia-400/10" },
-  groq: { icon: "https://cdn.simpleicons.org/groq/FFFFFF", fallback: "GQ", glow: "from-rose-400/25 to-orange-400/10" },
+const PROVIDER_MARKS: Record<string, { fallback: string; glow: string }> = {
+  openai: { fallback: "OA", glow: "from-emerald-400/25 to-cyan-400/10" },
+  anthropic: { fallback: "CL", glow: "from-orange-400/25 to-amber-300/10" },
+  google: { fallback: "G", glow: "from-blue-400/25 to-fuchsia-400/10" },
+  groq: { fallback: "GQ", glow: "from-rose-400/25 to-orange-400/10" },
   venice: { fallback: "V", glow: "from-violet-400/30 to-fuchsia-400/10" },
-  mistral: { icon: "https://cdn.simpleicons.org/mistralai/FFFFFF", fallback: "M", glow: "from-orange-400/25 to-red-400/10" },
+  mistral: { fallback: "M", glow: "from-orange-400/25 to-red-400/10" },
   deepseek: { fallback: "DS", glow: "from-blue-500/30 to-cyan-400/10" },
-  perplexity: { icon: "https://cdn.simpleicons.org/perplexity/FFFFFF", fallback: "P", glow: "from-cyan-400/25 to-teal-400/10" },
-  ollama: { icon: "https://cdn.simpleicons.org/ollama/FFFFFF", fallback: "O", glow: "from-zinc-300/20 to-zinc-500/10" },
+  perplexity: { fallback: "P", glow: "from-cyan-400/25 to-teal-400/10" },
+  ollama: { fallback: "O", glow: "from-zinc-300/20 to-zinc-500/10" },
   custom: { fallback: "AI", glow: "from-indigo-400/25 to-purple-400/10" },
-  github: { icon: "https://cdn.simpleicons.org/github/FFFFFF", fallback: "GH", glow: "from-zinc-300/20 to-zinc-500/10" },
-  railway: { icon: "https://cdn.simpleicons.org/railway/FFFFFF", fallback: "RW", glow: "from-violet-400/25 to-indigo-500/10" },
-  render: { icon: "https://cdn.simpleicons.org/render/FFFFFF", fallback: "R", glow: "from-cyan-400/25 to-emerald-400/10" },
-  vercel: { icon: "https://cdn.simpleicons.org/vercel/FFFFFF", fallback: "▲", glow: "from-zinc-200/20 to-zinc-500/10" },
+  github: { fallback: "GH", glow: "from-zinc-300/20 to-zinc-500/10" },
+  railway: { fallback: "RW", glow: "from-violet-400/25 to-indigo-500/10" },
+  render: { fallback: "R", glow: "from-cyan-400/25 to-emerald-400/10" },
+  vercel: { fallback: "▲", glow: "from-zinc-200/20 to-zinc-500/10" },
   vastai: { fallback: "VAST", glow: "from-red-400/25 to-orange-400/10" },
 };
 
@@ -91,13 +92,20 @@ function mergeProviders(input: Omit<ProviderInfo, "sourceIds">[]): ProviderInfo[
 
 function ProviderMark({ id, size = "large" }: { id: string; size?: "small" | "large" }) {
   const mark = PROVIDER_MARKS[id] ?? { fallback: id.slice(0, 2).toUpperCase(), glow: "from-indigo-400/25 to-cyan-400/10" };
+  const categoryIcon = providerCategoryIcon[id];
   const classes = size === "large" ? "h-14 w-14 rounded-2xl" : "h-11 w-11 rounded-xl";
   return (
     <div className={`${classes} relative shrink-0 overflow-hidden border border-white/10 bg-gradient-to-br ${mark.glow} shadow-[0_0_30px_rgba(90,120,255,0.12)]`}>
       <div className="absolute inset-0 bg-[#080b14]/78" />
-      <div className="relative flex h-full w-full items-center justify-center p-3">
-        {mark.icon ? (
-          <img src={mark.icon} alt="" className="h-full w-full object-contain" onError={(event) => { event.currentTarget.style.display = "none"; }} />
+      <div className="relative flex h-full w-full items-center justify-center p-2.5">
+        {categoryIcon ? (
+          <img
+            src={assetUrl(categoryIcon)}
+            width={categoryIcon.width}
+            height={categoryIcon.height}
+            alt=""
+            className="h-full w-full object-contain"
+          />
         ) : (
           <span className="text-xs font-black tracking-tight text-white">{mark.fallback}</span>
         )}

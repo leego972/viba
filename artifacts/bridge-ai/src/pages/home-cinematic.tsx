@@ -222,7 +222,26 @@ export default function CinematicHome() {
         <section className="viba-final-cta viba-concise-cta"><div className="viba-final-orb"><img src={`${import.meta.env.BASE_URL}viba-brain-logo.svg`} alt="" /></div><div><span>READY TO CHECK YOUR BUILD?</span><h2>Paste the repository.<br />Get the production verdict.</h2></div><a href="#audit" className="viba-final-button">Start the audit<ArrowRight /></a></section>
       </main>
 
-      <footer className="viba-cinematic-footer"><div className="viba-brand-lockup"><img src={`${import.meta.env.BASE_URL}viba-brain-logo.svg`} alt="" /><div><strong>V.I.B.A.</strong><span>All as One</span></div></div><p>AI orchestration for production-ready software.</p><div><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link></div></footer>
+      <footer className="viba-cinematic-footer">
+        <div className="viba-brand-lockup">
+          <img src={`${import.meta.env.BASE_URL}viba-brain-logo.svg`} alt="VIBA" width={44} height={44} />
+          <div><strong>V.I.B.A.</strong><span>ALL AS ONE</span></div>
+        </div>
+        <p>AI orchestration for production-ready software.</p>
+        <div
+          style={{ display: "flex", alignItems: "center", gap: 8, color: "#687086", fontSize: 11 }}
+        >
+          <span>Powered by</span>
+          <img
+            src={`${import.meta.env.BASE_URL}leego-logo-transparent.png`}
+            alt="Leego"
+            width={20}
+            height={20}
+            style={{ width: 20, height: 20, objectFit: "contain" }}
+          />
+        </div>
+        <div><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link></div>
+      </footer>
     </div>
   );
 }

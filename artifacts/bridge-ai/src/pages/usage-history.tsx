@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle, XCircle, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { assetUrl, empty } from "@/lib/assets";
 
 interface UsageEvent {
   id: number;
@@ -223,6 +224,13 @@ export default function UsageHistoryPage() {
               <div className="py-16 text-center text-sm text-muted-foreground">Loading usage history…</div>
             ) : !data?.events.length ? (
               <div className="py-16 text-center">
+                <img
+                  src={assetUrl(empty.noAnalytics)}
+                  width={empty.noAnalytics.width}
+                  height={empty.noAnalytics.height}
+                  alt=""
+                  className="mx-auto mb-3 h-12 w-12 object-contain opacity-80"
+                />
                 <p className="text-sm text-muted-foreground">No tasks found for the selected filters.</p>
                 {month !== "all" && (
                   <Button size="sm" variant="ghost" className="mt-2 text-xs" onClick={() => setMonth("all")}>
