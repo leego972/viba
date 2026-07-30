@@ -3,7 +3,6 @@ import { Link, useLocation } from "wouter";
 import {
   ArrowRight,
   Check,
-  ChevronRight,
   CircleAlert,
   CloudOff,
   GitBranch,
@@ -53,12 +52,6 @@ const INCIDENTS: Incident[] = [
   { id: "credential-failure", label: "Credential rejected", shortLabel: "AUTH FAILED", detail: "A deployment credential was rejected before release.", resolution: "Secure fallback credential verified", affectedNode: "deploy", icon: KeyRound },
   { id: "dependency-conflict", label: "Dependency conflict", shortLabel: "BUILD BLOCKED", detail: "Required packages returned incompatible versions.", resolution: "Compatible dependency path selected and tested", affectedNode: "code", icon: Unplug },
   { id: "source-offline", label: "Source unavailable", shortLabel: "SOURCE LOST", detail: "A primary evidence source became unavailable mid-task.", resolution: "Evidence recovered from an independent source", affectedNode: "research", icon: CloudOff },
-];
-
-const EXAMPLES = [
-  "Find the production blockers and rank them by severity",
-  "Test the frontend, API and deployment flow",
-  "Review the codebase and repair the highest-risk errors",
 ];
 
 const NODES: Array<{ id: NodeId; label: string; x: number; y: number }> = [
@@ -163,14 +156,17 @@ export default function CinematicHome() {
 
   function runDemo(event: FormEvent) {
     event.preventDefault();
-    const objective = instruction.trim() || EXAMPLES[0];
+    const objective = instruction.trim();
     const repo = repoUrl.trim();
     if (!repo || !isValidGithubRepo(repo)) {
       setRepoError("Enter a valid GitHub repository URL.");
       return;
     }
+    if (!objective) {
+      setRepoError("Tell V.I.B.A. what you need.");
+      return;
+    }
     setRepoError("");
-    setInstruction(objective);
     setManualRun(true);
     setSceneIndex(1);
     const params = new URLSearchParams({ goal: objective, repo });
@@ -203,9 +199,8 @@ export default function CinematicHome() {
             <form className="viba-command viba-concise-command" onSubmit={runDemo}>
               <div className="viba-command-top"><SquareTerminal /><span>Run a production preflight</span><kbd>LIVE AUDIT</kbd></div>
               <div className="viba-repo-entry"><input value={repoUrl} onChange={(event) => { setRepoUrl(event.target.value); if (repoError) setRepoError(""); }} placeholder="https://github.com/owner/repository" aria-label="GitHub repository URL" autoCapitalize="none" autoCorrect="off" /></div>
-              <div className="viba-command-entry"><input value={instruction} onChange={(event) => setInstruction(event.target.value)} placeholder="What should V.I.B.A. verify?" aria-label="Audit objective" /><button type="submit"><Play />Audit repository</button></div>
+              <div className="viba-command-entry"><input value={instruction} onChange={(event) => { setInstruction(event.target.value); if (repoError) setRepoError(""); }} placeholder="What do you need?" aria-label="What do you need?" /><button type="submit"><Play />Audit repository</button></div>
               {repoError && <div className="viba-repo-error" role="alert">{repoError}</div>}
-              <div className="viba-example-row">{EXAMPLES.map((example) => <button type="button" key={example} onClick={() => setInstruction(example)}>{example}<ChevronRight /></button>)}</div>
             </form>
 
             <div className="viba-proof-row"><span><ShieldCheck />Evidence-based findings</span><span><Network />Multi-agent review</span><span><Zap />One release verdict</span></div>
@@ -238,17 +233,9 @@ export default function CinematicHome() {
           <div><strong>V.I.B.A.</strong><span>ALL AS ONE</span></div>
         </div>
         <p>AI orchestration for production-ready software.</p>
-        <div
-          style={{ display: "flex", alignItems: "center", gap: 8, color: "#687086", fontSize: 11 }}
-        >
+        <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#687086", fontSize: 11 }}>
           <span>Powered by</span>
-          <img
-            src={`${import.meta.env.BASE_URL}leego-logo-transparent.png`}
-            alt="Leego"
-            width={20}
-            height={20}
-            style={{ width: 20, height: 20, objectFit: "contain" }}
-          />
+          <img src={`${import.meta.env.BASE_URL}leego-logo-transparent.png`} alt="Leego" width={20} height={20} style={{ width: 20, height: 20, objectFit: "contain" }} />
         </div>
         <div><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link></div>
       </footer>
