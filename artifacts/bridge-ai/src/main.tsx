@@ -8,6 +8,7 @@ import "./viba-global-branding.css";
 import "./ui-declutter.css";
 import "./scenario-demo-placement.css";
 import "./brain-motion-safety.css";
+import "./footer-leego-only.css";
 
 const rootEl = document.getElementById("root");
 if (!rootEl) {
