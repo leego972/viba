@@ -1,0 +1,46 @@
+/* Keep the interactive failure scenarios visually attached to the live orchestration demo. */
+.viba-concise-home main {
+  display: flex;
+  flex-direction: column;
+}
+
+.viba-concise-home .viba-concise-hero {
+  order: 1;
+}
+
+.viba-concise-home .viba-incident-visual {
+  order: 2;
+  margin-top: 0;
+  margin-bottom: 20px;
+  border-top: 1px solid rgba(122, 166, 255, 0.12);
+}
+
+.viba-concise-home .viba-compact-proof {
+  order: 3;
+}
+
+.viba-concise-home .viba-final-cta {
+  order: 4;
+}
+
+.viba-incident-button {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.viba-incident-button:focus-visible {
+  outline: 2px solid #65e8ff;
+  outline-offset: 3px;
+}
+
+@media (max-width: 720px) {
+  .viba-concise-home .viba-incident-visual {
+    margin-top: -4px;
+    margin-bottom: 18px;
+    padding-top: 20px;
+  }
+
+  .viba-concise-home .viba-compact-proof {
+    margin-top: 0;
+  }
+}
