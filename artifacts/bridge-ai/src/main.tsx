@@ -7,6 +7,7 @@ import "./footer-mobile-fix.css";
 import "./viba-global-branding.css";
 import "./ui-declutter.css";
 import "./scenario-demo-placement.css";
+import "./brain-motion-safety.css";
 
 const rootEl = document.getElementById("root");
 if (!rootEl) {
