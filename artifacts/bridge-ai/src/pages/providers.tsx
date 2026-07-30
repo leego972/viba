@@ -118,9 +118,12 @@ export default function ProvidersPage() {
     if (next) await loadKeys(provider);
   }
 
-  async function saveKey(provider: ProviderInfo) {
+  async function saveKey(provider: ProviderInfo): Promise<void> {
     const name = keyName.trim(); const value = keyValue.trim();
-    if (!name || !value) return toast({ title: "Name and value are required", variant: "destructive" });
+    if (!name || !value) {
+      toast({ title: "Name and value are required", variant: "destructive" });
+      return;
+    }
     setSaving(true);
     try {
       const response = await fetch(`/api/providers/${provider.id}/keys`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: name, key: value }) });
@@ -132,15 +135,21 @@ export default function ProvidersPage() {
     finally { setSaving(false); }
   }
 
-  async function deleteKey(provider: ProviderInfo, key: SavedKey) {
+  async function deleteKey(provider: ProviderInfo, key: SavedKey): Promise<void> {
     const response = await fetch(`/api/providers/${key.providerId}/keys/${encodeURIComponent(key.label)}`, { method: "DELETE", credentials: "include" });
-    if (!response.ok) return toast({ title: "Could not delete API key", variant: "destructive" });
+    if (!response.ok) {
+      toast({ title: "Could not delete API key", variant: "destructive" });
+      return;
+    }
     await Promise.all([loadKeys(provider), fetchProviders()]);
   }
 
-  async function setEnabled(provider: ProviderInfo, enabled: boolean) {
+  async function setEnabled(provider: ProviderInfo, enabled: boolean): Promise<void> {
     const response = await fetch(`/api/providers/${provider.id}`, { method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled }) });
-    if (!response.ok) return toast({ title: "Provider state was not updated", variant: "destructive" });
+    if (!response.ok) {
+      toast({ title: "Provider state was not updated", variant: "destructive" });
+      return;
+    }
     await fetchProviders();
   }
 
