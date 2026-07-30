@@ -140,7 +140,7 @@ export default function CinematicHome() {
         <section className="viba-compact-proof" aria-label="Audit stages"><div><strong>01</strong><span>Inspect</span><small>Code, routes, auth and configuration</small></div><div><strong>02</strong><span>Test</span><small>Build, typecheck, UI and deployment</small></div><div><strong>03</strong><span>Prioritise</span><small>Critical blockers first, with file evidence</small></div><div><strong>04</strong><span>Decide</span><small>One clear release-readiness verdict</small></div></section>
         <section className="viba-final-cta viba-concise-cta"><div className="viba-final-orb"><img src={`${import.meta.env.BASE_URL}viba-brain-logo.svg`} alt="" /></div><div><span>READY TO CHECK YOUR BUILD?</span><h2>Paste the repository.<br />Get the production verdict.</h2></div><a href="#audit" className="viba-final-button">Start the audit<ArrowRight /></a></section>
       </main>
-      <footer className="viba-cinematic-footer viba-footer-leego-only"><img src={`${import.meta.env.BASE_URL}leego-logo-transparent.png`} alt="Leego" className="viba-footer-leego-logo" /><div className="viba-footer-legal"><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link></div></footer>
+      <footer className="viba-cinematic-footer"><Link href="/" className="viba-brand-lockup" aria-label="VIBA home"><img src={`${import.meta.env.BASE_URL}viba-logo.png`} alt="VIBA" /></Link><div className="viba-footer-legal"><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link></div></footer>
     </div>
   );
 }
