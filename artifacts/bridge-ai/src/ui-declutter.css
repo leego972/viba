@@ -1,0 +1,315 @@
+/* Final interface guardrails: prevent clipped text, horizontal overflow and dense layouts. */
+
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+:where(main, section, article, aside, header, footer, nav, form, fieldset, div) {
+  min-width: 0;
+}
+
+:where(h1, h2, h3, h4, h5, h6, p, li, label, legend, span, strong, small, a, button, td, th) {
+  overflow-wrap: anywhere;
+}
+
+:where(input, textarea, select, button) {
+  max-width: 100%;
+}
+
+:where(img, svg, video, canvas, iframe) {
+  max-width: 100%;
+}
+
+:where(table) {
+  max-width: 100%;
+}
+
+/* Allow wide data views to scroll rather than crop. */
+:where([class*="table"], [class*="Table"], [role="table"], .overflow-table) {
+  min-width: 0;
+}
+
+:where([class*="card"], [class*="Card"], [class*="panel"], [class*="Panel"]) {
+  min-width: 0;
+}
+
+/* Preserve readable controls without forcing text outside buttons. */
+button,
+[role="button"] {
+  line-height: 1.2;
+}
+
+button > span,
+[role="button"] > span {
+  min-width: 0;
+}
+
+/* Landing page: clearer hierarchy, less visual density and safer responsive behavior. */
+.viba-cinematic-page {
+  overflow-x: clip;
+  overflow-y: visible;
+}
+
+.viba-cinematic-nav {
+  width: 100%;
+  min-width: 0;
+}
+
+.viba-brand-lockup,
+.viba-nav-actions,
+.viba-cinematic-nav nav {
+  min-width: 0;
+}
+
+.viba-nav-tagline {
+  white-space: nowrap;
+}
+
+.viba-concise-hero {
+  min-height: auto;
+}
+
+.viba-hero-copy,
+.viba-hero-stage,
+.viba-command,
+.viba-command-entry,
+.viba-repo-entry {
+  min-width: 0;
+}
+
+.viba-command-entry button,
+.viba-nav-primary,
+.viba-final-button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.viba-proof-row {
+  row-gap: 10px;
+}
+
+.viba-compact-proof > div,
+.viba-incident-button,
+.viba-stage-status > div {
+  min-width: 0;
+}
+
+.viba-stage-status strong,
+.viba-stage-status span,
+.viba-incident-button strong,
+.viba-compact-proof small {
+  overflow-wrap: anywhere;
+}
+
+/* De-emphasise secondary landing-page sections so the audit form remains primary. */
+.viba-compact-proof,
+.viba-incident-visual,
+.viba-final-cta {
+  content-visibility: auto;
+  contain-intrinsic-size: 1px 560px;
+}
+
+@media (max-width: 1100px) {
+  .viba-cinematic-nav {
+    gap: 18px;
+    padding-inline: 24px;
+  }
+
+  .viba-cinematic-nav nav {
+    gap: 18px;
+  }
+
+  .viba-hero {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 36px;
+    padding-top: 52px;
+  }
+
+  .viba-hero-copy {
+    max-width: 780px;
+  }
+
+  .viba-hero-stage {
+    width: min(100%, 900px);
+    margin-inline: auto;
+  }
+}
+
+@media (max-width: 760px) {
+  .viba-cinematic-nav {
+    height: auto;
+    min-height: 64px;
+    padding: 10px 16px;
+    gap: 10px;
+  }
+
+  .viba-cinematic-nav nav {
+    display: none;
+  }
+
+  .viba-brand-lockup img {
+    width: 38px;
+    height: 38px;
+  }
+
+  .viba-nav-actions {
+    margin-left: auto;
+    gap: 8px;
+  }
+
+  .viba-nav-link {
+    display: none;
+  }
+
+  .viba-nav-primary {
+    min-height: 40px;
+    height: auto;
+    padding: 9px 12px;
+  }
+
+  .viba-hero {
+    padding: 38px 16px 36px;
+    gap: 28px;
+  }
+
+  .viba-hero h1 {
+    margin-block: 18px 16px;
+    font-size: clamp(42px, 13vw, 64px);
+    line-height: .98;
+  }
+
+  .viba-hero-lead {
+    font-size: 16px;
+    line-height: 1.58;
+  }
+
+  .viba-command {
+    margin-top: 24px;
+    border-radius: 15px;
+  }
+
+  .viba-command-top {
+    height: auto;
+    min-height: 42px;
+    flex-wrap: wrap;
+    padding-block: 10px;
+  }
+
+  .viba-command-top kbd {
+    margin-left: auto;
+  }
+
+  .viba-command-entry {
+    flex-direction: column;
+    padding: 12px;
+  }
+
+  .viba-command-entry input,
+  .viba-command-entry button,
+  .viba-repo-entry input {
+    width: 100%;
+  }
+
+  .viba-command-entry button {
+    justify-content: center;
+  }
+
+  .viba-proof-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 9px;
+  }
+
+  .viba-network {
+    border-radius: 20px;
+  }
+
+  .viba-stage-status {
+    position: relative;
+    inset: auto;
+    margin-top: 12px;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .viba-compact-proof {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .viba-incident-visual {
+    padding-inline: 16px;
+  }
+
+  .viba-incident-deck {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .viba-final-cta {
+    margin-inline: 16px;
+    padding: 26px 20px;
+    gap: 18px;
+  }
+
+  .viba-cinematic-footer {
+    align-items: flex-start;
+    gap: 18px;
+    padding-inline: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .viba-nav-tagline,
+  .viba-command-top kbd,
+  .viba-stage-status .viba-scene-count {
+    display: none;
+  }
+
+  .viba-brand-lockup {
+    gap: 6px;
+  }
+
+  .viba-hero h1 br,
+  .viba-final-cta h2 br {
+    display: none;
+  }
+
+  .viba-compact-proof,
+  .viba-incident-deck {
+    grid-template-columns: 1fr;
+  }
+
+  .viba-incident-visual {
+    margin-top: 36px;
+  }
+
+  .viba-final-cta {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .viba-final-button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* Internal app: keep crowded headers and action bars usable on narrow screens. */
+@media (max-width: 900px) {
+  :where(.page-header, .section-header, .toolbar, .action-bar, [class*="Toolbar"], [class*="Actions"]) {
+    flex-wrap: wrap;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viba-cinematic-page *,
+  .viba-cinematic-page *::before,
+  .viba-cinematic-page *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}
