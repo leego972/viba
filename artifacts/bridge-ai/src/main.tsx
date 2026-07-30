@@ -5,6 +5,7 @@ import "./mobile-visibility.css";
 import "./production-ui-polish.css";
 import "./footer-mobile-fix.css";
 import "./viba-global-branding.css";
+import "./ui-declutter.css";
 
 const rootEl = document.getElementById("root");
 if (!rootEl) {
