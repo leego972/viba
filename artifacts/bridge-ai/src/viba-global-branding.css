@@ -39,16 +39,6 @@ footer img[alt="VIBA"] {
   filter: brightness(1.2) contrast(1.18) saturate(1.25) var(--viba-logo-glow) !important;
 }
 
-/* Shared brain artwork used on the landing page and internal content pages. */
-img[alt="VIBA orchestration brain"],
-img[alt="VIBA electric blue orchestration brain"] {
-  opacity: 1 !important;
-  filter: brightness(1.24) contrast(1.2) saturate(1.32)
-    drop-shadow(0 0 8px rgba(255,255,255,.72))
-    drop-shadow(0 0 28px rgba(42,190,255,.95))
-    drop-shadow(0 0 64px rgba(67,79,255,.72)) !important;
-}
-
 @media (max-width: 720px) {
   header.sticky a[href="/"] > img[alt="VIBA"] {
     height: 54px !important;

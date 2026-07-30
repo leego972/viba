@@ -26,15 +26,17 @@
   .viba-nav-primary svg{width:10px!important}
 }
 
-/* Real brain photo: let it dominate, drop the abstract blob container */
-.viba-brain-shell{width:50%!important;transform:translate(-50%,-50%)!important}
-.viba-brain-core{width:100%!important;height:100%!important;border:0!important;background:none!important;box-shadow:none!important;border-radius:0!important}
-.viba-brain-core img{width:100%!important;height:100%!important;object-fit:contain!important}
-.viba-brain-halo{background:radial-gradient(circle,rgba(83,180,255,.28),rgba(83,140,255,.1) 42%,transparent 72%)!important}
+/* Real brain photo: the dominant centrepiece, not a decorative blob.
+   Selectors match/exceed .viba-network .viba-X specificity used elsewhere
+   in this stylesheet stack so there is exactly one source of truth. */
+.viba-network .viba-brain-shell{width:78%!important;transform:translate(-50%,-50%)!important;z-index:3!important;pointer-events:none}
+.viba-network .viba-brain-core{width:100%!important;height:100%!important;overflow:visible!important;border:0!important;background:none!important;box-shadow:none!important;border-radius:0!important}
+.viba-network .viba-brain-core img{display:block!important;visibility:visible!important;width:100%!important;height:100%!important;max-width:none!important;object-fit:contain!important;opacity:1!important}
+.viba-network .viba-brain-halo{inset:-12%!important;background:radial-gradient(circle,rgba(20,151,255,.34),rgba(73,64,255,.13) 48%,transparent 74%)!important;filter:blur(8px)}
 
 /* State-driven brain colour: purple=build, blue=think/plan, yellow=research,
    red=error/connection-loss, flashing red=critical, green=complete/success */
-.viba-network .viba-brain-core img{filter:hue-rotate(0deg) saturate(1) drop-shadow(0 0 42px rgba(83,170,255,.55)) drop-shadow(0 0 95px rgba(83,140,255,.3));transition:filter .6s ease}
+.viba-network .viba-brain-core img{filter:hue-rotate(0deg) saturate(1) drop-shadow(0 0 42px rgba(83,170,255,.55)) drop-shadow(0 0 95px rgba(83,140,255,.3));animation:viba-brain-drift 5.5s ease-in-out infinite;transition:filter .6s ease}
 .viba-scene-idle .viba-brain-core img,.viba-scene-planning .viba-brain-core img{filter:hue-rotate(0deg) saturate(1) drop-shadow(0 0 42px rgba(83,170,255,.55)) drop-shadow(0 0 95px rgba(83,140,255,.3))}
 .viba-scene-repair .viba-brain-core img{filter:hue-rotate(70deg) saturate(1.15) drop-shadow(0 0 42px rgba(150,90,255,.6)) drop-shadow(0 0 95px rgba(150,90,255,.32))}
 .viba-scene-verify .viba-brain-core img{filter:hue-rotate(210deg) saturate(1.1) drop-shadow(0 0 42px rgba(230,200,60,.55)) drop-shadow(0 0 95px rgba(230,200,60,.3))}
@@ -45,8 +47,9 @@
   50%{filter:hue-rotate(155deg) saturate(1.6) brightness(1.45) drop-shadow(0 0 60px rgba(255,70,90,.85)) drop-shadow(0 0 130px rgba(255,70,90,.5))}
 }
 @media(max-width:720px){
-  .viba-brain-shell{width:74%!important}
+  .viba-network .viba-brain-shell{width:90%!important}
 }
 @media(prefers-reduced-motion:reduce){
+  .viba-network .viba-brain-core img{animation:none!important}
   .viba-scene-disconnect .viba-brain-core img{animation:none!important;filter:hue-rotate(155deg) saturate(1.3) drop-shadow(0 0 50px rgba(255,70,90,.7)) drop-shadow(0 0 100px rgba(255,70,90,.4))!important}
 }

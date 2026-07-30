@@ -1,5 +1,5 @@
 /* The current concise landing page does not render the legacy live-panel classes.
-   This file owns the cinematic centrepiece layering and header brand sizing. */
+   Centrepiece brain sizing/layering lives in home-cinematic-repo.css (loads last). */
 
 /* Primary VIBA header logo: deliberately larger on desktop and mobile. */
 .viba-cinematic-nav .viba-brand-lockup > img {
@@ -13,40 +13,6 @@
 .viba-cinematic-nav {
   min-height: 92px !important;
   height: 92px !important;
-}
-
-.viba-network .viba-brain-shell {
-  width: 62% !important;
-  z-index: 3 !important;
-  pointer-events: none;
-}
-
-.viba-network .viba-brain-halo {
-  inset: -12% !important;
-  background: radial-gradient(circle, rgba(20, 151, 255, .34), rgba(73, 64, 255, .13) 48%, transparent 74%) !important;
-  filter: blur(8px);
-}
-
-.viba-network .viba-brain-core {
-  width: 100% !important;
-  height: 100% !important;
-  overflow: visible !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
-}
-
-.viba-network .viba-brain-core img {
-  display: block !important;
-  visibility: visible !important;
-  width: 100% !important;
-  height: 100% !important;
-  max-width: none !important;
-  object-fit: contain !important;
-  opacity: 1 !important;
-  filter: saturate(1.15) contrast(1.1) drop-shadow(0 0 28px rgba(31, 161, 255, .8)) !important;
-  animation: viba-brain-drift 5.5s ease-in-out infinite;
 }
 
 .viba-network .viba-core-scan,
@@ -94,14 +60,10 @@
     height: 68px !important;
     flex-basis: 68px !important;
   }
-
-  .viba-network .viba-brain-shell {
-    width: 72% !important;
-  }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .viba-network .viba-brain-core img {
-    animation: none !important;
+@media(prefers-reduced-motion:reduce) {
+  .viba-cinematic-nav .viba-brand-lockup > img {
+    transform: none !important;
   }
 }

@@ -2,10 +2,8 @@ import type { IconType } from "react-icons";
 import {
   SiAnthropic,
   SiCloudflare,
-  SiDeepseek,
   SiGithub,
   SiGooglegemini,
-  SiGroq,
   SiMistralai,
   SiOllama,
   SiOpenai,
@@ -17,7 +15,7 @@ import {
   SiSupabase,
   SiVercel,
 } from "react-icons/si";
-import { BrainCircuit, Cloud, PlugZap, Server } from "lucide-react";
+import { BrainCircuit, Cloud, PlugZap, Server, Zap } from "lucide-react";
 
 const BRAND_ICONS: Record<string, IconType> = {
   openai: SiOpenai,
@@ -25,9 +23,7 @@ const BRAND_ICONS: Record<string, IconType> = {
   claude: SiAnthropic,
   google: SiGooglegemini,
   gemini: SiGooglegemini,
-  groq: SiGroq,
   mistral: SiMistralai,
-  deepseek: SiDeepseek,
   perplexity: SiPerplexity,
   ollama: SiOllama,
   github: SiGithub,
@@ -48,6 +44,8 @@ const FALLBACKS: Record<string, IconType> = {
   together: BrainCircuit,
   fireworks: BrainCircuit,
   neon: Cloud,
+  groq: Zap,
+  deepseek: BrainCircuit,
 };
 
 export function ProviderBrandIcon({
