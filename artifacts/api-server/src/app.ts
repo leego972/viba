@@ -18,15 +18,15 @@ import adminRouter from "./routes/admin";
 import { pool } from "@workspace/db";
 import { getBillingStatus, isStripeConfigured } from "./lib/billing";
 import { sendLowCreditsWarningIfNeeded } from "./lib/billingEmail";
-import { buildMockAdapter } from "./lib/agentFactory";
 import { isAdminUserId } from "./lib/adminAccess";
-import type { Agent } from "@workspace/db";
 import { generateLlmsTxt, generateLlmsFullTxt, getPublicPages, generateStructuredData } from "./engines/seoEngine";
 import { deployRoutes } from "./modules/deploy/deploy.routes";
 import { githubDeployRoutes } from "./modules/deploy/github.routes";
 
 const PgStore = connectPgSimple(session);
 const app: Express = express();
+const isProd = process.env.NODE_ENV === "production";
+
 app.set("trust proxy", 1);
 app.use(securityHeaders());
 
@@ -35,30 +35,38 @@ const PRODUCTION_ALLOWED_ORIGINS = new Set([
   "https://www.viba.guru",
   ...(process.env.CORS_ALLOWED_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean),
 ]);
+const configuredPublicOrigin = (process.env.PUBLIC_ORIGIN ?? process.env.PUBLIC_SITE_URL ?? "").replace(/\/$/, "");
+if (configuredPublicOrigin) PRODUCTION_ALLOWED_ORIGINS.add(configuredPublicOrigin);
 
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
-    if (process.env.NODE_ENV !== "production") return callback(null, true);
+    if (!isProd) return callback(null, true);
     if (PRODUCTION_ALLOWED_ORIGINS.has(origin)) return callback(null, true);
     callback(new Error(`CORS: origin "${origin}" is not permitted`));
   },
   credentials: true,
 }));
 
-const isProd = process.env.NODE_ENV === "production";
 const sessionSecret = process.env.SESSION_SECRET;
 if (isProd && (!sessionSecret || sessionSecret === "dev-secret-change-me-in-production")) {
   throw new Error("SESSION_SECRET must be set to a strong random value in production. Refusing to start.");
 }
 
+const crossSiteCookies = process.env.CROSS_SITE_COOKIES === "true";
 app.use(session({
   store: new PgStore({ pool, tableName: "user_sessions", createTableIfMissing: false }),
   name: "viba.sid",
   secret: sessionSecret ?? "dev-secret-change-me-in-production",
   resave: false,
   saveUninitialized: false,
-  cookie: { httpOnly: true, secure: isProd, sameSite: isProd ? "none" : "lax", maxAge: 30 * 24 * 60 * 60 * 1000 },
+  rolling: true,
+  cookie: {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: crossSiteCookies ? "none" : "lax",
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+  },
 }));
 
 const apiLimiter = createRateLimiter({ windowMs: 60_000, max: 300, message: "Too many requests. Please slow down." });
@@ -83,15 +91,30 @@ app.use(pinoHttp({
   },
 }));
 
-app.use(
-  express.json({
-    limit: "512kb",
-    verify: (req, _res, buf) => {
-      (req as unknown as Record<string, unknown>).rawBody = buf;
-    },
-  }),
-);
+app.use(express.json({
+  limit: "512kb",
+  verify: (req, _res, buf) => {
+    (req as unknown as Record<string, unknown>).rawBody = buf;
+  },
+}));
 app.use(express.urlencoded({ limit: "512kb", extended: true }));
+
+app.use((req, res, next) => {
+  if (!isProd || ["GET", "HEAD", "OPTIONS"].includes(req.method)) {
+    next();
+    return;
+  }
+  if (req.path === "/api/stripe/webhook" || req.path === "/api/deploy/github/webhook") {
+    next();
+    return;
+  }
+  const origin = req.get("origin");
+  if (!origin || PRODUCTION_ALLOWED_ORIGINS.has(origin)) {
+    next();
+    return;
+  }
+  res.status(403).json({ error: "origin_not_allowed" });
+});
 
 app.post("/api/sessions/:id/run-next", agentLimiter);
 app.post("/api/sessions/:id/run-full", agentLimiter);
@@ -99,11 +122,10 @@ app.use("/api/admin", apiLimiter, requireAdmin, adminRouter);
 
 app.get("/api/healthz", (_req, res) => { res.json({ status: "ok" }); });
 
-app.use("/api/deploy/github", apiLimiter, githubDeployRoutes);
-app.use("/api/deploy", apiLimiter, accessTokenMiddleware, deployRoutes);
+app.use("/api/deploy/github", apiLimiter, requireSession, githubDeployRoutes);
+app.use("/api/deploy", apiLimiter, accessTokenMiddleware, requireSession, deployRoutes);
 
 app.use(["/api/sessions/:id/run-next", "/api/sessions/:id/run-full"], async (req, res, next): Promise<void> => {
-  if (req.session?.bypass) { next(); return; }
   const userId = req.session?.userId;
   if (!userId) { next(); return; }
   if (await isAdminUserId(userId)) { next(); return; }
@@ -118,7 +140,7 @@ app.use(["/api/sessions/:id/run-next", "/api/sessions/:id/run-full"], async (req
     sendLowCreditsWarningIfNeeded(userId).catch(() => {});
     next();
   } catch (err) {
-    if (process.env.NODE_ENV === "production") {
+    if (isProd) {
       logger.error({ err }, "Credit gate error in production — failing closed (503)");
       res.status(503).json({ error: "billing_unavailable", message: "Billing service is temporarily unavailable. Please try again in a moment." });
       return;
@@ -163,38 +185,18 @@ app.post("/api/sessions/:id/reopen", apiLimiter, requireSession, async (req, res
   }
 });
 
-app.post("/api/sessions/:id/safety-vote", apiLimiter, requireSession, async (req, res): Promise<void> => {
-  const sessionId = parseInt(String(req.params.id ?? ""), 10);
-  const userId = req.session?.userId;
-  if (!sessionId) { res.status(400).json({ error: "invalid session id" }); return; }
-  try {
-    const { rows: sessionRows } = await pool.query<{ goal: string }>("SELECT goal FROM sessions WHERE id = $1 AND user_id = $2", [sessionId, userId]);
-    const sessionRow = sessionRows[0];
-    if (!sessionRow) { res.status(403).json({ error: "forbidden", message: "Session not found or you do not own it." }); return; }
-    const safetyAgent = { id: -1, provider: "openai", name: "VIBA Safety", role: "Safety Reviewer", canUseTools: false } as unknown as Agent;
-    const adapter = buildMockAdapter(safetyAgent);
-    const vote = await adapter.evaluateTask(sessionRow.goal, []);
-    res.json({ passed: vote.accepted, vote });
-  } catch (err) {
-    req.log?.error?.({ err }, "safety-vote error");
-    res.status(500).json({ error: "Internal server error" });
-  }
+app.post("/api/sessions/:id/safety-vote", apiLimiter, requireSession, (_req, res): void => {
+  res.status(501).json({
+    error: "safety_vote_unavailable",
+    message: "Safety voting is disabled until it is backed by verified live-provider evaluations. No simulated vote will be presented as real.",
+  });
 });
 
-// ── Public SEO / crawler routes (no auth required) ───────────────────────────
-
-const SITE_URL = process.env["PUBLIC_SITE_URL"] ?? "https://viba.guru";
+const SITE_URL = configuredPublicOrigin || "https://viba.guru";
 
 app.get("/robots.txt", (_req, res) => {
   res.setHeader("Content-Type", "text/plain");
-  res.send([
-    "User-agent: *",
-    "Allow: /",
-    "Disallow: /api/",
-    "Disallow: /admin",
-    "",
-    `Sitemap: ${SITE_URL}/sitemap.xml`,
-  ].join("\n"));
+  res.send(["User-agent: *", "Allow: /", "Disallow: /api/", "Disallow: /admin", "", `Sitemap: ${SITE_URL}/sitemap.xml`].join("\n"));
 });
 
 app.get("/sitemap.xml", (_req, res) => {
@@ -205,13 +207,9 @@ app.get("/sitemap.xml", (_req, res) => {
     { loc: `${SITE_URL}/pricing`, priority: "0.9", changefreq: "monthly" },
     { loc: `${SITE_URL}/signup`, priority: "0.8", changefreq: "monthly" },
     { loc: `${SITE_URL}/login`, priority: "0.6", changefreq: "yearly" },
-    ...pages
-      .filter(p => !["/", "/pricing"].includes(p.path))
-      .map(p => ({ loc: `${SITE_URL}${p.path}`, priority: "0.7", changefreq: "weekly" })),
+    ...pages.filter(p => !["/", "/pricing"].includes(p.path)).map(p => ({ loc: `${SITE_URL}${p.path}`, priority: "0.7", changefreq: "weekly" })),
   ];
-  const urlEntries = urls.map(u =>
-    `  <url>\n    <loc>${u.loc}</loc>\n    <lastmod>${now}</lastmod>\n    <changefreq>${u.changefreq}</changefreq>\n    <priority>${u.priority}</priority>\n  </url>`
-  ).join("\n");
+  const urlEntries = urls.map(u => `  <url>\n    <loc>${u.loc}</loc>\n    <lastmod>${now}</lastmod>\n    <changefreq>${u.changefreq}</changefreq>\n    <priority>${u.priority}</priority>\n  </url>`).join("\n");
   res.setHeader("Content-Type", "application/xml");
   res.send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urlEntries}\n</urlset>`);
 });
@@ -230,11 +228,7 @@ app.get("/structured-data.json", (_req, res) => {
   res.json(generateStructuredData());
 });
 
-// ── Auth routes (exempt from ACCESS_TOKEN gate — login/register must always work) ──
 app.use("/api", apiLimiter, authRouter);
-
-// ── Auth-gated API routes ─────────────────────────────────────────────────────
-
 app.use("/api", apiLimiter, accessTokenMiddleware, requireSession, router);
 
 const distDir = path.resolve(process.cwd(), "artifacts", "bridge-ai", "dist", "public");
