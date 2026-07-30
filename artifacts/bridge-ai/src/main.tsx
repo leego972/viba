@@ -5,17 +5,11 @@ import "./mobile-visibility.css";
 import "./production-ui-polish.css";
 import "./footer-mobile-fix.css";
 import "./viba-global-branding.css";
-import { ElevenLabsSettingsField } from "./components/ElevenLabsSettingsField";
 
 const rootEl = document.getElementById("root");
 if (!rootEl) {
   document.body.innerHTML =
     '<div style="padding:2rem;font-family:sans-serif;color:#c00">VIBA failed to mount — root element not found. Please refresh or contact support.</div>';
 } else {
-  createRoot(rootEl).render(
-    <>
-      <App />
-      <ElevenLabsSettingsField />
-    </>,
-  );
+  createRoot(rootEl).render(<App />);
 }
