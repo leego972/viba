@@ -1,0 +1,50 @@
+.viba-brain-core,
+.viba-brain-core img,
+.viba-brain-halo,
+.viba-core-scan,
+.viba-core-flare,
+.viba-orbit,
+.viba-packet,
+.viba-error-shock,
+.viba-repair-label,
+.viba-complete-wave,
+.viba-agent-node,
+.viba-node-ring,
+.viba-line,
+.viba-paths {
+  animation: none !important;
+  transform: none !important;
+}
+
+.viba-core-scan,
+.viba-core-flare,
+.viba-packet,
+.viba-complete-wave {
+  display: none !important;
+}
+
+.viba-brain-core img {
+  opacity: 1 !important;
+  filter: none !important;
+}
+
+.viba-brain-halo,
+.viba-network,
+.viba-agent-node,
+.viba-node-dot,
+.viba-line {
+  transition: background-color 8s ease, border-color 8s ease, box-shadow 8s ease, color 8s ease, opacity 8s ease, stroke 8s ease !important;
+}
+
+.viba-neural-canvas {
+  image-rendering: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viba-network *,
+  .viba-network *::before,
+  .viba-network *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
