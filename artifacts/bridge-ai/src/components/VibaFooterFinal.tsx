@@ -8,24 +8,18 @@ export default function VibaFooterFinal() {
     <footer className="w-full border-t border-white/10 bg-black text-white">
       <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
         <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-          {/* Leego logo — kept exactly where it currently appears */}
-          <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/15 bg-white/5 p-1.5">
-              <img
-                src={assetUrl(brand.leegoLogo)}
-                width={brand.leegoLogo.width}
-                height={brand.leegoLogo.height}
-                alt="Leego"
-                className="h-full w-full object-contain"
-              />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-white">Powered by Leego</p>
-              <p className="text-xs text-white/45">Technology partner</p>
-            </div>
+          {/* Standard VIBA logo */}
+          <div className="flex items-center">
+            <img
+              src={assetUrl(brand.vibaLogo)}
+              width={brand.vibaLogo.width}
+              height={brand.vibaLogo.height}
+              alt="VIBA"
+              className="h-9 w-auto object-contain"
+            />
           </div>
 
-          {/* VIBA logo lockup with tagline beneath, in place of a text-only label */}
+          {/* VIBA logo lockup with tagline beneath */}
           <div className="flex flex-col items-center gap-1.5">
             <img
               src={assetUrl(brand.vibaLogo)}
