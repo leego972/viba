@@ -67,6 +67,27 @@ dd,
   max-width: 100%;
 }
 
+/*
+ * The live home page uses an inline footer rather than the shared footer
+ * component. Replace only its footer Leego mark with the standard VIBA logo.
+ * The separate Leego lightbox/logo elsewhere is intentionally untouched.
+ */
+footer button img[alt="Leego"] {
+  content: url("/viba-logo.png");
+  height: 2.25rem !important;
+  width: auto !important;
+  object-fit: contain;
+}
+
+footer button:has(img[alt="Leego"]) {
+  pointer-events: none;
+  opacity: 1 !important;
+}
+
+footer button:has(img[alt="Leego"]) > span {
+  display: none;
+}
+
 @media (max-width: 900px) {
   /* The onboarding dialog sits above this dashboard canvas. Keep the underlying
      empty-state copy hidden on compact viewports so it cannot extend beyond the
