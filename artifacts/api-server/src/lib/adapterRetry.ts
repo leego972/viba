@@ -1,4 +1,5 @@
 import type { AgentAdapter, AgentTaskInput, AgentTaskResult } from "./adapters/interface";
+import { GroqAdapter } from "./adapters/groq";
 import { isPermanentError } from "./adapters/errors";
 import { logger } from "./logger";
 
@@ -39,9 +40,7 @@ export function validateCircuitBreakerEnv(): void {
   if (threshold !== undefined && threshold !== "") {
     const parsed = parseInt(threshold, 10);
     if (!Number.isFinite(parsed) || parsed <= 0) {
-      throw new Error(
-        `Invalid CIRCUIT_OPEN_THRESHOLD: "${threshold}" — must be a positive integer (e.g. 5)`
-      );
+      throw new Error(`Invalid CIRCUIT_OPEN_THRESHOLD: "${threshold}" — must be a positive integer (e.g. 5)`);
     }
   }
 
@@ -49,9 +48,7 @@ export function validateCircuitBreakerEnv(): void {
   if (timeoutMs !== undefined && timeoutMs !== "") {
     const parsed = parseInt(timeoutMs, 10);
     if (!Number.isFinite(parsed) || parsed <= 0) {
-      throw new Error(
-        `Invalid CIRCUIT_TIMEOUT_MS: "${timeoutMs}" — must be a positive integer in milliseconds (e.g. 300000)`
-      );
+      throw new Error(`Invalid CIRCUIT_TIMEOUT_MS: "${timeoutMs}" — must be a positive integer in milliseconds (e.g. 300000)`);
     }
   }
 }
@@ -98,10 +95,7 @@ async function refreshCircuitFromDb(provider: string, now = Date.now()): Promise
       import("@workspace/db"),
       import("drizzle-orm"),
     ]);
-    const rows = await db
-      .select()
-      .from(circuitStateTable)
-      .where(eq(circuitStateTable.provider, provider));
+    const rows = await db.select().from(circuitStateTable).where(eq(circuitStateTable.provider, provider));
 
     if (rows.length > 0) {
       const row = rows[0]!;
@@ -261,37 +255,93 @@ function explainProviderError(error: unknown): { raw: string; cause: string } {
   const raw = error instanceof Error ? error.message : String(error);
   const lower = raw.toLowerCase();
 
-  if (
-    lower.includes("quota") ||
-    lower.includes("billing") ||
-    lower.includes("insufficient") ||
-    lower.includes("credit balance")
-  ) {
-    return { raw, cause: "The provider reports a billing, quota, or API-credit problem." };
+  if (lower.includes("quota") || lower.includes("billing") || lower.includes("insufficient") || lower.includes("credit balance")) {
+    return { raw, cause: "billing, quota, or API credits" };
   }
-  if (
-    lower.includes("401") ||
-    lower.includes("403") ||
-    lower.includes("api key") ||
-    lower.includes("unauthorized") ||
-    lower.includes("authentication")
-  ) {
-    return { raw, cause: "The API key is missing, invalid, expired, or lacks permission." };
+  if (lower.includes("401") || lower.includes("403") || lower.includes("api key") || lower.includes("unauthorized") || lower.includes("authentication")) {
+    return { raw, cause: "API-key authentication or permission" };
   }
   if (lower.includes("model") || lower.includes("not found")) {
-    return { raw, cause: "The configured model may be unavailable to this API account." };
+    return { raw, cause: "model availability or access" };
   }
   if (lower.includes("rate") || lower.includes("429")) {
-    return { raw, cause: "The provider rate limit was reached." };
+    return { raw, cause: "provider rate limit" };
   }
-  return { raw, cause: "The live provider request failed." };
+  return { raw, cause: "live provider request" };
 }
 
-/**
- * Executes only real provider calls. Simulation fallback is deliberately disabled.
- * A failed provider call is audited and thrown back to the session layer so the UI
- * can stop and display the actual API, billing, key, model, or rate-limit error.
- */
+function getPlatformGroqKey(): string {
+  return process.env.GROQ_API_KEY?.trim() ?? "";
+}
+
+async function continueWithPlatformGroq(
+  taskInput: AgentTaskInput,
+  context: RetryContext,
+  primaryMessage: string,
+  logAudit: LogAuditFn,
+): Promise<AdapterRetryResult> {
+  const key = getPlatformGroqKey();
+  if (key.length <= 10) {
+    const message = `${primaryMessage} VIBA could not continue because its permanent GROQ_API_KEY is missing.`;
+    await logAudit("adapter_error", message, {
+      taskId: context.taskId,
+      agentId: context.agentId,
+      provider: context.provider,
+      fallbackProvider: "groq",
+      fallbackFailed: true,
+    });
+    throw new Error(message);
+  }
+
+  try {
+    const fallback = new GroqAdapter(
+      `${String(context.agentId)}-groq-fallback`,
+      "VIBA Groq",
+      taskInput.systemRole || "Fallback Agent",
+      key,
+      process.env.GROQ_MODEL,
+      taskInput.canUseTools,
+      process.env.RAILWAY_TOKEN,
+      process.env.GITHUB_TOKEN,
+    );
+    const result = await fallback.runTask(taskInput);
+    const notice = `⚠️ ${primaryMessage} VIBA continued this task with its built-in Groq connection. No simulation was used.`;
+
+    await recordSuccess("groq");
+    await logAudit("adapter_fallback", notice, {
+      taskId: context.taskId,
+      agentId: context.agentId,
+      provider: context.provider,
+      fallbackProvider: "groq",
+      fallbackModel: fallback.model,
+      simulated: false,
+    });
+
+    return {
+      result: { ...result, messageText: `${notice}\n\n${result.messageText}` },
+      usedFallback: false,
+      usedModel: fallback.model,
+      successAttempt: null,
+    };
+  } catch (groqError) {
+    await recordFailure("groq");
+    const groqExplanation = explainProviderError(groqError);
+    const message =
+      `${primaryMessage} VIBA also failed to continue with its built-in Groq connection ` +
+      `because of ${groqExplanation.cause}. Groq error: ${groqExplanation.raw}`;
+
+    await logAudit("adapter_error", message, {
+      taskId: context.taskId,
+      agentId: context.agentId,
+      provider: context.provider,
+      fallbackProvider: "groq",
+      fallbackFailed: true,
+      fallbackError: groqExplanation.raw,
+    });
+    throw new Error(message);
+  }
+}
+
 export async function runAdapterWithRetry(params: {
   buildLiveAdapter: () => Promise<AgentAdapter>;
   buildFallbackAdapter: () => AgentAdapter;
@@ -301,25 +351,24 @@ export async function runAdapterWithRetry(params: {
   context: RetryContext;
 }): Promise<AdapterRetryResult> {
   const { buildLiveAdapter, taskInput, retryDelayMs, logAudit, context } = params;
+  const provider = context.provider.toLowerCase();
 
-  await refreshCircuitFromDb(context.provider);
+  await refreshCircuitFromDb(provider);
 
-  if (isCircuitOpen(context.provider)) {
-    const message =
-      `Live ${context.provider} connection is temporarily disabled after repeated API failures. ` +
-      "Check the API key, billing/credits, model access, and provider status, then reset the circuit and retry.";
-    logger.warn(
-      { provider: context.provider, agentId: context.agentId },
-      "Circuit breaker open — blocking task; simulation is disabled"
-    );
-    await logAudit("adapter_error", message, {
+  if (isCircuitOpen(provider)) {
+    const primaryMessage =
+      `${context.provider} API issue: its circuit is temporarily open after repeated failures. ` +
+      "Check its API key, billing/credits, model access, or provider status.";
+
+    await logAudit("adapter_error", primaryMessage, {
       taskId: context.taskId,
       agentId: context.agentId,
       provider: context.provider,
-      permanent: false,
       circuitOpen: true,
     });
-    throw new Error(message);
+
+    if (provider === "groq") throw new Error(primaryMessage);
+    return continueWithPlatformGroq(taskInput, context, primaryMessage, logAudit);
   }
 
   let result: AgentTaskResult | null = null;
@@ -334,7 +383,7 @@ export async function runAdapterWithRetry(params: {
       result = await adapter.runTask(taskInput);
       lastLiveError = null;
       successAttempt = attempt;
-      await recordSuccess(context.provider);
+      await recordSuccess(provider);
       break;
     } catch (err) {
       lastLiveError = err;
@@ -344,42 +393,26 @@ export async function runAdapterWithRetry(params: {
   }
 
   if (successAttempt !== null && result !== null) {
-    await logAudit(
-      "adapter_success",
-      `Live ${context.provider} call succeeded on attempt ${successAttempt} for task "${context.taskTitle}"`,
-      {
-        taskId: context.taskId,
-        agentId: context.agentId,
-        provider: context.provider,
-        attempt: successAttempt,
-      }
-    );
-    return {
-      result,
-      usedFallback: false,
-      usedModel,
-      successAttempt,
-    };
-  }
-
-  await recordFailure(context.provider);
-  const permanent = isPermanentError(lastLiveError);
-  const explanation = explainProviderError(lastLiveError);
-  const message =
-    `Live ${context.provider} call failed. ${explanation.cause} ` +
-    `Provider error: ${explanation.raw}`;
-
-  logger.error(
-    {
-      err: lastLiveError,
+    await logAudit("adapter_success", `Live ${context.provider} call succeeded on attempt ${successAttempt} for task "${context.taskTitle}"`, {
+      taskId: context.taskId,
       agentId: context.agentId,
       provider: context.provider,
-      taskId: context.taskId,
-      permanent,
-    },
-    "Live adapter failed — blocking task; simulation is disabled"
+      attempt: successAttempt,
+    });
+    return { result, usedFallback: false, usedModel, successAttempt };
+  }
+
+  await recordFailure(provider);
+  const permanent = isPermanentError(lastLiveError);
+  const explanation = explainProviderError(lastLiveError);
+  const primaryMessage =
+    `${context.provider} API issue: ${explanation.cause}. Provider error: ${explanation.raw}`;
+
+  logger.error(
+    { err: lastLiveError, agentId: context.agentId, provider: context.provider, taskId: context.taskId, permanent },
+    provider === "groq" ? "Groq live adapter failed" : "Primary live adapter failed — continuing with Groq"
   );
-  await logAudit("adapter_error", message, {
+  await logAudit("adapter_error", primaryMessage, {
     taskId: context.taskId,
     agentId: context.agentId,
     provider: context.provider,
@@ -387,5 +420,6 @@ export async function runAdapterWithRetry(params: {
     error: explanation.raw,
   });
 
-  throw new Error(message);
+  if (provider === "groq") throw new Error(primaryMessage);
+  return continueWithPlatformGroq(taskInput, context, primaryMessage, logAudit);
 }
