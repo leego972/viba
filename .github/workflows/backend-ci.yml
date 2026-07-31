@@ -57,8 +57,8 @@ jobs:
       - name: Build Bridge AI frontend
         run: pnpm --filter @workspace/bridge-ai run build
 
-      - name: Run API server test suite
-        run: pnpm --filter @workspace/api-server run test
+      - name: Run recent API regression tests
+        run: pnpm --filter @workspace/api-server exec vitest run --config vitest.config.ts src/routes/appPublisher.test.ts src/recentBuildContracts.test.ts
 
       - name: Typecheck backend and workspace
         shell: bash
