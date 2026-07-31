@@ -137,5 +137,20 @@ export function createSemanticCacheKey(input: {
 }
 
 export function requiresExplicitApproval(action: string): boolean {
-  return /(?:delete|destroy|purge|rollback|deploy|publish|send|charge|purchase|write[_ -]?env|dns[_ -]?(?:write|delete)|merge)/i.test(action);
+  const normalized = action.trim().toLowerCase();
+  const mutatingActions = [
+    /\bdelete\b/,
+    /\bdestroy\b/,
+    /\bpurge\b/,
+    /\brollback\b/,
+    /\bdeploy\b/,
+    /\bpublish\b/,
+    /\bsend\b/,
+    /\bcharge\b/,
+    /\bpurchase\b/,
+    /\bmerge\b/,
+    /\bwrite[_ -]?env\b/,
+    /\bdns[_ -]?(?:write|delete)\b/,
+  ];
+  return mutatingActions.some((pattern) => pattern.test(normalized));
 }
