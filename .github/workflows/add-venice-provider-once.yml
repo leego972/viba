@@ -1,0 +1,50 @@
+name: Add Venice provider once
+
+on:
+  push:
+    paths:
+      - .github/workflows/add-venice-provider-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add Venice to the new-session UI
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("artifacts/bridge-ai/src/pages/new-session.tsx")
+          text = path.read_text()
+
+          provider_anchor = '  { id: "mistral",    name: "Mistral",    provider: "Mistral",    defaultRole: "Builder",       color: "bg-blue-500",    apiKey: "MISTRAL_API_KEY",    canUseTools: true  },\n'
+          venice_row = '  { id: "venice",     name: "Venice AI",  provider: "Venice",     defaultRole: "Researcher",    color: "bg-cyan-500",    apiKey: "VENICE_API_KEY",     canUseTools: false },\n'
+          if venice_row not in text:
+              if provider_anchor not in text:
+                  raise SystemExit("Provider anchor not found")
+              text = text.replace(provider_anchor, provider_anchor + venice_row, 1)
+
+          keys_old = 'const providers = ["openai", "anthropic", "google", "perplexity", "groq", "manus", "replit", "railway"];'
+          keys_new = 'const providers = ["openai", "anthropic", "google", "perplexity", "groq", "venice", "manus", "replit", "railway"];'
+          if keys_old in text:
+              text = text.replace(keys_old, keys_new, 1)
+          elif keys_new not in text:
+              raise SystemExit("Credential provider list anchor not found")
+
+          path.write_text(text)
+
+      - name: Remove one-time workflow and commit
+        run: |
+          rm .github/workflows/add-venice-provider-once.yml
+          git config user.name "VIBA automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add artifacts/bridge-ai/src/pages/new-session.tsx .github/workflows/add-venice-provider-once.yml
+          git commit -m "Add Venice AI to session provider UI"
+          git push
