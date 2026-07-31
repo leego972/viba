@@ -16,7 +16,7 @@
 # passed (e.g. an urgent security bugfix), you can add it to the
 # `minimumReleaseAgeExclude` allowlist below. Only consider doing this for
 # packages released by trusted organizations with an impeccable security
-# posture (e.g. Replit packsges, react from Meta, typescript from Microsoft). Even then,
+# posture (e.g. Replit packages, React from Meta, TypeScript from Microsoft). Even then,
 # remove the exclusion once the 1-day window has passed.
 #
 # Example:
@@ -25,7 +25,7 @@
 #     - typescript
 #
 # ============================================================================
-minimumReleaseAge: 0
+minimumReleaseAge: 1440
 
 minimumReleaseAgeExclude:
   # Exclude @replit scoped packages from the minimum release age check.
