@@ -1,361 +1,223 @@
-/**
- * VIBA Deployment Providers API
- *
- * GET  /api/deployment-providers
- * GET  /api/deployment-providers/:providerId
- * POST /api/deployment-providers/:providerId/readiness
- * POST /api/deployment-providers/:providerId/plan
- * POST /api/deployment-providers/:providerId/dry-run
- * POST /api/deployment-providers/:providerId/execute
- *
- * Security rules:
- * - GET endpoints return provider metadata only — no credentials
- * - readiness checks credential presence by metadata only — no raw values
- * - execute refuses if: adapter is placeholder, safe-build missing, approval
- *   missing, credential missing, or action is unsupported
- * - rawValuesReturned: false on every response
- */
 import { Router } from "express";
 import { pool } from "@workspace/db";
 import {
   getAllProviders,
   getProviderById,
-  canExecuteProvider,
-  isPlaceholderProvider,
   generateManualGuide,
 } from "../lib/deploymentProviderRegistry";
+import {
+  getRenderConnectorStatus,
+  triggerRenderDeploy,
+  getRenderEnvVarKeys,
+  applyRenderEnvVars,
+  getRenderLogs,
+  getRenderDeploys,
+} from "../lib/renderConnector";
+import {
+  getRailwayConnectorStatus,
+  applyRailwayVariablesViaApi,
+} from "../lib/railwayConnector";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
-// ─── Auth helper ──────────────────────────────────────────────────────────────
+type Action = "deploy" | "env_write" | "env_read" | "status" | "logs" | "domain_check";
 
 function uid(req: { session?: { userId?: number } }): number {
   return typeof req.session?.userId === "number" ? req.session.userId : 0;
 }
 
-// ─── Credential metadata check (never returns raw values) ─────────────────────
-
-async function checkCredentialMetadata(
-  userId: number,
-  credentialProvider: string,
-): Promise<{ hasCredential: boolean; credentialLabel: string | null; expiresAt: string | null }> {
+async function hasCredential(userId: number, provider: string): Promise<boolean> {
   try {
-    const { rows } = await pool.query<Record<string, unknown>>(
-      `SELECT label, (metadata->>'expiresAt') as expires_at
-         FROM viba_credentials
-        WHERE user_id=$1 AND provider=$2
-        ORDER BY created_at DESC LIMIT 1`,
-      [userId, credentialProvider],
+    const { rows } = await pool.query(
+      `SELECT 1 FROM viba_credentials WHERE user_id=$1 AND provider=$2 LIMIT 1`,
+      [userId, provider],
     );
-    if (!rows[0]) return { hasCredential: false, credentialLabel: null, expiresAt: null };
-    return {
-      hasCredential: true,
-      credentialLabel: rows[0]["label"] ? String(rows[0]["label"]) : null,
-      expiresAt: rows[0]["expires_at"] ? String(rows[0]["expires_at"]) : null,
-    };
+    return rows.length > 0;
   } catch {
-    return { hasCredential: false, credentialLabel: null, expiresAt: null };
+    return false;
   }
 }
 
-// ─── GET /api/deployment-providers ───────────────────────────────────────────
+function executableActions(providerId: string): Action[] {
+  if (providerId === "render") return ["deploy", "env_write", "env_read", "status", "logs"];
+  if (providerId === "railway") return ["env_write", "status"];
+  return [];
+}
+
+function verifiedProvider(providerId: string) {
+  const provider = getProviderById(providerId);
+  if (!provider) return null;
+  const actions = executableActions(providerId);
+  return {
+    ...provider,
+    supportsEnvRead: actions.includes("env_read"),
+    supportsEnvWrite: actions.includes("env_write"),
+    supportsDeployStatus: actions.includes("status"),
+    supportsDeployTrigger: actions.includes("deploy"),
+    supportsDomainCheck: actions.includes("domain_check"),
+    supportsLogs: actions.includes("logs"),
+    canExecute: actions.length > 0,
+    executableActions: actions,
+    verification: "runtime_function_mapped",
+    rawValuesReturned: false,
+  };
+}
 
 router.get("/api/deployment-providers", (_req, res): void => {
-  const providers = getAllProviders().map((p) => ({
-    providerId: p.providerId,
-    label: p.label,
-    description: p.description,
-    docsStatus: p.docsStatus,
-    manualGuideAvailable: p.manualGuideAvailable,
-    supportsDeployTrigger: p.supportsDeployTrigger,
-    requiresSafeBuildBeforeDeploy: p.requiresSafeBuildBeforeDeploy,
-    requiresApprovalForDeploy: p.requiresApprovalForDeploy,
-    requiredCredentialKinds: p.requiredCredentialKinds,
-    detectionHints: p.detectionHints,
-    canExecute: canExecuteProvider(p.providerId),
-    rawValuesReturned: false,
-  }));
-  res.json({ ok: true, providers, count: providers.length, rawValuesReturned: false });
+  const providers = getAllProviders().map((p) => verifiedProvider(p.providerId)).filter(Boolean);
+  res.json({ ok: true, providers, count: providers.length, verifiedRegistry: true, rawValuesReturned: false });
 });
-
-// ─── GET /api/deployment-providers/:providerId ────────────────────────────────
 
 router.get("/api/deployment-providers/:providerId", (req, res): void => {
-  const pid = req.params["providerId"] as string;
-  const provider = getProviderById(pid);
-  if (!provider) {
-    res.status(404).json({ error: `Provider '${pid}' not found`, rawValuesReturned: false });
-    return;
-  }
-  res.json({
-    ok: true,
-    provider: { ...provider, rawValuesReturned: false },
-    canExecute: canExecuteProvider(pid),
-    isPlaceholder: isPlaceholderProvider(pid),
-    rawValuesReturned: false,
-  });
+  const provider = verifiedProvider(String(req.params.providerId));
+  if (!provider) { res.status(404).json({ error: "Provider not found" }); return; }
+  res.json({ ok: true, provider, rawValuesReturned: false });
 });
-
-// ─── POST /api/deployment-providers/:providerId/readiness ─────────────────────
 
 router.post("/api/deployment-providers/:providerId/readiness", async (req, res): Promise<void> => {
-  const u = uid(req);
-  if (!u) { res.status(401).json({ error: "Authentication required", rawValuesReturned: false }); return; }
-
-  const pid = req.params["providerId"] as string;
-  const provider = getProviderById(pid);
-  if (!provider) { res.status(404).json({ error: `Provider '${pid}' not found`, rawValuesReturned: false }); return; }
-
-  const credMeta = provider.credentialProvider
-    ? await checkCredentialMetadata(u, provider.credentialProvider)
-    : { hasCredential: true, credentialLabel: null, expiresAt: null };
-
-  const ready =
-    provider.docsStatus === "implemented" && credMeta.hasCredential;
-
+  const userId = uid(req);
+  if (!userId) { res.status(401).json({ error: "Authentication required" }); return; }
+  const provider = verifiedProvider(String(req.params.providerId));
+  if (!provider) { res.status(404).json({ error: "Provider not found" }); return; }
+  const credentialReady = provider.credentialProvider
+    ? await hasCredential(userId, provider.credentialProvider)
+    : true;
   const blocks: string[] = [];
-  if (provider.docsStatus !== "implemented") blocks.push(`Provider adapter is ${provider.docsStatus} — automated execution unavailable`);
-  if (!credMeta.hasCredential && provider.credentialProvider) blocks.push(`Missing vault credential for ${provider.credentialProvider}`);
-
+  if (!provider.canExecute) blocks.push("No verified runtime function is mapped for this provider");
+  if (!credentialReady) blocks.push(`Missing vault credential for ${provider.credentialProvider}`);
   res.json({
     ok: true,
-    providerId: pid,
-    providerLabel: provider.label,
-    adapterStatus: provider.docsStatus,
-    credentialStatus: {
-      hasCredential: credMeta.hasCredential,
-      credentialLabel: credMeta.credentialLabel,
-      expiresAt: credMeta.expiresAt,
-      rawValuesReturned: false,
-    },
-    isReady: ready,
-    manualGuideAvailable: provider.manualGuideAvailable,
+    providerId: provider.providerId,
+    isReady: provider.canExecute && credentialReady,
+    credentialReady,
+    executableActions: provider.executableActions,
     blocks,
+    verification: "runtime_function_mapped",
     rawValuesReturned: false,
   });
 });
 
-// ─── POST /api/deployment-providers/:providerId/plan ──────────────────────────
-
-router.post("/api/deployment-providers/:providerId/plan", async (req, res): Promise<void> => {
-  const u = uid(req);
-  if (!u) { res.status(401).json({ error: "Authentication required", rawValuesReturned: false }); return; }
-
-  const pid = req.params["providerId"] as string;
-  const provider = getProviderById(pid);
-  if (!provider) { res.status(404).json({ error: `Provider '${pid}' not found`, rawValuesReturned: false }); return; }
-
-  const { appName = "app", publicUrl, notes } = req.body as {
-    appName?: string; publicUrl?: string; notes?: string;
-  };
-
-  const credMeta = provider.credentialProvider
-    ? await checkCredentialMetadata(u, provider.credentialProvider)
-    : { hasCredential: true, credentialLabel: null, expiresAt: null };
-
-  const steps: Array<{ step: number; action: string; requiresApproval: boolean; requiresSafeBuild: boolean; automated: boolean }> = [
-    { step: 1, action: "Run safe-build locally and confirm passing", requiresApproval: false, requiresSafeBuild: false, automated: false },
-    { step: 2, action: "Verify required credentials are in vault", requiresApproval: false, requiresSafeBuild: false, automated: true },
-    { step: 3, action: "Confirm environment variables are configured on provider dashboard", requiresApproval: true, requiresSafeBuild: false, automated: provider.supportsEnvRead },
-    { step: 4, action: "Review QA release gate — all checks must pass", requiresApproval: true, requiresSafeBuild: true, automated: false },
-    { step: 5, action: `Trigger deployment on ${provider.label}`, requiresApproval: true, requiresSafeBuild: true, automated: canExecuteProvider(pid) },
-    { step: 6, action: "Verify public URL health post-deploy", requiresApproval: false, requiresSafeBuild: false, automated: true },
-    { step: 7, action: "Run Production Ops → Check Now to confirm all checks pass", requiresApproval: false, requiresSafeBuild: false, automated: true },
-  ];
-
-  const manualGuide = !canExecuteProvider(pid)
-    ? generateManualGuide(pid, appName, publicUrl)
-    : null;
-
+router.post("/api/deployment-providers/:providerId/plan", (req, res): void => {
+  const provider = verifiedProvider(String(req.params.providerId));
+  if (!provider) { res.status(404).json({ error: "Provider not found" }); return; }
+  const appName = typeof req.body?.appName === "string" ? req.body.appName : "app";
   res.json({
     ok: true,
-    providerId: pid,
-    providerLabel: provider.label,
+    providerId: provider.providerId,
     appName,
-    adapterStatus: provider.docsStatus,
-    credentialReady: credMeta.hasCredential,
-    canAutomate: canExecuteProvider(pid),
-    manualGuideAvailable: provider.manualGuideAvailable,
-    manualGuide,
-    steps,
-    approvalRequired: provider.requiresApprovalForDeploy,
-    safeBuildRequired: provider.requiresSafeBuildBeforeDeploy,
-    notes: notes ?? null,
+    executableActions: provider.executableActions,
+    steps: [
+      "Run the real safe-build command and retain its output",
+      "Confirm provider credentials are available",
+      "Obtain owner approval",
+      provider.executableActions.length ? "Execute a mapped provider function" : "Follow the manual provider guide",
+      "Verify the provider response and public health after execution",
+    ],
+    manualGuide: provider.executableActions.length ? null : generateManualGuide(provider.providerId, appName),
     rawValuesReturned: false,
   });
 });
 
-// ─── POST /api/deployment-providers/:providerId/dry-run ──────────────────────
-
-router.post("/api/deployment-providers/:providerId/dry-run", async (req, res): Promise<void> => {
-  const u = uid(req);
-  if (!u) { res.status(401).json({ error: "Authentication required", rawValuesReturned: false }); return; }
-
-  const pid = req.params["providerId"] as string;
-  const provider = getProviderById(pid);
-  if (!provider) { res.status(404).json({ error: `Provider '${pid}' not found`, rawValuesReturned: false }); return; }
-
-  // Dry-run never mutates the provider
-  const { appName = "app", safeBuildPassed = false } = req.body as {
-    appName?: string; safeBuildPassed?: boolean;
-  };
-
-  const credMeta = provider.credentialProvider
-    ? await checkCredentialMetadata(u, provider.credentialProvider)
-    : { hasCredential: true, credentialLabel: null, expiresAt: null };
-
-  const checks = [
-    { check: "adapter_status", status: provider.docsStatus === "implemented" ? "pass" : "warn", detail: `Adapter: ${provider.docsStatus}` },
-    { check: "credential", status: credMeta.hasCredential ? "pass" : "fail", detail: credMeta.hasCredential ? `Credential found: ${credMeta.credentialLabel ?? "unnamed"}` : "No credential in vault" },
-    { check: "safe_build", status: safeBuildPassed ? "pass" : "fail", detail: safeBuildPassed ? "Safe build passed" : "Safe build not confirmed" },
-    { check: "approval_gate", status: "pending", detail: "Owner approval required before execute" },
-  ];
-
-  const allPass = checks.every((c) => c.status === "pass" || c.status === "pending");
-
+router.post("/api/deployment-providers/:providerId/dry-run", (req, res): void => {
+  const provider = verifiedProvider(String(req.params.providerId));
+  if (!provider) { res.status(404).json({ error: "Provider not found" }); return; }
+  const action = String(req.body?.action ?? "deploy") as Action;
+  const runtimeMapped = provider.executableActions.includes(action);
+  const safeBuildPassed = req.body?.safeBuildPassed === true;
+  const approved = req.body?.approved === true;
   res.json({
     ok: true,
     dryRun: true,
     mutated: false,
-    providerId: pid,
-    providerLabel: provider.label,
-    appName,
-    checks,
-    wouldProceed: allPass && provider.docsStatus === "implemented",
-    blockers: checks.filter((c) => c.status === "fail").map((c) => c.detail),
+    providerId: provider.providerId,
+    action,
+    wouldProceed: runtimeMapped && (action !== "deploy" || safeBuildPassed) && (!["deploy", "env_write"].includes(action) || approved),
+    checks: { runtimeMapped, safeBuildPassed, approved },
     rawValuesReturned: false,
   });
 });
 
-// ─── POST /api/deployment-providers/:providerId/execute ───────────────────────
-
 router.post("/api/deployment-providers/:providerId/execute", async (req, res): Promise<void> => {
-  const u = uid(req);
-  if (!u) { res.status(401).json({ error: "Authentication required", rawValuesReturned: false }); return; }
+  const userId = uid(req);
+  if (!userId) { res.status(401).json({ error: "Authentication required" }); return; }
 
-  const pid = req.params["providerId"] as string;
-  const provider = getProviderById(pid);
-  if (!provider) { res.status(404).json({ error: `Provider '${pid}' not found`, rawValuesReturned: false }); return; }
+  const providerId = String(req.params.providerId);
+  const provider = verifiedProvider(providerId);
+  if (!provider) { res.status(404).json({ error: "Provider not found" }); return; }
 
-  const {
-    action,
-    approved = false,
-    safeBuildPassed = false,
-  } = req.body as {
-    action?: string;
-    approved?: boolean;
-    safeBuildPassed?: boolean;
-  };
-
-  // ── Gate 1: Placeholder adapter ──────────────────────────────────────────────
-  if (!canExecuteProvider(pid)) {
-    const manualGuide = generateManualGuide(pid, "your app");
+  const action = String(req.body?.action ?? "deploy") as Action;
+  if (!provider.executableActions.includes(action)) {
     res.status(400).json({
       ok: false,
       blocked: true,
-      blockedReason: "adapter_placeholder",
-      message: `Provider '${provider.label}' adapter is ${provider.docsStatus}. Automated execution is unavailable. Use the manual deployment guide instead.`,
-      manualGuide,
-      manualGuideAvailable: provider.manualGuideAvailable,
+      blockedReason: "runtime_action_not_mapped",
+      message: `${provider.label} ${action} is not implemented by a verified runtime function.`,
+      manualGuide: generateManualGuide(providerId, String(req.body?.appName ?? "app")),
       rawValuesReturned: false,
     });
     return;
   }
 
-  // ── Gate 2: Safe build ────────────────────────────────────────────────────────
-  if (provider.requiresSafeBuildBeforeDeploy && !safeBuildPassed) {
-    res.status(400).json({
-      ok: false,
-      blocked: true,
-      blockedReason: "safe_build_missing",
-      message: "Safe build must pass before deployment. Run: pnpm run safe-build",
-      rawValuesReturned: false,
-    });
+  if (["deploy", "env_write"].includes(action) && req.body?.approved !== true) {
+    res.status(400).json({ ok: false, blocked: true, blockedReason: "approval_missing" });
+    return;
+  }
+  if (action === "deploy" && req.body?.safeBuildPassed !== true) {
+    res.status(400).json({ ok: false, blocked: true, blockedReason: "safe_build_missing" });
     return;
   }
 
-  // ── Gate 3: Approval ──────────────────────────────────────────────────────────
-  if ((provider.requiresApprovalForDeploy || provider.requiresApprovalForEnvWrite) && !approved) {
-    res.status(400).json({
-      ok: false,
-      blocked: true,
-      blockedReason: "approval_missing",
-      message: "Owner approval is required before executing this deployment action.",
-      rawValuesReturned: false,
-    });
-    return;
+  try {
+    if (providerId === "render") {
+      if (action === "deploy") {
+        const result = await triggerRenderDeploy({ clearCache: req.body?.clearCache === true });
+        if (!result.ok) { res.status(502).json({ ok: false, error: result.error }); return; }
+        res.status(201).json({ ok: true, executed: true, providerId, action, deployId: result.deployId, status: result.status, rawValuesReturned: false });
+        return;
+      }
+      if (action === "env_write") {
+        const variables = req.body?.variables && typeof req.body.variables === "object" ? req.body.variables : {};
+        const result = await applyRenderEnvVars(variables);
+        if (!result.ok) { res.status(502).json({ ok: false, error: result.error, skippedKeys: result.skippedKeys }); return; }
+        res.json({ ok: true, executed: true, providerId, action, appliedKeys: result.appliedKeys, skippedKeys: result.skippedKeys, rawValuesReturned: false });
+        return;
+      }
+      if (action === "env_read") {
+        const result = await getRenderEnvVarKeys();
+        if (!result.ok) { res.status(502).json({ ok: false, error: result.error }); return; }
+        res.json({ ok: true, executed: true, providerId, action, keys: result.keys, rawValuesReturned: false });
+        return;
+      }
+      if (action === "logs") {
+        const result = await getRenderLogs(Math.min(Number(req.body?.limit ?? 100), 500));
+        if (!result.ok) { res.status(502).json({ ok: false, error: result.error }); return; }
+        res.json({ ok: true, executed: true, providerId, action, lines: result.lines, rawValuesReturned: false });
+        return;
+      }
+      const [status, deploys] = await Promise.all([getRenderConnectorStatus(), getRenderDeploys(5)]);
+      res.json({ ok: status.apiAvailable && deploys.ok, executed: true, providerId, action, status, deploys: deploys.deploys, error: deploys.error, rawValuesReturned: false });
+      return;
+    }
+
+    if (providerId === "railway") {
+      if (action === "env_write") {
+        const variables = req.body?.variables && typeof req.body.variables === "object" ? req.body.variables : {};
+        const result = await applyRailwayVariablesViaApi(variables, { replace: false, skipDeploys: req.body?.skipDeploys !== false });
+        if (!result.ok) { res.status(502).json({ ok: false, executed: false, error: result.error, fallbackNeeded: result.fallbackNeeded }); return; }
+        res.json({ ok: true, executed: true, providerId, action, modeUsed: result.modeUsed, appliedKeys: result.appliedKeys, rawValuesReturned: false });
+        return;
+      }
+      const status = await getRailwayConnectorStatus();
+      res.json({ ok: status.apiAvailable || status.cliAvailable || status.mcpAvailable, executed: true, providerId, action, status, rawValuesReturned: false });
+      return;
+    }
+
+    res.status(400).json({ ok: false, blocked: true, blockedReason: "runtime_action_not_mapped" });
+  } catch (err) {
+    logger.error({ err, providerId, action }, "Verified provider execution failed");
+    res.status(500).json({ ok: false, executed: false, error: "Provider execution failed" });
   }
-
-  // ── Gate 4: Credential ────────────────────────────────────────────────────────
-  const credMeta = provider.credentialProvider
-    ? await checkCredentialMetadata(u, provider.credentialProvider)
-    : { hasCredential: true, credentialLabel: null, expiresAt: null };
-
-  if (provider.credentialProvider && !credMeta.hasCredential) {
-    res.status(400).json({
-      ok: false,
-      blocked: true,
-      blockedReason: "credential_missing",
-      message: `Required credential for ${provider.label} not found in vault. Add it via VIBA Vault.`,
-      rawValuesReturned: false,
-    });
-    return;
-  }
-
-  // ── Gate 5: Unsupported action ───────────────────────────────────────────────
-  const SUPPORTED_ACTIONS = ["deploy", "env_write", "env_read", "status", "logs", "domain_check"];
-  if (action && !SUPPORTED_ACTIONS.includes(action)) {
-    res.status(400).json({
-      ok: false,
-      blocked: true,
-      blockedReason: "unsupported_action",
-      message: `Action '${action}' is not supported for provider '${provider.label}'.`,
-      rawValuesReturned: false,
-    });
-    return;
-  }
-
-  // Route implemented providers to their dedicated connector endpoints
-  const connectorPaths: Record<string, { base: string; label: string }> = {
-    railway: { base: "/api/railway-connector", label: "Railway Connector" },
-    render:  { base: "/api/render-connector",  label: "Render Connector"  },
-  };
-  const connector = connectorPaths[pid];
-
-  if (!connector) {
-    // Should never reach here — Gate 1 blocks non-implemented providers
-    res.status(400).json({
-      ok: false,
-      blocked: true,
-      blockedReason: "adapter_placeholder",
-      message: `Provider '${provider.label}' has no active connector. This is a bug — contact support.`,
-      rawValuesReturned: false,
-    });
-    return;
-  }
-
-  const actionRoutes: Record<string, string> = {
-    deploy:       `${connector.base}/deploy`,
-    env_write:    `${connector.base}/env-vars/apply`,
-    env_read:     `${connector.base}/env-vars`,
-    status:       `${connector.base}/status`,
-    logs:         `${connector.base}/logs`,
-    domain_check: `${connector.base}/status`,
-  };
-
-  res.json({
-    ok: true,
-    providerId: pid,
-    providerLabel: provider.label,
-    action: action ?? "deploy",
-    status: "accepted",
-    connectorLabel: connector.label,
-    connectorBase: connector.base,
-    actionEndpoint: actionRoutes[action ?? "deploy"] ?? `${connector.base}/status`,
-    message: `Action '${action ?? "deploy"}' accepted for ${provider.label}. Delegate to ${connector.label} at ${connector.base}.`,
-    note: "Destructive actions (deploy, env_write) require ADMIN_TOKEN + X-Admin-Confirm: true header at the connector endpoint. No raw credentials are returned.",
-    rawValuesReturned: false,
-  });
 });
 
 export default router;
