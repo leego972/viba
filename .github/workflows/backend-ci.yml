@@ -26,7 +26,7 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile=false --reporter=silent
+        run: pnpm install --frozen-lockfile --reporter=silent
 
       - name: Build workspace type declarations
         run: pnpm run typecheck:libs
