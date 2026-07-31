@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
+import qualityApprovalGateRouter from "./qualityApprovalGate";
 import sessionsRouter from "./sessions";
 import settingsRouter from "./settings";
 import statsRouter from "./stats";
@@ -72,6 +73,7 @@ router.use(healthRouter);
 router.use(sessionAccessRouter);
 router.use(coreDefaultsRouter);
 router.use(backgroundSessionsRouter);
+router.use(qualityApprovalGateRouter);
 router.use(sessionsRouter);
 router.use(attachmentsRouter);
 router.use(selfRepairAutoRouter);
