@@ -23,6 +23,7 @@ const AVAILABLE_PROVIDERS = [
   { id: "ollama",     name: "Ollama",     provider: "Ollama",     defaultRole: "Researcher",    color: "bg-slate-500",   apiKey: "",                   canUseTools: true  },
   { id: "deepseek",   name: "DeepSeek",   provider: "DeepSeek",   defaultRole: "Researcher",    color: "bg-purple-500",  apiKey: "DEEPSEEK_API_KEY",   canUseTools: true  },
   { id: "mistral",    name: "Mistral",    provider: "Mistral",    defaultRole: "Builder",       color: "bg-blue-500",    apiKey: "MISTRAL_API_KEY",    canUseTools: true  },
+  { id: "venice",     name: "Venice AI",  provider: "Venice",     defaultRole: "Researcher",    color: "bg-cyan-500",    apiKey: "VENICE_API_KEY",     canUseTools: false },
   { id: "railway",    name: "Railway",    provider: "Railway",    defaultRole: "DevOps",        color: "bg-violet-500",  apiKey: "RAILWAY_TOKEN",      canUseTools: true  },
   { id: "gemini",     name: "Gemini",     provider: "Google",     defaultRole: "Researcher",    color: "bg-teal-500",    apiKey: "GEMINI_API_KEY",     canUseTools: false },
   { id: "perplexity", name: "Perplexity", provider: "Perplexity", defaultRole: "Researcher",    color: "bg-amber-500",   apiKey: "PERPLEXITY_API_KEY", canUseTools: false },
@@ -208,7 +209,7 @@ export default function NewSession() {
 
   useEffect(() => {
     const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
-    const providers = ["openai", "anthropic", "google", "perplexity", "groq", "manus", "replit", "railway"];
+    const providers = ["openai", "anthropic", "google", "perplexity", "groq", "venice", "manus", "replit", "railway"];
     void Promise.allSettled(
       providers.map(async (id) => {
         try {
