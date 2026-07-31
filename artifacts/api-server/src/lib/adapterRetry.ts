@@ -24,12 +24,6 @@ export interface AdapterRetryResult {
   circuitOpen?: boolean;
 }
 
-// ── Circuit breaker ────────────────────────────────────────────────────────────
-// Per-provider state. The in-memory map is a short-lived cache (TTL = 30 s).
-// The database is the source of truth. Before any circuit check the cache is
-// revalidated from the DB if it is stale, which allows multiple API server
-// instances to share circuit state correctly.
-
 function parsePositiveInt(value: string | undefined, defaultValue: number): number {
   if (value === undefined || value === "") return defaultValue;
   const parsed = parseInt(value, 10);
@@ -38,16 +32,8 @@ function parsePositiveInt(value: string | undefined, defaultValue: number): numb
 
 const CIRCUIT_OPEN_THRESHOLD = parsePositiveInt(process.env.CIRCUIT_OPEN_THRESHOLD, 5);
 const CIRCUIT_TIMEOUT_MS = parsePositiveInt(process.env.CIRCUIT_TIMEOUT_MS, 5 * 60 * 1000);
-const CACHE_TTL_MS = 30_000; // 30 seconds — max staleness across instances
+const CACHE_TTL_MS = 30_000;
 
-/**
- * Validates CIRCUIT_OPEN_THRESHOLD and CIRCUIT_TIMEOUT_MS environment variables.
- * Throws a descriptive Error if either variable is set to a non-positive-integer value
- * so that misconfigured deployments fail fast with a clear message instead of
- * silently falling back to defaults and behaving unpredictably.
- *
- * Call once at server startup before beginning to listen for requests.
- */
 export function validateCircuitBreakerEnv(): void {
   const threshold = process.env.CIRCUIT_OPEN_THRESHOLD;
   if (threshold !== undefined && threshold !== "") {
@@ -70,12 +56,11 @@ export function validateCircuitBreakerEnv(): void {
   }
 }
 
-// Internal state kept in the map; cachedAt is not part of the public interface.
 interface InternalCircuitState {
   consecutiveFailures: number;
-  openedAt: number | null; // Unix ms timestamp, or null when closed
-  cachedAt: number;        // when the entry was last read from / written to DB
-  persistedAt: number | null; // Unix ms timestamp of last successful DB write, or null
+  openedAt: number | null;
+  cachedAt: number;
+  persistedAt: number | null;
 }
 
 export interface CircuitState {
@@ -83,19 +68,14 @@ export interface CircuitState {
   openedAt: number | null;
 }
 
-const circuitMap = new Map<string, InternalCircuitState>();
-
 interface StartupLoadInfo {
   loadedAt: number;
   restoredCount: number;
 }
 
+const circuitMap = new Map<string, InternalCircuitState>();
 let startupLoadInfo: StartupLoadInfo | null = null;
 
-/**
- * Returns metadata about the most recent call to loadCircuitStateFromDb(),
- * or null if it has not been called yet.
- */
 export function getStartupLoadInfo(): StartupLoadInfo | null {
   return startupLoadInfo;
 }
@@ -103,29 +83,21 @@ export function getStartupLoadInfo(): StartupLoadInfo | null {
 function getOrCreateLocal(provider: string): InternalCircuitState {
   let state = circuitMap.get(provider);
   if (!state) {
-    // cachedAt=0 forces a DB read-through on the next check
     state = { consecutiveFailures: 0, openedAt: null, cachedAt: 0, persistedAt: null };
     circuitMap.set(provider, state);
   }
   return state;
 }
 
-/**
- * Revalidate a single provider's circuit state from the database when the
- * in-memory entry is older than CACHE_TTL_MS. Skips silently if the DB is
- * unavailable (e.g. in tests without DATABASE_URL) and updates cachedAt so
- * the next in-window call doesn't hammer the DB.
- */
 async function refreshCircuitFromDb(provider: string, now = Date.now()): Promise<void> {
   const state = circuitMap.get(provider);
-  if (state && now - state.cachedAt < CACHE_TTL_MS) return; // cache is fresh
+  if (state && now - state.cachedAt < CACHE_TTL_MS) return;
 
   try {
     const [{ db, circuitStateTable }, { eq }] = await Promise.all([
       import("@workspace/db"),
       import("drizzle-orm"),
     ]);
-
     const rows = await db
       .select()
       .from(circuitStateTable)
@@ -140,28 +112,15 @@ async function refreshCircuitFromDb(provider: string, now = Date.now()): Promise
         persistedAt: row.updatedAt.getTime(),
       });
     } else {
-      // No DB row for this provider. A missing row is the canonical reset state —
-      // if another instance deleted the row via resetProviderCircuit, we must
-      // honour that by clearing the local entry too so the circuit closes.
       circuitMap.delete(provider);
     }
   } catch (err) {
     logger.warn({ err, provider }, "Failed to refresh circuit state from DB");
-    // Update cachedAt even on failure to avoid hammering the DB
-    const existing = getOrCreateLocal(provider);
-    existing.cachedAt = now;
+    getOrCreateLocal(provider).cachedAt = now;
   }
 }
 
-/**
- * Upsert a single provider's circuit state into the database.
- * Uses a dynamic import so the module can be loaded in test environments
- * that do not have DATABASE_URL set — failures are logged and swallowed.
- */
-async function persistCircuitState(
-  provider: string,
-  state: InternalCircuitState,
-): Promise<void> {
+async function persistCircuitState(provider: string, state: InternalCircuitState): Promise<void> {
   try {
     const { db, circuitStateTable } = await import("@workspace/db");
     await db
@@ -185,10 +144,6 @@ async function persistCircuitState(
   }
 }
 
-/**
- * Delete a single provider's circuit state row from the database.
- * A missing row is the canonical "closed/reset" state used by resetProviderCircuit.
- */
 async function deleteCircuitStateFromDb(provider: string): Promise<void> {
   try {
     const [{ db, circuitStateTable }, { eq }] = await Promise.all([
@@ -201,12 +156,6 @@ async function deleteCircuitStateFromDb(provider: string): Promise<void> {
   }
 }
 
-/**
- * Load all circuit breaker state from the database into the in-memory map.
- * Call once at server startup so the server resumes from the last known state
- * rather than starting with all circuits closed. If the DB is unavailable,
- * logs a warning and continues with a clean (all-closed) state.
- */
 export async function loadCircuitStateFromDb(): Promise<number> {
   try {
     const { db, circuitStateTable } = await import("@workspace/db");
@@ -225,16 +174,11 @@ export async function loadCircuitStateFromDb(): Promise<number> {
     return rows.length;
   } catch (err) {
     logger.warn({ err }, "Failed to load circuit state from DB — starting with empty state");
-    // Clear any previously successful load info so that a re-load failure does
-    // not leave stale "loaded" metadata visible. A null lastLoadedAt signals that
-    // the load has not run successfully, keeping it distinct from a successful 0-row load.
     startupLoadInfo = null;
     return 0;
   }
 }
 
-/** Synchronous check using the current in-memory cache. Always call
- *  refreshCircuitFromDb() first when multi-instance correctness matters. */
 export function isCircuitOpen(provider: string, now = Date.now()): boolean {
   const state = circuitMap.get(provider);
   if (!state || state.openedAt === null) return false;
@@ -253,39 +197,18 @@ async function recordFailure(provider: string, now = Date.now()): Promise<void> 
   const state = getOrCreateLocal(provider);
   state.consecutiveFailures += 1;
   if (state.consecutiveFailures >= CIRCUIT_OPEN_THRESHOLD) {
-    const alreadyOpen =
-      state.openedAt !== null && now - state.openedAt < CIRCUIT_TIMEOUT_MS;
-    if (!alreadyOpen) {
-      const isReopen = state.openedAt !== null;
-      state.openedAt = now;
-      logger.warn(
-        { provider, failures: state.consecutiveFailures },
-        isReopen
-          ? "Circuit breaker re-opened after failed half-open probe"
-          : "Circuit breaker opened for provider"
-      );
-    }
+    const alreadyOpen = state.openedAt !== null && now - state.openedAt < CIRCUIT_TIMEOUT_MS;
+    if (!alreadyOpen) state.openedAt = now;
   }
   state.cachedAt = now;
   await persistCircuitState(provider, state);
 }
 
-/**
- * Exposed for tests only — resets all in-memory circuit state and startup load
- * metadata so that tests start from a clean slate without leaking loaded info
- * across scenarios.
- */
 export function resetAllCircuits(): void {
   circuitMap.clear();
   startupLoadInfo = null;
 }
 
-/**
- * Manually reset a single provider's circuit breaker to closed state.
- * Removes the in-memory map entry and deletes the DB row so the reset
- * is visible to all running instances within one cache TTL window.
- * A missing map entry / missing DB row is the canonical "closed" state.
- */
 export async function resetProviderCircuit(provider: string): Promise<void> {
   circuitMap.delete(provider);
   await deleteCircuitStateFromDb(provider);
@@ -303,19 +226,13 @@ export interface CircuitStatusEntry {
   timeoutMs: number;
 }
 
-/**
- * Returns the current circuit breaker state for every provider that has ever
- * been seen. Providers with no recorded failures are omitted.
- */
 export function getCircuitStatus(now = Date.now()): CircuitStatusEntry[] {
   const entries: CircuitStatusEntry[] = [];
-
   for (const [provider, cs] of circuitMap.entries()) {
     if (cs.consecutiveFailures === 0 && cs.openedAt === null) continue;
 
     let state: "open" | "half-open" | "closed";
     let msUntilReset: number | null = null;
-
     if (cs.openedAt === null) {
       state = "closed";
     } else if (now - cs.openedAt < CIRCUIT_TIMEOUT_MS) {
@@ -332,29 +249,48 @@ export function getCircuitStatus(now = Date.now()): CircuitStatusEntry[] {
       consecutiveFailures: cs.consecutiveFailures,
       openedAt: cs.openedAt,
       msUntilReset,
-      persistedAt: cs.persistedAt ?? null,
+      persistedAt: cs.persistedAt,
       openThreshold: CIRCUIT_OPEN_THRESHOLD,
       timeoutMs: CIRCUIT_TIMEOUT_MS,
     });
   }
-
   return entries;
 }
 
-// ── Main retry function ────────────────────────────────────────────────────────
+function explainProviderError(error: unknown): { raw: string; cause: string } {
+  const raw = error instanceof Error ? error.message : String(error);
+  const lower = raw.toLowerCase();
+
+  if (
+    lower.includes("quota") ||
+    lower.includes("billing") ||
+    lower.includes("insufficient") ||
+    lower.includes("credit balance")
+  ) {
+    return { raw, cause: "The provider reports a billing, quota, or API-credit problem." };
+  }
+  if (
+    lower.includes("401") ||
+    lower.includes("403") ||
+    lower.includes("api key") ||
+    lower.includes("unauthorized") ||
+    lower.includes("authentication")
+  ) {
+    return { raw, cause: "The API key is missing, invalid, expired, or lacks permission." };
+  }
+  if (lower.includes("model") || lower.includes("not found")) {
+    return { raw, cause: "The configured model may be unavailable to this API account." };
+  }
+  if (lower.includes("rate") || lower.includes("429")) {
+    return { raw, cause: "The provider rate limit was reached." };
+  }
+  return { raw, cause: "The live provider request failed." };
+}
 
 /**
- * Attempts to run the task using the live adapter up to 2 times.
- * Permanent errors (401/403/invalid API key) skip the retry immediately.
- * If the provider's circuit breaker is open (5+ consecutive failures in 5 min),
- * the live call is bypassed entirely and simulation is used straight away.
- * If all live attempts fail, falls back to the mock adapter.
- *
- * Before the circuit check, the per-provider cache is revalidated from the DB
- * if it is stale (>30 s), so multiple API instances share circuit state.
- *
- * Accepts injectable factory functions and an audit-log callback so the
- * function can be tested without touching the database.
+ * Executes only real provider calls. Simulation fallback is deliberately disabled.
+ * A failed provider call is audited and thrown back to the session layer so the UI
+ * can stop and display the actual API, billing, key, model, or rate-limit error.
  */
 export async function runAdapterWithRetry(params: {
   buildLiveAdapter: () => Promise<AgentAdapter>;
@@ -364,45 +300,32 @@ export async function runAdapterWithRetry(params: {
   logAudit: LogAuditFn;
   context: RetryContext;
 }): Promise<AdapterRetryResult> {
-  const { buildLiveAdapter, buildFallbackAdapter, taskInput, retryDelayMs, logAudit, context } =
-    params;
+  const { buildLiveAdapter, taskInput, retryDelayMs, logAudit, context } = params;
 
-  // Revalidate cache from DB so this instance sees state from other instances.
   await refreshCircuitFromDb(context.provider);
 
-  // Circuit breaker short-circuit — skip live call entirely when open
   if (isCircuitOpen(context.provider)) {
+    const message =
+      `Live ${context.provider} connection is temporarily disabled after repeated API failures. ` +
+      "Check the API key, billing/credits, model access, and provider status, then reset the circuit and retry.";
     logger.warn(
       { provider: context.provider, agentId: context.agentId },
-      "Circuit breaker open — skipping live adapter, falling back to simulation"
+      "Circuit breaker open — blocking task; simulation is disabled"
     );
-    await logAudit(
-      "adapter_fallback",
-      `Circuit open for ${context.provider} — skipping live call, falling back to simulation for task "${context.taskTitle}"`,
-      {
-        taskId: context.taskId,
-        agentId: context.agentId,
-        provider: context.provider,
-        permanent: false,
-        circuitOpen: true,
-      }
-    );
-    const fallback = buildFallbackAdapter();
-    const result = await fallback.runTask(taskInput);
-    return {
-      result,
-      usedFallback: true,
-      usedModel: fallback.model,
-      successAttempt: null,
+    await logAudit("adapter_error", message, {
+      taskId: context.taskId,
+      agentId: context.agentId,
+      provider: context.provider,
+      permanent: false,
       circuitOpen: true,
-    };
+    });
+    throw new Error(message);
   }
 
   let result: AgentTaskResult | null = null;
-  let usedFallback = false;
   let lastLiveError: unknown = null;
   let successAttempt: number | null = null;
-  let usedModel: string | null = null;
+  let usedModel = "";
 
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
@@ -415,20 +338,8 @@ export async function runAdapterWithRetry(params: {
       break;
     } catch (err) {
       lastLiveError = err;
-      if (isPermanentError(err)) {
-        logger.warn(
-          { err, agentId: context.agentId, provider: context.provider, attempt },
-          "Live adapter failed with permanent error — skipping retry"
-        );
-        break;
-      }
-      if (attempt === 1) {
-        logger.warn(
-          { err, agentId: context.agentId, provider: context.provider, attempt },
-          "Live adapter failed on attempt 1 — retrying after delay"
-        );
-        await new Promise((r) => setTimeout(r, retryDelayMs));
-      }
+      if (isPermanentError(err)) break;
+      if (attempt === 1) await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
     }
   }
 
@@ -443,45 +354,38 @@ export async function runAdapterWithRetry(params: {
         attempt: successAttempt,
       }
     );
+    return {
+      result,
+      usedFallback: false,
+      usedModel,
+      successAttempt,
+    };
   }
 
-  if (lastLiveError !== null || result === null) {
-    const permanent = isPermanentError(lastLiveError);
-    await recordFailure(context.provider);
-    logger.error(
-      {
-        err: lastLiveError,
-        agentId: context.agentId,
-        provider: context.provider,
-        taskId: context.taskId,
-        permanent,
-      },
-      permanent
-        ? "Live adapter failed with permanent error — falling back to simulation without retry"
-        : "Live adapter failed after retry — falling back to simulation"
-    );
-    await logAudit(
-      "adapter_fallback",
-      `Live ${context.provider} call failed${permanent ? " (permanent error, no retry)" : " after retry"}; falling back to simulation for task "${context.taskTitle}"`,
-      {
-        taskId: context.taskId,
-        agentId: context.agentId,
-        provider: context.provider,
-        permanent,
-        error:
-          lastLiveError instanceof Error ? lastLiveError.message : String(lastLiveError),
-      }
-    );
-    const fallback = buildFallbackAdapter();
-    usedModel = fallback.model;
-    result = await fallback.runTask(taskInput);
-    usedFallback = true;
-  }
+  await recordFailure(context.provider);
+  const permanent = isPermanentError(lastLiveError);
+  const explanation = explainProviderError(lastLiveError);
+  const message =
+    `Live ${context.provider} call failed. ${explanation.cause} ` +
+    `Provider error: ${explanation.raw}`;
 
-  return {
-    result: result!,
-    usedFallback,
-    usedModel: usedModel ?? "",
-    successAttempt,
-  };
+  logger.error(
+    {
+      err: lastLiveError,
+      agentId: context.agentId,
+      provider: context.provider,
+      taskId: context.taskId,
+      permanent,
+    },
+    "Live adapter failed — blocking task; simulation is disabled"
+  );
+  await logAudit("adapter_error", message, {
+    taskId: context.taskId,
+    agentId: context.agentId,
+    provider: context.provider,
+    permanent,
+    error: explanation.raw,
+  });
+
+  throw new Error(message);
 }
