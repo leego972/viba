@@ -49,6 +49,8 @@ import BudgetsPage from "@/pages/budgets";
 import ProjectMemoryPage from "@/pages/project-memory";
 import AppPublisherPage from "@/pages/app-publisher";
 import PlayPublisherPage from "@/pages/play-publisher";
+import MarketplacePage from "@/pages/marketplace";
+import ModuleInventoryPage from "@/pages/module-inventory";
 import Terms from "@/pages/terms";
 import Privacy from "@/pages/privacy";
 import UserInstructions from "@/pages/user-instructions";
@@ -67,105 +69,86 @@ import { useAuth } from "@/hooks/useAuth";
 import { isBypassValid, setBypassValid } from "@/lib/auth";
 
 const isMobileVisibilityAudit = import.meta.env.VITE_MOBILE_AUDIT === "true";
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: isMobileVisibilityAudit ? false : 3,
-    },
-  },
-});
+const queryClient = new QueryClient({ defaultOptions: { queries: { retry: isMobileVisibilityAudit ? false : 3 } } });
 
 function Spinner() {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="flex items-center gap-3 text-muted-foreground">
-        <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-        </svg>
-        <span className="text-sm">Loading…</span>
-      </div>
-    </div>
-  );
+  return <div className="min-h-screen flex items-center justify-center bg-background"><div className="flex items-center gap-3 text-muted-foreground"><svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg><span className="text-sm">Loading…</span></div></div>;
 }
 
 function AuthGuard({ children }: { children: ReactNode }) {
   const [location, setLocation] = useLocation();
   const { isAuthenticated, isLoading } = useAuth();
   const bypassActive = isBypassValid() && location.startsWith("/bridge");
-
   useEffect(() => {
     if (!isLoading && !isAuthenticated && !bypassActive) {
       const returnTo = `${window.location.pathname}${window.location.search}`;
       setLocation(`/login?returnTo=${encodeURIComponent(returnTo)}`);
     }
   }, [isLoading, isAuthenticated, bypassActive, setLocation]);
-
   if (bypassActive) return <>{children}</>;
   if (isLoading || !isAuthenticated) return <Spinner />;
   return <>{children}</>;
 }
 
 function GatedRouter() {
-  return (
-    <AuthGuard>
-      <Switch>
-        <Route path="/dashboard" component={Dashboard} />
-        <Route path="/sessions/new" component={NewSession} />
-        <Route path="/repository-audit" component={RepositoryAuditPage} />
-        <Route path="/sessions/:id/timeline" component={SessionTimelinePage} />
-        <Route path="/sessions/:id/map" component={CollaborationMapPage} />
-        <Route path="/sessions/:id" component={SessionWorkspace} />
-        <Route path="/settings" component={Settings} />
-        <Route path="/billing" component={Billing} />
-        <Route path="/workbench" component={Workbench} />
-        <Route path="/bridge" component={Bridge} />
-        <Route path="/providers" component={ProvidersPage} />
-        <Route path="/credentials" component={VaultPage} />
-        <Route path="/agent-console" component={AgentConsolePage} />
-        <Route path="/tool-console" component={ToolConsolePage} />
-        <Route path="/doctor" component={DoctorPage} />
-        <Route path="/doctor/history" component={DoctorHistory} />
-        <Route path="/owner-actions" component={OwnerActions} />
-        <Route path="/setup-assistant" component={SetupAssistant} />
-        <Route path="/connectors" component={CompletionPage} />
-        <Route path="/self-audit" component={CompletionPage} />
-        <Route path="/crews" component={CompletionPage} />
-        <Route path="/production-smoke-test" component={CompletionPage} />
-        <Route path="/mobile-readiness" component={CompletionPage} />
-        <Route path="/team" component={CompletionPage} />
-        <Route path="/usage" component={CompletionPage} />
-        <Route path="/recovery" component={CompletionPage} />
-        <Route path="/doctor/trends" component={CompletionPage} />
-        <Route path="/clients" component={CompletionPage} />
-        <Route path="/security-evidence" component={CompletionPage} />
-        <Route path="/reports/compare" component={CompletionPage} />
-        <Route path="/market-readiness" component={CompletionPage} />
-        <Route path="/assisted-browser" component={AssistedBrowserPage} />
-        <Route path="/qa-release-gate" component={QAReleaseGatePage} />
-        <Route path="/project-import" component={ProjectImportPage} />
-        <Route path="/production-ops" component={ProductionOpsPage} />
-        <Route path="/security-center" component={SecurityCenterPage} />
-        <Route path="/domain-setup" component={DomainSetupPage} />
-        <Route path="/onboarding" component={OnboardingPage} />
-        <Route path="/connections" component={ConnectionsPage} />
-        <Route path="/launch-readiness" component={LaunchReadinessPage} />
-        <Route path="/seo" component={SeoDashboardPage} />
-        <Route path="/advertising" component={AdvertisingDashboardPage} />
-        <Route path="/content-creator" component={ContentCreatorPage} />
-        <Route path="/brand-outreach" component={BrandOutreachPage} />
-        <Route path="/render-connector" component={RenderConnectorPage} />
-        <Route path="/ai-optimizer" component={AiOptimizerPage} />
-        <Route path="/ai-savings" component={AiSavingsPage} />
-        <Route path="/usage-history" component={UsageHistoryPage} />
-        <Route path="/budgets" component={BudgetsPage} />
-        <Route path="/project-memory" component={ProjectMemoryPage} />
-        <Route path="/app-publisher" component={AppPublisherPage} />
-        <Route path="/play-publisher" component={PlayPublisherPage} />
-        <Route component={NotFound} />
-      </Switch>
-    </AuthGuard>
-  );
+  return <AuthGuard><Switch>
+    <Route path="/dashboard" component={Dashboard} />
+    <Route path="/sessions/new" component={NewSession} />
+    <Route path="/repository-audit" component={RepositoryAuditPage} />
+    <Route path="/sessions/:id/timeline" component={SessionTimelinePage} />
+    <Route path="/sessions/:id/map" component={CollaborationMapPage} />
+    <Route path="/sessions/:id" component={SessionWorkspace} />
+    <Route path="/settings" component={Settings} />
+    <Route path="/billing" component={Billing} />
+    <Route path="/workbench" component={Workbench} />
+    <Route path="/bridge" component={Bridge} />
+    <Route path="/marketplace" component={MarketplacePage} />
+    <Route path="/marketplace/:slug" component={MarketplacePage} />
+    <Route path="/module-inventory" component={ModuleInventoryPage} />
+    <Route path="/providers" component={ProvidersPage} />
+    <Route path="/credentials" component={VaultPage} />
+    <Route path="/agent-console" component={AgentConsolePage} />
+    <Route path="/tool-console" component={ToolConsolePage} />
+    <Route path="/doctor" component={DoctorPage} />
+    <Route path="/doctor/history" component={DoctorHistory} />
+    <Route path="/owner-actions" component={OwnerActions} />
+    <Route path="/setup-assistant" component={SetupAssistant} />
+    <Route path="/connectors" component={CompletionPage} />
+    <Route path="/self-audit" component={CompletionPage} />
+    <Route path="/crews" component={CompletionPage} />
+    <Route path="/production-smoke-test" component={CompletionPage} />
+    <Route path="/mobile-readiness" component={CompletionPage} />
+    <Route path="/team" component={CompletionPage} />
+    <Route path="/usage" component={CompletionPage} />
+    <Route path="/recovery" component={CompletionPage} />
+    <Route path="/doctor/trends" component={CompletionPage} />
+    <Route path="/clients" component={CompletionPage} />
+    <Route path="/security-evidence" component={CompletionPage} />
+    <Route path="/reports/compare" component={CompletionPage} />
+    <Route path="/market-readiness" component={CompletionPage} />
+    <Route path="/assisted-browser" component={AssistedBrowserPage} />
+    <Route path="/qa-release-gate" component={QAReleaseGatePage} />
+    <Route path="/project-import" component={ProjectImportPage} />
+    <Route path="/production-ops" component={ProductionOpsPage} />
+    <Route path="/security-center" component={SecurityCenterPage} />
+    <Route path="/domain-setup" component={DomainSetupPage} />
+    <Route path="/onboarding" component={OnboardingPage} />
+    <Route path="/connections" component={ConnectionsPage} />
+    <Route path="/launch-readiness" component={LaunchReadinessPage} />
+    <Route path="/seo" component={SeoDashboardPage} />
+    <Route path="/advertising" component={AdvertisingDashboardPage} />
+    <Route path="/content-creator" component={ContentCreatorPage} />
+    <Route path="/brand-outreach" component={BrandOutreachPage} />
+    <Route path="/render-connector" component={RenderConnectorPage} />
+    <Route path="/ai-optimizer" component={AiOptimizerPage} />
+    <Route path="/ai-savings" component={AiSavingsPage} />
+    <Route path="/usage-history" component={UsageHistoryPage} />
+    <Route path="/budgets" component={BudgetsPage} />
+    <Route path="/project-memory" component={ProjectMemoryPage} />
+    <Route path="/app-publisher" component={AppPublisherPage} />
+    <Route path="/play-publisher" component={PlayPublisherPage} />
+    <Route component={NotFound} />
+  </Switch></AuthGuard>;
 }
 
 function BypassHandler() {
@@ -173,63 +156,34 @@ function BypassHandler() {
     const urlParams = new URLSearchParams(window.location.search);
     const bypassParam = urlParams.get("bypass");
     if (!bypassParam || isBypassValid()) return;
-
-    fetch("/api/auth/verify-bypass", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ token: bypassParam }),
-    })
-      .then(async (res) => {
-        if (res.ok) {
-          setBypassValid();
-          const cleanUrl = window.location.pathname + window.location.hash;
-          window.history.replaceState(null, "", cleanUrl);
-          queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
-        }
-      })
+    fetch("/api/auth/verify-bypass", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ token: bypassParam }) })
+      .then(async (res) => { if (res.ok) { setBypassValid(); const cleanUrl = window.location.pathname + window.location.hash; window.history.replaceState(null, "", cleanUrl); queryClient.invalidateQueries({ queryKey: ["auth", "me"] }); } })
       .catch(() => {});
   }, []);
-
   return null;
 }
 
 function App() {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
-
-  return (
-    <ErrorBoundary>
-      <ThemeProvider>
-        <QueryClientProvider client={queryClient}>
-          <TooltipProvider>
-            <WouterRouter base={basePath}>
-              <BypassHandler />
-              <Switch>
-                <Route path="/login" component={LoginPage} />
-                <Route path="/signup" component={SignUpPage} />
-                <Route path="/forgot-password" component={ForgotPassword} />
-                <Route path="/reset-password" component={ResetPassword} />
-                <Route path="/verify-email" component={VerifyEmail} />
-                <Route path="/pricing" component={Pricing} />
-                <Route path="/checkout/success" component={CheckoutSuccess} />
-                <Route path="/terms" component={Terms} />
-                <Route path="/privacy" component={Privacy} />
-                <Route path="/user-instructions" component={UserInstructions} />
-                <Route path="/demo/doctor-report" component={DemoDoctorReport} />
-                <Route path="/demo/proof-report" component={DemoProofReport} />
-                <Route path="/demo" component={DemoPage} />
-                <Route path="/share/reports/:shareId" component={ShareReportPage} />
-                <Route path="/admin" component={Admin} />
-                <Route path="/" component={Home} />
-                <Route component={GatedRouter} />
-              </Switch>
-            </WouterRouter>
-            <Toaster />
-          </TooltipProvider>
-        </QueryClientProvider>
-      </ThemeProvider>
-    </ErrorBoundary>
-  );
+  return <ErrorBoundary><ThemeProvider><QueryClientProvider client={queryClient}><TooltipProvider><WouterRouter base={basePath}><BypassHandler /><Switch>
+    <Route path="/login" component={LoginPage} />
+    <Route path="/signup" component={SignUpPage} />
+    <Route path="/forgot-password" component={ForgotPassword} />
+    <Route path="/reset-password" component={ResetPassword} />
+    <Route path="/verify-email" component={VerifyEmail} />
+    <Route path="/pricing" component={Pricing} />
+    <Route path="/checkout/success" component={CheckoutSuccess} />
+    <Route path="/terms" component={Terms} />
+    <Route path="/privacy" component={Privacy} />
+    <Route path="/user-instructions" component={UserInstructions} />
+    <Route path="/demo/doctor-report" component={DemoDoctorReport} />
+    <Route path="/demo/proof-report" component={DemoProofReport} />
+    <Route path="/demo" component={DemoPage} />
+    <Route path="/share/reports/:shareId" component={ShareReportPage} />
+    <Route path="/admin" component={Admin} />
+    <Route path="/" component={Home} />
+    <Route component={GatedRouter} />
+  </Switch></WouterRouter><Toaster /></TooltipProvider></QueryClientProvider></ThemeProvider></ErrorBoundary>;
 }
 
 export default App;
