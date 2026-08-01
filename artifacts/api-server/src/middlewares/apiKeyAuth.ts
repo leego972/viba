@@ -103,6 +103,7 @@ export function requireSessionOrApiKey(requiredScope: string) {
     }
 
     res.locals.vibaAuth = { userId: row.user_id, method: "api_key", apiKeyId: row.id, scopes } satisfies VibaAuthContext;
+    if (req.session) req.session.userId = row.user_id;
     await pool.query(`UPDATE viba_api_keys SET last_used_at = NOW() WHERE id = $1`, [row.id]);
     next();
   };
