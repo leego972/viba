@@ -20,3 +20,4 @@ export * from "./marketing";
 export * from "./contentCreator";
 export * from "./deploy";
 export * from "./aiOptimizer";
+export * from "./marketplace";
