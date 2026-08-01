@@ -276,6 +276,7 @@ async function continueWithFallback(
   primaryMessage: string,
   logAudit: LogAuditFn,
   circuitOpen = false,
+  permanent = false,
 ): Promise<AdapterRetryResult> {
   try {
     const fallback = buildFallbackAdapter();
@@ -284,7 +285,8 @@ async function continueWithFallback(
       ? `⚠️ ${primaryMessage} VIBA continued with its configured fallback adapter.`
       : `⚠️ ${primaryMessage} VIBA continued with ${fallback.name}.`;
 
-    await recordSuccess(fallback.provider.toLowerCase());
+    // A fallback success must not clear the primary provider's circuit state.
+    // The primary failure remains relevant even when degraded service succeeds.
     await logAudit("adapter_fallback", notice, {
       taskId: context.taskId,
       agentId: context.agentId,
@@ -293,6 +295,7 @@ async function continueWithFallback(
       fallbackModel: fallback.model,
       simulated: fallback.isMock,
       circuitOpen,
+      permanent,
     });
 
     return {
@@ -314,6 +317,7 @@ async function continueWithFallback(
       provider: context.provider,
       fallbackFailed: true,
       fallbackError: fallbackExplanation.raw,
+      permanent,
     });
     throw new Error(message);
   }
@@ -396,5 +400,5 @@ export async function runAdapterWithRetry(params: {
     error: explanation.raw,
   });
 
-  return continueWithFallback(buildFallbackAdapter, taskInput, context, primaryMessage, logAudit);
+  return continueWithFallback(buildFallbackAdapter, taskInput, context, primaryMessage, logAudit, false, permanent);
 }
