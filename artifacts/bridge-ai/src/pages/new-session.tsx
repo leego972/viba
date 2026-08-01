@@ -93,7 +93,7 @@ export default function NewSession() {
 
   useEffect(() => {
     let cancelled = false;
-    void Promise.all(PROVIDERS.map(async (provider) => {
+    void Promise.all(PROVIDERS.map(async (provider): Promise<string | null> => {
       try {
         const response = await fetch(`/api/providers/${provider.id}/keys`, { credentials: "include" });
         if (!response.ok) return null;
@@ -103,7 +103,7 @@ export default function NewSession() {
         return null;
       }
     })).then((results) => {
-      if (!cancelled) setVaultProviders(new Set(results.filter((id): id is string => Boolean(id))));
+      if (!cancelled) setVaultProviders(new Set(results.filter((id): id is string => id !== null)));
     });
     return () => { cancelled = true; };
   }, []);
