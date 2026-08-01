@@ -37,25 +37,30 @@ export function OnboardingModal({ onClose }: OnboardingModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-white/[0.1] bg-[hsl(var(--background))] shadow-2xl shadow-black/50">
+      <div
+        className="relative w-full max-w-md overflow-hidden rounded-2xl border border-white/[0.1] bg-[hsl(var(--background))] shadow-2xl shadow-black/50"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="viba-welcome-title"
+      >
         <div className="h-[3px] w-full bg-gradient-to-r from-primary/60 via-violet-500/80 to-primary/60" />
 
         <button
           type="button"
           onClick={onClose}
-          className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full border border-border/60 bg-muted/30 text-muted-foreground transition hover:bg-muted/60 hover:text-foreground"
+          className="absolute right-4 top-16 flex h-9 w-9 items-center justify-center rounded-full border border-border/60 bg-muted/30 text-muted-foreground transition hover:bg-muted/60 hover:text-foreground sm:top-4"
           aria-label="Close welcome popup"
         >
           <X className="h-4 w-4" />
         </button>
 
         <div className="space-y-5 p-6 pt-7">
-          <div className="flex items-start gap-3 pr-8">
+          <div className="flex items-start gap-3 pr-10 sm:pr-8">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary/25 bg-primary/15">
               <Sparkles className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <h2 className="text-xl font-semibold">Welcome to VIBA</h2>
+              <h2 id="viba-welcome-title" className="text-xl font-semibold">Welcome to VIBA</h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 Start with built-in Groq immediately, or add OpenAI, Claude, Gemini and other providers later from Connections.
               </p>

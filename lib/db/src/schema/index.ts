@@ -10,6 +10,7 @@ export * from "./bannerDismissals";
 export * from "./circuitState";
 export * from "./subscribers";
 export * from "./users";
+export * from "./apiKeys";
 export * from "./passwordResetTokens";
 export * from "./creditTransactions";
 export * from "./teamMembers";

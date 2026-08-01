@@ -6,15 +6,27 @@ on:
     paths:
       - "artifacts/bridge-ai/**"
       - ".github/workflows/mobile-visibility-audit.yml"
+  schedule:
+    - cron: "17 18 * * 1"
   workflow_dispatch:
+    inputs:
+      exhaustive:
+        description: "Run the exhaustive all-route, all-viewport audit"
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: read
 
+concurrency:
+  group: mobile-visibility-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   mobile-visibility:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 10 || 30 }}
     env:
       CI: "true"
       VITE_MOBILE_AUDIT: "true"
@@ -35,7 +47,7 @@ jobs:
           corepack prepare pnpm@10.26.1 --activate
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --reporter=silent
 
       - name: Install Chromium
         run: pnpm --filter @workspace/bridge-ai exec playwright install chromium
@@ -54,10 +66,24 @@ jobs:
           cat /tmp/viba-frontend.log
           exit 1
 
-      - name: Run mobile visibility audit
-        id: audit
+      - name: Run fast PR mobile smoke audit
+        if: github.event_name == 'pull_request'
+        id: smoke
         continue-on-error: true
-        run: pnpm --filter @workspace/bridge-ai exec playwright test tests/mobile-visibility.spec.ts --config=playwright.config.ts
+        run: |
+          echo "Running representative merge-gate coverage: 3 viewports × critical public/protected routes"
+          pnpm --filter @workspace/bridge-ai exec playwright test tests/mobile-visibility.spec.ts \
+            --config=playwright.config.ts \
+            --retries=0 \
+            --grep='(iphone-se|iphone-15-pro-max|small-tablet).*(/ remains visible|/login remains visible|/signup remains visible|/pricing remains visible|/dashboard remains visible|/sessions/new remains visible|/settings remains visible|/workbench remains visible|/providers remains visible|/credentials remains visible|/connections remains visible|/security-center remains visible|/production-ops remains visible|/launch-readiness remains visible|/app-publisher remains visible)'
+
+      - name: Run exhaustive mobile visibility audit
+        if: github.event_name != 'pull_request'
+        id: exhaustive
+        continue-on-error: true
+        run: |
+          echo "Running exhaustive all-route, all-viewport audit"
+          pnpm --filter @workspace/bridge-ai exec playwright test tests/mobile-visibility.spec.ts --config=playwright.config.ts
 
       - name: Print audit summary
         if: always()
@@ -69,25 +95,33 @@ jobs:
             echo "Mobile audit report was not created."
           fi
 
-      - name: Print frontend log
-        if: always()
+      - name: Print frontend log on failure
+        if: failure() || steps.smoke.outcome == 'failure' || steps.exhaustive.outcome == 'failure'
         run: cat /tmp/viba-frontend.log || true
 
       - name: Package audit evidence
         if: always()
         run: |
           cd artifacts/bridge-ai
+          mkdir -p test-results/mobile-visibility
+          if [ ! -f test-results/mobile-visibility/report.json ]; then
+            printf '{"summary":{"errors":1,"warnings":0,"total":1},"issues":[{"severity":"error","kind":"audit-incomplete","route":"n/a","viewport":"n/a","details":"Audit did not produce a report."}]}' > test-results/mobile-visibility/report.json
+          fi
           zip -qr mobile-visibility-audit.zip test-results playwright-report 2>/dev/null || zip -qr mobile-visibility-audit.zip test-results
 
       - name: Upload audit evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mobile-visibility-audit
+          name: mobile-visibility-audit-${{ github.event_name }}
           path: artifacts/bridge-ai/mobile-visibility-audit.zip
           if-no-files-found: error
           retention-days: 14
 
-      - name: Enforce audit result
-        if: steps.audit.outcome == 'failure'
+      - name: Enforce PR smoke result
+        if: github.event_name == 'pull_request' && steps.smoke.outcome == 'failure'
+        run: exit 1
+
+      - name: Enforce exhaustive result
+        if: github.event_name != 'pull_request' && steps.exhaustive.outcome == 'failure'
         run: exit 1

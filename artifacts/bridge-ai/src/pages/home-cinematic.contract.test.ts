@@ -22,10 +22,12 @@ describe("public landing page contract", () => {
     expect(page).toContain("returnTo=");
   });
 
-  it("keeps the animated orchestration network as the dominant visual", () => {
-    expect(page).toContain("<BrainNetwork scene={scene.id} incident={incident} />");
-    expect(page).toContain("Choose a failure scenario.");
-    expect(page).toContain("onClick={() => selectIncident(index)}");
+  it("keeps one clearly labelled orchestration demo as the dominant visual", () => {
+    expect(page).toContain("<BrainNetwork scene={scene.id} />");
+    expect(page).toContain("LANDING PAGE DEMO");
+    expect(page).toContain("const DEMO_INCIDENT");
+    expect(page).not.toContain("Choose a failure scenario.");
+    expect(page).not.toContain("selectIncident");
   });
 
   it("preserves the promised compact four-stage explanation", () => {

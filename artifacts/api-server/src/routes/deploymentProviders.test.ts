@@ -113,22 +113,22 @@ describe("DeploymentProviderRegistry", () => {
   });
 
   it("placeholder providers do not claim execution support", () => {
-    const placeholders = ALL_PROVIDER_IDS.filter((id) => id !== "railway");
+    const placeholders = ALL_PROVIDER_IDS.filter((id) => id !== "railway" && id !== "render");
     for (const id of placeholders) {
       expect(canExecuteProvider(id)).toBe(false);
     }
   });
 
-  it("railway is the only provider that can execute", () => {
+  it("railway and render are the providers that can execute", () => {
     expect(canExecuteProvider("railway")).toBe(true);
-    expect(canExecuteProvider("render")).toBe(false);
+    expect(canExecuteProvider("render")).toBe(true);
     expect(canExecuteProvider("vercel")).toBe(false);
     expect(canExecuteProvider("sevall")).toBe(false);
     expect(canExecuteProvider("custom")).toBe(false);
   });
 
-  it("isPlaceholderProvider returns true for non-Railway providers", () => {
-    expect(isPlaceholderProvider("render")).toBe(true);
+  it("isPlaceholderProvider returns true for non-implemented providers", () => {
+    expect(isPlaceholderProvider("render")).toBe(false);
     expect(isPlaceholderProvider("digitalocean")).toBe(true);
     expect(isPlaceholderProvider("vercel")).toBe(true);
     expect(isPlaceholderProvider("sevall")).toBe(true);
@@ -136,7 +136,7 @@ describe("DeploymentProviderRegistry", () => {
 
   it("isManualGuidedProvider returns true for custom and placeholder providers", () => {
     expect(isManualGuidedProvider("custom")).toBe(true);
-    expect(isManualGuidedProvider("render")).toBe(true);
+    expect(isManualGuidedProvider("digitalocean")).toBe(true);
   });
 
   it("all providers require safe-build before deploy", () => {
@@ -307,14 +307,14 @@ describe("GET /api/deployment-providers/:providerId", () => {
     expect(body?.["rawValuesReturned"]).toBe(false);
   });
 
-  it("returns Render with isPlaceholder: true", async () => {
+  it("returns Render with isPlaceholder: false (implemented, executable)", async () => {
     const handler = await getRouteHandler("/api/deployment-providers/:providerId", "get");
     const { res, getBody } = makeRes();
     const req = { session: { userId: 1 }, params: { providerId: "render" }, body: {} };
     if (handler) await handler(req, res, () => {});
     const body = getBody() as Record<string, unknown>;
-    expect(body?.["isPlaceholder"]).toBe(true);
-    expect(body?.["canExecute"]).toBe(false);
+    expect(body?.["isPlaceholder"]).toBe(false);
+    expect(body?.["canExecute"]).toBe(true);
   });
 
   it("returns 404 for unknown provider", async () => {
@@ -360,7 +360,7 @@ describe("POST readiness", () => {
     expect(body?.["isReady"]).toBe(true);
   });
 
-  it("Render: not ready — adapter is placeholder", async () => {
+  it("Render: not ready without credential", async () => {
     mockVaultEmpty();
     const handler = await getRouteHandler("/api/deployment-providers/:providerId/readiness", "post");
     const { res, getBody } = makeRes();
@@ -369,14 +369,24 @@ describe("POST readiness", () => {
     const body = getBody() as Record<string, unknown>;
     expect(body?.["isReady"]).toBe(false);
     expect(Array.isArray(body?.["blocks"])).toBe(true);
-    expect((body?.["blocks"] as string[]).some((b) => /adapter/i.test(b))).toBe(true);
+    expect((body?.["blocks"] as string[]).some((b) => /credential/i.test(b))).toBe(true);
+  });
+
+  it("Render: ready with credential", async () => {
+    mockVaultWithCred("render");
+    const handler = await getRouteHandler("/api/deployment-providers/:providerId/readiness", "post");
+    const { res, getBody } = makeRes();
+    const req = { session: { userId: 1 }, params: { providerId: "render" }, body: {} };
+    if (handler) await handler(req, res, () => {});
+    const body = getBody() as Record<string, unknown>;
+    expect(body?.["isReady"]).toBe(true);
   });
 });
 
 // ─── Route: POST execute — placeholder blocked ────────────────────────────────
 
 describe("POST execute — placeholder provider blocked", () => {
-  it("Render execute returns blocked with manual guide", async () => {
+  it("Render execute blocked without credential", async () => {
     mockVaultEmpty();
     const handler = await getRouteHandler("/api/deployment-providers/:providerId/execute", "post");
     const { res, getBody, getStatus } = makeRes();
@@ -385,8 +395,7 @@ describe("POST execute — placeholder provider blocked", () => {
     expect(getStatus()).toBe(400);
     const body = getBody() as Record<string, unknown>;
     expect(body?.["blocked"]).toBe(true);
-    expect(body?.["blockedReason"]).toBe("adapter_placeholder");
-    expect(typeof body?.["manualGuide"]).toBe("string");
+    expect(body?.["blockedReason"]).toBe("credential_missing");
     expect(body?.["rawValuesReturned"]).toBe(false);
   });
 
@@ -413,26 +422,31 @@ describe("POST execute — placeholder provider blocked", () => {
     expect(body?.["rawValuesReturned"]).toBe(false);
   });
 
-  it("execute blocked without safe-build even for railway", async () => {
+  it("Railway deploy stays blocked as not-yet-mapped even with approval and safe-build satisfied (no bypass)", async () => {
     mockVaultWithCred("railway");
     const handler = await getRouteHandler("/api/deployment-providers/:providerId/execute", "post");
     const { res, getBody, getStatus } = makeRes();
-    const req = { session: { userId: 1 }, params: { providerId: "railway" }, body: { approved: true, safeBuildPassed: false } };
+    const req = { session: { userId: 1 }, params: { providerId: "railway" }, body: { approved: true, safeBuildPassed: true } };
     if (handler) await handler(req, res, () => {});
     expect(getStatus()).toBe(400);
     const body = getBody() as Record<string, unknown>;
-    expect(body?.["blockedReason"]).toBe("safe_build_missing");
+    expect(body?.["blockedReason"]).toBe("runtime_action_not_mapped");
   });
 
-  it("execute blocked without approval even for railway with safe-build", async () => {
-    mockVaultWithCred("railway");
+  it("approval and safe-build gates block Render deploy (the provider with a real deploy connector)", async () => {
+    mockVaultWithCred("render");
     const handler = await getRouteHandler("/api/deployment-providers/:providerId/execute", "post");
-    const { res, getBody, getStatus } = makeRes();
-    const req = { session: { userId: 1 }, params: { providerId: "railway" }, body: { approved: false, safeBuildPassed: true } };
-    if (handler) await handler(req, res, () => {});
-    expect(getStatus()).toBe(400);
-    const body = getBody() as Record<string, unknown>;
-    expect(body?.["blockedReason"]).toBe("approval_missing");
+    const { res: res1, getBody: getBody1, getStatus: getStatus1 } = makeRes();
+    const req1 = { session: { userId: 1 }, params: { providerId: "render" }, body: { approved: true, safeBuildPassed: false } };
+    if (handler) await handler(req1, res1, () => {});
+    expect(getStatus1()).toBe(400);
+    expect((getBody1() as Record<string, unknown>)?.["blockedReason"]).toBe("safe_build_missing");
+
+    const { res: res2, getBody: getBody2, getStatus: getStatus2 } = makeRes();
+    const req2 = { session: { userId: 1 }, params: { providerId: "render" }, body: { approved: false, safeBuildPassed: true } };
+    if (handler) await handler(req2, res2, () => {});
+    expect(getStatus2()).toBe(400);
+    expect((getBody2() as Record<string, unknown>)?.["blockedReason"]).toBe("approval_missing");
   });
 
   it("execute: credential check never returns raw credential value", async () => {
