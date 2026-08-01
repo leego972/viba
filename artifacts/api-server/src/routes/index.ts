@@ -1,4 +1,5 @@
 import "../lib/marketplaceBootstrap";
+import "../lib/marketplaceReconciler";
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
 import qualityApprovalGateRouter from "./qualityApprovalGate";
