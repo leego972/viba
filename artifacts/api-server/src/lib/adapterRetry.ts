@@ -1,4 +1,5 @@
 import type { AgentAdapter, AgentTaskInput, AgentTaskResult } from "./adapters/interface";
+import { GroqAdapter } from "./adapters/groq";
 import { isPermanentError } from "./adapters/errors";
 import { logger } from "./logger";
 
@@ -269,55 +270,73 @@ function explainProviderError(error: unknown): { raw: string; cause: string } {
   return { raw, cause: "live provider request" };
 }
 
-async function continueWithFallback(
-  buildFallbackAdapter: () => AgentAdapter,
+function getPlatformGroqKey(): string {
+  return process.env.GROQ_API_KEY?.trim() ?? "";
+}
+
+async function continueWithPlatformGroq(
   taskInput: AgentTaskInput,
   context: RetryContext,
   primaryMessage: string,
   logAudit: LogAuditFn,
-  circuitOpen = false,
-  permanent = false,
 ): Promise<AdapterRetryResult> {
-  try {
-    const fallback = buildFallbackAdapter();
-    const result = await fallback.runTask(taskInput);
-    const notice = fallback.isMock
-      ? `⚠️ ${primaryMessage} VIBA continued with its configured fallback adapter.`
-      : `⚠️ ${primaryMessage} VIBA continued with ${fallback.name}.`;
+  const key = getPlatformGroqKey();
+  if (key.length <= 10) {
+    const message = `${primaryMessage} VIBA could not continue because its permanent GROQ_API_KEY is missing.`;
+    await logAudit("adapter_error", message, {
+      taskId: context.taskId,
+      agentId: context.agentId,
+      provider: context.provider,
+      fallbackProvider: "groq",
+      fallbackFailed: true,
+    });
+    throw new Error(message);
+  }
 
-    // A fallback success must not clear the primary provider's circuit state.
-    // The primary failure remains relevant even when degraded service succeeds.
+  try {
+    const fallback = new GroqAdapter(
+      `${String(context.agentId)}-groq-fallback`,
+      "VIBA Groq",
+      taskInput.systemRole || "Fallback Agent",
+      key,
+      process.env.GROQ_MODEL,
+      taskInput.canUseTools,
+      process.env.RAILWAY_TOKEN,
+      process.env.GITHUB_TOKEN,
+    );
+    const result = await fallback.runTask(taskInput);
+    const notice = `⚠️ ${primaryMessage} VIBA continued this task with its built-in Groq connection. No simulation was used.`;
+
+    await recordSuccess("groq");
     await logAudit("adapter_fallback", notice, {
       taskId: context.taskId,
       agentId: context.agentId,
       provider: context.provider,
-      fallbackProvider: fallback.provider,
+      fallbackProvider: "groq",
       fallbackModel: fallback.model,
-      simulated: fallback.isMock,
-      circuitOpen,
-      permanent,
+      simulated: false,
     });
 
     return {
       result: { ...result, messageText: `${notice}\n\n${result.messageText}` },
-      usedFallback: true,
+      usedFallback: false,
       usedModel: fallback.model,
       successAttempt: null,
-      circuitOpen: circuitOpen || undefined,
     };
-  } catch (fallbackError) {
-    const fallbackExplanation = explainProviderError(fallbackError);
+  } catch (groqError) {
+    await recordFailure("groq");
+    const groqExplanation = explainProviderError(groqError);
     const message =
-      `${primaryMessage} VIBA also failed to continue with its configured fallback ` +
-      `because of ${fallbackExplanation.cause}. Fallback error: ${fallbackExplanation.raw}`;
+      `${primaryMessage} VIBA also failed to continue with its built-in Groq connection ` +
+      `because of ${groqExplanation.cause}. Groq error: ${groqExplanation.raw}`;
 
     await logAudit("adapter_error", message, {
       taskId: context.taskId,
       agentId: context.agentId,
       provider: context.provider,
+      fallbackProvider: "groq",
       fallbackFailed: true,
-      fallbackError: fallbackExplanation.raw,
-      permanent,
+      fallbackError: groqExplanation.raw,
     });
     throw new Error(message);
   }
@@ -331,7 +350,7 @@ export async function runAdapterWithRetry(params: {
   logAudit: LogAuditFn;
   context: RetryContext;
 }): Promise<AdapterRetryResult> {
-  const { buildLiveAdapter, buildFallbackAdapter, taskInput, retryDelayMs, logAudit, context } = params;
+  const { buildLiveAdapter, taskInput, retryDelayMs, logAudit, context } = params;
   const provider = context.provider.toLowerCase();
 
   await refreshCircuitFromDb(provider);
@@ -348,7 +367,8 @@ export async function runAdapterWithRetry(params: {
       circuitOpen: true,
     });
 
-    return continueWithFallback(buildFallbackAdapter, taskInput, context, primaryMessage, logAudit, true);
+    if (provider === "groq") throw new Error(primaryMessage);
+    return continueWithPlatformGroq(taskInput, context, primaryMessage, logAudit);
   }
 
   let result: AgentTaskResult | null = null;
@@ -390,7 +410,7 @@ export async function runAdapterWithRetry(params: {
 
   logger.error(
     { err: lastLiveError, agentId: context.agentId, provider: context.provider, taskId: context.taskId, permanent },
-    "Primary live adapter failed — continuing with configured fallback"
+    provider === "groq" ? "Groq live adapter failed" : "Primary live adapter failed — continuing with Groq"
   );
   await logAudit("adapter_error", primaryMessage, {
     taskId: context.taskId,
@@ -400,5 +420,6 @@ export async function runAdapterWithRetry(params: {
     error: explanation.raw,
   });
 
-  return continueWithFallback(buildFallbackAdapter, taskInput, context, primaryMessage, logAudit, false, permanent);
+  if (provider === "groq") throw new Error(primaryMessage);
+  return continueWithPlatformGroq(taskInput, context, primaryMessage, logAudit);
 }
