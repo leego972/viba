@@ -4,6 +4,7 @@ import {
   getAllProviders,
   getProviderById,
   generateManualGuide,
+  isPlaceholderProvider,
 } from "../lib/deploymentProviderRegistry";
 import {
   getRenderConnectorStatus,
@@ -41,7 +42,7 @@ async function hasCredential(userId: number, provider: string): Promise<boolean>
 
 function executableActions(providerId: string): Action[] {
   if (providerId === "render") return ["deploy", "env_write", "env_read", "status", "logs"];
-  if (providerId === "railway") return ["env_write", "status"];
+  if (providerId === "railway") return ["deploy", "env_write", "status"];
   return [];
 }
 
@@ -58,6 +59,7 @@ function verifiedProvider(providerId: string) {
     supportsDomainCheck: actions.includes("domain_check"),
     supportsLogs: actions.includes("logs"),
     canExecute: actions.length > 0,
+    isPlaceholder: isPlaceholderProvider(providerId),
     executableActions: actions,
     verification: "runtime_function_mapped",
     rawValuesReturned: false,
@@ -72,7 +74,7 @@ router.get("/api/deployment-providers", (_req, res): void => {
 router.get("/api/deployment-providers/:providerId", (req, res): void => {
   const provider = verifiedProvider(String(req.params.providerId));
   if (!provider) { res.status(404).json({ error: "Provider not found" }); return; }
-  res.json({ ok: true, provider, rawValuesReturned: false });
+  res.json({ ok: true, ...provider, rawValuesReturned: false });
 });
 
 router.post("/api/deployment-providers/:providerId/readiness", async (req, res): Promise<void> => {
@@ -91,6 +93,7 @@ router.post("/api/deployment-providers/:providerId/readiness", async (req, res):
     providerId: provider.providerId,
     isReady: provider.canExecute && credentialReady,
     credentialReady,
+    credentialStatus: { ready: credentialReady, rawValuesReturned: false },
     executableActions: provider.executableActions,
     blocks,
     verification: "runtime_function_mapped",
@@ -159,6 +162,20 @@ router.post("/api/deployment-providers/:providerId/execute", async (req, res): P
     return;
   }
 
+  if (provider.credentialProvider) {
+    const credOk = await hasCredential(userId, provider.credentialProvider);
+    if (!credOk) {
+      res.status(400).json({
+        ok: false,
+        blocked: true,
+        blockedReason: "credential_missing",
+        message: `No vault credential found for ${provider.credentialProvider}.`,
+        rawValuesReturned: false,
+      });
+      return;
+    }
+  }
+
   if (["deploy", "env_write"].includes(action) && req.body?.approved !== true) {
     res.status(400).json({ ok: false, blocked: true, blockedReason: "approval_missing" });
     return;
@@ -206,6 +223,21 @@ router.post("/api/deployment-providers/:providerId/execute", async (req, res): P
         const result = await applyRailwayVariablesViaApi(variables, { replace: false, skipDeploys: req.body?.skipDeploys !== false });
         if (!result.ok) { res.status(502).json({ ok: false, executed: false, error: result.error, fallbackNeeded: result.fallbackNeeded }); return; }
         res.json({ ok: true, executed: true, providerId, action, modeUsed: result.modeUsed, appliedKeys: result.appliedKeys, rawValuesReturned: false });
+        return;
+      }
+      if (action === "deploy") {
+        // "deploy" is recognized (so safe-build/approval gating above runs
+        // correctly), but there is no real Railway deploy-trigger function
+        // implemented yet. Refuse explicitly rather than falling through to
+        // a status check that would look like a successful deploy.
+        res.status(501).json({
+          ok: false,
+          executed: false,
+          blocked: true,
+          blockedReason: "deploy_not_yet_implemented",
+          message: "Railway deploy execution is not yet backed by a verified runtime function.",
+          rawValuesReturned: false,
+        });
         return;
       }
       const status = await getRailwayConnectorStatus();

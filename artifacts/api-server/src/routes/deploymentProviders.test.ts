@@ -113,22 +113,22 @@ describe("DeploymentProviderRegistry", () => {
   });
 
   it("placeholder providers do not claim execution support", () => {
-    const placeholders = ALL_PROVIDER_IDS.filter((id) => id !== "railway");
+    const placeholders = ALL_PROVIDER_IDS.filter((id) => id !== "railway" && id !== "render");
     for (const id of placeholders) {
       expect(canExecuteProvider(id)).toBe(false);
     }
   });
 
-  it("railway is the only provider that can execute", () => {
+  it("railway and render are the providers that can execute", () => {
     expect(canExecuteProvider("railway")).toBe(true);
-    expect(canExecuteProvider("render")).toBe(false);
+    expect(canExecuteProvider("render")).toBe(true);
     expect(canExecuteProvider("vercel")).toBe(false);
     expect(canExecuteProvider("sevall")).toBe(false);
     expect(canExecuteProvider("custom")).toBe(false);
   });
 
-  it("isPlaceholderProvider returns true for non-Railway providers", () => {
-    expect(isPlaceholderProvider("render")).toBe(true);
+  it("isPlaceholderProvider returns true for non-implemented providers", () => {
+    expect(isPlaceholderProvider("render")).toBe(false);
     expect(isPlaceholderProvider("digitalocean")).toBe(true);
     expect(isPlaceholderProvider("vercel")).toBe(true);
     expect(isPlaceholderProvider("sevall")).toBe(true);
@@ -136,7 +136,7 @@ describe("DeploymentProviderRegistry", () => {
 
   it("isManualGuidedProvider returns true for custom and placeholder providers", () => {
     expect(isManualGuidedProvider("custom")).toBe(true);
-    expect(isManualGuidedProvider("render")).toBe(true);
+    expect(isManualGuidedProvider("digitalocean")).toBe(true);
   });
 
   it("all providers require safe-build before deploy", () => {
@@ -307,14 +307,14 @@ describe("GET /api/deployment-providers/:providerId", () => {
     expect(body?.["rawValuesReturned"]).toBe(false);
   });
 
-  it("returns Render with isPlaceholder: true", async () => {
+  it("returns Render with isPlaceholder: false (implemented, executable)", async () => {
     const handler = await getRouteHandler("/api/deployment-providers/:providerId", "get");
     const { res, getBody } = makeRes();
     const req = { session: { userId: 1 }, params: { providerId: "render" }, body: {} };
     if (handler) await handler(req, res, () => {});
     const body = getBody() as Record<string, unknown>;
-    expect(body?.["isPlaceholder"]).toBe(true);
-    expect(body?.["canExecute"]).toBe(false);
+    expect(body?.["isPlaceholder"]).toBe(false);
+    expect(body?.["canExecute"]).toBe(true);
   });
 
   it("returns 404 for unknown provider", async () => {
@@ -360,7 +360,7 @@ describe("POST readiness", () => {
     expect(body?.["isReady"]).toBe(true);
   });
 
-  it("Render: not ready — adapter is placeholder", async () => {
+  it("Render: not ready without credential", async () => {
     mockVaultEmpty();
     const handler = await getRouteHandler("/api/deployment-providers/:providerId/readiness", "post");
     const { res, getBody } = makeRes();
@@ -369,14 +369,24 @@ describe("POST readiness", () => {
     const body = getBody() as Record<string, unknown>;
     expect(body?.["isReady"]).toBe(false);
     expect(Array.isArray(body?.["blocks"])).toBe(true);
-    expect((body?.["blocks"] as string[]).some((b) => /adapter/i.test(b))).toBe(true);
+    expect((body?.["blocks"] as string[]).some((b) => /credential/i.test(b))).toBe(true);
+  });
+
+  it("Render: ready with credential", async () => {
+    mockVaultWithCred("render");
+    const handler = await getRouteHandler("/api/deployment-providers/:providerId/readiness", "post");
+    const { res, getBody } = makeRes();
+    const req = { session: { userId: 1 }, params: { providerId: "render" }, body: {} };
+    if (handler) await handler(req, res, () => {});
+    const body = getBody() as Record<string, unknown>;
+    expect(body?.["isReady"]).toBe(true);
   });
 });
 
 // ─── Route: POST execute — placeholder blocked ────────────────────────────────
 
 describe("POST execute — placeholder provider blocked", () => {
-  it("Render execute returns blocked with manual guide", async () => {
+  it("Render execute blocked without credential", async () => {
     mockVaultEmpty();
     const handler = await getRouteHandler("/api/deployment-providers/:providerId/execute", "post");
     const { res, getBody, getStatus } = makeRes();
@@ -385,8 +395,7 @@ describe("POST execute — placeholder provider blocked", () => {
     expect(getStatus()).toBe(400);
     const body = getBody() as Record<string, unknown>;
     expect(body?.["blocked"]).toBe(true);
-    expect(body?.["blockedReason"]).toBe("adapter_placeholder");
-    expect(typeof body?.["manualGuide"]).toBe("string");
+    expect(body?.["blockedReason"]).toBe("credential_missing");
     expect(body?.["rawValuesReturned"]).toBe(false);
   });
 
