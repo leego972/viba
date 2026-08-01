@@ -42,7 +42,7 @@ async function hasCredential(userId: number, provider: string): Promise<boolean>
 
 function executableActions(providerId: string): Action[] {
   if (providerId === "render") return ["deploy", "env_write", "env_read", "status", "logs"];
-  if (providerId === "railway") return ["deploy", "env_write", "status"];
+  if (providerId === "railway") return ["env_write", "status"];
   return [];
 }
 
@@ -223,21 +223,6 @@ router.post("/api/deployment-providers/:providerId/execute", async (req, res): P
         const result = await applyRailwayVariablesViaApi(variables, { replace: false, skipDeploys: req.body?.skipDeploys !== false });
         if (!result.ok) { res.status(502).json({ ok: false, executed: false, error: result.error, fallbackNeeded: result.fallbackNeeded }); return; }
         res.json({ ok: true, executed: true, providerId, action, modeUsed: result.modeUsed, appliedKeys: result.appliedKeys, rawValuesReturned: false });
-        return;
-      }
-      if (action === "deploy") {
-        // "deploy" is recognized (so safe-build/approval gating above runs
-        // correctly), but there is no real Railway deploy-trigger function
-        // implemented yet. Refuse explicitly rather than falling through to
-        // a status check that would look like a successful deploy.
-        res.status(501).json({
-          ok: false,
-          executed: false,
-          blocked: true,
-          blockedReason: "deploy_not_yet_implemented",
-          message: "Railway deploy execution is not yet backed by a verified runtime function.",
-          rawValuesReturned: false,
-        });
         return;
       }
       const status = await getRailwayConnectorStatus();

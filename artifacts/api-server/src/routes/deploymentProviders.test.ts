@@ -422,26 +422,31 @@ describe("POST execute — placeholder provider blocked", () => {
     expect(body?.["rawValuesReturned"]).toBe(false);
   });
 
-  it("execute blocked without safe-build even for railway", async () => {
+  it("Railway deploy stays blocked as not-yet-mapped even with approval and safe-build satisfied (no bypass)", async () => {
     mockVaultWithCred("railway");
     const handler = await getRouteHandler("/api/deployment-providers/:providerId/execute", "post");
     const { res, getBody, getStatus } = makeRes();
-    const req = { session: { userId: 1 }, params: { providerId: "railway" }, body: { approved: true, safeBuildPassed: false } };
+    const req = { session: { userId: 1 }, params: { providerId: "railway" }, body: { approved: true, safeBuildPassed: true } };
     if (handler) await handler(req, res, () => {});
     expect(getStatus()).toBe(400);
     const body = getBody() as Record<string, unknown>;
-    expect(body?.["blockedReason"]).toBe("safe_build_missing");
+    expect(body?.["blockedReason"]).toBe("runtime_action_not_mapped");
   });
 
-  it("execute blocked without approval even for railway with safe-build", async () => {
-    mockVaultWithCred("railway");
+  it("approval and safe-build gates block Render deploy (the provider with a real deploy connector)", async () => {
+    mockVaultWithCred("render");
     const handler = await getRouteHandler("/api/deployment-providers/:providerId/execute", "post");
-    const { res, getBody, getStatus } = makeRes();
-    const req = { session: { userId: 1 }, params: { providerId: "railway" }, body: { approved: false, safeBuildPassed: true } };
-    if (handler) await handler(req, res, () => {});
-    expect(getStatus()).toBe(400);
-    const body = getBody() as Record<string, unknown>;
-    expect(body?.["blockedReason"]).toBe("approval_missing");
+    const { res: res1, getBody: getBody1, getStatus: getStatus1 } = makeRes();
+    const req1 = { session: { userId: 1 }, params: { providerId: "render" }, body: { approved: true, safeBuildPassed: false } };
+    if (handler) await handler(req1, res1, () => {});
+    expect(getStatus1()).toBe(400);
+    expect((getBody1() as Record<string, unknown>)?.["blockedReason"]).toBe("safe_build_missing");
+
+    const { res: res2, getBody: getBody2, getStatus: getStatus2 } = makeRes();
+    const req2 = { session: { userId: 1 }, params: { providerId: "render" }, body: { approved: false, safeBuildPassed: true } };
+    if (handler) await handler(req2, res2, () => {});
+    expect(getStatus2()).toBe(400);
+    expect((getBody2() as Record<string, unknown>)?.["blockedReason"]).toBe("approval_missing");
   });
 
   it("execute: credential check never returns raw credential value", async () => {
