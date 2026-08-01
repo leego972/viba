@@ -40,7 +40,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: pnpm
 
       - name: Enable pnpm
         run: |
@@ -104,6 +103,10 @@ jobs:
         if: always()
         run: |
           cd artifacts/bridge-ai
+          mkdir -p test-results/mobile-visibility
+          if [ ! -f test-results/mobile-visibility/report.json ]; then
+            printf '{"summary":{"errors":1,"warnings":0,"total":1},"issues":[{"severity":"error","kind":"audit-incomplete","route":"n/a","viewport":"n/a","details":"Audit did not produce a report."}]}' > test-results/mobile-visibility/report.json
+          fi
           zip -qr mobile-visibility-audit.zip test-results playwright-report 2>/dev/null || zip -qr mobile-visibility-audit.zip test-results
 
       - name: Upload audit evidence
