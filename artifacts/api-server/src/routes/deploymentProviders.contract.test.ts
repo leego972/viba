@@ -78,7 +78,11 @@ describe("deployment provider executable-route contract", () => {
     const safeBuildGate = routeSource.indexOf(
       'action === "deploy" && req.body?.safeBuildPassed !== true',
     );
-    const renderDispatch = routeSource.indexOf('if (providerId === "render")');
+    // Search for the execute-route dispatch block specifically (note the
+    // trailing "{"), not the earlier executableActions() classification
+    // line ('if (providerId === "render") return [...]') which shares the
+    // same prefix but appears before the gates by design.
+    const renderDispatch = routeSource.indexOf('if (providerId === "render") {');
 
     expect(approvalGate).toBeGreaterThan(-1);
     expect(safeBuildGate).toBeGreaterThan(-1);
