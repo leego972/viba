@@ -1,0 +1,25 @@
+{
+  "name": "@viba/credit-ledger",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "manifest.json",
+    "migrations"
+  ],
+  "scripts": {
+    "build": "pnpm --workspace-root exec tsc -p lib/credit-ledger/tsconfig.json",
+    "typecheck": "pnpm --workspace-root exec tsc -p lib/credit-ledger/tsconfig.json --noEmit",
+    "test": "node --test test/index.test.mjs"
+  }
+}
