@@ -18,13 +18,8 @@
     "migrations"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx --test src/index.test.ts"
-  },
-  "devDependencies": {
-    "@types/node": "catalog:",
-    "tsx": "catalog:",
-    "typescript": "~5.9.3"
+    "build": "pnpm --workspace-root exec tsc -p lib/credit-ledger/tsconfig.json",
+    "typecheck": "pnpm --workspace-root exec tsc -p lib/credit-ledger/tsconfig.json --noEmit",
+    "test": "node --test dist/index.test.js"
   }
 }
