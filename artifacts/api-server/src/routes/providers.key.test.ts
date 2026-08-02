@@ -28,6 +28,8 @@ vi.mock("@workspace/db", () => {
 vi.mock("../lib/vibaVault", () => ({
   saveVibaCredential: vi.fn().mockResolvedValue(undefined),
   resolveVibaCredential: vi.fn().mockResolvedValue({ value: null, source: "missing", missing: [] }),
+  listVibaCredentials: vi.fn().mockResolvedValue([]),
+  deleteVibaCredential: vi.fn().mockResolvedValue(undefined),
   logVibaEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -58,7 +60,6 @@ describe("PATCH /providers/:provider — key routing", () => {
     expect(saveVibaCredential).toHaveBeenCalledWith(
       expect.objectContaining({ provider: "openai", kind: "api_key", value: "sk-openai-test-key" }),
     );
-    // settingsTable upsert should NOT be called with the raw key
     const insertCalls = (db.insert as ReturnType<typeof vi.fn>).mock.calls;
     const updateCalls = (db.update as ReturnType<typeof vi.fn>).mock.calls;
     const allCalls = [...insertCalls, ...updateCalls].flat();
