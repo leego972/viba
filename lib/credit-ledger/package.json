@@ -20,6 +20,6 @@
   "scripts": {
     "build": "pnpm --workspace-root exec tsc -p lib/credit-ledger/tsconfig.json",
     "typecheck": "pnpm --workspace-root exec tsc -p lib/credit-ledger/tsconfig.json --noEmit",
-    "test": "node --test dist/index.test.js"
+    "test": "node --experimental-strip-types --test src/index.test.ts"
   }
 }
