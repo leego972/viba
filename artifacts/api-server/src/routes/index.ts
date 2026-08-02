@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { startMarketplaceReconciler } from "../lib/marketplaceReconciler";
 import healthRouter from "./health";
 import qualityApprovalGateRouter from "./qualityApprovalGate";
 import sessionsRouter from "./sessions";
@@ -64,6 +65,7 @@ import googlePlayCredentialOwnershipRouter from "./googlePlayCredentialOwnership
 import googlePlayPublisherRouter from "./googlePlayPublisher";
 import googlePlaySelfSetupRouter from "./googlePlaySelfSetup";
 import googlePlaySigningRouter from "./googlePlaySigning";
+import marketplaceRouter from "./marketplace";
 
 const router: IRouter = Router();
 
@@ -132,5 +134,8 @@ router.use(googlePlayCredentialOwnershipRouter);
 router.use(googlePlayPublisherRouter);
 router.use(googlePlaySelfSetupRouter);
 router.use(googlePlaySigningRouter);
+router.use(marketplaceRouter);
+
+startMarketplaceReconciler();
 
 export default router;

@@ -49,6 +49,8 @@ import BudgetsPage from "@/pages/budgets";
 import ProjectMemoryPage from "@/pages/project-memory";
 import AppPublisherPage from "@/pages/app-publisher";
 import PlayPublisherPage from "@/pages/play-publisher";
+import MarketplacePage from "@/pages/marketplace";
+import ModuleInventoryPage from "@/pages/module-inventory";
 import Terms from "@/pages/terms";
 import Privacy from "@/pages/privacy";
 import UserInstructions from "@/pages/user-instructions";
@@ -162,6 +164,9 @@ function GatedRouter() {
         <Route path="/project-memory" component={ProjectMemoryPage} />
         <Route path="/app-publisher" component={AppPublisherPage} />
         <Route path="/play-publisher" component={PlayPublisherPage} />
+        <Route path="/marketplace/:slug" component={MarketplacePage} />
+        <Route path="/marketplace" component={MarketplacePage} />
+        <Route path="/module-inventory" component={ModuleInventoryPage} />
         <Route component={NotFound} />
       </Switch>
     </AuthGuard>
