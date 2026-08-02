@@ -9,6 +9,6 @@
   "scripts": {
     "typecheck": "pnpm --workspace-root exec tsc -p lib/affiliate-referral/tsconfig.json --noEmit",
     "build": "pnpm --workspace-root exec tsc -p lib/affiliate-referral/tsconfig.json",
-    "test": "node --test lib/affiliate-referral/test/index.test.mjs"
+    "test": "node --test test/index.test.mjs"
   }
 }
