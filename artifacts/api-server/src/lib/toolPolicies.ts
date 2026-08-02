@@ -16,8 +16,6 @@ export interface PolicyDecision {
   warnings: string[];
 }
 
-// ─── Payload/result redaction ─────────────────────────────────────────────────
-
 const SENSITIVE_KEYS = new Set([
   "password", "secret", "token", "api_key", "key", "webhook_secret",
   "database_url", "smtp_pass", "auth_tag", "iv", "encrypted_value",
@@ -52,8 +50,6 @@ export function redactPayload(obj: Record<string, unknown> | null | undefined): 
 export function redactResult(obj: Record<string, unknown> | null | undefined): Record<string, unknown> {
   return redactPayload(obj);
 }
-
-// ─── Policy evaluators ────────────────────────────────────────────────────────
 
 export function evaluateDeploymentPolicy(tool: ToolDefinition, hasSafeBuildPassed: boolean): PolicyDecision {
   const warnings: string[] = [];
@@ -157,7 +153,7 @@ export function evaluateBuildPolicy(_tool: ToolDefinition, hasSafeBuildPassed: b
     requiresDryRun: false,
     requiresApproval: false,
     requiresSafeBuild: false,
-    blockedReason: hasSafeBuildPassed ? null : null,
+    blockedReason: null,
     warnings: hasSafeBuildPassed ? ["Safe build has passed."] : ["Safe build not yet run. Run pnpm run safe-build before deployment."],
   };
 }
@@ -176,42 +172,38 @@ export function evaluateAiPolicy(tool: ToolDefinition, hasByokCredential: boolea
   return { allowed: true, requiresDryRun: false, requiresApproval: false, requiresSafeBuild: false, blockedReason: null, warnings: [] };
 }
 
-// ─── Master policy evaluator ──────────────────────────────────────────────────
-
 export interface PolicyContext {
   hasSafeBuildPassed?: boolean;
   hasByokCredential?: boolean;
   hasVaultCredential?: boolean;
-  /** Current user plan — used for entitlement gating */
   planKey?: string;
 }
 
 export function evaluateToolPolicy(tool: ToolDefinition, context: PolicyContext = {}): PolicyDecision {
   const { hasSafeBuildPassed = false, hasByokCredential = false, hasVaultCredential = false, planKey } = context;
 
-  // ── Plan entitlement gate (checked first, before credential / category gates) ─
-  if (planKey) {
-    if (!isToolAllowedForPlan(tool.toolId, planKey as PlanKey)) {
-      return {
-        allowed: false,
-        requiresDryRun: false,
-        requiresApproval: false,
-        requiresSafeBuild: false,
-        blockedReason: UPGRADE_MESSAGE,
-        warnings: [`This tool (${tool.toolId}) requires the Pro Repair plan.`],
-      };
-    }
-  }
-
-  // Vault credential gate
+  // Report missing operational prerequisites before commercial entitlement gates.
+  // This keeps diagnostics accurate and avoids returning "upgrade required" when
+  // the action could not run under any plan because its credential is absent.
   if (tool.permissionsRequired.includes("vault_required") && !hasVaultCredential) {
     return {
       allowed: false,
-      requiresDryRun: false,
-      requiresApproval: false,
-      requiresSafeBuild: false,
+      requiresDryRun: tool.supportsDryRun,
+      requiresApproval: tool.requiresApproval,
+      requiresSafeBuild: tool.requiresSafeBuild,
       blockedReason: `${tool.label} requires a vault credential for ${tool.credentialProvider ?? "unknown"} (kind: ${tool.credentialKind ?? "unknown"}). Save one via POST /api/credentials/save.`,
       warnings: [],
+    };
+  }
+
+  if (planKey && !isToolAllowedForPlan(tool.toolId, planKey as PlanKey)) {
+    return {
+      allowed: false,
+      requiresDryRun: tool.supportsDryRun,
+      requiresApproval: tool.requiresApproval,
+      requiresSafeBuild: tool.requiresSafeBuild,
+      blockedReason: UPGRADE_MESSAGE,
+      warnings: [`This tool (${tool.toolId}) requires the Pro Repair plan.`],
     };
   }
 
@@ -233,8 +225,6 @@ export function evaluateToolPolicy(tool: ToolDefinition, context: PolicyContext 
     };
   }
 }
-
-// ─── Risk level helpers ───────────────────────────────────────────────────────
 
 export function isDestructiveOrHigh(riskLevel: RiskLevel): boolean {
   return riskLevel === "destructive" || riskLevel === "high";
