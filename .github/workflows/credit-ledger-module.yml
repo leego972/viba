@@ -1,0 +1,51 @@
+name: Credit Ledger Module
+
+on:
+  pull_request:
+    paths:
+      - "lib/credit-ledger/**"
+      - ".github/workflows/credit-ledger-module.yml"
+  push:
+    branches: [main]
+    paths:
+      - "lib/credit-ledger/**"
+      - ".github/workflows/credit-ledger-module.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-and-package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm --filter @viba/credit-ledger typecheck
+      - name: Test
+        run: pnpm --filter @viba/credit-ledger test
+      - name: Build
+        run: pnpm --filter @viba/credit-ledger build
+      - name: Package for Cloudflare R2
+        run: |
+          mkdir -p module-package/credit-ledger-1.0.0
+          cp -R lib/credit-ledger/dist module-package/credit-ledger-1.0.0/
+          cp -R lib/credit-ledger/migrations module-package/credit-ledger-1.0.0/
+          cp lib/credit-ledger/README.md lib/credit-ledger/manifest.json module-package/credit-ledger-1.0.0/
+          cd module-package
+          zip -qr credit-ledger-1.0.0.zip credit-ledger-1.0.0
+          sha256sum credit-ledger-1.0.0.zip > credit-ledger-1.0.0.zip.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: credit-ledger-r2-package
+          path: |
+            module-package/credit-ledger-1.0.0.zip
+            module-package/credit-ledger-1.0.0.zip.sha256
+          retention-days: 30
