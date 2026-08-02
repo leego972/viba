@@ -1,0 +1,51 @@
+name: Affiliate Referral Module
+
+on:
+  pull_request:
+    paths:
+      - "lib/affiliate-referral/**"
+      - ".github/workflows/affiliate-referral-module.yml"
+  push:
+    branches: [main]
+    paths:
+      - "lib/affiliate-referral/**"
+      - ".github/workflows/affiliate-referral-module.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-and-package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm --filter @viba/affiliate-referral typecheck
+      - name: Build
+        run: pnpm --filter @viba/affiliate-referral build
+      - name: Test compiled module
+        run: pnpm --filter @viba/affiliate-referral test
+      - name: Package for Cloudflare R2
+        run: |
+          mkdir -p module-package/affiliate-referral-1.0.0
+          cp -R lib/affiliate-referral/dist module-package/affiliate-referral-1.0.0/
+          cp -R lib/affiliate-referral/migrations module-package/affiliate-referral-1.0.0/
+          cp lib/affiliate-referral/README.md lib/affiliate-referral/manifest.json module-package/affiliate-referral-1.0.0/
+          cd module-package
+          zip -qr affiliate-referral-1.0.0.zip affiliate-referral-1.0.0
+          sha256sum affiliate-referral-1.0.0.zip > affiliate-referral-1.0.0.zip.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: affiliate-referral-r2-package
+          path: |
+            module-package/affiliate-referral-1.0.0.zip
+            module-package/affiliate-referral-1.0.0.zip.sha256
+          retention-days: 30

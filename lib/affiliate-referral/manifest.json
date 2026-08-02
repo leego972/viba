@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "name": "affiliate-referral",
+  "version": "1.0.0",
+  "runtime": "node>=22",
+  "database": "postgresql>=15",
+  "entrypoint": "dist/index.js",
+  "migration": "migrations/001_affiliate_referral.sql",
+  "capabilities": [
+    "first-touch-attribution",
+    "last-touch-attribution",
+    "fixed-commissions",
+    "percentage-commissions",
+    "recurring-commissions",
+    "idempotent-conversions",
+    "commission-lifecycle",
+    "chargeback-reversal",
+    "payout-batching"
+  ],
+  "sourceReview": {
+    "candidate": "leego972/virellestudios",
+    "decision": "domain-model-reference-only",
+    "reason": "affiliate router used placeholder engine functions and was not copied as working implementation"
+  }
+}
