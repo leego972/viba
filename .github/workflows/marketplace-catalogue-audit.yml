@@ -1,0 +1,58 @@
+name: Marketplace Catalogue Audit
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  catalogue-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Viba
+        uses: actions/checkout@v4
+        with:
+          path: viba
+
+      - name: Checkout legacy Archibald catalogue
+        uses: actions/checkout@v4
+        with:
+          repository: leego972/archibald-titan-ai
+          ref: main
+          path: archibald-titan-ai
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: viba/pnpm-lock.yaml
+
+      - name: Install Viba dependencies
+        working-directory: viba
+        run: pnpm install --frozen-lockfile --reporter=silent
+
+      - name: Audit every seller, listing, and payload definition
+        working-directory: viba
+        run: node scripts/audit-archibald-marketplace.mjs ../archibald-titan-ai audit-results/marketplace
+
+      - name: Print audit decision
+        working-directory: viba
+        run: cat audit-results/marketplace/REPORT.md
+
+      - name: Upload evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: marketplace-catalogue-audit
+          path: viba/audit-results/marketplace
+          if-no-files-found: error
+          retention-days: 30
