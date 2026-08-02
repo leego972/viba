@@ -1,7 +1,10 @@
 import { pool } from "@workspace/db";
 import { getStripeClient } from "./stripe/client";
 
-export async function fulfillMarketplaceCheckout(checkoutSessionId: string): Promise<{
+export async function fulfillMarketplaceCheckout(
+  checkoutSessionId: string,
+  expectedBuyerUserId?: number,
+): Promise<{
   inventoryId: number;
   moduleId: number;
   alreadyOwned: boolean;
@@ -23,6 +26,9 @@ export async function fulfillMarketplaceCheckout(checkoutSessionId: string): Pro
   if (![buyerUserId, moduleId, sellerId].every((value) => Number.isInteger(value) && value > 0)) {
     throw new Error("Marketplace checkout metadata is invalid");
   }
+  if (expectedBuyerUserId !== undefined && buyerUserId !== expectedBuyerUserId) {
+    throw new Error("Checkout session belongs to a different buyer");
+  }
 
   const client = await pool.connect();
   try {
@@ -30,15 +36,16 @@ export async function fulfillMarketplaceCheckout(checkoutSessionId: string): Pro
     const purchaseResult = await client.query<{
       id: number;
       status: string;
-      amount_cents: number;
-      platform_fee_cents: number;
       seller_net_cents: number;
     }>(
-      `SELECT id, status, amount_cents, platform_fee_cents, seller_net_cents
+      `SELECT id, status, seller_net_cents
          FROM marketplace_purchases
         WHERE stripe_checkout_session_id = $1
+          AND buyer_user_id = $2
+          AND module_id = $3
+          AND seller_id = $4
         FOR UPDATE`,
-      [checkoutSessionId],
+      [checkoutSessionId, buyerUserId, moduleId, sellerId],
     );
     const purchase = purchaseResult.rows[0];
     if (!purchase) throw new Error("Marketplace purchase record was not found");
@@ -70,6 +77,7 @@ export async function fulfillMarketplaceCheckout(checkoutSessionId: string): Pro
         `INSERT INTO user_module_inventory
            (user_id, module_id, purchase_id, acquired_via, license_snapshot, version_owned)
          VALUES ($1,$2,$3,'purchase',$4::jsonb,$5)
+         ON CONFLICT (user_id, module_id) DO UPDATE SET version_owned = EXCLUDED.version_owned
          RETURNING id`,
         [buyerUserId, moduleId, purchase.id, JSON.stringify({ license: module.license, moduleName: module.name }), module.version],
       );
