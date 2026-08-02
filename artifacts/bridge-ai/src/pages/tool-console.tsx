@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Navbar } from "@/components/layout/Navbar";
+import { OrbOverlay } from "@/components/OrbOverlay";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -219,6 +220,12 @@ function CommandOrb({ active, warnings, selected }: { active: number; warnings: 
           {selected.label} mode
         </div>
       </div>
+
+      {/* TODO: AGENTS.length is a static placeholder (always 4) — replace
+          with a real live-agent-presence count/indices once that signal
+          exists (e.g. from a session/orchestration API), same way `active`
+          above is wired to executableCount + planningCount. */}
+      <OrbOverlay activeCount={AGENTS.length} />
     </div>
   );
 }
