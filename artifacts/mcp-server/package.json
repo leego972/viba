@@ -1,0 +1,24 @@
+{
+  "name": "@workspace/mcp-server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node ./build.mjs",
+    "start": "node --enable-source-maps ./dist/index.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "express": "^5.2.1",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "catalog:",
+    "esbuild": "0.28.1",
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.6"
+  }
+}

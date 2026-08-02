@@ -79,3 +79,9 @@ jobs:
 
       - name: Build API server
         run: pnpm --filter @workspace/api-server run build
+
+      - name: Run MCP server tests
+        run: pnpm --filter @workspace/mcp-server run test
+
+      - name: Build MCP server
+        run: pnpm --filter @workspace/mcp-server run build
