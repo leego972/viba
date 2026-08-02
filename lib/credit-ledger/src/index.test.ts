@@ -7,7 +7,7 @@ import {
   InsufficientCreditsError,
   ReservationStateError,
   SequentialIdGenerator,
-} from "./index.js";
+} from "./index.ts";
 
 function createLedger() {
   return new CreditLedger(
