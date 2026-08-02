@@ -8,6 +8,10 @@ import path from "path";
 import { existsSync } from "fs";
 import router from "./routes";
 import authRouter from "./routes/auth";
+import apiKeysRouter from "./routes/apiKeys";
+import taskIntakeApiAuthRouter from "./routes/taskIntakeApiAuth";
+import taskIntakeStatusRouter from "./routes/taskIntakeStatus";
+import taskIntakeRouter from "./routes/taskIntake";
 import { logger } from "./lib/logger";
 import { createRateLimiter } from "./middlewares/rateLimiter";
 import { requireSession } from "./middlewares/requireSession";
@@ -229,6 +233,17 @@ app.get("/structured-data.json", (_req, res) => {
 });
 
 app.use("/api", apiLimiter, authRouter);
+// These four are mounted here, ahead of accessTokenMiddleware/requireSession,
+// because they need to be reachable by a bare `Authorization: Bearer
+// viba_live_<key>` request with no browser session and no site-wide
+// ACCESS_TOKEN (e.g. an external MCP client calling on a user's behalf).
+// Each route enforces its own auth: apiKeysRouter and requireSessionUser()
+// require a real login session (key management stays session-only);
+// taskIntakeApiAuthRouter's requireSessionOrApiKey("task-intake") accepts
+// either a session OR a scoped API key, and bridges a valid key into
+// req.session.userId so the downstream task-intake handlers work unchanged.
+app.use("/api", apiLimiter, apiKeysRouter);
+app.use("/api", apiLimiter, taskIntakeApiAuthRouter, taskIntakeStatusRouter, taskIntakeRouter);
 app.use("/api", apiLimiter, accessTokenMiddleware, requireSession, router);
 
 const distDir = path.resolve(process.cwd(), "artifacts", "bridge-ai", "dist", "public");
