@@ -113,18 +113,22 @@ export function getCapabilitySummary(): Record<string, unknown> {
   };
 }
 
+function hasWord(text: string, word: string): boolean {
+  return new RegExp(`\\b${word}\\b`, "i").test(text);
+}
+
 export function routeJobToToolSequence(jobType: string): Record<string, unknown> {
   const normalized = jobType.toLowerCase();
-  if (normalized.includes("design") || normalized.includes("ui") || normalized.includes("ux")) {
-    return { jobType, sequence: ["builder.design.review", "builder.ui.spec.generate", "builder.acceptance.criteria", "builder.coding_agent.prompt"], rawValuesReturned: false };
-  }
-  if (normalized.includes("repair") || normalized.includes("fix") || normalized.includes("bug")) {
+  if (["repair", "fix", "bug", "broken"].some((word) => hasWord(normalized, word))) {
     return { jobType, sequence: ["builder.repair.diagnose", "builder.repair.plan", "builder.patch.plan", "builder.test.plan", "builder.release.gate"], rawValuesReturned: false };
   }
-  if (normalized.includes("upgrade") || normalized.includes("professional") || normalized.includes("improve")) {
+  if (hasWord(normalized, "design") || hasWord(normalized, "ui") || hasWord(normalized, "ux")) {
+    return { jobType, sequence: ["builder.design.review", "builder.ui.spec.generate", "builder.acceptance.criteria", "builder.coding_agent.prompt"], rawValuesReturned: false };
+  }
+  if (["upgrade", "professional", "improve"].some((word) => hasWord(normalized, word))) {
     return { jobType, sequence: ["builder.upgrade.plan", "builder.feature.plan", "builder.test.plan", "builder.release.gate", "builder.acceptance.criteria"], rawValuesReturned: false };
   }
-  if (normalized.includes("deploy") || normalized.includes("render") || normalized.includes("railway")) {
+  if (["deploy", "render", "railway"].some((word) => hasWord(normalized, word))) {
     return { jobType, sequence: ["deployment.provider.readiness", "deployment.plan", "deployment.env.read", "builder.release.gate", "deployment.manual_guide.generate"], rawValuesReturned: false };
   }
   return { jobType, sequence: ["builder.project.blueprint", "builder.feature.plan", "builder.patch.plan", "builder.test.plan", "builder.release.gate"], rawValuesReturned: false };
