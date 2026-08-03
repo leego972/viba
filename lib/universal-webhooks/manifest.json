@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "name": "universal-webhooks",
+  "displayName": "Universal Webhook Framework",
+  "version": "1.0.0",
+  "runtime": "node>=22",
+  "database": "postgresql>=15",
+  "entrypoint": "dist/index.js",
+  "migrationPath": "migrations/001_universal_webhooks.sql",
+  "capabilities": [
+    "hmac-sha256-signing",
+    "timestamp-replay-protection",
+    "inbound-idempotency",
+    "event-subscriptions",
+    "exponential-retries",
+    "dead-letter-replay",
+    "secret-rotation",
+    "delivery-attempt-history"
+  ],
+  "verification": {
+    "typecheck": "pnpm --filter @viba/universal-webhooks typecheck",
+    "build": "pnpm --filter @viba/universal-webhooks build",
+    "test": "pnpm --filter @viba/universal-webhooks test"
+  }
+}
