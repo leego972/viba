@@ -175,7 +175,10 @@ export class UniversalWebhookService {
     previousSecret?: string;
     toleranceSeconds?: number;
   }): Promise<"accepted" | "duplicate" | "invalid"> {
-    const valid = await verifySignature(input);
+    const valid = await verifySignature({
+      ...input,
+      now: Math.floor(this.now().getTime() / 1000),
+    });
     if (!valid) return "invalid";
     if (await this.store.hasInboundEvent(input.eventId)) return "duplicate";
     await this.store.markInboundEvent(input.eventId, this.now().toISOString());
