@@ -285,8 +285,15 @@ export default function NewSession() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><BrainCircuit className="h-5 w-5" /> Automatic AI routing</CardTitle>
-              <CardDescription>Manual provider assignment has been removed.</CardDescription>
+              <CardTitle className="flex items-center gap-2">
+                <BrainCircuit className="h-5 w-5" />
+                {autonomyMode === "Manual" ? "Manual AI assignment" : "Automatic AI routing"}
+              </CardTitle>
+              <CardDescription>
+                {autonomyMode === "Manual"
+                  ? "AI assignment is controlled manually for this mission."
+                  : "VIBA automatically selects the best connected AI for each task."}
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex items-center justify-between">
@@ -294,7 +301,9 @@ export default function NewSession() {
                 <Badge variant={joinedTeam.length > 0 ? "default" : "destructive"}>{joinedTeam.length}</Badge>
               </div>
               <p className="text-sm text-muted-foreground">
-                VIBA compares capability fit, tool access, reliability, quality threshold, and relative model cost for every task. The selected AI and routing reason are shown in the execution log.
+                {autonomyMode === "Manual"
+                  ? "Manual assignment mode is active. Provider choices and execution evidence remain visible in the mission log."
+                  : "VIBA compares capability fit, tool access, reliability, quality threshold, and relative model cost for every task. The selected AI and routing reason are shown in the execution log."}
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {joinedTeam.map((agent) => <Badge key={agent.provider} variant="secondary">{agent.name}</Badge>)}
