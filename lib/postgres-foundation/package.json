@@ -1,0 +1,14 @@
+{
+  "name": "@viba/postgres-foundation",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist", "migrations", "README.md", "manifest.json", "LICENSE"],
+  "scripts": {
+    "typecheck": "pnpm --workspace-root exec tsc -p lib/postgres-foundation/tsconfig.json --noEmit",
+    "build": "pnpm --workspace-root exec tsc -p lib/postgres-foundation/tsconfig.json",
+    "test": "node --test test/index.test.mjs"
+  }
+}
