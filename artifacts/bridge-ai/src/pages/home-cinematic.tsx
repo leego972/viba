@@ -1,90 +1,16 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { ArrowRight, Network, Play, ShieldCheck, SquareTerminal, Zap } from "lucide-react";
 import { useAuth, useLogout } from "@/hooks/useAuth";
-import ExecutionOrbOverlay from "@/components/ExecutionOrbOverlay";
-import "@/components/execution-orb-overlay.css";
+import AdobeExecutionBrain from "@/components/AdobeExecutionBrain";
 import "./home-cinematic.css";
 import "./home-cinematic-incidents.css";
 import "./home-cinematic-v2.css";
 import "./home-cinematic-live.css";
 import "./home-cinematic-repo.css";
 
-const ADOBE_BRAIN_FRAMES = [
-  "https://platform-cs-jpn3.adobe.io/rendition/id/urn:aaid:sc:AP:da498ddc-22a2-4762-b7f5-86c08a1548c4?size=1200",
-  "https://platform-cs-jpn3.adobe.io/rendition/id/urn:aaid:sc:AP:22b22ddb-1b95-4682-8cad-029e4dccbaac?size=1200",
-  "https://platform-cs-jpn3.adobe.io/rendition/id/urn:aaid:sc:AP:9a0cd621-8524-4bc7-858d-65e4e46070e7?size=1200",
-  "https://platform-cs-jpn3.adobe.io/rendition/id/urn:aaid:sc:AP:a5d1763c-afdd-49a7-b852-1ad994764866?size=1200",
-  "https://platform-cs-jpn3.adobe.io/rendition/id/urn:aaid:sc:AP:def911ca-2100-4f08-8b13-e1e7af778814?size=1200",
-  "https://platform-cs-jpn3.adobe.io/rendition/id/urn:aaid:sc:AP:f50e9f20-acd9-4f29-8c11-021ca593d433?size=1200",
-  "https://platform-cs-jpn3.adobe.io/rendition/id/urn:aaid:sc:AP:fc2cd941-a5b4-4089-89b8-cd5da98cb548?size=1200",
-] as const;
-
-const FRAME_PHASES = ["idle", "planning", "working", "working", "verifying", "working", "complete"] as const;
-
 function isValidGithubRepo(value: string): boolean {
   return /^https?:\/\/github\.com\/[^/\s]+\/[^/\s?#]+(?:\.git)?(?:[/?#].*)?$/i.test(value.trim());
-}
-
-function AdobeBrainSequence() {
-  const [activeFrame, setActiveFrame] = useState(0);
-
-  useEffect(() => {
-    ADOBE_BRAIN_FRAMES.forEach((src) => {
-      const image = new Image();
-      image.src = src;
-    });
-
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const timer = window.setInterval(() => {
-      setActiveFrame((current) => (current + 1) % ADOBE_BRAIN_FRAMES.length);
-    }, 2200);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  return (
-    <div
-      className="viba-network"
-      aria-label="VIBA cinematic brain orchestration animation"
-      style={{ position: "relative", overflow: "hidden", isolation: "isolate" }}
-    >
-      <div className="viba-grid" />
-      <div className="viba-aurora viba-aurora-one" />
-      <div className="viba-aurora viba-aurora-two" />
-      {ADOBE_BRAIN_FRAMES.map((src, index) => (
-        <img
-          key={src}
-          src={src}
-          alt={index === 0 ? "VIBA cinematic neural brain" : ""}
-          aria-hidden={index !== 0}
-          loading={index === 0 ? "eager" : "lazy"}
-          style={{
-            position: "absolute",
-            inset: 0,
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            opacity: index === activeFrame ? 1 : 0,
-            transform: index === activeFrame ? "scale(1.02)" : "scale(1.06)",
-            transition: "opacity 1.15s ease, transform 2.2s ease",
-            filter: "saturate(1.08) contrast(1.04)",
-            zIndex: 2,
-          }}
-        />
-      ))}
-      <div
-        aria-hidden="true"
-        style={{
-          position: "absolute",
-          inset: 0,
-          zIndex: 3,
-          background: "linear-gradient(180deg, rgba(4,8,22,.04), rgba(4,8,22,.34))",
-          pointerEvents: "none",
-        }}
-      />
-      <ExecutionOrbOverlay phase={FRAME_PHASES[activeFrame]} />
-    </div>
-  );
 }
 
 export default function CinematicHome() {
@@ -153,7 +79,7 @@ export default function CinematicHome() {
           </div>
 
           <div className="viba-hero-stage">
-            <AdobeBrainSequence />
+            <AdobeExecutionBrain phase="idle" className="viba-network" />
           </div>
         </section>
 
