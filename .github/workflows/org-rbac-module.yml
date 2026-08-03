@@ -1,0 +1,67 @@
+name: Organization RBAC Module
+
+on:
+  pull_request:
+    paths:
+      - "lib/org-rbac/**"
+      - ".github/workflows/org-rbac-module.yml"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "lib/org-rbac/**"
+      - ".github/workflows/org-rbac-module.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-and-package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm --filter @viba/org-rbac typecheck
+      - name: Build
+        run: pnpm --filter @viba/org-rbac build
+      - name: Test compiled module
+        run: pnpm --filter @viba/org-rbac test
+      - name: Package for Cloudflare R2
+        run: |
+          mkdir -p artifacts
+          zip -r artifacts/viba-org-rbac-1.0.0.zip \
+            lib/org-rbac/dist \
+            lib/org-rbac/migrations \
+            lib/org-rbac/README.md \
+            lib/org-rbac/manifest.json \
+            lib/org-rbac/package.json
+          sha256sum artifacts/viba-org-rbac-1.0.0.zip > artifacts/viba-org-rbac-1.0.0.zip.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: viba-org-rbac-1.0.0-r2
+          path: artifacts/*
+          if-no-files-found: error
+      - name: Upload verified package to Cloudflare R2
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+        run: |
+          endpoint="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          prefix="viba-modules/org-rbac/1.0.0"
+          aws s3 cp artifacts/viba-org-rbac-1.0.0.zip "s3://${R2_BUCKET_NAME}/${prefix}/module.zip" --endpoint-url "$endpoint"
+          aws s3 cp artifacts/viba-org-rbac-1.0.0.zip.sha256 "s3://${R2_BUCKET_NAME}/${prefix}/module.zip.sha256" --endpoint-url "$endpoint"
+          aws s3api head-object --bucket "$R2_BUCKET_NAME" --key "${prefix}/module.zip" --endpoint-url "$endpoint"
+          aws s3api head-object --bucket "$R2_BUCKET_NAME" --key "${prefix}/module.zip.sha256" --endpoint-url "$endpoint"
