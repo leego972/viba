@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import type { CoordinatorPhase } from "@/lib/orchestrationViewModel";
 import { PHASE_LABELS } from "@/lib/orchestrationViewModel";
+import AdobeExecutionBrain, { type ExecutionVisualPhase } from "@/components/AdobeExecutionBrain";
 
 const PHASE_COLORS: Record<CoordinatorPhase, string> = {
   idle:             "#4b5563",
@@ -11,6 +12,17 @@ const PHASE_COLORS: Record<CoordinatorPhase, string> = {
   synthesising:     "#a78bfa",
   complete:         "#22c55e",
   error:            "#ef4444",
+};
+
+const EXECUTION_PHASE: Record<CoordinatorPhase, ExecutionVisualPhase> = {
+  idle: "idle",
+  planning: "planning",
+  delegating: "working",
+  reviewing: "verifying",
+  waiting_approval: "verifying",
+  synthesising: "working",
+  complete: "complete",
+  error: "failed",
 };
 
 interface Props {
@@ -49,14 +61,7 @@ export function CoordinatorNode({
         viewBox={`0 0 ${ringSize} ${ringSize}`}
         aria-hidden="true"
       >
-        <circle
-          cx={ringSize / 2}
-          cy={ringSize / 2}
-          r={ringRadius}
-          fill="none"
-          stroke="rgba(255,255,255,0.07)"
-          strokeWidth="2"
-        />
+        <circle cx={ringSize / 2} cy={ringSize / 2} r={ringRadius} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="2" />
         <motion.circle
           cx={ringSize / 2}
           cy={ringSize / 2}
@@ -82,32 +87,12 @@ export function CoordinatorNode({
         />
       )}
 
-      {!reducedMotion && (
-        <motion.div
-          className="absolute rounded-full"
-          style={{
-            width: size + 24,
-            height: size + 24,
-            background: `radial-gradient(circle, ${color}2f 0%, transparent 70%)`,
-          }}
-          animate={isWorking
-            ? { scale: [1, 1.16, 1], opacity: [0.5, 0.95, 0.5] }
-            : { scale: [1, 1.06, 1], opacity: [0.35, 0.55, 0.35] }}
-          transition={{ duration: isWorking ? 1.8 : 3.6, repeat: Infinity, ease: "easeInOut" }}
-        />
-      )}
-
       {!reducedMotion && isWorking && [0, 1, 2].map((index) => (
         <motion.span
           key={index}
           className="absolute inset-0 pointer-events-none"
           animate={{ rotate: 360 }}
-          transition={{
-            duration: 4.8 + index * 0.7,
-            repeat: Infinity,
-            ease: "linear",
-            delay: index * -1.1,
-          }}
+          transition={{ duration: 4.8 + index * 0.7, repeat: Infinity, ease: "linear", delay: index * -1.1 }}
           aria-hidden="true"
         >
           <span
@@ -125,22 +110,25 @@ export function CoordinatorNode({
         </motion.span>
       ))}
 
+      <AdobeExecutionBrain
+        phase={EXECUTION_PHASE[phase]}
+        compact
+        className="relative z-10 rounded-full border-2 shadow-lg"
+        showOverlay={!reducedMotion}
+      />
+
       <div
-        className="relative z-10 flex flex-col items-center justify-center rounded-full border-2 shadow-lg"
-        style={{
-          width: size,
-          height: size,
-          background: `radial-gradient(circle at 35% 30%, ${color}48 0%, #10131c 58%, #090b10 100%)`,
-          borderColor: `${color}95`,
-          boxShadow: `0 0 22px ${color}45, 0 0 52px ${color}1f, inset 0 0 16px rgba(255,255,255,0.035)`,
-        }}
+        className="pointer-events-none absolute z-30 flex flex-col items-center justify-center rounded-full"
+        style={{ width: size, height: size }}
       >
-        <span className="text-[10px] font-bold tracking-[0.22em] text-white/95 uppercase leading-none">VIBA</span>
-        <span className="mt-1 text-[8px] font-medium text-white/55 leading-none">{PHASE_LABELS[phase]}</span>
-        <span className="mt-1 text-[8px] tabular-nums leading-none" style={{ color }}>
+        <span className="text-[8px] font-bold tracking-[0.2em] text-white/95 uppercase leading-none drop-shadow">VIBA</span>
+        <span className="mt-1 text-[7px] font-medium text-white/70 leading-none drop-shadow">{PHASE_LABELS[phase]}</span>
+        <span className="mt-1 text-[7px] tabular-nums leading-none drop-shadow" style={{ color }}>
           {Math.round(safeProgress)}%
         </span>
       </div>
+
+      <style>{`.relative.z-10.rounded-full.border-2.shadow-lg { width: ${size}px; height: ${size}px; border-color: ${color}95; box-shadow: 0 0 22px ${color}45, 0 0 52px ${color}1f; }`}</style>
 
       <div
         className="absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[8px] font-semibold uppercase tracking-[0.2em]"
