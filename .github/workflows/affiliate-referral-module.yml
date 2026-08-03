@@ -49,3 +49,19 @@ jobs:
             module-package/affiliate-referral-1.0.0.zip
             module-package/affiliate-referral-1.0.0.zip.sha256
           retention-days: 30
+      - name: Upload verified package to Cloudflare R2
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+        run: |
+          set -euo pipefail
+          endpoint="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          prefix="s3://${R2_BUCKET_NAME}/viba-modules/affiliate-referral/1.0.0"
+          aws s3 cp module-package/affiliate-referral-1.0.0.zip "${prefix}/affiliate-referral-1.0.0.zip" --endpoint-url "$endpoint" --only-show-errors
+          aws s3 cp module-package/affiliate-referral-1.0.0.zip.sha256 "${prefix}/affiliate-referral-1.0.0.zip.sha256" --endpoint-url "$endpoint" --only-show-errors
+          aws s3api head-object --bucket "$R2_BUCKET_NAME" --key "viba-modules/affiliate-referral/1.0.0/affiliate-referral-1.0.0.zip" --endpoint-url "$endpoint" >/dev/null
+          aws s3api head-object --bucket "$R2_BUCKET_NAME" --key "viba-modules/affiliate-referral/1.0.0/affiliate-referral-1.0.0.zip.sha256" --endpoint-url "$endpoint" >/dev/null
