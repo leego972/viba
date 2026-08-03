@@ -22,10 +22,11 @@ describe("public landing page contract", () => {
     expect(page).toContain("returnTo=");
   });
 
-  it("keeps one clearly labelled orchestration demo as the dominant visual", () => {
-    expect(page).toContain("<BrainNetwork scene={scene.id} />");
-    expect(page).toContain("LANDING PAGE DEMO");
-    expect(page).toContain("const DEMO_INCIDENT");
+  it("keeps the real Adobe execution brain as the dominant visual", () => {
+    expect(page).toContain('import AdobeExecutionBrain from "@/components/AdobeExecutionBrain"');
+    expect(page).toContain('<AdobeExecutionBrain phase="idle" className="viba-network" />');
+    expect(page).not.toContain("LANDING PAGE DEMO");
+    expect(page).not.toContain("const DEMO_INCIDENT");
     expect(page).not.toContain("Choose a failure scenario.");
     expect(page).not.toContain("selectIncident");
   });
