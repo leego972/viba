@@ -1,0 +1,47 @@
+name: Universal Webhooks Module
+
+on:
+  pull_request:
+    paths:
+      - "lib/universal-webhooks/**"
+      - ".github/workflows/universal-webhooks-module.yml"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-and-package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm --filter @viba/universal-webhooks typecheck
+      - name: Build
+        run: pnpm --filter @viba/universal-webhooks build
+      - name: Test compiled module
+        run: pnpm --filter @viba/universal-webhooks test
+      - name: Package for Cloudflare R2
+        run: |
+          mkdir -p artifacts
+          zip -r artifacts/viba-universal-webhooks-1.0.0.zip \
+            lib/universal-webhooks/dist \
+            lib/universal-webhooks/migrations \
+            lib/universal-webhooks/README.md \
+            lib/universal-webhooks/manifest.json \
+            lib/universal-webhooks/package.json
+          sha256sum artifacts/viba-universal-webhooks-1.0.0.zip > artifacts/viba-universal-webhooks-1.0.0.zip.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: viba-universal-webhooks-1.0.0-r2
+          path: artifacts/*
+          if-no-files-found: error
