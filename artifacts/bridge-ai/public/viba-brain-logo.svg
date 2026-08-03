@@ -8,8 +8,9 @@
       <stop offset="1" stop-color="#A855F7"/>
     </linearGradient>
     <linearGradient id="word" x1="180" y1="42" x2="490" y2="122" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#111827"/>
-      <stop offset="1" stop-color="#4F46E5"/>
+      <stop stop-color="#67E8F9"/>
+      <stop offset="0.55" stop-color="#6366F1"/>
+      <stop offset="1" stop-color="#A855F7"/>
     </linearGradient>
     <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
       <feGaussianBlur stdDeviation="4" result="blur"/>
@@ -55,6 +56,6 @@
 
   <g>
     <text x="170" y="91" font-family="Inter, Arial, sans-serif" font-size="62" font-weight="800" letter-spacing="4" fill="url(#word)">V.I.B.A</text>
-    <text x="174" y="120" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="600" letter-spacing="3.2" fill="#6B7280">VIRTUAL INTELLIGENCE BUSINESS ASSISTANT</text>
+    <text x="174" y="120" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700" letter-spacing="3.2" fill="#E5E7EB">VIRTUAL INTELLIGENCE BUSINESS ASSISTANT</text>
   </g>
 </svg>
