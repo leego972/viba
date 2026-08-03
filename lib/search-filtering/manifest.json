@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "1.0",
+  "name": "@viba/search-filtering",
+  "version": "1.0.0",
+  "category": "search",
+  "runtime": "node>=22",
+  "database": "postgresql>=15",
+  "entrypoint": "dist/index.js",
+  "migrations": ["migrations/001_search_filtering_helpers.sql"],
+  "capabilities": [
+    "postgresql-full-text-query-builder",
+    "safe-parameterized-query-generation",
+    "tenant-scoped-search",
+    "configurable-searchable-fields",
+    "exact-range-array-filters",
+    "allowlisted-sorting",
+    "cursor-pagination",
+    "ranked-results",
+    "highlighting-metadata",
+    "search-suggestions",
+    "facet-counts",
+    "vector-search-adapter-interface"
+  ],
+  "security": {
+    "sqlInjectionProtection": "all values are passed as parameterized placeholders; all identifiers are validated against a strict pattern and the caller-supplied schema allowlist",
+    "tenantIsolation": true,
+    "unknownFieldsRejected": true,
+    "queryComplexityLimits": {
+      "maxLimit": 200,
+      "maxQueryLength": 200,
+      "maxFilterCount": 20,
+      "maxSortFields": 5,
+      "maxArrayFilterValues": 100
+    }
+  },
+  "license": "MIT"
+}
