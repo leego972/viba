@@ -1,152 +1,104 @@
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { ArrowRight, Check, CircleAlert, GitBranch, Network, Play, RefreshCw, ShieldCheck, Sparkles, SquareTerminal, Zap } from "lucide-react";
-import { assetUrl, agents, execution, hero, type AssetRef } from "@/lib/assets";
+import { ArrowRight, Network, Play, ShieldCheck, SquareTerminal, Zap } from "lucide-react";
 import { useAuth, useLogout } from "@/hooks/useAuth";
-import CinematicNeuralCanvas from "@/components/CinematicNeuralCanvas";
 import "./home-cinematic.css";
 import "./home-cinematic-incidents.css";
 import "./home-cinematic-v2.css";
 import "./home-cinematic-live.css";
 import "./home-cinematic-repo.css";
 
-type Scene = "idle" | "planning" | "disconnect" | "repair" | "verify" | "complete";
-type NodeId = "strategy" | "research" | "code" | "browser" | "deploy" | "verify";
-type Incident = {
-  label: string;
-  shortLabel: string;
-  detail: string;
-  resolution: string;
-  affectedNode: NodeId;
-};
-
-const SCENES: Array<{ id: Scene; label: string; detail: string; duration: number }> = [
-  { id: "idle", label: "System ready", detail: "Waiting for your instruction", duration: 5200 },
-  { id: "planning", label: "Planning", detail: "Breaking the audit into specialist tasks", duration: 6200 },
-  { id: "disconnect", label: "Issue detected", detail: "A critical pathway stopped responding", duration: 5200 },
-  { id: "repair", label: "Repairing", detail: "Rerouting work through an available pathway", duration: 6800 },
-  { id: "verify", label: "Verifying", detail: "Checking the repair against evidence and tests", duration: 6200 },
-  { id: "complete", label: "Audit complete", detail: "One consolidated release-readiness result", duration: 7000 },
-];
-
-const DEMO_INCIDENT: Incident = {
-  label: "Provider timeout",
-  shortLabel: "API TIMEOUT",
-  detail: "A provider stopped responding during execution.",
-  resolution: "Work rerouted through an available provider and verified",
-  affectedNode: "browser",
-};
-
-const NODES: Array<{ id: NodeId; label: string; x: number; y: number }> = [
-  { id: "strategy", label: "Plan", x: 13, y: 24 },
-  { id: "research", label: "Inspect", x: 16, y: 72 },
-  { id: "code", label: "Code", x: 82, y: 20 },
-  { id: "browser", label: "UI", x: 88, y: 52 },
-  { id: "deploy", label: "Deploy", x: 77, y: 82 },
-  { id: "verify", label: "Verify", x: 45, y: 91 },
-];
-
-const NODE_ICON: Record<NodeId, AssetRef> = {
-  strategy: execution.plan,
-  research: execution.review,
-  code: agents.developer,
-  browser: agents.designer,
-  deploy: agents.deploymentAgent,
-  verify: execution.verify,
-};
+const ADOBE_BRAIN_FRAMES = [
+  "https://platform-cs-jpn3.adobe.io/rendition/id/urn:aaid:sc:AP:da498ddc-22a2-4762-b7f5-86c08a1548c4?size=1200",
+  "https://platform-cs-jpn3.adobe.io/rendition/id/urn:aaid:sc:AP:22b22ddb-1b95-4682-8cad-029e4dccbaac?size=1200",
+  "https://platform-cs-jpn3.adobe.io/rendition/id/urn:aaid:sc:AP:9a0cd621-8524-4bc7-858d-65e4e46070e7?size=1200",
+  "https://platform-cs-jpn3.adobe.io/rendition/id/urn:aaid:sc:AP:a5d1763c-afdd-49a7-b852-1ad994764866?size=1200",
+  "https://platform-cs-jpn3.adobe.io/rendition/id/urn:aaid:sc:AP:def911ca-2100-4f08-8b13-e1e7af778814?size=1200",
+  "https://platform-cs-jpn3.adobe.io/rendition/id/urn:aaid:sc:AP:f50e9f20-acd9-4f29-8c11-021ca593d433?size=1200",
+  "https://platform-cs-jpn3.adobe.io/rendition/id/urn:aaid:sc:AP:fc2cd941-a5b4-4089-89b8-cd5da98cb548?size=1200",
+] as const;
 
 function isValidGithubRepo(value: string): boolean {
   return /^https?:\/\/github\.com\/[^/\s]+\/[^/\s?#]+(?:\.git)?(?:[/?#].*)?$/i.test(value.trim());
 }
 
-function BrainNetwork({ scene }: { scene: Scene }) {
-  const incident = DEMO_INCIDENT;
-  const repairActive = scene === "repair" || scene === "verify" || scene === "complete";
-  const failureActive = scene === "disconnect";
-  const isBusy = scene !== "idle";
+function AdobeBrainSequence() {
+  const [activeFrame, setActiveFrame] = useState(0);
+
+  useEffect(() => {
+    ADOBE_BRAIN_FRAMES.forEach((src) => {
+      const image = new Image();
+      image.src = src;
+    });
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const timer = window.setInterval(() => {
+      setActiveFrame((current) => (current + 1) % ADOBE_BRAIN_FRAMES.length);
+    }, 2200);
+    return () => window.clearInterval(timer);
+  }, []);
 
   return (
     <div
-      className={`viba-network viba-scene-${scene}`}
-      aria-label={`Landing-page demonstration of VIBA orchestration: ${scene}. ${incident.label}`}
+      className="viba-network"
+      aria-label="VIBA cinematic brain animation created in Adobe"
+      style={{ position: "relative", overflow: "hidden", isolation: "isolate" }}
     >
       <div className="viba-grid" />
       <div className="viba-aurora viba-aurora-one" />
       <div className="viba-aurora viba-aurora-two" />
-      <div className="viba-orbit viba-orbit-outer" />
-      <div className="viba-orbit viba-orbit-inner" />
-      <CinematicNeuralCanvas scene={scene} affectedNode={incident.affectedNode} />
-      <svg className="viba-paths" viewBox="0 0 1000 720" preserveAspectRatio="none" aria-hidden="true">
-        <defs>
-          <linearGradient id="pathGlow" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="#53e7ff" />
-            <stop offset="0.52" stopColor="#7a7cff" />
-            <stop offset="1" stopColor="#d55cff" />
-          </linearGradient>
-          <linearGradient id="repairGlow" x1="0" y1="1" x2="1" y2="0">
-            <stop offset="0" stopColor="#3fffc1" />
-            <stop offset="1" stopColor="#53e7ff" />
-          </linearGradient>
-          <filter id="softGlow">
-            <feGaussianBlur stdDeviation="4" result="blur" />
-            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
-        </defs>
-        <g className="viba-line-group" filter="url(#softGlow)">
-          <path className="viba-line viba-line-a" d="M130 170 C310 180 330 310 490 350" />
-          <path className="viba-line viba-line-b" d="M150 520 C280 500 350 390 490 350" />
-          <path className="viba-line viba-line-c" d="M490 350 C650 250 720 130 825 150" />
-          <path className="viba-line viba-line-d" d="M490 350 C680 350 760 360 885 370" />
-          <path className="viba-line viba-line-e" d="M490 350 C660 470 715 565 790 590" />
-          <path className="viba-line viba-line-f" d="M490 350 C480 470 470 560 455 645" />
-          <path className="viba-line viba-line-break" d="M490 350 C680 350 760 360 885 370" />
-          {repairActive && <path className="viba-line viba-line-repair" d="M490 350 C615 455 730 420 885 370" />}
-        </g>
-      </svg>
-
-      <div className="viba-brain-shell">
-        <div className="viba-brain-halo" />
-        <div className="viba-brain-core">
-          <img src={assetUrl(hero.brain)} width={hero.brain.width} height={hero.brain.height} alt="VIBA orchestration brain" />
-          <div className="viba-core-scan" />
-          <div className="viba-core-flare" />
-        </div>
-        <div className="viba-core-caption">
-          <span>V.I.B.A.</span>
-          <small>{scene === "complete" ? "VERIFIED" : isBusy ? "ORCHESTRATING" : "READY"}</small>
-        </div>
+      {ADOBE_BRAIN_FRAMES.map((src, index) => (
+        <img
+          key={src}
+          src={src}
+          alt={index === 0 ? "VIBA cinematic neural brain" : ""}
+          aria-hidden={index !== 0}
+          loading={index === 0 ? "eager" : "lazy"}
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            opacity: index === activeFrame ? 1 : 0,
+            transform: index === activeFrame ? "scale(1.02)" : "scale(1.06)",
+            transition: "opacity 1.15s ease, transform 2.2s ease",
+            filter: "saturate(1.08) contrast(1.04)",
+            zIndex: 2,
+          }}
+        />
+      ))}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          inset: 0,
+          zIndex: 3,
+          background: "linear-gradient(180deg, rgba(4,8,22,.04), rgba(4,8,22,.34))",
+          pointerEvents: "none",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          left: "50%",
+          bottom: "6%",
+          zIndex: 4,
+          transform: "translateX(-50%)",
+          padding: ".55rem .9rem",
+          borderRadius: "999px",
+          border: "1px solid rgba(116,225,255,.36)",
+          background: "rgba(5,10,28,.62)",
+          backdropFilter: "blur(12px)",
+          color: "white",
+          fontSize: ".72rem",
+          fontWeight: 700,
+          letterSpacing: ".16em",
+          whiteSpace: "nowrap",
+        }}
+      >
+        ADOBE CINEMATIC BRAIN
       </div>
-
-      {NODES.map((node, index) => {
-        const affected = node.id === incident.affectedNode && failureActive;
-        const restored = node.id === incident.affectedNode && (scene === "repair" || scene === "verify");
-        return (
-          <div
-            key={node.id}
-            className={`viba-agent-node ${affected ? "is-affected" : ""} ${restored ? "is-restored" : ""}`}
-            style={{ left: `${node.x}%`, top: `${node.y}%`, animationDelay: `${index * -0.7}s` }}
-          >
-            <div className="viba-node-ring" />
-            <div className="viba-node-dot">
-              {affected ? <CircleAlert /> : restored ? <RefreshCw /> : (
-                <img src={assetUrl(NODE_ICON[node.id])} width={20} height={20} alt="" style={{ width: 20, height: 20, objectFit: "contain" }} />
-              )}
-            </div>
-            <span>{node.label}</span>
-            <small>{affected ? "BLOCKED" : restored ? "RESTORED" : isBusy ? "ACTIVE" : "STANDBY"}</small>
-          </div>
-        );
-      })}
-
-      <div className="viba-packet viba-packet-one" />
-      <div className="viba-packet viba-packet-two" />
-      <div className="viba-packet viba-packet-three" />
-      <div className="viba-error-shock"><CircleAlert /><span>PATHWAY LOST</span></div>
-      <div className="viba-repair-label"><GitBranch /><span>NEW PATH VERIFIED</span></div>
-      <div className="viba-incident-badge"><CircleAlert /><span>{incident.shortLabel}</span></div>
-      <div className="viba-incident-resolution"><ShieldCheck /><span>{incident.resolution}</span></div>
-      <div className="viba-complete-wave" />
-      <div className="viba-complete-message"><Check /><strong>AUDIT READY</strong><span>Consolidated result prepared</span></div>
     </div>
   );
 }
@@ -155,20 +107,9 @@ export default function CinematicHome() {
   const { isAuthenticated } = useAuth();
   const logout = useLogout();
   const [, navigate] = useLocation();
-  const [sceneIndex, setSceneIndex] = useState(0);
   const [instruction, setInstruction] = useState("");
   const [repoUrl, setRepoUrl] = useState("");
   const [repoError, setRepoError] = useState("");
-  const scene = SCENES[sceneIndex];
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setSceneIndex((current) => (current + 1) % SCENES.length);
-    }, scene.duration);
-    return () => window.clearTimeout(timer);
-  }, [sceneIndex, scene.duration]);
-
-  const progress = useMemo(() => ((sceneIndex + 1) / SCENES.length) * 100, [sceneIndex]);
 
   function runAudit(event: FormEvent) {
     event.preventDefault();
@@ -228,17 +169,7 @@ export default function CinematicHome() {
           </div>
 
           <div className="viba-hero-stage">
-            <BrainNetwork scene={scene.id} />
-            <div className="viba-stage-status">
-              <div className="viba-status-icon">{scene.id === "disconnect" ? <CircleAlert /> : scene.id === "repair" ? <RefreshCw /> : scene.id === "complete" ? <Check /> : <Sparkles />}</div>
-              <div>
-                <small>LANDING PAGE DEMO</small>
-                <strong>{scene.label}</strong>
-                <span>{scene.id === "disconnect" ? DEMO_INCIDENT.detail : scene.id === "repair" ? DEMO_INCIDENT.resolution : scene.detail}</span>
-              </div>
-              <div className="viba-scene-count">0{sceneIndex + 1}<small>/0{SCENES.length}</small></div>
-              <div className="viba-progress"><i style={{ width: `${progress}%` }} /></div>
-            </div>
+            <AdobeBrainSequence />
           </div>
         </section>
 
