@@ -7,6 +7,13 @@ on:
       - ".github/workflows/universal-webhooks-module.yml"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "lib/universal-webhooks/**"
+      - ".github/workflows/universal-webhooks-module.yml"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
 
 permissions:
   contents: read
@@ -45,3 +52,19 @@ jobs:
           name: viba-universal-webhooks-1.0.0-r2
           path: artifacts/*
           if-no-files-found: error
+      - name: Upload verified package to Cloudflare R2
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+        run: |
+          set -euo pipefail
+          endpoint="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          prefix="s3://${R2_BUCKET_NAME}/viba-modules/universal-webhooks/1.0.0"
+          aws s3 cp artifacts/viba-universal-webhooks-1.0.0.zip "${prefix}/viba-universal-webhooks-1.0.0.zip" --endpoint-url "$endpoint" --only-show-errors
+          aws s3 cp artifacts/viba-universal-webhooks-1.0.0.zip.sha256 "${prefix}/viba-universal-webhooks-1.0.0.zip.sha256" --endpoint-url "$endpoint" --only-show-errors
+          aws s3api head-object --bucket "$R2_BUCKET_NAME" --key "viba-modules/universal-webhooks/1.0.0/viba-universal-webhooks-1.0.0.zip" --endpoint-url "$endpoint" >/dev/null
+          aws s3api head-object --bucket "$R2_BUCKET_NAME" --key "viba-modules/universal-webhooks/1.0.0/viba-universal-webhooks-1.0.0.zip.sha256" --endpoint-url "$endpoint" >/dev/null
