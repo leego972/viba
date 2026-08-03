@@ -2,6 +2,8 @@ import { type FormEvent, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { ArrowRight, Network, Play, ShieldCheck, SquareTerminal, Zap } from "lucide-react";
 import { useAuth, useLogout } from "@/hooks/useAuth";
+import ExecutionOrbOverlay from "@/components/ExecutionOrbOverlay";
+import "@/components/execution-orb-overlay.css";
 import "./home-cinematic.css";
 import "./home-cinematic-incidents.css";
 import "./home-cinematic-v2.css";
@@ -17,6 +19,8 @@ const ADOBE_BRAIN_FRAMES = [
   "https://platform-cs-jpn3.adobe.io/rendition/id/urn:aaid:sc:AP:f50e9f20-acd9-4f29-8c11-021ca593d433?size=1200",
   "https://platform-cs-jpn3.adobe.io/rendition/id/urn:aaid:sc:AP:fc2cd941-a5b4-4089-89b8-cd5da98cb548?size=1200",
 ] as const;
+
+const FRAME_PHASES = ["idle", "planning", "working", "working", "verifying", "working", "complete"] as const;
 
 function isValidGithubRepo(value: string): boolean {
   return /^https?:\/\/github\.com\/[^/\s]+\/[^/\s?#]+(?:\.git)?(?:[/?#].*)?$/i.test(value.trim());
@@ -41,7 +45,7 @@ function AdobeBrainSequence() {
   return (
     <div
       className="viba-network"
-      aria-label="VIBA cinematic brain animation created in Adobe"
+      aria-label="VIBA cinematic brain orchestration animation"
       style={{ position: "relative", overflow: "hidden", isolation: "isolate" }}
     >
       <div className="viba-grid" />
@@ -78,27 +82,7 @@ function AdobeBrainSequence() {
           pointerEvents: "none",
         }}
       />
-      <div
-        style={{
-          position: "absolute",
-          left: "50%",
-          bottom: "6%",
-          zIndex: 4,
-          transform: "translateX(-50%)",
-          padding: ".55rem .9rem",
-          borderRadius: "999px",
-          border: "1px solid rgba(116,225,255,.36)",
-          background: "rgba(5,10,28,.62)",
-          backdropFilter: "blur(12px)",
-          color: "white",
-          fontSize: ".72rem",
-          fontWeight: 700,
-          letterSpacing: ".16em",
-          whiteSpace: "nowrap",
-        }}
-      >
-        ADOBE CINEMATIC BRAIN
-      </div>
+      <ExecutionOrbOverlay phase={FRAME_PHASES[activeFrame]} />
     </div>
   );
 }
