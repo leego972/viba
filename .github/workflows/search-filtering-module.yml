@@ -1,0 +1,93 @@
+name: Search Filtering Module
+
+on:
+  pull_request:
+    paths:
+      - "lib/search-filtering/**"
+      - ".github/workflows/search-filtering-module.yml"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "lib/search-filtering/**"
+      - ".github/workflows/search-filtering-module.yml"
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  verify-and-package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm --filter @viba/search-filtering typecheck
+      - name: Build
+        run: pnpm --filter @viba/search-filtering build
+      - name: Test compiled module
+        run: pnpm --filter @viba/search-filtering test
+      - name: Package for Cloudflare R2
+        run: |
+          mkdir -p artifacts
+          zip -r artifacts/viba-search-filtering-1.0.0.zip \
+            lib/search-filtering/dist \
+            lib/search-filtering/migrations \
+            lib/search-filtering/README.md \
+            lib/search-filtering/manifest.json \
+            lib/search-filtering/package.json
+          sha256sum artifacts/viba-search-filtering-1.0.0.zip > artifacts/viba-search-filtering-1.0.0.zip.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: viba-search-filtering-1.0.0-r2
+          path: artifacts/*
+          if-no-files-found: error
+      - name: Upload and verify package in Cloudflare R2
+        id: r2_upload
+        continue-on-error: true
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+        run: |
+          set -euo pipefail
+          endpoint="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          prefix="viba-modules/search-filtering/1.0.0"
+          aws s3 cp artifacts/viba-search-filtering-1.0.0.zip "s3://${R2_BUCKET_NAME}/${prefix}/module.zip" --endpoint-url "$endpoint" --only-show-errors
+          aws s3 cp artifacts/viba-search-filtering-1.0.0.zip.sha256 "s3://${R2_BUCKET_NAME}/${prefix}/module.zip.sha256" --endpoint-url "$endpoint" --only-show-errors
+          aws s3api head-object --bucket "$R2_BUCKET_NAME" --key "${prefix}/module.zip" --endpoint-url "$endpoint" >/dev/null
+          aws s3api head-object --bucket "$R2_BUCKET_NAME" --key "${prefix}/module.zip.sha256" --endpoint-url "$endpoint" >/dev/null
+      - name: Publish machine-readable R2 verification status
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/github-script@v7
+        env:
+          R2_UPLOAD_OUTCOME: ${{ steps.r2_upload.outcome }}
+        with:
+          script: |
+            const verified = process.env.R2_UPLOAD_OUTCOME === 'success';
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: verified ? 'success' : 'failure',
+              context: 'R2 Upload / search-filtering',
+              description: verified
+                ? 'R2 ZIP and checksum verified for search-filtering 1.0.0'
+                : 'R2 upload or object verification failed for search-filtering',
+              target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+            });
+      - name: Fail when R2 publication is not verified
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.r2_upload.outcome != 'success'
+        run: exit 1
