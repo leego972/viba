@@ -46,8 +46,11 @@ export default function CinematicHome() {
     <div className="viba-cinematic-page viba-concise-home">
       <header className="viba-cinematic-nav">
         <Link href="/" className="viba-brand-lockup" aria-label="VIBA home">
-          <img src={`${import.meta.env.BASE_URL}viba-brain-logo.svg`} alt="VIBA" />
-          <span className="viba-nav-tagline">All as One</span>
+          <img src={`${import.meta.env.BASE_URL}viba-brain-logo.svg`} alt="" aria-hidden="true" />
+          <div className="viba-brand-copy">
+            <strong className="viba-brand-name">VIBA</strong>
+            <span className="viba-nav-tagline">All as One</span>
+          </div>
         </Link>
         <nav><a href="#audit">Repository audit</a><Link href="/pricing">Pricing</Link></nav>
         <div className="viba-nav-actions">
@@ -98,7 +101,13 @@ export default function CinematicHome() {
       </main>
 
       <footer className="viba-cinematic-footer">
-        <Link href="/" className="viba-brand-lockup" aria-label="VIBA home"><img src={`${import.meta.env.BASE_URL}viba-logo.png`} alt="VIBA" /></Link>
+        <Link href="/" className="viba-brand-lockup" aria-label="VIBA home">
+          <img src={`${import.meta.env.BASE_URL}viba-brain-logo.svg`} alt="" aria-hidden="true" />
+          <div className="viba-brand-copy">
+            <strong className="viba-brand-name">VIBA</strong>
+            <span className="viba-nav-tagline">All as One</span>
+          </div>
+        </Link>
         <div className="viba-footer-legal"><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link></div>
       </footer>
     </div>
