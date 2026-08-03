@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "1.0",
+  "name": "@viba/audit-evidence",
+  "version": "1.0.0",
+  "category": "compliance-audit",
+  "runtime": "node>=22",
+  "database": "postgresql>=15",
+  "entrypoint": "dist/index.js",
+  "migrations": ["migrations/001_audit_evidence.sql"],
+  "capabilities": [
+    "append-only-audit-events",
+    "tenant-scoped-events",
+    "before-after-snapshots",
+    "request-correlation-ip-context",
+    "safe-evidence-attachment-references",
+    "deterministic-event-ordering",
+    "cursor-pagination",
+    "json-evidence-bundle-export",
+    "integrity-hash-chain",
+    "hash-chain-verification",
+    "configurable-field-redaction"
+  ],
+  "security": {
+    "authorizationDefault": "deny",
+    "tenantIsolation": true,
+    "eventsAreImmutable": true,
+    "secretFieldsRejectedAtWrite": true,
+    "hashAlgorithm": "sha256",
+    "cryptoSource": "node:crypto"
+  },
+  "license": "MIT"
+}
