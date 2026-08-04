@@ -51,7 +51,7 @@ function hasActiveDependent(taskId: number, tasks: Task[]): boolean {
   return tasks.some((task) => task.dependencyTaskId === taskId && ACTIVE_STATUSES.has(task.status));
 }
 
-function agentScore(task: Task, agent: Agent): number {
+function agentScore(task: Task, agent: Agent, workerReliability?: ReadonlyMap<number, number>): number {
   if (agent.satOutReason) return Number.NEGATIVE_INFINITY;
   if ((task.toolRequirements?.length ?? 0) > 0 && !agent.canUseTools) return Number.NEGATIVE_INFINITY;
 
@@ -63,12 +63,21 @@ function agentScore(task: Task, agent: Agent): number {
     [agent.role, agent.provider, ...agent.capabilities],
   ) * 5;
   if (!agent.isMock) score += 3;
+
+  const reliability = workerReliability?.get(agent.id);
+  if (reliability !== undefined) {
+    score += Math.max(-15, Math.min(15, (reliability - 50) * 0.3));
+  }
   return score;
 }
 
-export function selectBestAgent(task: Task, agents: Agent[]): { agent: Agent | null; score: number; reasons: string[] } {
+export function selectBestAgent(
+  task: Task,
+  agents: Agent[],
+  workerReliability?: ReadonlyMap<number, number>,
+): { agent: Agent | null; score: number; reasons: string[] } {
   const ranked = agents
-    .map((agent) => ({ agent, score: agentScore(task, agent) }))
+    .map((agent) => ({ agent, score: agentScore(task, agent, workerReliability) }))
     .filter((candidate) => Number.isFinite(candidate.score))
     .sort((left, right) => right.score - left.score || left.agent.id - right.agent.id);
 
@@ -81,6 +90,8 @@ export function selectBestAgent(task: Task, agents: Agent[]): { agent: Agent | n
   if (task.assignedAgentId === best.agent.id) reasons.push("Preserves the existing operator assignment.");
   if ((task.toolRequirements?.length ?? 0) > 0) reasons.push("Selected operator satisfies required tool capabilities.");
   if (best.score > 0) reasons.push("Operator role and capabilities match the task content.");
+  const reliability = workerReliability?.get(best.agent.id);
+  if (reliability !== undefined) reasons.push(`Measured worker reliability is ${reliability.toFixed(1)}%.`);
   return { agent: best.agent, score: best.score, reasons };
 }
 
@@ -106,6 +117,7 @@ export function buildCoordinationPlan(input: {
   agents: Agent[];
   now?: Date;
   stalledAfterMs?: number;
+  workerReliability?: ReadonlyMap<number, number>;
 }): CoordinationPlan {
   const now = input.now ?? new Date();
   const stalledAfterMs = input.stalledAfterMs ?? 15 * 60_000;
@@ -120,7 +132,7 @@ export function buildCoordinationPlan(input: {
     if (task.status === "in_progress") {
       const ageMs = now.getTime() - task.updatedAt.getTime();
       if (ageMs >= stalledAfterMs && !hasActiveDependent(task.id, input.tasks)) {
-        const selection = selectBestAgent({ ...task, assignedAgentId: null }, input.agents);
+        const selection = selectBestAgent({ ...task, assignedAgentId: null }, input.agents, input.workerReliability);
         decisions.push({
           type: "recover",
           taskId: task.id,
@@ -145,7 +157,7 @@ export function buildCoordinationPlan(input: {
       continue;
     }
 
-    const selection = selectBestAgent(task, input.agents);
+    const selection = selectBestAgent(task, input.agents, input.workerReliability);
     if (!selection.agent) {
       blockedTaskIds.push(task.id);
       decisions.push({ type: "blocked", taskId: task.id, agentId: null, score: 0, reasons: selection.reasons });
