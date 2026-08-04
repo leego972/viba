@@ -67,3 +67,14 @@ export const proposalDecisionsTable = pgTable("proposal_decisions", {
   contractVersionCreated: integer("contract_version_created"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const architectureTwinSnapshotsTable = pgTable("architecture_twin_snapshots", {
+  id: serial("id").primaryKey(),
+  sessionId: integer("session_id").notNull().references(() => sessionsTable.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+  sourceRevision: text("source_revision"),
+  nodeCount: integer("node_count").notNull(),
+  edgeCount: integer("edge_count").notNull(),
+  snapshot: jsonb("snapshot").$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({ sessionVersion: uniqueIndex("architecture_twin_session_version_uq").on(table.sessionId, table.version) }));
