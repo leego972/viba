@@ -16,16 +16,39 @@ if (!process.env.DATABASE_URL) {
 // 25 leaves headroom for the db push step and other tooling.
 const poolMax = parseInt(process.env["DATABASE_POOL_MAX"] ?? "25", 10);
 
-export const pool = new Pool({
+const rawPool = new Pool({
   connectionString: process.env.DATABASE_URL,
   max: poolMax,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 5_000,
 });
 
-// Install the governance tables, default-contract issuer and execution guards
-// before any application module can send work to the database.
-await ensureGovernanceDatabase(pool);
+/**
+ * Starts governance bootstrap immediately. The exported pool waits for this
+ * promise before application queries/connects, while the bootstrap itself uses
+ * rawPool and therefore cannot deadlock through the guard.
+ */
+export const governanceReady = ensureGovernanceDatabase(rawPool);
+
+export const pool = new Proxy(rawPool, {
+  get(target, property, receiver) {
+    if (property === "query") {
+      return async (...args: unknown[]) => {
+        await governanceReady;
+        return (target.query as (...queryArgs: unknown[]) => unknown).apply(target, args);
+      };
+    }
+    if (property === "connect") {
+      return async (...args: unknown[]) => {
+        await governanceReady;
+        return (target.connect as (...connectArgs: unknown[]) => unknown).apply(target, args);
+      };
+    }
+
+    const value = Reflect.get(target, property, receiver) as unknown;
+    return typeof value === "function" ? value.bind(target) : value;
+  },
+}) as pg.Pool;
 
 export const db = drizzle(pool, { schema });
 
