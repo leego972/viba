@@ -1,18 +1,21 @@
-import { db, auditLogsTable, sessionsTable, tasksTable } from "@workspace/db";
+import { db, agentsTable, auditLogsTable, sessionsTable, tasksTable } from "@workspace/db";
 import type { Task } from "@workspace/db";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import {
   runFullWorkflow as runRawFullWorkflow,
   runNextAgentStep as runRawNextAgentStep,
 } from "./agentLoop";
 import { authorizeScheduledContract } from "./architectureImpactGate";
 import { refreshSessionArchitectureTwin } from "./architectureTwinService";
+import { buildCoordinationPlan, type CoordinationDecision } from "./autonomousCoordinator";
 import {
   evaluateExecutionAuthorization,
   getActiveTaskContract,
   releaseTaskReservations,
   reserveContractResources,
 } from "./governanceStore";
+
+const COORDINATION_WAIT_STATUS = "coordination_wait";
 
 async function logGovernanceAudit(
   sessionId: number,
@@ -23,32 +26,104 @@ async function logGovernanceAudit(
   await db.insert(auditLogsTable).values({ sessionId, eventType, description, metadata });
 }
 
-async function findNextPlannedTask(sessionId: number): Promise<Task | null> {
-  const tasks = await db
+async function logCoordinationDecision(sessionId: number, decision: CoordinationDecision): Promise<void> {
+  await logGovernanceAudit(
+    sessionId,
+    `coordination_${decision.type}`,
+    decision.reasons.join(" ") || `Coordination decision: ${decision.type}`,
+    {
+      taskId: decision.taskId,
+      agentId: decision.agentId,
+      score: decision.score,
+      decisionType: decision.type,
+    },
+  );
+}
+
+async function prepareCoordinatedTask(sessionId: number): Promise<Task | null> {
+  await db
+    .update(tasksTable)
+    .set({ status: "planned", blockedReason: null })
+    .where(inArray(
+      tasksTable.id,
+      db
+        .select({ id: tasksTable.id })
+        .from(tasksTable)
+        .where(and(
+          eq(tasksTable.sessionId, sessionId),
+          eq(tasksTable.status, COORDINATION_WAIT_STATUS),
+        )),
+    ));
+
+  const [tasks, agents] = await Promise.all([
+    db.select().from(tasksTable).where(eq(tasksTable.sessionId, sessionId)).orderBy(asc(tasksTable.id)),
+    db.select().from(agentsTable).where(eq(agentsTable.sessionId, sessionId)),
+  ]);
+  const activeAgents = agents.filter((agent) => !agent.satOutReason);
+  const plan = buildCoordinationPlan({ tasks, agents: activeAgents });
+
+  for (const decision of plan.decisions) {
+    await logCoordinationDecision(sessionId, decision);
+
+    if (decision.type === "recover") {
+      await db
+        .update(tasksTable)
+        .set({
+          status: "planned",
+          assignedAgentId: decision.agentId,
+          blockedReason: decision.reasons.join(" "),
+        })
+        .where(eq(tasksTable.id, decision.taskId));
+    } else if (decision.type === "reassign") {
+      await db
+        .update(tasksTable)
+        .set({ assignedAgentId: decision.agentId, blockedReason: null })
+        .where(eq(tasksTable.id, decision.taskId));
+    } else if (decision.type === "wait_for_dependencies") {
+      await db
+        .update(tasksTable)
+        .set({ status: COORDINATION_WAIT_STATUS, blockedReason: decision.reasons.join(" ") })
+        .where(eq(tasksTable.id, decision.taskId));
+    } else if (decision.type === "blocked") {
+      await db
+        .update(tasksTable)
+        .set({ status: "review", blockedReason: decision.reasons.join(" ") })
+        .where(eq(tasksTable.id, decision.taskId));
+    }
+  }
+
+  const refreshedTasks = await db
     .select()
     .from(tasksTable)
     .where(eq(tasksTable.sessionId, sessionId))
     .orderBy(asc(tasksTable.id));
+  const refreshedPlan = buildCoordinationPlan({ tasks: refreshedTasks, agents: activeAgents });
+  const nextTaskId = refreshedPlan.runnableTaskIds[0];
+  if (nextTaskId === undefined) return null;
 
-  const blockedTaskIds = new Set(
-    tasks.filter((task) => task.status === "blocked_needs_tools").map((task) => task.id),
+  const nextTask = refreshedTasks.find((task) => task.id === nextTaskId) ?? null;
+  const assignment = refreshedPlan.decisions.find((decision) =>
+    decision.taskId === nextTaskId && (decision.type === "schedule" || decision.type === "reassign"),
   );
-  return tasks.find((task) =>
-    task.status === "planned" &&
-    task.dependencyTaskId !== null &&
-    blockedTaskIds.has(task.dependencyTaskId),
-  ) ?? tasks.find((task) => task.status === "planned") ?? null;
+  if (nextTask && assignment?.agentId !== null && assignment?.agentId !== undefined) {
+    await db
+      .update(tasksTable)
+      .set({ assignedAgentId: assignment.agentId, blockedReason: null })
+      .where(eq(tasksTable.id, nextTask.id));
+    return { ...nextTask, assignedAgentId: assignment.agentId };
+  }
+  return nextTask;
 }
 
 export async function runNextAgentStep(
   sessionId: number,
   userId = 0,
 ): ReturnType<typeof runRawNextAgentStep> {
-  const nextTask = await findNextPlannedTask(sessionId);
+  const nextTask = await prepareCoordinatedTask(sessionId);
   if (!nextTask) return runRawNextAgentStep(sessionId, userId);
 
   const contract = await getActiveTaskContract(nextTask.id);
-  const mode = process.env.VIBA_GOVERNANCE_MODE?.toLowerCase() === "enforce" ? "enforce" : "audit";
+  const mode = process.env.VIBA_GOVERNANCE_MODE?.toLowerCase() === "audit" ? "audit" : "enforce";
   const authorization = evaluateExecutionAuthorization({
     taskId: nextTask.id,
     sessionId,
