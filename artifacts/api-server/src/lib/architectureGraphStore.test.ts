@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ArchitectureDigitalTwin } from "./architectureDigitalTwin";
 import { buildArchitectureTwin, type SessionArchitectureInput } from "./architectureGraphStore";
 
 function fixture(): SessionArchitectureInput {
@@ -82,7 +83,6 @@ describe("buildArchitectureTwin", () => {
 
   it("produces a snapshot usable by impact analysis", () => {
     const snapshot = buildArchitectureTwin(fixture());
-    const { ArchitectureDigitalTwin } = require("./architectureDigitalTwin") as typeof import("./architectureDigitalTwin");
     const report = new ArchitectureDigitalTwin(snapshot).analyzeChange({
       taskId: 11,
       changedPaths: ["artifacts/api-server/src/routes/example.ts"],
