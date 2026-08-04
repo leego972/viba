@@ -1,0 +1,201 @@
+import {
+  db,
+  governanceReservationsTable,
+  operatorProposalsTable,
+  proposalDecisionsTable,
+  taskContractsTable,
+} from "@workspace/db";
+import { and, desc, eq } from "drizzle-orm";
+import type {
+  ActiveReservation,
+  ImprovementProposal,
+  ProposalAssessment,
+  TaskContract,
+} from "./orchestrationGovernance";
+
+export type GovernanceMode = "audit" | "enforce";
+
+export interface ExecutionAuthorization {
+  allowed: boolean;
+  mode: GovernanceMode;
+  contract: TaskContract | null;
+  reason: string;
+}
+
+function modeFromEnvironment(): GovernanceMode {
+  return process.env.VIBA_GOVERNANCE_MODE?.toLowerCase() === "enforce" ? "enforce" : "audit";
+}
+
+function toRuntimeContract(row: typeof taskContractsTable.$inferSelect): TaskContract {
+  return {
+    id: String(row.id),
+    version: row.version,
+    sessionId: row.sessionId,
+    taskId: row.taskId,
+    objective: row.objective,
+    assignedAgentId: row.assignedAgentId ?? 0,
+    allowedPaths: row.allowedPaths,
+    forbiddenPaths: row.forbiddenPaths,
+    ownedInterfaces: row.ownedInterfaces,
+    dependencies: row.dependencyTaskIds,
+    requiredChecks: row.requiredChecks,
+    maxEstimatedCost: row.maxEstimatedCost ?? undefined,
+    expiresAt: row.expiresAt?.toISOString(),
+  };
+}
+
+export async function getActiveTaskContract(taskId: number): Promise<TaskContract | null> {
+  const [row] = await db
+    .select()
+    .from(taskContractsTable)
+    .where(and(eq(taskContractsTable.taskId, taskId), eq(taskContractsTable.status, "active")))
+    .orderBy(desc(taskContractsTable.version))
+    .limit(1);
+
+  if (!row) return null;
+  if (row.expiresAt && row.expiresAt.getTime() <= Date.now()) return null;
+  return toRuntimeContract(row);
+}
+
+export async function authorizeTaskExecution(input: {
+  taskId: number;
+  sessionId: number;
+  agentId: number;
+  mode?: GovernanceMode;
+}): Promise<ExecutionAuthorization> {
+  const mode = input.mode ?? modeFromEnvironment();
+  const contract = await getActiveTaskContract(input.taskId);
+
+  if (!contract) {
+    return {
+      allowed: mode === "audit",
+      mode,
+      contract: null,
+      reason: mode === "audit"
+        ? "No active task contract; execution allowed in audit mode."
+        : "Execution blocked: no active task contract.",
+    };
+  }
+
+  if (contract.sessionId !== input.sessionId) {
+    return { allowed: false, mode, contract, reason: "Execution blocked: contract belongs to another session." };
+  }
+
+  if (contract.assignedAgentId > 0 && contract.assignedAgentId !== input.agentId) {
+    return { allowed: false, mode, contract, reason: "Execution blocked: contract is assigned to another operator." };
+  }
+
+  return { allowed: true, mode, contract, reason: "Execution authorized by active task contract." };
+}
+
+export async function listActiveReservations(sessionId: number): Promise<ActiveReservation[]> {
+  const rows = await db
+    .select()
+    .from(governanceReservationsTable)
+    .where(and(
+      eq(governanceReservationsTable.sessionId, sessionId),
+      eq(governanceReservationsTable.status, "active"),
+    ));
+
+  const grouped = new Map<number, ActiveReservation>();
+  for (const row of rows) {
+    const current = grouped.get(row.taskId) ?? {
+      contractId: String(row.contractId),
+      taskId: row.taskId,
+      agentId: row.agentId ?? 0,
+      paths: [],
+      interfaces: [],
+    };
+    if (row.resourceType === "path") current.paths.push(row.resourceKey);
+    if (row.resourceType === "interface") current.interfaces.push(row.resourceKey);
+    grouped.set(row.taskId, current);
+  }
+  return [...grouped.values()];
+}
+
+export async function reserveContractResources(contract: TaskContract): Promise<void> {
+  const contractId = Number(contract.id);
+  if (!Number.isSafeInteger(contractId)) throw new Error("Persisted contract id must be numeric");
+
+  const existing = await db
+    .select()
+    .from(governanceReservationsTable)
+    .where(and(
+      eq(governanceReservationsTable.contractId, contractId),
+      eq(governanceReservationsTable.status, "active"),
+    ));
+  if (existing.length > 0) return;
+
+  const rows = [
+    ...contract.allowedPaths.map((resourceKey) => ({ resourceType: "path", resourceKey })),
+    ...contract.ownedInterfaces.map((resourceKey) => ({ resourceType: "interface", resourceKey })),
+  ];
+  if (rows.length === 0) return;
+
+  await db.insert(governanceReservationsTable).values(rows.map((row) => ({
+    sessionId: contract.sessionId,
+    taskId: contract.taskId,
+    contractId,
+    agentId: contract.assignedAgentId || null,
+    resourceType: row.resourceType,
+    resourceKey: row.resourceKey,
+    status: "active",
+  })));
+}
+
+export async function releaseTaskReservations(taskId: number): Promise<void> {
+  await db
+    .update(governanceReservationsTable)
+    .set({ status: "released", releasedAt: new Date() })
+    .where(and(
+      eq(governanceReservationsTable.taskId, taskId),
+      eq(governanceReservationsTable.status, "active"),
+    ));
+}
+
+export async function persistImprovementProposal(
+  proposal: ImprovementProposal,
+  expectedBenefits: string[] = [],
+): Promise<number> {
+  const [row] = await db.insert(operatorProposalsTable).values({
+    sessionId: 0,
+    taskId: proposal.taskId,
+    contractId: Number(proposal.contractId),
+    agentId: proposal.proposedByAgentId,
+    proposalType: proposal.type,
+    summary: proposal.summary,
+    rationale: proposal.rationale,
+    affectedPaths: proposal.requestedPaths,
+    affectedInterfaces: proposal.affectedInterfaces,
+    requestedDependencies: proposal.requestedDependencies,
+    expectedBenefits,
+    estimatedCost: {
+      implementation: proposal.estimatedImplementationCost,
+      monthlyDelta: proposal.estimatedMonthlyCostDelta,
+      savingsPercent: proposal.estimatedSavingsPercent,
+    },
+    risk: proposal.risk,
+    status: "pending",
+  }).returning({ id: operatorProposalsTable.id });
+  if (!row) throw new Error("Failed to persist operator proposal");
+  return row.id;
+}
+
+export async function persistProposalDecision(input: {
+  proposalId: number;
+  assessment: ProposalAssessment;
+  contractVersionCreated?: number;
+}): Promise<void> {
+  await db.insert(proposalDecisionsTable).values({
+    proposalId: input.proposalId,
+    decision: input.assessment.decision,
+    reason: input.assessment.reasons.join(" "),
+    conditions: input.assessment.conditions,
+    conflictReport: { taskIds: input.assessment.conflictingTaskIds },
+    contractVersionCreated: input.contractVersionCreated,
+  });
+  await db
+    .update(operatorProposalsTable)
+    .set({ status: input.assessment.decision, decidedAt: new Date() })
+    .where(eq(operatorProposalsTable.id, input.proposalId));
+}
