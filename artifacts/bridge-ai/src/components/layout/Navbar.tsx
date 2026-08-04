@@ -161,7 +161,7 @@ export function Navbar() {
       <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
       <div className="container flex h-[60px] max-w-screen-2xl items-center gap-1 px-2 min-[360px]:gap-1.5 min-[360px]:px-3 sm:gap-3 sm:px-4">
         <Link href="/" className="flex min-w-0 shrink items-center xl:shrink-0">
-          <img src={`${import.meta.env.BASE_URL}viba-logo.png`} alt="VIBA" className="h-9 w-auto max-w-[68px] object-contain min-[360px]:h-10 min-[360px]:max-w-[82px] sm:h-14 sm:max-w-none" />
+          <img src={`${import.meta.env.BASE_URL}viba-logo.png`} alt="VIBA" className="h-11 w-auto max-w-[84px] object-contain min-[360px]:h-12 min-[360px]:max-w-[96px] sm:h-16 sm:max-w-none" />
         </Link>
 
         <nav className="hidden min-w-0 flex-1 items-center gap-0.5 xl:flex" aria-label="Main navigation">

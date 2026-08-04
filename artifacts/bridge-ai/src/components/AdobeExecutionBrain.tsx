@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 export type ExecutionVisualPhase = "idle" | "planning" | "working" | "verifying" | "complete" | "failed";
 
@@ -21,9 +21,18 @@ type Operator = {
   accent: string;
 };
 
+// Base brain animation (self-hosted, served from /public/assets/brain).
+// Used as the underlying layer for every phase; the operator plasma
+// overlay (PlasmaOverlay, below) renders on top of it via z-20.
+const BRAIN_ANIMATION_SRC = `${import.meta.env.BASE_URL}assets/brain/viba-brain-animation.mp4`;
+// Static still frame, shown while the video buffers and as a fallback if
+// it fails to load (blocked format, network error, etc.) so the brain
+// screen never renders blank.
+const BRAIN_POSTER_SRC = `${import.meta.env.BASE_URL}assets/hero/viba-brain-hero.webp`;
+
 const SUPPLIED_ADOBE_VIDEOS = {
-  main: "https://at.adobe.com/SQFrff2FxDkq786F",
-  active: "https://at.adobe.com/u1yW29X4jlSsOUwS",
+  main: BRAIN_ANIMATION_SRC,
+  active: BRAIN_ANIMATION_SRC,
 } as const;
 
 const OPERATORS: Operator[] = [
@@ -189,10 +198,12 @@ export default function AdobeExecutionBrain({
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const source = videoForPhase(phase);
+  const [videoFailed, setVideoFailed] = useState(false);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
+    setVideoFailed(false);
     video.load();
     void video.play().catch(() => undefined);
   }, [source]);
@@ -202,25 +213,39 @@ export default function AdobeExecutionBrain({
       className={`relative isolate overflow-hidden bg-[#07090e] ${className}`}
       aria-label={`VIBA Adobe execution animation: ${phase}`}
     >
-      <video
-        ref={videoRef}
-        key={source}
-        className="absolute inset-0 h-full w-full select-none"
-        style={{
-          objectFit: compact ? "cover" : "contain",
-          objectPosition: "50% 50%",
-          transform: compact ? "scale(1.04)" : "none",
-        }}
-        autoPlay
-        muted
-        loop
-        playsInline
-        preload="auto"
-        disablePictureInPicture
-        aria-hidden="true"
-      >
-        <source src={source} type="video/mp4" />
-      </video>
+      {videoFailed ? (
+        // Video failed to load (bad format, network error, etc.) — fall
+        // back to the static brain still so the screen is never blank.
+        <img
+          src={BRAIN_POSTER_SRC}
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 h-full w-full select-none object-contain"
+          style={{ objectPosition: "50% 50%" }}
+        />
+      ) : (
+        <video
+          ref={videoRef}
+          key={source}
+          className="absolute inset-0 h-full w-full select-none"
+          style={{
+            objectFit: compact ? "cover" : "contain",
+            objectPosition: "50% 50%",
+            transform: compact ? "scale(1.04)" : "none",
+          }}
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="auto"
+          poster={BRAIN_POSTER_SRC}
+          disablePictureInPicture
+          aria-hidden="true"
+          onError={() => setVideoFailed(true)}
+        >
+          <source src={source} type="video/mp4" />
+        </video>
+      )}
       <div
         className="pointer-events-none absolute inset-0 z-10"
         style={{
