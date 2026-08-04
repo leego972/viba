@@ -127,25 +127,39 @@ export async function refreshContinuousImprovementSnapshot(sessionId: number): P
     const durations = assigned.map((task) => Math.max(0, task.updatedAt.getTime() - task.createdAt.getTime()));
     const costs = assigned.map((task) => task.costEstimate ?? 0);
     const qualitySignals = assigned.map((task) => task.status === "complete" ? 1 : task.status === "review" ? 0.45 : task.status === "blocked_needs_tools" ? 0.2 : 0.6);
-    const input = {
+    const completedTasks = assigned.filter((task) => task.status === "complete").length;
+    const reviewedTasks = assigned.filter((task) => task.status === "review").length;
+    const recoveredTasks = recoveredByAgent.get(agentId) ?? 0;
+    const blockedTasks = assigned.filter((task) => task.status === "blocked_needs_tools").length;
+    const averageCostUsd = average(costs);
+    const averageDurationMs = average(durations);
+    const score = scoreWorker({
       agentId,
-      completedTasks: assigned.filter((task) => task.status === "complete").length,
-      reviewedTasks: assigned.filter((task) => task.status === "review").length,
-      recoveredTasks: recoveredByAgent.get(agentId) ?? 0,
-      blockedTasks: assigned.filter((task) => task.status === "blocked_needs_tools").length,
-      averageCostUsd: average(costs),
-      averageDurationMs: average(durations),
+      completedTasks,
+      reviewedTasks,
+      recoveredTasks,
+      blockedTasks,
+      averageCostUsd,
+      averageDurationMs,
       qualitySignals,
-    };
-    const score = scoreWorker(input);
+    });
     workerScores.push(score);
     await db.insert(operatorPerformanceSnapshotsTable).values({
       sessionId,
       agentId,
       version: await nextWorkerVersion(sessionId, agentId),
-      ...input,
-      ...score,
-      evidence: { taskIds: assigned.map((task) => task.id) },
+      completedTasks,
+      reviewedTasks,
+      recoveredTasks,
+      blockedTasks,
+      averageCostUsd,
+      averageDurationMs,
+      successRate: score.successRate,
+      recoveryRate: score.recoveryRate,
+      qualityScore: score.qualityScore,
+      efficiencyScore: score.efficiencyScore,
+      reliabilityScore: score.reliabilityScore,
+      evidence: { taskIds: assigned.map((task) => task.id), qualitySignals },
     });
   }
 
