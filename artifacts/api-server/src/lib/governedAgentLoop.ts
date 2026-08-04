@@ -9,6 +9,10 @@ import { authorizeScheduledContract } from "./architectureImpactGate";
 import { refreshSessionArchitectureTwin } from "./architectureTwinService";
 import { buildCoordinationPlan, type CoordinationDecision } from "./autonomousCoordinator";
 import {
+  getLatestWorkerReliability,
+  refreshContinuousImprovementSnapshot,
+} from "./continuousImprovementService";
+import {
   captureEngineeringLesson,
   injectEngineeringMemoryContext,
 } from "./engineeringMemoryIntegration";
@@ -59,12 +63,13 @@ async function prepareCoordinatedTask(sessionId: number): Promise<Task | null> {
         )),
     ));
 
-  const [tasks, agents] = await Promise.all([
+  const [tasks, agents, workerReliability] = await Promise.all([
     db.select().from(tasksTable).where(eq(tasksTable.sessionId, sessionId)).orderBy(asc(tasksTable.id)),
     db.select().from(agentsTable).where(eq(agentsTable.sessionId, sessionId)),
+    getLatestWorkerReliability(sessionId),
   ]);
   const activeAgents = agents.filter((agent) => !agent.satOutReason);
-  const plan = buildCoordinationPlan({ tasks, agents: activeAgents });
+  const plan = buildCoordinationPlan({ tasks, agents: activeAgents, workerReliability });
 
   for (const decision of plan.decisions) {
     await logCoordinationDecision(sessionId, decision);
@@ -122,7 +127,11 @@ async function prepareCoordinatedTask(sessionId: number): Promise<Task | null> {
     .from(tasksTable)
     .where(eq(tasksTable.sessionId, sessionId))
     .orderBy(asc(tasksTable.id));
-  const refreshedPlan = buildCoordinationPlan({ tasks: refreshedTasks, agents: activeAgents });
+  const refreshedPlan = buildCoordinationPlan({
+    tasks: refreshedTasks,
+    agents: activeAgents,
+    workerReliability,
+  });
   const nextTaskId = refreshedPlan.runnableTaskIds[0];
   if (nextTaskId === undefined) return null;
 
@@ -174,6 +183,7 @@ export async function runNextAgentStep(
       .update(tasksTable)
       .set({ status: "review", blockedReason: authorization.reason })
       .where(eq(tasksTable.id, nextTask.id));
+    await refreshContinuousImprovementSnapshot(sessionId);
     return {
       newMessages: [],
       updatedTasks: [{ ...nextTask, status: "review", blockedReason: authorization.reason } as Task],
@@ -182,6 +192,7 @@ export async function runNextAgentStep(
     };
   }
 
+  let memoryBrief = "";
   if (authorization.contract) {
     const snapshot = await refreshSessionArchitectureTwin({ sessionId });
     const impact = await authorizeScheduledContract({ sessionId, contract: authorization.contract });
@@ -208,6 +219,7 @@ export async function runNextAgentStep(
         .update(tasksTable)
         .set({ status: "review", blockedReason })
         .where(eq(tasksTable.id, nextTask.id));
+      await refreshContinuousImprovementSnapshot(sessionId);
       return {
         newMessages: [],
         updatedTasks: [{ ...nextTask, status: "review", blockedReason } as Task],
@@ -216,7 +228,7 @@ export async function runNextAgentStep(
       };
     }
 
-    await injectEngineeringMemoryContext({
+    memoryBrief = await injectEngineeringMemoryContext({
       sessionId,
       taskTitle: nextTask.title,
       taskDescription: nextTask.description,
@@ -225,12 +237,21 @@ export async function runNextAgentStep(
     });
     await reserveContractResources(authorization.contract);
   } else {
-    await injectEngineeringMemoryContext({
+    memoryBrief = await injectEngineeringMemoryContext({
       sessionId,
       taskTitle: nextTask.title,
       taskDescription: nextTask.description,
       modules: [nextTask.type],
     });
+  }
+
+  if (memoryBrief) {
+    await logGovernanceAudit(
+      sessionId,
+      "engineering_memory_context_injected",
+      "Relevant engineering memory was injected into the operator context.",
+      { taskId: nextTask.id, agentId: nextTask.assignedAgentId, characterCount: memoryBrief.length },
+    );
   }
 
   const result = await runRawNextAgentStep(sessionId, userId);
@@ -240,6 +261,17 @@ export async function runNextAgentStep(
   if (finished) {
     await releaseTaskReservations(nextTask.id);
     await refreshSessionArchitectureTwin({ sessionId });
+    const improvement = await refreshContinuousImprovementSnapshot(sessionId);
+    await logGovernanceAudit(
+      sessionId,
+      "continuous_improvement_snapshot_created",
+      `Continuous improvement snapshot ${improvement.systemVersion} created.`,
+      {
+        taskId: nextTask.id,
+        workerCount: improvement.workers.length,
+        recommendationCount: improvement.recommendations.length,
+      },
+    );
   }
   return result;
 }
