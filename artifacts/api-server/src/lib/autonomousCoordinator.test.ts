@@ -58,6 +58,25 @@ describe("autonomous coordinator", () => {
     expect(selection.agent?.id).toBe(2);
   });
 
+  it("uses measured reliability to choose between equally capable workers", () => {
+    const selection = selectBestAgent(
+      task(1),
+      [agent(1), agent(2)],
+      new Map([[1, 35], [2, 92]]),
+    );
+    expect(selection.agent?.id).toBe(2);
+    expect(selection.reasons.join(" ")).toContain("92.0%");
+  });
+
+  it("does not allow reliability to override required tool capability", () => {
+    const selection = selectBestAgent(
+      task(1, { toolRequirements: ["run_tests"] }),
+      [agent(1, { canUseTools: false }), agent(2, { canUseTools: true })],
+      new Map([[1, 100], [2, 20]]),
+    );
+    expect(selection.agent?.id).toBe(2);
+  });
+
   it("creates parallel-safe batches across different operators", () => {
     const plan = buildCoordinationPlan({
       tasks: [task(1, { assignedAgentId: 1 }), task(2, { assignedAgentId: 2 }), task(3, { dependencyTaskId: 1 })],
