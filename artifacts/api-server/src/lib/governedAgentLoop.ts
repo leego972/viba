@@ -5,6 +5,8 @@ import {
   runFullWorkflow as runRawFullWorkflow,
   runNextAgentStep as runRawNextAgentStep,
 } from "./agentLoop";
+import { authorizeScheduledContract } from "./architectureImpactGate";
+import { refreshSessionArchitectureTwin } from "./architectureTwinService";
 import {
   evaluateExecutionAuthorization,
   getActiveTaskContract,
@@ -80,12 +82,51 @@ export async function runNextAgentStep(
     };
   }
 
-  if (authorization.contract) await reserveContractResources(authorization.contract);
+  if (authorization.contract) {
+    const snapshot = await refreshSessionArchitectureTwin({ sessionId });
+    const impact = await authorizeScheduledContract({ sessionId, contract: authorization.contract });
+    const impactReason = impact?.reasons.join(" ") || "Architecture impact simulation completed.";
+
+    await logGovernanceAudit(
+      sessionId,
+      impact?.allowed === false ? "architecture_execution_blocked" : "architecture_execution_authorized",
+      impactReason,
+      {
+        taskId: nextTask.id,
+        snapshotVersion: snapshot.version,
+        action: impact?.action ?? "approve",
+        riskLevel: impact?.report.riskLevel ?? "low",
+        riskScore: impact?.report.riskScore ?? 0,
+        conflictingTaskIds: impact?.report.conflictingTaskIds ?? [],
+        requiredReviews: impact?.report.requiredReviews ?? [],
+      },
+    );
+
+    if (impact && !impact.allowed) {
+      const blockedReason = impact.conditions.join(" ") || impactReason;
+      await db
+        .update(tasksTable)
+        .set({ status: "review", blockedReason })
+        .where(eq(tasksTable.id, nextTask.id));
+      return {
+        newMessages: [],
+        updatedTasks: [{ ...nextTask, status: "review", blockedReason } as Task],
+        approvalRequired: false,
+        approval: null,
+      };
+    }
+
+    await reserveContractResources(authorization.contract);
+  }
+
   const result = await runRawNextAgentStep(sessionId, userId);
   const finished = result.updatedTasks.some((task) =>
     task.id === nextTask.id && (task.status === "complete" || task.status === "review"),
   );
-  if (finished) await releaseTaskReservations(nextTask.id);
+  if (finished) {
+    await releaseTaskReservations(nextTask.id);
+    await refreshSessionArchitectureTwin({ sessionId });
+  }
   return result;
 }
 
