@@ -1,0 +1,14 @@
+{
+  "name": "@viba/api-foundation",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist", "README.md", "manifest.json", "PROVENANCE.md"],
+  "scripts": {
+    "typecheck": "pnpm --workspace-root exec tsc -p lib/api-foundation/tsconfig.json --noEmit",
+    "build": "pnpm --workspace-root exec tsc -p lib/api-foundation/tsconfig.json",
+    "test": "node --test test/index.test.mjs"
+  }
+}
