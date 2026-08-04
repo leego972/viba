@@ -10,8 +10,5 @@
     "typecheck": "pnpm --workspace-root exec tsc -p lib/auth-identity/tsconfig.json --noEmit",
     "build": "pnpm --workspace-root exec tsc -p lib/auth-identity/tsconfig.json",
     "test": "node --test lib/auth-identity/test/index.test.mjs"
-  },
-  "devDependencies": {
-    "@types/node": "catalog:"
   }
 }
