@@ -6,6 +6,7 @@ import {
   taskContractsTable,
 } from "@workspace/db";
 import { and, desc, eq } from "drizzle-orm";
+import { captureApprovedProposalDecision } from "./engineeringMemoryIntegration";
 import type {
   ActiveReservation,
   ImprovementProposal,
@@ -23,7 +24,7 @@ export interface ExecutionAuthorization {
 }
 
 function modeFromEnvironment(): GovernanceMode {
-  return process.env.VIBA_GOVERNANCE_MODE?.toLowerCase() === "enforce" ? "enforce" : "audit";
+  return process.env.VIBA_GOVERNANCE_MODE?.toLowerCase() === "audit" ? "audit" : "enforce";
 }
 
 function toRuntimeContract(row: typeof taskContractsTable.$inferSelect): TaskContract {
@@ -222,4 +223,8 @@ export async function persistProposalDecision(input: {
     .update(operatorProposalsTable)
     .set({ status: input.assessment.decision, decidedAt: new Date() })
     .where(eq(operatorProposalsTable.id, input.proposalId));
+  await captureApprovedProposalDecision({
+    proposalId: input.proposalId,
+    assessment: input.assessment,
+  });
 }
