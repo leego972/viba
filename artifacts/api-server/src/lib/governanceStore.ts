@@ -44,6 +44,39 @@ function toRuntimeContract(row: typeof taskContractsTable.$inferSelect): TaskCon
   };
 }
 
+export function evaluateExecutionAuthorization(input: {
+  taskId: number;
+  sessionId: number;
+  agentId: number;
+  mode: GovernanceMode;
+  contract: TaskContract | null;
+}): ExecutionAuthorization {
+  const { contract, mode } = input;
+  if (!contract) {
+    return {
+      allowed: mode === "audit",
+      mode,
+      contract: null,
+      reason: mode === "audit"
+        ? "No active task contract; execution allowed in audit mode."
+        : "Execution blocked: no active task contract.",
+    };
+  }
+  if (contract.taskId !== input.taskId) {
+    return { allowed: false, mode, contract, reason: "Execution blocked: contract belongs to another task." };
+  }
+  if (contract.sessionId !== input.sessionId) {
+    return { allowed: false, mode, contract, reason: "Execution blocked: contract belongs to another session." };
+  }
+  if (contract.assignedAgentId > 0 && contract.assignedAgentId !== input.agentId) {
+    return { allowed: false, mode, contract, reason: "Execution blocked: contract is assigned to another operator." };
+  }
+  if (contract.expiresAt && Date.parse(contract.expiresAt) <= Date.now()) {
+    return { allowed: false, mode, contract, reason: "Execution blocked: task contract has expired." };
+  }
+  return { allowed: true, mode, contract, reason: "Execution authorized by active task contract." };
+}
+
 export async function getActiveTaskContract(taskId: number): Promise<TaskContract | null> {
   const [row] = await db
     .select()
@@ -53,7 +86,6 @@ export async function getActiveTaskContract(taskId: number): Promise<TaskContrac
     .limit(1);
 
   if (!row) return null;
-  if (row.expiresAt && row.expiresAt.getTime() <= Date.now()) return null;
   return toRuntimeContract(row);
 }
 
@@ -65,27 +97,7 @@ export async function authorizeTaskExecution(input: {
 }): Promise<ExecutionAuthorization> {
   const mode = input.mode ?? modeFromEnvironment();
   const contract = await getActiveTaskContract(input.taskId);
-
-  if (!contract) {
-    return {
-      allowed: mode === "audit",
-      mode,
-      contract: null,
-      reason: mode === "audit"
-        ? "No active task contract; execution allowed in audit mode."
-        : "Execution blocked: no active task contract.",
-    };
-  }
-
-  if (contract.sessionId !== input.sessionId) {
-    return { allowed: false, mode, contract, reason: "Execution blocked: contract belongs to another session." };
-  }
-
-  if (contract.assignedAgentId > 0 && contract.assignedAgentId !== input.agentId) {
-    return { allowed: false, mode, contract, reason: "Execution blocked: contract is assigned to another operator." };
-  }
-
-  return { allowed: true, mode, contract, reason: "Execution authorized by active task contract." };
+  return evaluateExecutionAuthorization({ ...input, mode, contract });
 }
 
 export async function listActiveReservations(sessionId: number): Promise<ActiveReservation[]> {
