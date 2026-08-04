@@ -21,3 +21,4 @@ export * from "./contentCreator";
 export * from "./deploy";
 export * from "./aiOptimizer";
 export * from "./governance";
+export * from "./engineeringMemory";
