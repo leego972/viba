@@ -85,6 +85,22 @@ function line(value: string, max = 240): string {
   return normalized.length <= max ? normalized : `${normalized.slice(0, max - 1)}…`;
 }
 
+export function formatEngineeringMemoryBrief(input: {
+  decisions: Array<{ title: string; decision: string }>;
+  patterns: Array<{ title: string; decision?: string }>;
+  lessons: Array<{ title: string; decision?: string }>;
+}, limit = 6): string {
+  const entries = [
+    ...input.decisions.map((record) => `ADR: ${line(record.title)} — ${line(record.decision)}`),
+    ...input.patterns.map((record) => `PATTERN: ${line(record.title)} — ${line(record.decision ?? "")}`),
+    ...input.lessons.map((record) => `LESSON: ${line(record.title)} — ${line(record.decision ?? "")}`),
+  ].slice(0, limit);
+
+  return entries.length > 0
+    ? `[ENGINEERING MEMORY]\n${entries.map((entry) => `• ${entry}`).join("\n")}`
+    : "";
+}
+
 export async function buildEngineeringMemoryBrief(input: {
   sessionId: number;
   taskTitle: string;
@@ -99,16 +115,7 @@ export async function buildEngineeringMemoryBrief(input: {
     interfaces: input.interfaces ?? [],
     limit: input.limit ?? 6,
   });
-
-  const entries = [
-    ...memory.decisions.map((record) => `ADR: ${line(record.title)} — ${line(record.decision)}`),
-    ...memory.patterns.map((record) => `PATTERN: ${line(record.title)} — ${line(record.decision ?? "")}`),
-    ...memory.lessons.map((record) => `LESSON: ${line(record.title)} — ${line(record.decision ?? "")}`),
-  ].slice(0, input.limit ?? 6);
-
-  return entries.length > 0
-    ? `[ENGINEERING MEMORY]\n${entries.map((entry) => `• ${entry}`).join("\n")}`
-    : "";
+  return formatEngineeringMemoryBrief(memory, input.limit ?? 6);
 }
 
 export async function injectEngineeringMemoryContext(input: {
