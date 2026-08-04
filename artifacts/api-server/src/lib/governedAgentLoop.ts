@@ -8,6 +8,7 @@ import {
 import { authorizeScheduledContract } from "./architectureImpactGate";
 import { refreshSessionArchitectureTwin } from "./architectureTwinService";
 import { buildCoordinationPlan, type CoordinationDecision } from "./autonomousCoordinator";
+import { injectContinuousImprovementContext } from "./continuousImprovementContext";
 import {
   getLatestWorkerReliability,
   refreshContinuousImprovementSnapshot,
@@ -251,6 +252,16 @@ export async function runNextAgentStep(
       "engineering_memory_context_injected",
       "Relevant engineering memory was injected into the operator context.",
       { taskId: nextTask.id, agentId: nextTask.assignedAgentId, characterCount: memoryBrief.length },
+    );
+  }
+
+  const improvementBrief = await injectContinuousImprovementContext(sessionId);
+  if (improvementBrief) {
+    await logGovernanceAudit(
+      sessionId,
+      "continuous_improvement_context_injected",
+      "Current improvement recommendations were injected into planning context.",
+      { taskId: nextTask.id, agentId: nextTask.assignedAgentId, characterCount: improvementBrief.length },
     );
   }
 
