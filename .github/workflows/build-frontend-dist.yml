@@ -33,6 +33,9 @@ concurrency:
 jobs:
   build-and-commit:
     runs-on: ubuntu-latest
+    env:
+      VITE_VIBA_BRAIN_VIDEO_MAIN: ${{ secrets.VITE_VIBA_BRAIN_VIDEO_MAIN }}
+      VITE_VIBA_BRAIN_VIDEO_ACTIVE: ${{ secrets.VITE_VIBA_BRAIN_VIDEO_ACTIVE }}
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -50,6 +53,36 @@ jobs:
           node-version: 22.22.1
           cache: pnpm
 
+      - name: Verify Adobe brain video assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          verify_video() {
+            local name="$1"
+            local url="$2"
+            if [[ -z "$url" ]]; then
+              echo "::error::$name is missing from repository secrets"
+              exit 1
+            fi
+            if [[ "$url" != https://* ]]; then
+              echo "::error::$name must be an HTTPS direct video URL"
+              exit 1
+            fi
+            if [[ "$url" == *"at.adobe.com"* ]]; then
+              echo "::error::$name points to an Adobe share page, not a direct video asset"
+              exit 1
+            fi
+            headers="$(curl --fail --silent --show-error --location --max-time 30 --range 0-1023 --dump-header - --output /dev/null "$url")"
+            content_type="$(printf '%s\n' "$headers" | tr -d '\r' | awk -F': ' 'tolower($1)=="content-type" {value=tolower($2)} END {print value}')"
+            if [[ "$content_type" != video/* && "$content_type" != application/octet-stream* ]]; then
+              echo "::error::$name did not return a playable video content type (received: ${content_type:-missing})"
+              exit 1
+            fi
+            echo "$name verified as a direct video asset"
+          }
+          verify_video VITE_VIBA_BRAIN_VIDEO_MAIN "$VITE_VIBA_BRAIN_VIDEO_MAIN"
+          verify_video VITE_VIBA_BRAIN_VIDEO_ACTIVE "$VITE_VIBA_BRAIN_VIDEO_ACTIVE"
+
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile --prod=false
 
@@ -61,6 +94,14 @@ jobs:
           test -f artifacts/bridge-ai/dist/public/index.html
           test -f artifacts/bridge-ai/dist/public/deploy-version.txt
           grep -R "Know what is broken" artifacts/bridge-ai/dist/public >/dev/null
+          if ! grep -R --fixed-strings "$VITE_VIBA_BRAIN_VIDEO_MAIN" artifacts/bridge-ai/dist/public/assets >/dev/null; then
+            echo "::error::Main Adobe brain video URL was not embedded in the production frontend"
+            exit 1
+          fi
+          if ! grep -R --fixed-strings "$VITE_VIBA_BRAIN_VIDEO_ACTIVE" artifacts/bridge-ai/dist/public/assets >/dev/null; then
+            echo "::error::Active Adobe brain video URL was not embedded in the production frontend"
+            exit 1
+          fi
           find artifacts/bridge-ai/dist/public -maxdepth 3 -type f -print
 
       - name: Commit generated frontend to main

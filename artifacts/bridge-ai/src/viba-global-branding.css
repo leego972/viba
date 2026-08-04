@@ -17,11 +17,13 @@ header.sticky a[href="/"] > img[alt="VIBA"] {
   transform-origin: left center;
 }
 
-/* Public landing-page header. */
-.viba-cinematic-nav .viba-brand-lockup > img[alt="VIBA"] {
+/* Public landing-page header. Do not depend on alt text: the decorative logo image
+   is intentionally aria-hidden in some layouts. */
+.viba-cinematic-nav .viba-brand-lockup > img {
   width: auto !important;
   height: 82px !important;
   max-width: 190px !important;
+  min-width: 132px !important;
   object-fit: contain !important;
   filter: brightness(1.25) contrast(1.2) saturate(1.3) var(--viba-logo-glow) !important;
   transform: scale(1.08);
@@ -46,9 +48,10 @@ footer img[alt="VIBA"] {
     transform: scale(1.04);
   }
 
-  .viba-cinematic-nav .viba-brand-lockup > img[alt="VIBA"] {
-    height: 68px !important;
-    max-width: 150px !important;
+  .viba-cinematic-nav .viba-brand-lockup > img {
+    height: 72px !important;
+    max-width: 166px !important;
+    min-width: 126px !important;
   }
 
   .viba-cinematic-footer .viba-brand-lockup > img,
