@@ -1,6 +1,6 @@
 import { db, agentsTable, auditLogsTable, sessionsTable, tasksTable } from "@workspace/db";
 import type { Task } from "@workspace/db";
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import {
   runFullWorkflow as runRawFullWorkflow,
   runNextAgentStep as runRawNextAgentStep,
@@ -41,13 +41,18 @@ async function logCoordinationDecision(sessionId: number, decision: Coordination
 }
 
 async function prepareCoordinatedTask(sessionId: number): Promise<Task | null> {
-  // Reconsider tasks previously held for incomplete dependencies.
   await db
     .update(tasksTable)
     .set({ status: "planned", blockedReason: null })
     .where(inArray(
       tasksTable.id,
-      db.select({ id: tasksTable.id }).from(tasksTable).where(eq(tasksTable.status, COORDINATION_WAIT_STATUS)),
+      db
+        .select({ id: tasksTable.id })
+        .from(tasksTable)
+        .where(and(
+          eq(tasksTable.sessionId, sessionId),
+          eq(tasksTable.status, COORDINATION_WAIT_STATUS),
+        )),
     ));
 
   const [tasks, agents] = await Promise.all([
@@ -87,7 +92,6 @@ async function prepareCoordinatedTask(sessionId: number): Promise<Task | null> {
     }
   }
 
-  // Recovery decisions may have made a stalled task runnable; rebuild once.
   const refreshedTasks = await db
     .select()
     .from(tasksTable)
