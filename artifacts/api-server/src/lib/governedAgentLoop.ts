@@ -9,6 +9,10 @@ import { authorizeScheduledContract } from "./architectureImpactGate";
 import { refreshSessionArchitectureTwin } from "./architectureTwinService";
 import { buildCoordinationPlan, type CoordinationDecision } from "./autonomousCoordinator";
 import {
+  captureEngineeringLesson,
+  injectEngineeringMemoryContext,
+} from "./engineeringMemoryIntegration";
+import {
   evaluateExecutionAuthorization,
   getActiveTaskContract,
   releaseTaskReservations,
@@ -66,6 +70,7 @@ async function prepareCoordinatedTask(sessionId: number): Promise<Task | null> {
     await logCoordinationDecision(sessionId, decision);
 
     if (decision.type === "recover") {
+      const task = tasks.find((candidate) => candidate.id === decision.taskId);
       await db
         .update(tasksTable)
         .set({
@@ -74,6 +79,26 @@ async function prepareCoordinatedTask(sessionId: number): Promise<Task | null> {
           blockedReason: decision.reasons.join(" "),
         })
         .where(eq(tasksTable.id, decision.taskId));
+      await captureEngineeringLesson({
+        sessionId,
+        taskId: decision.taskId,
+        lessonType: "stalled_task_recovery",
+        severity: "medium",
+        title: `Recovered stalled task: ${task?.title ?? decision.taskId}`,
+        observation: decision.reasons.join(" "),
+        rootCause: "The task remained in progress beyond the coordination stall threshold.",
+        correctiveAction: decision.agentId === null
+          ? "Return the task to planning for operator reassessment."
+          : `Return the task to planning and assign operator ${decision.agentId}.`,
+        preventionRules: [
+          "Apply bounded execution timeouts.",
+          "Persist progress heartbeats for long-running tasks.",
+          "Re-evaluate operator suitability when a task stalls.",
+        ],
+        affectedModules: task?.type ? [task.type] : [],
+        evidence: { coordinationDecision: decision },
+        resolved: true,
+      });
     } else if (decision.type === "reassign") {
       await db
         .update(tasksTable)
@@ -191,7 +216,21 @@ export async function runNextAgentStep(
       };
     }
 
+    await injectEngineeringMemoryContext({
+      sessionId,
+      taskTitle: nextTask.title,
+      taskDescription: nextTask.description,
+      modules: authorization.contract.allowedPaths,
+      interfaces: authorization.contract.ownedInterfaces,
+    });
     await reserveContractResources(authorization.contract);
+  } else {
+    await injectEngineeringMemoryContext({
+      sessionId,
+      taskTitle: nextTask.title,
+      taskDescription: nextTask.description,
+      modules: [nextTask.type],
+    });
   }
 
   const result = await runRawNextAgentStep(sessionId, userId);
