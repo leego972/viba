@@ -6,7 +6,8 @@ import {
   runNextAgentStep as runRawNextAgentStep,
 } from "./agentLoop";
 import {
-  authorizeTaskExecution,
+  evaluateExecutionAuthorization,
+  getActiveTaskContract,
   releaseTaskReservations,
   reserveContractResources,
 } from "./governanceStore";
@@ -44,11 +45,14 @@ export async function runNextAgentStep(
   const nextTask = await findNextPlannedTask(sessionId);
   if (!nextTask) return runRawNextAgentStep(sessionId, userId);
 
-  const requestedAgentId = nextTask.assignedAgentId ?? 0;
-  const authorization = await authorizeTaskExecution({
+  const contract = await getActiveTaskContract(nextTask.id);
+  const mode = process.env.VIBA_GOVERNANCE_MODE?.toLowerCase() === "enforce" ? "enforce" : "audit";
+  const authorization = evaluateExecutionAuthorization({
     taskId: nextTask.id,
     sessionId,
-    agentId: requestedAgentId,
+    agentId: contract?.assignedAgentId ?? nextTask.assignedAgentId ?? 0,
+    mode,
+    contract,
   });
 
   await logGovernanceAudit(
@@ -78,8 +82,10 @@ export async function runNextAgentStep(
 
   if (authorization.contract) await reserveContractResources(authorization.contract);
   const result = await runRawNextAgentStep(sessionId, userId);
-  const completed = result.updatedTasks.some((task) => task.id === nextTask.id && task.status === "complete");
-  if (completed) await releaseTaskReservations(nextTask.id);
+  const finished = result.updatedTasks.some((task) =>
+    task.id === nextTask.id && (task.status === "complete" || task.status === "review"),
+  );
+  if (finished) await releaseTaskReservations(nextTask.id);
   return result;
 }
 
@@ -87,16 +93,16 @@ export async function runFullWorkflow(
   sessionId: number,
   userId = 0,
 ): Promise<Awaited<ReturnType<typeof runRawFullWorkflow>>> {
-  const allNewMessages: Awaited<ReturnType<typeof runRawNextAgentStep>>["newMessages"] = [];
-  const allUpdatedTasks: Task[] = [];
+  const newMessages: Awaited<ReturnType<typeof runRawNextAgentStep>>["newMessages"] = [];
+  const updatedTasks: Task[] = [];
   let stepsRun = 0;
   let approvalRequired = false;
   let approval: Awaited<ReturnType<typeof runRawNextAgentStep>>["approval"] = null;
 
   for (let index = 0; index < 12; index += 1) {
     const result = await runNextAgentStep(sessionId, userId);
-    allNewMessages.push(...result.newMessages);
-    allUpdatedTasks.push(...result.updatedTasks);
+    newMessages.push(...result.newMessages);
+    updatedTasks.push(...result.updatedTasks);
     stepsRun += 1;
 
     if (result.approvalRequired) {
@@ -110,5 +116,5 @@ export async function runFullWorkflow(
     if (session?.status !== "active") break;
   }
 
-  return { allNewMessages, allUpdatedTasks, approvalRequired, approval, stepsRun } as unknown as Awaited<ReturnType<typeof runRawFullWorkflow>>;
+  return { newMessages, updatedTasks, approvalRequired, approval, stepsRun };
 }
