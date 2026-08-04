@@ -1,6 +1,6 @@
 import { db, sessionsTable, messagesTable, auditLogsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { runNextAgentStep } from "./agentLoop";
+import { runNextAgentStep } from "./governedAgentLoop";
 import { getBillingStatus, isStripeConfigured } from "./billing";
 import { logger } from "./logger";
 
