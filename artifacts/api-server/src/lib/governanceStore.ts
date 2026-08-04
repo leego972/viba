@@ -39,8 +39,8 @@ function toRuntimeContract(row: typeof taskContractsTable.$inferSelect): TaskCon
     ownedInterfaces: row.ownedInterfaces,
     dependencies: row.dependencyTaskIds,
     requiredChecks: row.requiredChecks,
-    maxEstimatedCost: row.maxEstimatedCost ?? undefined,
-    expiresAt: row.expiresAt?.toISOString(),
+    ...(row.maxEstimatedCost === null ? {} : { maxEstimatedCost: row.maxEstimatedCost }),
+    ...(row.expiresAt === null ? {} : { expiresAt: row.expiresAt.toISOString() }),
   };
 }
 
@@ -157,10 +157,26 @@ export async function persistImprovementProposal(
   proposal: ImprovementProposal,
   expectedBenefits: string[] = [],
 ): Promise<number> {
+  const contractId = Number(proposal.contractId);
+  if (!Number.isSafeInteger(contractId)) throw new Error("Persisted contract id must be numeric");
+
+  const [contract] = await db
+    .select({ sessionId: taskContractsTable.sessionId, taskId: taskContractsTable.taskId })
+    .from(taskContractsTable)
+    .where(eq(taskContractsTable.id, contractId))
+    .limit(1);
+  if (!contract) throw new Error("Cannot persist a proposal for a missing task contract");
+  if (contract.taskId !== proposal.taskId) throw new Error("Proposal task does not match its task contract");
+
+  const estimatedCost: Record<string, number> = {};
+  if (proposal.estimatedImplementationCost !== undefined) estimatedCost.implementation = proposal.estimatedImplementationCost;
+  if (proposal.estimatedMonthlyCostDelta !== undefined) estimatedCost.monthlyDelta = proposal.estimatedMonthlyCostDelta;
+  if (proposal.estimatedSavingsPercent !== undefined) estimatedCost.savingsPercent = proposal.estimatedSavingsPercent;
+
   const [row] = await db.insert(operatorProposalsTable).values({
-    sessionId: 0,
+    sessionId: contract.sessionId,
     taskId: proposal.taskId,
-    contractId: Number(proposal.contractId),
+    contractId,
     agentId: proposal.proposedByAgentId,
     proposalType: proposal.type,
     summary: proposal.summary,
@@ -169,11 +185,7 @@ export async function persistImprovementProposal(
     affectedInterfaces: proposal.affectedInterfaces,
     requestedDependencies: proposal.requestedDependencies,
     expectedBenefits,
-    estimatedCost: {
-      implementation: proposal.estimatedImplementationCost,
-      monthlyDelta: proposal.estimatedMonthlyCostDelta,
-      savingsPercent: proposal.estimatedSavingsPercent,
-    },
+    estimatedCost,
     risk: proposal.risk,
     status: "pending",
   }).returning({ id: operatorProposalsTable.id });
@@ -192,7 +204,7 @@ export async function persistProposalDecision(input: {
     reason: input.assessment.reasons.join(" "),
     conditions: input.assessment.conditions,
     conflictReport: { taskIds: input.assessment.conflictingTaskIds },
-    contractVersionCreated: input.contractVersionCreated,
+    ...(input.contractVersionCreated === undefined ? {} : { contractVersionCreated: input.contractVersionCreated }),
   });
   await db
     .update(operatorProposalsTable)
