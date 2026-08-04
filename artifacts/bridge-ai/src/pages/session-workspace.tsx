@@ -386,7 +386,7 @@ export default function SessionWorkspace() {
         const fire = () => {
           new Notification("VIBA — Fallback Spike", {
             body: `${newProviders.join(", ")} hit ${recentSpikeThreshold}+ fallbacks in the last hour. Check your API keys.`,
-            icon: "/favicon.ico",
+            icon: "/assets/brand/favicon-mark.webp",
           });
         };
         if (Notification.permission === "granted") {
