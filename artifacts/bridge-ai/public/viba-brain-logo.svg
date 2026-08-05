@@ -1,61 +1,31 @@
-<svg width="520" height="160" viewBox="0 0 520 160" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
-  <title id="title">V.I.B.A brain orchestration logo</title>
-  <desc id="desc">A glowing neural brain and orchestration network beside the V.I.B.A wordmark.</desc>
+<svg width="640" height="180" viewBox="0 0 640 180" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">VIBA</title>
+  <desc id="desc">VIBA orchestration mark and wordmark.</desc>
   <defs>
-    <linearGradient id="g" x1="20" y1="18" x2="148" y2="142" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#22D3EE"/>
-      <stop offset="0.48" stop-color="#6366F1"/>
-      <stop offset="1" stop-color="#A855F7"/>
+    <linearGradient id="wingLeft" x1="28" y1="20" x2="118" y2="132" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#00E0FF"/><stop offset="0.55" stop-color="#2563FF"/><stop offset="1" stop-color="#5146E5"/>
     </linearGradient>
-    <linearGradient id="word" x1="180" y1="42" x2="490" y2="122" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#67E8F9"/>
-      <stop offset="0.55" stop-color="#6366F1"/>
-      <stop offset="1" stop-color="#A855F7"/>
+    <linearGradient id="wingRight" x1="154" y1="18" x2="75" y2="137" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#A855F7"/><stop offset="0.48" stop-color="#7B61FF"/><stop offset="1" stop-color="#2563FF"/>
     </linearGradient>
-    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
-      <feGaussianBlur stdDeviation="4" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
+    <radialGradient id="core" cx="0" cy="0" r="1" gradientTransform="translate(91 112) rotate(90) scale(29)">
+      <stop offset="0" stop-color="#FFFFFF"/><stop offset="0.28" stop-color="#7DF4FF"/><stop offset="0.68" stop-color="#2563FF"/><stop offset="1" stop-color="#101B54"/>
+    </radialGradient>
+    <filter id="glow" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <linearGradient id="tag" x1="260" y1="0" x2="580" y2="0" gradientUnits="userSpaceOnUse"><stop stop-color="#00E0FF"/><stop offset="1" stop-color="#7B61FF"/></linearGradient>
   </defs>
-
-  <g transform="translate(12 10)">
-    <circle cx="70" cy="70" r="57" fill="#0B1020" stroke="url(#g)" stroke-width="2.5"/>
-    <circle cx="70" cy="70" r="47" fill="url(#g)" fill-opacity="0.08"/>
-
-    <g stroke="url(#g)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)">
-      <path d="M68 35C56 25 39 31 39 46C27 48 23 64 33 72C24 83 31 98 44 99C46 113 61 118 70 107"/>
-      <path d="M72 35C84 25 101 31 101 46C113 48 117 64 107 72C116 83 109 98 96 99C94 113 79 118 70 107"/>
-      <path d="M70 35V107"/>
-      <path d="M45 53C55 52 61 58 61 67"/>
-      <path d="M95 53C85 52 79 58 79 67"/>
-      <path d="M42 84C53 82 60 88 60 98"/>
-      <path d="M98 84C87 82 80 88 80 98"/>
-    </g>
-
-    <g fill="#22D3EE" filter="url(#glow)">
-      <circle cx="39" cy="46" r="3.6"/>
-      <circle cx="33" cy="72" r="3.6"/>
-      <circle cx="44" cy="99" r="3.6"/>
-      <circle cx="101" cy="46" r="3.6"/>
-      <circle cx="107" cy="72" r="3.6"/>
-      <circle cx="96" cy="99" r="3.6"/>
-      <circle cx="70" cy="70" r="4.2"/>
-    </g>
-
-    <g stroke="url(#g)" stroke-width="2" stroke-linecap="round" opacity="0.95">
-      <path d="M15 70H31"/><path d="M109 70H125"/>
-      <path d="M25 30L39 43"/><path d="M115 30L101 43"/>
-      <path d="M25 110L44 99"/><path d="M115 110L96 99"/>
-    </g>
-    <g fill="#A855F7" filter="url(#glow)">
-      <circle cx="15" cy="70" r="4"/><circle cx="125" cy="70" r="4"/>
-      <circle cx="25" cy="30" r="4"/><circle cx="115" cy="30" r="4"/>
-      <circle cx="25" cy="110" r="4"/><circle cx="115" cy="110" r="4"/>
-    </g>
+  <g transform="translate(8 8)">
+    <path d="M19 20L70 42L91 91L58 79L19 20Z" fill="url(#wingLeft)"/>
+    <path d="M163 20L112 42L91 91L124 79L163 20Z" fill="url(#wingRight)"/>
+    <path d="M31 30L70 48" stroke="#A4F8FF" stroke-width="2" stroke-linecap="round" opacity=".8"/>
+    <path d="M151 30L112 48" stroke="#D9C8FF" stroke-width="2" stroke-linecap="round" opacity=".8"/>
+    <circle cx="91" cy="108" r="34" fill="#07111F" opacity=".9" filter="url(#glow)"/>
+    <circle cx="91" cy="108" r="27" fill="url(#core)" stroke="#B8F8FF" stroke-width="2"/>
+    <path d="M91 137L84 148L91 158L98 148L91 137Z" fill="#2563FF" opacity=".95"/>
   </g>
-
-  <g>
-    <text x="170" y="91" font-family="Inter, Arial, sans-serif" font-size="62" font-weight="800" letter-spacing="4" fill="url(#word)">V.I.B.A</text>
-    <text x="174" y="120" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700" letter-spacing="3.2" fill="#E5E7EB">VIRTUAL INTELLIGENCE BUSINESS ASSISTANT</text>
+  <g transform="translate(212 38)">
+    <text x="0" y="65" font-family="Sora, Inter, Arial, sans-serif" font-size="68" font-weight="600" letter-spacing="18" fill="currentColor">VIBA</text>
+    <text x="2" y="103" font-family="Sora, Inter, Arial, sans-serif" font-size="12" font-weight="600" letter-spacing="3.8" fill="currentColor" opacity=".72">ONE ORCHESTRATOR.</text>
+    <text x="184" y="103" font-family="Sora, Inter, Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="3.2" fill="url(#tag)">LIMITLESS INTELLIGENCE.</text>
   </g>
 </svg>
