@@ -1,0 +1,119 @@
+:root {
+  --viba-cyan: #00e0ff;
+  --viba-blue: #2563ff;
+  --viba-violet: #7b61ff;
+  --viba-purple: #a855f7;
+  --viba-ink: #050816;
+  --viba-glow: 0 0 18px rgba(37, 99, 255, .28), 0 0 34px rgba(123, 97, 255, .12);
+}
+
+/* Replace legacy raster brand artwork throughout the VIBA website. */
+img[src*="viba-logo.png"],
+img[src*="favicon-mark.webp"],
+img[src*="app-icon.webp"] {
+  content: url('/viba-brain-logo.svg');
+  object-fit: contain;
+}
+
+/* Small square placements use the standalone VIBA mark. */
+img[src*="favicon-mark.webp"],
+img[src*="app-icon.webp"] {
+  content: url('/viba-mark.svg');
+}
+
+/* Site-wide custom VIBA icon language. Lucide geometry is retained only as
+   the semantic skeleton; the visual treatment is VIBA-owned and consistent. */
+svg.lucide {
+  box-sizing: content-box;
+  color: var(--viba-blue);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  padding: .18em;
+  border-radius: .42em;
+  background:
+    radial-gradient(circle at 35% 22%, rgba(0, 224, 255, .20), transparent 46%),
+    linear-gradient(145deg, rgba(37, 99, 255, .13), rgba(123, 97, 255, .10));
+  border: 1px solid rgba(94, 129, 255, .20);
+  filter: drop-shadow(0 0 5px rgba(37, 99, 255, .28));
+  transition: color .18s ease, border-color .18s ease, filter .18s ease, transform .18s ease, background .18s ease;
+}
+
+button:hover svg.lucide,
+a:hover svg.lucide,
+[role="button"]:hover svg.lucide {
+  color: var(--viba-cyan);
+  border-color: rgba(0, 224, 255, .38);
+  filter: drop-shadow(0 0 8px rgba(0, 224, 255, .42));
+  transform: translateY(-1px);
+}
+
+/* Utility controls must remain compact and visually balanced. */
+button[aria-label] > svg.lucide,
+button[title] > svg.lucide,
+[data-radix-collection-item] svg.lucide {
+  padding: .14em;
+  border-radius: .38em;
+}
+
+/* Status colours retain their meaning while using the same VIBA shell. */
+.text-red-500 svg.lucide,
+.text-red-400 svg.lucide,
+.text-destructive svg.lucide,
+svg.lucide.text-red-500,
+svg.lucide.text-red-400,
+svg.lucide.text-destructive {
+  color: #fb7185;
+  border-color: rgba(251, 113, 133, .28);
+  background: linear-gradient(145deg, rgba(251, 113, 133, .13), rgba(127, 29, 29, .08));
+}
+
+.text-emerald-500 svg.lucide,
+.text-green-500 svg.lucide,
+svg.lucide.text-emerald-500,
+svg.lucide.text-green-500 {
+  color: #34d399;
+  border-color: rgba(52, 211, 153, .26);
+  background: linear-gradient(145deg, rgba(52, 211, 153, .12), rgba(6, 78, 59, .08));
+}
+
+.text-amber-500 svg.lucide,
+.text-yellow-500 svg.lucide,
+svg.lucide.text-amber-500,
+svg.lucide.text-yellow-500 {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, .28);
+  background: linear-gradient(145deg, rgba(251, 191, 36, .12), rgba(120, 53, 15, .08));
+}
+
+/* Brand lockups use generous clear space and never collapse on mobile. */
+.viba-brand-lockup,
+header a[href="/"]:has(img[src*="viba"]) {
+  min-width: 0;
+}
+
+header a[href="/"] img[src*="viba"] {
+  width: clamp(132px, 13vw, 196px) !important;
+  max-width: min(48vw, 196px) !important;
+  height: auto !important;
+  aspect-ratio: 640 / 180;
+}
+
+@media (max-width: 640px) {
+  header a[href="/"] img[src*="viba"] {
+    width: 126px !important;
+    max-width: 38vw !important;
+  }
+
+  svg.lucide {
+    padding: .15em;
+    filter: drop-shadow(0 0 4px rgba(37, 99, 255, .24));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  svg.lucide { transition: none; }
+  button:hover svg.lucide,
+  a:hover svg.lucide,
+  [role="button"]:hover svg.lucide { transform: none; }
+}

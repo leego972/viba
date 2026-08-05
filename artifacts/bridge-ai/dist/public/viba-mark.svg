@@ -1,0 +1,17 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+<title id="title">VIBA mark</title><desc id="desc">A luminous V-shaped orchestration mark with an intelligence core.</desc>
+<defs>
+<linearGradient id="l" x1="34" y1="38" x2="128" y2="170" gradientUnits="userSpaceOnUse"><stop stop-color="#00E0FF"/><stop offset=".55" stop-color="#2563FF"/><stop offset="1" stop-color="#5146E5"/></linearGradient>
+<linearGradient id="r" x1="222" y1="38" x2="128" y2="170" gradientUnits="userSpaceOnUse"><stop stop-color="#A855F7"/><stop offset=".48" stop-color="#7B61FF"/><stop offset="1" stop-color="#2563FF"/></linearGradient>
+<radialGradient id="c" cx="0" cy="0" r="1" gradientTransform="translate(128 166) rotate(90) scale(46)"><stop stop-color="#fff"/><stop offset=".25" stop-color="#7DF4FF"/><stop offset=".65" stop-color="#2563FF"/><stop offset="1" stop-color="#101B54"/></radialGradient>
+<filter id="g" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="10" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs>
+<rect width="256" height="256" rx="54" fill="#050816"/>
+<path d="M34 42L100 71L128 134L84 116L34 42Z" fill="url(#l)"/>
+<path d="M222 42L156 71L128 134L172 116L222 42Z" fill="url(#r)"/>
+<path d="M48 55L100 78" stroke="#B8FAFF" stroke-width="3" stroke-linecap="round" opacity=".75"/>
+<path d="M208 55L156 78" stroke="#E2D5FF" stroke-width="3" stroke-linecap="round" opacity=".75"/>
+<circle cx="128" cy="162" r="48" fill="#07111F" opacity=".9" filter="url(#g)"/>
+<circle cx="128" cy="162" r="38" fill="url(#c)" stroke="#C8FBFF" stroke-width="3"/>
+<path d="M128 202L118 219L128 234L138 219L128 202Z" fill="#2563FF"/>
+</svg>
