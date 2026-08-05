@@ -7,18 +7,24 @@
   --viba-glow: 0 0 18px rgba(37, 99, 255, .28), 0 0 34px rgba(123, 97, 255, .12);
 }
 
-/* Replace legacy raster brand artwork throughout the VIBA website. */
-img[src*="viba-logo.png"],
-img[src*="favicon-mark.webp"],
-img[src*="app-icon.webp"] {
-  content: url('/viba-brain-logo.svg');
+/* Use explicit theme-specific wordmarks. External SVG images do not inherit
+   currentColor, so each mode needs its own contrast-safe asset. */
+img[src*="viba-logo.png"] {
+  content: url('/viba-logo-light.svg');
   object-fit: contain;
+  filter: drop-shadow(0 2px 4px rgba(15, 23, 42, .12));
+  transition: filter .2s ease, opacity .2s ease;
 }
 
-/* Small square placements use the standalone VIBA mark. */
+html.dark img[src*="viba-logo.png"] {
+  content: url('/viba-logo-dark.svg');
+  filter: drop-shadow(0 0 10px rgba(34, 211, 238, .18));
+}
+
 img[src*="favicon-mark.webp"],
 img[src*="app-icon.webp"] {
   content: url('/viba-mark.svg');
+  object-fit: contain;
 }
 
 /* Site-wide custom VIBA icon language. Lucide geometry is retained only as
@@ -113,6 +119,7 @@ header a[href="/"] img[src*="viba"] {
 
 @media (prefers-reduced-motion: reduce) {
   svg.lucide { transition: none; }
+  img[src*="viba-logo.png"] { transition: none; }
   button:hover svg.lucide,
   a:hover svg.lucide,
   [role="button"]:hover svg.lucide { transform: none; }
