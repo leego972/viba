@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import growthRouter from "./adminGrowth";
+import maintenanceRouter from "./adminMaintenance";
 import { db, pool } from "@workspace/db";
 import {
   sessionsTable,
@@ -557,5 +558,6 @@ router.get("/credentials", async (_req, res): Promise<void> => {
 
 // ─── Growth / advertising sub-router ─────────────────────────────────────────
 router.use("/growth", growthRouter);
+router.use("/maintenance", maintenanceRouter);
 
 export default router;
