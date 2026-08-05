@@ -33,6 +33,16 @@ import ProductionOpsPage from "@/pages/production-ops";
 import SecurityCenterPage from "@/pages/security-center";
 import DomainSetupPage from "@/pages/domain-setup";
 import DoctorPage from "@/pages/doctor";
+import DoctorReportDetail from "@/pages/doctor-report-detail";
+import DoctorReportChecklist from "@/pages/doctor-report-checklist";
+import DoctorImplementationPlan from "@/pages/doctor-implementation-plan";
+import DoctorProposalPreview from "@/pages/doctor-proposal-preview";
+import UiAuditPage from "@/pages/ui-audit";
+import ProofReportPage from "@/pages/proof-report";
+import SessionApprovals from "@/pages/session-approvals";
+import SessionBudget from "@/pages/session-budget";
+import SessionNextAction from "@/pages/session-next-action";
+import SessionProofReport from "@/pages/session-proof-report";
 import AssistedBrowserPage from "@/pages/assisted-browser";
 import OnboardingPage from "@/pages/onboarding";
 import ConnectionsPage from "@/pages/connections";
@@ -117,6 +127,10 @@ function GatedRouter() {
         <Route path="/repository-audit" component={RepositoryAuditPage} />
         <Route path="/sessions/:id/timeline" component={SessionTimelinePage} />
         <Route path="/sessions/:id/map" component={CollaborationMapPage} />
+        <Route path="/sessions/:id/approvals" component={SessionApprovals} />
+        <Route path="/sessions/:id/budget" component={SessionBudget} />
+        <Route path="/sessions/:id/next-action" component={SessionNextAction} />
+        <Route path="/sessions/:id/proof-report" component={SessionProofReport} />
         <Route path="/sessions/:id" component={SessionWorkspace} />
         <Route path="/settings" component={Settings} />
         <Route path="/billing" component={Billing} />
@@ -128,6 +142,10 @@ function GatedRouter() {
         <Route path="/tool-console" component={ToolConsolePage} />
         <Route path="/doctor" component={DoctorPage} />
         <Route path="/doctor/history" component={DoctorHistory} />
+        <Route path="/doctor/reports/:id/checklist" component={DoctorReportChecklist} />
+        <Route path="/doctor/reports/:id/implementation-plan" component={DoctorImplementationPlan} />
+        <Route path="/doctor/reports/:id/proposal" component={DoctorProposalPreview} />
+        <Route path="/doctor/reports/:id" component={DoctorReportDetail} />
         <Route path="/owner-actions" component={OwnerActions} />
         <Route path="/setup-assistant" component={SetupAssistant} />
         <Route path="/connectors" component={CompletionPage} />
@@ -139,6 +157,8 @@ function GatedRouter() {
         <Route path="/usage" component={CompletionPage} />
         <Route path="/recovery" component={CompletionPage} />
         <Route path="/doctor/trends" component={CompletionPage} />
+        <Route path="/ui-audit" component={UiAuditPage} />
+        <Route path="/proof-report" component={ProofReportPage} />
         <Route path="/clients" component={CompletionPage} />
         <Route path="/security-evidence" component={CompletionPage} />
         <Route path="/reports/compare" component={CompletionPage} />
