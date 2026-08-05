@@ -108,7 +108,12 @@ export default function CinematicHome() {
             <span className="viba-nav-tagline">All as One</span>
           </div>
         </Link>
-        <div className="viba-footer-legal"><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link></div>
+        <div className="viba-footer-legal">
+          <img className="viba-footer-asset" src={`${import.meta.env.BASE_URL}viba-electric-brain.svg`} alt="" aria-hidden="true" />
+          <Link href="/privacy">Privacy</Link>
+          <span className="viba-footer-divider" aria-hidden="true">•</span>
+          <Link href="/terms">Terms</Link>
+        </div>
       </footer>
     </div>
   );
