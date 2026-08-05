@@ -1,0 +1,31 @@
+<svg width="640" height="180" viewBox="0 0 640 180" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">VIBA</title>
+  <desc id="desc">VIBA orchestration logo for dark backgrounds.</desc>
+  <defs>
+    <linearGradient id="wingLeft" x1="28" y1="20" x2="118" y2="132" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22D3EE"/><stop offset="0.55" stop-color="#3B82F6"/><stop offset="1" stop-color="#6366F1"/>
+    </linearGradient>
+    <linearGradient id="wingRight" x1="154" y1="18" x2="75" y2="137" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C084FC"/><stop offset="0.48" stop-color="#8B5CF6"/><stop offset="1" stop-color="#3B82F6"/>
+    </linearGradient>
+    <radialGradient id="core" cx="0" cy="0" r="1" gradientTransform="translate(91 112) rotate(90) scale(29)">
+      <stop offset="0" stop-color="#FFFFFF"/><stop offset="0.28" stop-color="#A5F3FC"/><stop offset="0.68" stop-color="#3B82F6"/><stop offset="1" stop-color="#172554"/>
+    </radialGradient>
+    <filter id="glow" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <linearGradient id="tag" x1="260" y1="0" x2="580" y2="0" gradientUnits="userSpaceOnUse"><stop stop-color="#22D3EE"/><stop offset="1" stop-color="#A78BFA"/></linearGradient>
+  </defs>
+  <g transform="translate(8 8)">
+    <path d="M19 20L70 42L91 91L58 79L19 20Z" fill="url(#wingLeft)"/>
+    <path d="M163 20L112 42L91 91L124 79L163 20Z" fill="url(#wingRight)"/>
+    <path d="M31 30L70 48" stroke="#CFFAFE" stroke-width="2" stroke-linecap="round" opacity=".9"/>
+    <path d="M151 30L112 48" stroke="#EDE9FE" stroke-width="2" stroke-linecap="round" opacity=".9"/>
+    <circle cx="91" cy="108" r="34" fill="#07111F" opacity=".92" filter="url(#glow)"/>
+    <circle cx="91" cy="108" r="27" fill="url(#core)" stroke="#CFFAFE" stroke-width="2"/>
+    <path d="M91 137L84 148L91 158L98 148L91 137Z" fill="#3B82F6" opacity=".98"/>
+  </g>
+  <g transform="translate(212 38)">
+    <text x="0" y="65" font-family="Sora, Inter, Arial, sans-serif" font-size="68" font-weight="600" letter-spacing="18" fill="#F8FAFC">VIBA</text>
+    <text x="2" y="103" font-family="Sora, Inter, Arial, sans-serif" font-size="12" font-weight="600" letter-spacing="3.8" fill="#CBD5E1">ONE ORCHESTRATOR.</text>
+    <text x="184" y="103" font-family="Sora, Inter, Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="3.2" fill="url(#tag)">LIMITLESS INTELLIGENCE.</text>
+  </g>
+</svg>
