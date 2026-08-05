@@ -69,15 +69,17 @@
     </script>
 
     <!-- VIBA favicon and install icons -->
-    <link rel="icon" type="image/svg+xml" href="/viba-brain-logo.svg?v=2" />
-    <link rel="alternate icon" type="image/webp" href="/assets/brand/favicon-mark.webp?v=2" />
-    <link rel="apple-touch-icon" href="/assets/brand/app-icon.webp?v=2" />
-    <meta name="theme-color" content="#07111f" />
+    <link rel="icon" type="image/svg+xml" href="/viba-mark.svg?v=3" />
+    <link rel="alternate icon" type="image/svg+xml" href="/viba-mark.svg?v=3" />
+    <link rel="apple-touch-icon" href="/viba-mark.svg?v=3" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#050816" />
     <link rel="stylesheet" href="/orchestration-polish.css" />
     <link rel="stylesheet" href="/living-brain.css" />
+    <link rel="stylesheet" href="/viba-brand-system.css?v=3" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..800;1,14..32,300..700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..800;1,14..32,300..700&family=JetBrains+Mono:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script>
       window.onerror = function(msg, src, line, col, err) {
         clearTimeout(window.__VIBA_TIMEOUT__);
@@ -96,21 +98,21 @@
       window.__VIBA_TIMEOUT__ = setTimeout(function() {
         var root = document.getElementById('root');
         if (root && !root.firstElementChild) {
-          root.innerHTML = '<div style="position:fixed;top:0;left:0;right:0;bottom:0;background:#0d1117;display:flex;align-items:center;justify-content:center;font-family:sans-serif;flex-direction:column;gap:16px"><div style="color:#7c3aed;font-size:32px;font-weight:700">VIBA</div><div style="color:#94a3b8;font-size:15px">Loading failed — please hard-refresh (Ctrl+Shift+R or Cmd+Shift+R)</div><div style="color:#475569;font-size:13px">If this persists, try a different browser or disable extensions</div></div>';
+          root.innerHTML = '<div style="position:fixed;top:0;left:0;right:0;bottom:0;background:#050816;display:flex;align-items:center;justify-content:center;font-family:Sora,sans-serif;flex-direction:column;gap:16px"><img src="/viba-mark.svg" alt="VIBA" style="width:84px;height:84px"><div style="color:#94a3b8;font-size:15px">Loading failed — please hard-refresh (Ctrl+Shift+R or Cmd+Shift+R)</div><div style="color:#475569;font-size:13px">If this persists, try a different browser or disable extensions</div></div>';
         }
       }, 8000);
     </script>
   </head>
   <body>
     <div id="root">
-      <div style="position:fixed;top:0;left:0;right:0;bottom:0;background:#0d1117;display:flex;align-items:center;justify-content:center;font-family:sans-serif;flex-direction:column;gap:12px">
-        <div style="color:#7c3aed;font-size:28px;font-weight:700;letter-spacing:-0.5px">⬡ VIBA</div>
-        <div style="color:#64748b;font-size:14px">Loading…</div>
+      <div style="position:fixed;top:0;left:0;right:0;bottom:0;background:#050816;display:flex;align-items:center;justify-content:center;font-family:Sora,sans-serif;flex-direction:column;gap:12px">
+        <img src="/viba-mark.svg" alt="VIBA" style="width:76px;height:76px">
+        <div style="color:#64748b;font-size:14px">Loading VIBA…</div>
       </div>
     </div>
     <noscript>
-      <div style="position:fixed;top:0;left:0;right:0;bottom:0;background:#0d1117;display:flex;align-items:center;justify-content:center;font-family:sans-serif;flex-direction:column;gap:12px">
-        <div style="color:#7c3aed;font-size:28px;font-weight:700">⬡ VIBA</div>
+      <div style="position:fixed;top:0;left:0;right:0;bottom:0;background:#050816;display:flex;align-items:center;justify-content:center;font-family:Sora,sans-serif;flex-direction:column;gap:12px">
+        <img src="/viba-mark.svg" alt="VIBA" style="width:76px;height:76px">
         <div style="color:#f87171;font-size:15px">JavaScript is required to run VIBA.</div>
         <div style="color:#94a3b8;font-size:13px">Please enable JavaScript in your browser settings.</div>
       </div>
