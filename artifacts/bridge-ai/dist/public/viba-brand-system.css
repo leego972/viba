@@ -7,18 +7,14 @@
   --viba-glow: 0 0 18px rgba(37, 99, 255, .28), 0 0 34px rgba(123, 97, 255, .12);
 }
 
-/* Use explicit theme-specific wordmarks. External SVG images do not inherit
-   currentColor, so each mode needs its own contrast-safe asset. */
+/* Theme-specific VIBA logo assets. */
 img[src*="viba-logo.png"] {
   content: url('/viba-logo-light.svg');
   object-fit: contain;
-  filter: drop-shadow(0 2px 4px rgba(15, 23, 42, .12));
-  transition: filter .2s ease, opacity .2s ease;
 }
 
 html.dark img[src*="viba-logo.png"] {
   content: url('/viba-logo-dark.svg');
-  filter: drop-shadow(0 0 10px rgba(34, 211, 238, .18));
 }
 
 img[src*="favicon-mark.webp"],
@@ -27,8 +23,6 @@ img[src*="app-icon.webp"] {
   object-fit: contain;
 }
 
-/* Site-wide custom VIBA icon language. Lucide geometry is retained only as
-   the semantic skeleton; the visual treatment is VIBA-owned and consistent. */
 svg.lucide {
   box-sizing: content-box;
   color: var(--viba-blue);
@@ -54,7 +48,6 @@ a:hover svg.lucide,
   transform: translateY(-1px);
 }
 
-/* Utility controls must remain compact and visually balanced. */
 button[aria-label] > svg.lucide,
 button[title] > svg.lucide,
 [data-radix-collection-item] svg.lucide {
@@ -62,7 +55,6 @@ button[title] > svg.lucide,
   border-radius: .38em;
 }
 
-/* Status colours retain their meaning while using the same VIBA shell. */
 .text-red-500 svg.lucide,
 .text-red-400 svg.lucide,
 .text-destructive svg.lucide,
@@ -92,7 +84,6 @@ svg.lucide.text-yellow-500 {
   background: linear-gradient(145deg, rgba(251, 191, 36, .12), rgba(120, 53, 15, .08));
 }
 
-/* Brand lockups use generous clear space and never collapse on mobile. */
 .viba-brand-lockup,
 header a[href="/"]:has(img[src*="viba"]) {
   min-width: 0;
@@ -103,6 +94,81 @@ header a[href="/"] img[src*="viba"] {
   max-width: min(48vw, 196px) !important;
   height: auto !important;
   aspect-ratio: 640 / 180;
+}
+
+/* Dashboard sidebar decluttering. All original panels remain accessible. */
+.viba-sidebar-secondary {
+  display: none;
+}
+
+.viba-sidebar-details-open .viba-sidebar-secondary {
+  display: block;
+}
+
+.viba-sidebar-details-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: .65rem;
+  background: rgba(255,255,255,.025);
+  padding: .55rem .7rem;
+  color: rgba(255,255,255,.46);
+  font-size: .68rem;
+  font-weight: 600;
+  letter-spacing: .02em;
+  transition: border-color .18s ease, background .18s ease, color .18s ease;
+}
+
+.viba-sidebar-details-toggle:hover {
+  border-color: rgba(99,102,241,.28);
+  background: rgba(99,102,241,.07);
+  color: rgba(255,255,255,.78);
+}
+
+.viba-sidebar-chevron {
+  font-size: 1rem;
+  line-height: 1;
+  transition: transform .18s ease;
+}
+
+.viba-sidebar-details-open .viba-sidebar-chevron {
+  transform: rotate(90deg);
+}
+
+.viba-admin-sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: .625rem;
+  margin-top: .3rem;
+  border: 1px solid rgba(244,63,94,.24);
+  border-radius: .55rem;
+  background: rgba(244,63,94,.08);
+  padding: .5rem .75rem;
+  color: #fda4af;
+  font-size: .7rem;
+  font-weight: 650;
+  transition: background .18s ease, border-color .18s ease, color .18s ease;
+}
+
+.viba-admin-sidebar-item:hover {
+  border-color: rgba(244,63,94,.4);
+  background: rgba(244,63,94,.13);
+  color: #fecdd3;
+}
+
+.viba-admin-sidebar-icon {
+  display: inline-flex;
+  width: 1.15rem;
+  height: 1.15rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: .35rem;
+  background: rgba(244,63,94,.16);
+  font-size: .6rem;
+  font-weight: 800;
 }
 
 @media (max-width: 640px) {
@@ -119,7 +185,6 @@ header a[href="/"] img[src*="viba"] {
 
 @media (prefers-reduced-motion: reduce) {
   svg.lucide { transition: none; }
-  img[src*="viba-logo.png"] { transition: none; }
   button:hover svg.lucide,
   a:hover svg.lucide,
   [role="button"]:hover svg.lucide { transform: none; }
