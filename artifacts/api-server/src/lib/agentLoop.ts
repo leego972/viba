@@ -311,15 +311,7 @@ export async function runNextAgentStep(sessionId: number, userId = 0): Promise<{
   }
 
   let result: AgentTaskResult = retryOutcome.result;
-  const usedFallback = retryOutcome.usedFallback;
   const usedModel: string | null = retryOutcome.usedModel || null;
-
-  if (usedFallback) {
-    result = {
-      ...result,
-      messageText: `⚠️ [Simulated — live ${assignedAgent.provider} API unavailable] ${result.messageText}`,
-    };
-  }
 
   if (usedModel) {
     await db.update(agentsTable).set({ lastUsedModel: usedModel }).where(eq(agentsTable.id, assignedAgent.id));

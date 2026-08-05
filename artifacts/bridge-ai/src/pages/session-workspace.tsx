@@ -16,8 +16,6 @@ import {
   useListApprovals,
   useListAuditLogs,
   useGetStats,
-  useGetBannerDismissal,
-  useDismissBanner,
   useAnswerQuestion,
   useDeleteSession,
   getGetSessionQueryKey,
@@ -25,7 +23,6 @@ import {
   getListTasksQueryKey,
   getListApprovalsQueryKey,
   getListAuditLogsQueryKey,
-  getGetBannerDismissalQueryKey,
   getGetStatsQueryKey,
   type Approval,
   type Task,
@@ -178,57 +175,6 @@ export default function SessionWorkspace() {
     pruneStaleSpikeDismissalKeys();
   }, []);
 
-  // Banner dismissal — persisted server-side so it works across devices.
-  // On first load we migrate any existing localStorage value to the server.
-  const bannerQueryKey = getGetBannerDismissalQueryKey(sessionId);
-  const dismissBannerMutation = useDismissBanner({
-    mutation: {
-      onSuccess: (data) => {
-        // Immediately sync the cache so the banner hides without a round-trip refetch.
-        queryClient.setQueryData(bannerQueryKey, data);
-      },
-    },
-  });
-  const { data: bannerDismissalData } = useGetBannerDismissal(sessionId, {
-    query: {
-      enabled: !!sessionId,
-      queryKey: bannerQueryKey,
-    },
-  });
-
-  // Migrate existing localStorage dismissal to the server (runs once when the
-  // server reports no dismissal for this session).
-  useEffect(() => {
-    if (!sessionId) return;
-    if (bannerDismissalData === undefined) return;
-    if (bannerDismissalData.dismissedAt !== null) return;
-    const storageKey = `viba_fallback_banner_${sessionId}`;
-    try {
-      const stored = localStorage.getItem(storageKey);
-      if (stored && !isNaN(Date.parse(stored))) {
-        // Pass the original timestamp so the banner re-show comparison
-        // (latestFallbackTimestamp > dismissedAt) is preserved correctly.
-        dismissBannerMutation.mutate(
-          { id: sessionId, data: { dismissedAt: stored } },
-          {
-            onSuccess: () => {
-              // Remove the now-migrated legacy key so it doesn't linger.
-              try { localStorage.removeItem(storageKey); } catch {}
-            },
-          },
-        );
-      }
-    } catch {
-      // localStorage unavailable — nothing to migrate
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, bannerDismissalData?.dismissedAt]);
-
-  const dismissedAt = bannerDismissalData?.dismissedAt ?? null;
-
-  const dismissFallbackBanner = () => {
-    dismissBannerMutation.mutate({ id: sessionId, data: {} });
-  };
 
   // Real-time SSE stream — pushes all session data updates at ~800 ms intervals,
   // populating the React Query cache so all queries below stay fresh without polling.
@@ -300,18 +246,8 @@ export default function SessionWorkspace() {
   // Memory from SSE-enriched session data
   const sessionMemory = session?.memory ?? null;
 
-  // Detect fallback messages
-  const fallbackMessages = messages.filter(m => m.content?.startsWith(SIMULATED_PREFIX));
-  const hasFallbackMessages = fallbackMessages.length > 0;
-  const fallbackAgentNames = [...new Set(fallbackMessages.map(m => m.agentName).filter(Boolean))];
-  const fallbackAgentCount = fallbackAgentNames.length;
-  const latestFallbackTimestamp = fallbackMessages.reduce<string | null>((latest, m) => {
-    if (!m.createdAt) return latest;
-    return latest === null || m.createdAt > latest ? m.createdAt : latest;
-  }, null);
-  const showFallbackBanner = hasFallbackMessages && (
-    dismissedAt === null || (latestFallbackTimestamp !== null && latestFallbackTimestamp > dismissedAt)
-  );
+  // Historical simulated messages (from before live-error surfacing replaced
+  // silent simulation) still render with a badge — see SIMULATED_PREFIX below.
 
   // ── Feature 8+9: Sound effects wiring ────────────────────────────────
   const prevMsgCount = useRef(0);
@@ -868,31 +804,6 @@ export default function SessionWorkspace() {
               className="shrink-0 mt-0.5 rounded p-0.5 text-red-400 hover:bg-red-500/20 hover:text-red-200 transition-colors"
             >
               <X className="h-4 w-4" />
-            </button>
-          </div>
-        )}
-
-        {/* Simulation fallback banner */}
-        {showFallbackBanner && (
-          <div className="flex items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-300 shrink-0">
-            <RotateCcw className="h-4 w-4 shrink-0 text-amber-400" />
-            <span className="flex-1">
-              <span className="font-semibold">
-                {fallbackAgentCount <= 1 ? "An agent" : `${fallbackAgentCount} agents`} switched to simulation mid-run
-              </span>{" "}
-              — the live API call was retried before falling back to simulation.
-              Simulated messages are marked with a{" "}
-              <span className="inline-flex items-center gap-0.5 font-medium text-amber-400">
-                <FlaskConical className="h-3 w-3" /> Simulated
-              </span>{" "}
-              badge. Check your API keys if you expected a live response.
-            </span>
-            <button
-              onClick={() => dismissFallbackBanner()}
-              className="shrink-0 rounded p-0.5 hover:bg-amber-500/20 transition-colors"
-              aria-label="Dismiss banner"
-            >
-              <X className="h-4 w-4 text-amber-400" />
             </button>
           </div>
         )}

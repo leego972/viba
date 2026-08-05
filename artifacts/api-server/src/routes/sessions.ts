@@ -399,7 +399,17 @@ router.post("/sessions/:id/run-next", agentRunUserLimiter, async (req, res): Pro
     return;
   }
 
-  const result = await runNextAgentStep(params.data.id, req.session?.userId ?? 0);
+  let result: Awaited<ReturnType<typeof runNextAgentStep>>;
+  try {
+    result = await runNextAgentStep(params.data.id, req.session?.userId ?? 0);
+  } catch (err) {
+    // Real provider failures (live call + built-in Groq fallback both
+    // failed) throw instead of silently continuing with simulated output.
+    // Return the actual reason instead of a generic 500.
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(502).json({ error: message });
+    return;
+  }
   const [updatedSession] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, params.data.id));
   const stepAgents = await db.select().from(agentsTable).where(eq(agentsTable.sessionId, params.data.id));
   const stepAgentNameMap = new Map(stepAgents.map((a) => [a.id, a.name]));
@@ -428,7 +438,14 @@ router.post("/sessions/:id/run-full", agentRunUserLimiter, async (req, res): Pro
     return;
   }
 
-  const result = await runFullWorkflow(params.data.id, req.session?.userId ?? 0);
+  let result: Awaited<ReturnType<typeof runFullWorkflow>>;
+  try {
+    result = await runFullWorkflow(params.data.id, req.session?.userId ?? 0);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(502).json({ error: message });
+    return;
+  }
   const [updatedSession] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, params.data.id));
   const fullAgents = await db.select().from(agentsTable).where(eq(agentsTable.sessionId, params.data.id));
   const fullAgentNameMap = new Map(fullAgents.map((a) => [a.id, a.name]));

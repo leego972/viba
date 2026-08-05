@@ -106,7 +106,24 @@ async function runLoop(run: BackgroundRun): Promise<void> {
       const canRun = await canRunNextAction(run);
       if (!canRun) break;
 
-      const result = await runNextAgentStep(run.sessionId, run.userId);
+      let result: Awaited<ReturnType<typeof runNextAgentStep>>;
+      try {
+        result = await runNextAgentStep(run.sessionId, run.userId);
+      } catch (stepErr) {
+        // A real provider failure (live call + built-in Groq fallback both
+        // failed) throws instead of silently continuing with simulated
+        // output. Surface it in the session as a visible message and pause
+        // — a silent stall would be worse than the simulation it replaced.
+        const message = stepErr instanceof Error ? stepErr.message : String(stepErr);
+        await db.update(sessionsTable).set({ status: "paused" }).where(eq(sessionsTable.id, run.sessionId));
+        await addSystemMessage(run.sessionId, `⚠️ Background run paused after a provider error: ${message}`, {
+          reason: "background_run_provider_error",
+          stepsRun: run.stepsRun,
+        });
+        await logAudit(run.sessionId, "background_run_error", message, { stepsRun: run.stepsRun });
+        logger.error({ err: stepErr, sessionId: run.sessionId }, "Background workflow stopped by a real provider error");
+        return;
+      }
       run.stepsRun += 1;
 
       if (result.approvalRequired) {
