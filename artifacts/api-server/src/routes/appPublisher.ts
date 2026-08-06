@@ -41,6 +41,9 @@ export type PublisherValidation = {
   infrastructureVerified: boolean;
 };
 
+type TokenSource = "request" | "vault" | "environment" | "none";
+type ResolvedToken = { token: string | null; source: TokenSource };
+
 const ANDROID_SECRET_NAMES = [
   "VIBA_ANDROID_KEYSTORE_BASE64",
   "VIBA_ANDROID_KEYSTORE_PASSWORD",
@@ -59,21 +62,46 @@ function requestUserId(req: { session?: { userId?: number } }): number | null {
   return typeof req.session?.userId === "number" ? req.session.userId : null;
 }
 
-async function resolveGithubToken(userId: number | null): Promise<string | null> {
-  const mobileToken = process.env.VIBA_MOBILE_GITHUB_TOKEN?.trim();
-  if (mobileToken) return mobileToken;
-  const resolved = await resolveVibaCredential({
+function normalizeGithubToken(value: unknown): string {
+  if (typeof value !== "string") return "";
+  let token = value.replace(/[\u200B-\u200D\u2060\uFEFF]/g, "").trim();
+  token = token.replace(/^(?:bearer|token)\s+/i, "").trim();
+  if ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'"))) {
+    token = token.slice(1, -1).trim();
+  }
+  return token.replace(/\s+/g, "");
+}
+
+async function resolveGithubToken(userId: number | null, suppliedToken = ""): Promise<ResolvedToken> {
+  const requestToken = normalizeGithubToken(suppliedToken);
+  if (requestToken) return { token: requestToken, source: "request" };
+
+  const saved = await resolveVibaCredential({
     userId,
     provider: "github",
     kind: "token",
-    envNames: ["GITHUB_TOKEN"],
+    envNames: [],
     label: "default",
   });
-  return resolved.value?.trim() || null;
+  const vaultToken = normalizeGithubToken(saved.value);
+  if (vaultToken) return { token: vaultToken, source: "vault" };
+
+  const environmentToken = normalizeGithubToken(
+    process.env.VIBA_MOBILE_GITHUB_TOKEN || process.env.GITHUB_TOKEN,
+  );
+  if (environmentToken) return { token: environmentToken, source: "environment" };
+
+  return { token: null, source: "none" };
 }
 
 async function persistGithubToken(userId: number | null, token: string): Promise<void> {
-  await saveVibaCredential({ userId, provider: "github", kind: "token", value: token, label: "default" });
+  await saveVibaCredential({
+    userId,
+    provider: "github",
+    kind: "token",
+    value: normalizeGithubToken(token),
+    label: "default",
+  });
 }
 
 function privateIpv4(hostname: string): boolean {
@@ -132,7 +160,7 @@ export function validatePublisherInput(body: Record<string, unknown>): {
   const appName = typeof body.appName === "string" ? body.appName.trim() : "";
   const bundleId = typeof body.bundleId === "string" ? body.bundleId.trim().toLowerCase() : "";
   const version = typeof body.version === "string" ? body.version.trim() : "";
-  const githubToken = typeof body.githubToken === "string" ? body.githubToken.trim() : "";
+  const githubToken = normalizeGithubToken(body.githubToken);
   const githubRepository = typeof body.githubRepository === "string" && body.githubRepository.trim() ? body.githubRepository.trim() : DEFAULT_REPOSITORY;
   const githubRef = typeof body.githubRef === "string" && body.githubRef.trim() ? body.githubRef.trim() : DEFAULT_REF;
   const githubWorkflow = typeof body.githubWorkflow === "string" && body.githubWorkflow.trim() ? body.githubWorkflow.trim() : DEFAULT_WORKFLOW;
@@ -151,7 +179,7 @@ export function validatePublisherInput(body: Record<string, unknown>): {
   if (!validRepository(githubRepository)) issues.push({ field: "githubRepository", message: "Enter the GitHub repository as owner/repo.", severity: "error" });
   if (!validGithubRef(githubRef)) issues.push({ field: "githubRef", message: "Enter a valid GitHub branch or tag, such as main.", severity: "error" });
   if (!validWorkflow(githubWorkflow)) issues.push({ field: "githubWorkflow", message: "Enter a workflow filename ending in .yml or .yaml.", severity: "error" });
-  if (githubToken && githubToken.length < 20) issues.push({ field: "githubToken", message: "The GitHub PAT appears incomplete.", severity: "error" });
+  if (githubToken && githubToken.length < 20) issues.push({ field: "githubToken", message: "The GitHub PAT appears incomplete after removing spaces or prefixes.", severity: "error" });
 
   return {
     input: { platforms, websiteUrl, appName, bundleId, version, buildNumber, githubRepository, githubRef, githubWorkflow },
@@ -181,7 +209,7 @@ async function githubRequest(path: string, token: string, init: RequestInit = {}
       ...init,
       headers: {
         Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${token}`,
+        Authorization: `token ${normalizeGithubToken(token)}`,
         "X-GitHub-Api-Version": "2022-11-28",
         "User-Agent": "VIBA-App-Publisher/1.0",
         ...init.headers,
@@ -193,8 +221,22 @@ async function githubRequest(path: string, token: string, init: RequestInit = {}
   }
 }
 
-async function inspectInfrastructure(input: PublisherInput, userId: number | null, suppliedToken: string): Promise<{ issues: PublisherIssue[]; verified: boolean }> {
-  const token = suppliedToken || await resolveGithubToken(userId);
+async function githubErrorMessage(response: Response): Promise<string> {
+  try {
+    const payload = await response.clone().json() as { message?: unknown };
+    return typeof payload.message === "string" ? payload.message : "";
+  } catch {
+    return "";
+  }
+}
+
+async function inspectInfrastructure(
+  input: PublisherInput,
+  userId: number | null,
+  suppliedToken: string,
+): Promise<{ issues: PublisherIssue[]; verified: boolean }> {
+  const resolved = await resolveGithubToken(userId, suppliedToken);
+  const token = resolved.token;
   if (!token) {
     return { verified: false, issues: [{ field: "githubToken", message: "Enter your GitHub personal access token, then run this readiness check again.", severity: "error" }] };
   }
@@ -204,17 +246,20 @@ async function inspectInfrastructure(input: PublisherInput, userId: number | nul
     const repoPath = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
     const repoResponse = await githubRequest(repoPath, token);
     if (!repoResponse.ok) {
+      const githubMessage = await githubErrorMessage(repoResponse);
+      const sourceLabel = resolved.source === "request" ? "the PAT entered in this form" :
+        resolved.source === "vault" ? "the PAT saved in VIBA" : "the server fallback PAT";
       const message = repoResponse.status === 401
-        ? "GitHub rejected this PAT. It may be expired, revoked or copied incorrectly."
+        ? `GitHub returned 401 for ${sourceLabel}${githubMessage ? `: ${githubMessage}` : ""}. Re-enter the PAT; VIBA removed spaces, quotes and token prefixes before testing it.`
         : repoResponse.status === 403
           ? `The PAT is valid but lacks access to ${input.githubRepository}. Grant this repository to the token.`
           : repoResponse.status === 404
             ? `The PAT cannot access ${input.githubRepository}. Check the owner/repo value and token repository selection.`
-            : `GitHub could not verify access to ${input.githubRepository} (HTTP ${repoResponse.status}).`;
+            : `GitHub could not verify access to ${input.githubRepository} (HTTP ${repoResponse.status}${githubMessage ? `: ${githubMessage}` : ""}).`;
       return { verified: false, issues: [{ field: "githubToken", message, severity: "error" }] };
     }
 
-    if (suppliedToken) await persistGithubToken(userId, suppliedToken);
+    if (resolved.source === "request") await persistGithubToken(userId, token);
 
     const workflowPath = `${repoPath}/actions/workflows/${encodeURIComponent(input.githubWorkflow)}`;
     const secretsPath = `${repoPath}/actions/secrets?per_page=100`;
@@ -293,7 +338,8 @@ router.post("/app-publisher/publish", publishLimiter, async (req, res): Promise<
     return;
   }
 
-  const token = await resolveGithubToken(userId);
+  const resolved = await resolveGithubToken(userId);
+  const token = resolved.token;
   if (!token) {
     res.status(503).json({ error: "publisher_not_connected", message: "Enter and validate a GitHub PAT before publishing." });
     return;
@@ -314,7 +360,7 @@ router.post("/app-publisher/publish", publishLimiter, async (req, res): Promise<
 
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
-      req.log?.error?.({ githubStatus: response.status, detail: detail.slice(0, 500), repository: input.githubRepository, workflow: input.githubWorkflow }, "App publisher workflow dispatch failed");
+      req.log?.error?.({ githubStatus: response.status, detail: detail.slice(0, 500), credentialSource: resolved.source, repository: input.githubRepository, workflow: input.githubWorkflow }, "App publisher workflow dispatch failed");
       res.status(502).json({ error: "dispatch_failed", message: "VIBA could not start the store build. Check the PAT Actions permission, repository, branch and workflow." });
       return;
     }
@@ -335,7 +381,7 @@ router.post("/app-publisher/publish", publishLimiter, async (req, res): Promise<
       message: "The verified store build has been queued.",
     });
   } catch (error) {
-    req.log?.error?.({ err: error, repository: input.githubRepository, workflow: input.githubWorkflow }, "App publisher workflow dispatch request failed");
+    req.log?.error?.({ err: error, credentialSource: resolved.source, repository: input.githubRepository, workflow: input.githubWorkflow }, "App publisher workflow dispatch request failed");
     res.status(503).json({ error: "dispatch_unavailable", message: "GitHub build automation is temporarily unavailable." });
   }
 });
