@@ -1,7 +1,7 @@
 import { isIP } from "node:net";
 import { Router, type IRouter } from "express";
 import { createUserRateLimiter } from "../middlewares/rateLimiter";
-import { resolveVibaCredential } from "../lib/vibaVault";
+import { resolveVibaCredential, saveVibaCredential } from "../lib/vibaVault";
 
 const router: IRouter = Router();
 
@@ -10,10 +10,9 @@ function safeGithubSegment(value: string | undefined, fallback: string): string 
   return /^[A-Za-z0-9_.-]+$/.test(candidate) ? candidate : fallback;
 }
 
-const OWNER = safeGithubSegment(process.env.VIBA_MOBILE_GITHUB_OWNER, "leego972");
-const REPO = safeGithubSegment(process.env.VIBA_MOBILE_GITHUB_REPO, "viba");
-const WORKFLOW = safeGithubSegment(process.env.VIBA_MOBILE_WORKFLOW, "mobile-store-build.yml");
-const REF = process.env.VIBA_MOBILE_GITHUB_REF?.trim() || "main";
+const DEFAULT_REPOSITORY = `${safeGithubSegment(process.env.VIBA_MOBILE_GITHUB_OWNER, "leego972")}/${safeGithubSegment(process.env.VIBA_MOBILE_GITHUB_REPO, "viba")}`;
+const DEFAULT_WORKFLOW = safeGithubSegment(process.env.VIBA_MOBILE_WORKFLOW, "mobile-store-build.yml");
+const DEFAULT_REF = process.env.VIBA_MOBILE_GITHUB_REF?.trim() || "main";
 
 const publishLimiter = createUserRateLimiter({
   windowMs: 10 * 60_000,
@@ -35,6 +34,9 @@ export type PublisherInput = {
   bundleId: string;
   version: string;
   buildNumber: number;
+  githubRepository: string;
+  githubRef: string;
+  githubWorkflow: string;
 };
 
 export type PublisherValidation = {
@@ -76,6 +78,16 @@ async function resolveGithubToken(userId: number | null): Promise<string | null>
   });
 
   return resolved.value?.trim() || null;
+}
+
+async function persistGithubToken(userId: number | null, token: string): Promise<void> {
+  await saveVibaCredential({
+    userId,
+    provider: "github",
+    kind: "token",
+    value: token,
+    label: "default",
+  });
 }
 
 function privateIpv4(hostname: string): boolean {
@@ -121,8 +133,21 @@ function validVersion(value: string): boolean {
   return value.split(".").every((part) => Number(part) <= 9999);
 }
 
+function validRepository(value: string): boolean {
+  return /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value);
+}
+
+function validGithubRef(value: string): boolean {
+  return value.length > 0 && value.length <= 255 && /^[A-Za-z0-9._/-]+$/.test(value) && !value.includes("..") && !value.startsWith("/") && !value.endsWith("/");
+}
+
+function validWorkflow(value: string): boolean {
+  return /^[A-Za-z0-9_.-]+\.(?:yml|yaml)$/.test(value);
+}
+
 export function validatePublisherInput(body: Record<string, unknown>): {
   input: PublisherInput;
+  githubToken: string;
   issues: PublisherIssue[];
 } {
   const rawPlatforms = Array.isArray(body.platforms) ? body.platforms : [];
@@ -132,6 +157,14 @@ export function validatePublisherInput(body: Record<string, unknown>): {
   const appName = typeof body.appName === "string" ? body.appName.trim() : "";
   const bundleId = typeof body.bundleId === "string" ? body.bundleId.trim().toLowerCase() : "";
   const version = typeof body.version === "string" ? body.version.trim() : "";
+  const githubToken = typeof body.githubToken === "string" ? body.githubToken.trim() : "";
+  const githubRepository = typeof body.githubRepository === "string" && body.githubRepository.trim()
+    ? body.githubRepository.trim()
+    : DEFAULT_REPOSITORY;
+  const githubRef = typeof body.githubRef === "string" && body.githubRef.trim() ? body.githubRef.trim() : DEFAULT_REF;
+  const githubWorkflow = typeof body.githubWorkflow === "string" && body.githubWorkflow.trim()
+    ? body.githubWorkflow.trim()
+    : DEFAULT_WORKFLOW;
   const parsedBuildNumber = typeof body.buildNumber === "number"
     ? body.buildNumber
     : typeof body.buildNumber === "string" && /^\d+$/.test(body.buildNumber.trim())
@@ -147,8 +180,16 @@ export function validatePublisherInput(body: Record<string, unknown>): {
   if (invalidPlatforms.length > 0) issues.push({ field: "platforms", message: "An unsupported app store was supplied.", severity: "error" });
   if (!validVersion(version)) issues.push({ field: "version", message: "Version must use three numbers, for example 1.0.0.", severity: "error" });
   if (buildNumber < 1 || buildNumber > 2_100_000_000) issues.push({ field: "buildNumber", message: "Build number must be a positive whole number.", severity: "error" });
+  if (!validRepository(githubRepository)) issues.push({ field: "githubRepository", message: "Enter the GitHub repository as owner/repo.", severity: "error" });
+  if (!validGithubRef(githubRef)) issues.push({ field: "githubRef", message: "Enter a valid GitHub branch or tag, such as main.", severity: "error" });
+  if (!validWorkflow(githubWorkflow)) issues.push({ field: "githubWorkflow", message: "Enter a workflow filename ending in .yml or .yaml.", severity: "error" });
+  if (githubToken && githubToken.length < 20) issues.push({ field: "githubToken", message: "The GitHub PAT appears incomplete.", severity: "error" });
 
-  return { input: { platforms, websiteUrl, appName, bundleId, version, buildNumber }, issues };
+  return {
+    input: { platforms, websiteUrl, appName, bundleId, version, buildNumber, githubRepository, githubRef, githubWorkflow },
+    githubToken,
+    issues,
+  };
 }
 
 export function buildWorkflowInputs(input: PublisherInput): Record<string, string> {
@@ -174,6 +215,7 @@ async function githubRequest(path: string, token: string, init: RequestInit = {}
         Accept: "application/vnd.github+json",
         Authorization: `Bearer ${token}`,
         "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "VIBA-App-Publisher/1.0",
         ...init.headers,
       },
       signal: controller.signal,
@@ -183,21 +225,33 @@ async function githubRequest(path: string, token: string, init: RequestInit = {}
   }
 }
 
-async function inspectInfrastructure(platforms: PublisherPlatform[], userId: number | null): Promise<{
-  issues: PublisherIssue[];
-  verified: boolean;
-}> {
-  const token = await resolveGithubToken(userId);
+async function inspectInfrastructure(
+  input: PublisherInput,
+  userId: number | null,
+  suppliedToken: string,
+): Promise<{ issues: PublisherIssue[]; verified: boolean }> {
+  const token = suppliedToken || await resolveGithubToken(userId);
   if (!token) {
     return {
       verified: false,
-      issues: [{ field: "automation", message: "Connect GitHub in VIBA Credentials, then run this readiness check again.", severity: "error" }],
+      issues: [{ field: "githubToken", message: "Enter your GitHub personal access token, then run this readiness check again.", severity: "error" }],
     };
   }
 
+  const [owner, repo] = input.githubRepository.split("/");
   try {
-    const workflowPath = `/repos/${encodeURIComponent(OWNER)}/${encodeURIComponent(REPO)}/actions/workflows/${encodeURIComponent(WORKFLOW)}`;
-    const secretsPath = `/repos/${encodeURIComponent(OWNER)}/${encodeURIComponent(REPO)}/actions/secrets?per_page=100`;
+    const userResponse = await githubRequest("/user", token);
+    if (!userResponse.ok) {
+      return {
+        verified: false,
+        issues: [{ field: "githubToken", message: "GitHub rejected this PAT. Check the token and its repository permissions.", severity: "error" }],
+      };
+    }
+
+    if (suppliedToken) await persistGithubToken(userId, suppliedToken);
+
+    const workflowPath = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/workflows/${encodeURIComponent(input.githubWorkflow)}`;
+    const secretsPath = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/secrets?per_page=100`;
     const [workflowResponse, secretsResponse] = await Promise.all([
       githubRequest(workflowPath, token),
       githubRequest(secretsPath, token),
@@ -208,8 +262,8 @@ async function inspectInfrastructure(platforms: PublisherPlatform[], userId: num
       issues.push({
         field: "automation",
         message: workflowResponse.status === 404
-          ? "The mobile store build workflow was not found."
-          : "The GitHub connection cannot access the mobile build workflow.",
+          ? `The workflow ${input.githubWorkflow} was not found in ${input.githubRepository}.`
+          : "The GitHub PAT cannot access the selected mobile build workflow.",
         severity: "error",
       });
     }
@@ -217,7 +271,7 @@ async function inspectInfrastructure(platforms: PublisherPlatform[], userId: num
     if (!secretsResponse.ok) {
       issues.push({
         field: "signing",
-        message: "VIBA could not verify the store-signing secrets. The build can only succeed when those GitHub secrets are configured.",
+        message: "VIBA could not verify repository Actions secrets. Grant the PAT repository Actions read access.",
         severity: "warning",
       });
       return { issues, verified: false };
@@ -226,8 +280,8 @@ async function inspectInfrastructure(platforms: PublisherPlatform[], userId: num
     const payload = await secretsResponse.json() as { secrets?: Array<{ name?: string }> };
     const configured = new Set((payload.secrets ?? []).map((secret) => String(secret.name ?? "")));
     const required = new Set<string>();
-    if (platforms.includes("android")) ANDROID_SECRET_NAMES.forEach((name) => required.add(name));
-    if (platforms.includes("apple")) APPLE_SECRET_NAMES.forEach((name) => required.add(name));
+    if (input.platforms.includes("android")) ANDROID_SECRET_NAMES.forEach((name) => required.add(name));
+    if (input.platforms.includes("apple")) APPLE_SECRET_NAMES.forEach((name) => required.add(name));
     const missing = [...required].filter((name) => !configured.has(name));
 
     if (missing.length > 0) {
@@ -251,7 +305,7 @@ async function validateRequest(body: Record<string, unknown>, userId: number | n
   const local = validatePublisherInput(body);
   const infrastructure = local.issues.some((issue) => issue.severity === "error")
     ? { issues: [] as PublisherIssue[], verified: false }
-    : await inspectInfrastructure(local.input.platforms, userId);
+    : await inspectInfrastructure(local.input, userId, local.githubToken);
   const issues = [...local.issues, ...infrastructure.issues];
   const errors = issues.filter((issue) => issue.severity === "error").length;
   const warnings = issues.filter((issue) => issue.severity === "warning").length;
@@ -283,42 +337,47 @@ router.post("/app-publisher/publish", publishLimiter, async (req, res): Promise<
 
   const token = await resolveGithubToken(userId);
   if (!token) {
-    res.status(503).json({ error: "publisher_not_connected", message: "Connect GitHub in VIBA Credentials before publishing." });
+    res.status(503).json({ error: "publisher_not_connected", message: "Enter and validate a GitHub PAT before publishing." });
     return;
   }
 
+  const input = validation.input;
+  const [owner, repo] = input.githubRepository.split("/");
   try {
     const response = await githubRequest(
-      `/repos/${encodeURIComponent(OWNER)}/${encodeURIComponent(REPO)}/actions/workflows/${encodeURIComponent(WORKFLOW)}/dispatches`,
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/workflows/${encodeURIComponent(input.githubWorkflow)}/dispatches`,
       token,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ref: REF, inputs: buildWorkflowInputs(validation.input) }),
+        body: JSON.stringify({ ref: input.githubRef, inputs: buildWorkflowInputs(input) }),
       },
     );
 
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
-      req.log?.error?.({ githubStatus: response.status, detail: detail.slice(0, 500), owner: OWNER, repo: REPO, workflow: WORKFLOW }, "App publisher workflow dispatch failed");
-      res.status(502).json({ error: "dispatch_failed", message: "VIBA could not start the store build. The GitHub automation rejected the request." });
+      req.log?.error?.({ githubStatus: response.status, detail: detail.slice(0, 500), repository: input.githubRepository, workflow: input.githubWorkflow }, "App publisher workflow dispatch failed");
+      res.status(502).json({ error: "dispatch_failed", message: "VIBA could not start the store build. Check the PAT Actions permission, repository, branch and workflow." });
       return;
     }
 
-    const inputs = buildWorkflowInputs(validation.input);
+    const inputs = buildWorkflowInputs(input);
     res.status(202).json({
       ok: true,
       status: "queued",
       stores: inputs.stores,
-      version: validation.input.version,
-      buildNumber: validation.input.buildNumber,
-      appName: validation.input.appName,
-      bundleId: validation.input.bundleId,
-      websiteUrl: validation.input.websiteUrl,
+      version: input.version,
+      buildNumber: input.buildNumber,
+      appName: input.appName,
+      bundleId: input.bundleId,
+      websiteUrl: input.websiteUrl,
+      githubRepository: input.githubRepository,
+      githubRef: input.githubRef,
+      githubWorkflow: input.githubWorkflow,
       message: "The verified store build has been queued.",
     });
   } catch (error) {
-    req.log?.error?.({ err: error, owner: OWNER, repo: REPO, workflow: WORKFLOW }, "App publisher workflow dispatch request failed");
+    req.log?.error?.({ err: error, repository: input.githubRepository, workflow: input.githubWorkflow }, "App publisher workflow dispatch request failed");
     res.status(503).json({ error: "dispatch_unavailable", message: "GitHub build automation is temporarily unavailable." });
   }
 });
