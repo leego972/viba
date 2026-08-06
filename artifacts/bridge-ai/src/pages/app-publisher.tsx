@@ -1,28 +1,18 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Apple,
-  Check,
-  CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  Github,
-  Globe2,
-  KeyRound,
-  Loader2,
-  Play,
-  Rocket,
-  ShieldCheck,
-  Smartphone,
-  Store,
+  Apple, Check, CheckCircle2, ChevronLeft, ChevronRight, Github, Globe2,
+  KeyRound, Loader2, Play, Rocket, Save, ShieldCheck, Smartphone, Store,
   WandSparkles,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+const GITHUB_CONFIG_KEY = "viba.appPublisher.githubConfig.v1";
+
 type Platform = "android" | "apple";
 type Issue = { field: string; message: string; severity: "error" | "warning" };
 type PublisherInput = {
@@ -44,8 +34,13 @@ type ValidationResponse = {
   infrastructureVerified?: boolean;
   message?: string;
 };
-
-type LoadingAction = "validate" | "publish" | null;
+type LoadingAction = "save" | "validate" | "publish" | null;
+type SavedGithubConfig = {
+  repository: string;
+  ref: string;
+  workflow: string;
+  savedAt: string;
+};
 
 const STEPS = ["Stores", "Website", "App details", "Review", "Publish"];
 const BUNDLE_PATTERN = /^[a-z][a-z0-9]*(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?){1,5}$/;
@@ -73,6 +68,23 @@ function publicHttpsUrl(value: string): boolean {
   }
 }
 
+function readSavedGithubConfig(): SavedGithubConfig | null {
+  try {
+    const raw = window.localStorage.getItem(GITHUB_CONFIG_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<SavedGithubConfig>;
+    if (
+      typeof parsed.repository !== "string" ||
+      typeof parsed.ref !== "string" ||
+      typeof parsed.workflow !== "string" ||
+      typeof parsed.savedAt !== "string"
+    ) return null;
+    return parsed as SavedGithubConfig;
+  } catch {
+    return null;
+  }
+}
+
 export default function AppPublisherPage() {
   const { toast } = useToast();
   const [step, setStep] = useState(0);
@@ -87,11 +99,31 @@ export default function AppPublisherPage() {
   const [githubRepository, setGithubRepository] = useState("leego972/viba");
   const [githubRef, setGithubRef] = useState("main");
   const [githubWorkflow, setGithubWorkflow] = useState("mobile-store-build.yml");
+  const [savedGithubConfig, setSavedGithubConfig] = useState<SavedGithubConfig | null>(null);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [score, setScore] = useState<number | null>(null);
   const [infrastructureVerified, setInfrastructureVerified] = useState(false);
   const [loadingAction, setLoadingAction] = useState<LoadingAction>(null);
   const [published, setPublished] = useState(false);
+
+  useEffect(() => {
+    const saved = readSavedGithubConfig();
+    if (!saved) return;
+    setSavedGithubConfig(saved);
+    setGithubRepository(saved.repository);
+    setGithubRef(saved.ref);
+    setGithubWorkflow(saved.workflow);
+    setGithubTokenSaved(true);
+  }, []);
+
+  const githubFieldsValid = useMemo(
+    () =>
+      REPOSITORY_PATTERN.test(githubRepository.trim()) &&
+      REF_PATTERN.test(githubRef.trim()) &&
+      !githubRef.includes("..") &&
+      WORKFLOW_PATTERN.test(githubWorkflow.trim()),
+    [githubRef, githubRepository, githubWorkflow],
+  );
 
   const canContinue = useMemo(() => {
     if (step === 0) return platforms.length > 0;
@@ -105,14 +137,14 @@ export default function AppPublisherPage() {
         Number.isInteger(buildNumber) &&
         buildNumber > 0 &&
         (githubTokenSaved || githubToken.trim().length >= 20) &&
-        REPOSITORY_PATTERN.test(githubRepository.trim()) &&
-        REF_PATTERN.test(githubRef.trim()) &&
-        !githubRef.includes("..") &&
-        WORKFLOW_PATTERN.test(githubWorkflow.trim())
+        githubFieldsValid
       );
     }
     return true;
-  }, [appName, buildNumber, bundleId, githubRef, githubRepository, githubToken, githubTokenSaved, githubWorkflow, platforms.length, step, version, websiteUrl]);
+  }, [
+    appName, buildNumber, bundleId, githubFieldsValid, githubToken,
+    githubTokenSaved, platforms.length, step, version, websiteUrl,
+  ]);
 
   function togglePlatform(platform: Platform) {
     setPlatforms((current) =>
@@ -137,7 +169,18 @@ export default function AppPublisherPage() {
     };
   }
 
-  function applyValidation(data: ValidationResponse) {
+  function persistGithubConfig() {
+    const saved: SavedGithubConfig = {
+      repository: githubRepository.trim(),
+      ref: githubRef.trim(),
+      workflow: githubWorkflow.trim(),
+      savedAt: new Date().toISOString(),
+    };
+    window.localStorage.setItem(GITHUB_CONFIG_KEY, JSON.stringify(saved));
+    setSavedGithubConfig(saved);
+  }
+
+  function applyValidation(data: ValidationResponse, moveToReview = true) {
     const nextIssues = Array.isArray(data.issues) ? data.issues : [];
     setIssues(nextIssues);
     setScore(typeof data.score === "number" ? data.score : 0);
@@ -157,7 +200,54 @@ export default function AppPublisherPage() {
       setGithubRef(data.input.githubRef);
       setGithubWorkflow(data.input.githubWorkflow);
     }
-    setStep(3);
+    if (moveToReview) setStep(3);
+  }
+
+  async function saveGithubConnection() {
+    if (!githubFieldsValid || (!githubTokenSaved && githubToken.trim().length < 20)) {
+      toast({
+        title: "GitHub details incomplete",
+        description: "Enter a valid PAT, repository, branch and workflow filename.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoadingAction("save");
+    try {
+      const response = await fetch(`${BASE}/api/app-publisher/validate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(publisherBody(true)),
+      });
+      const data = await responseJson<ValidationResponse>(response);
+      const blockingConnectionIssue = (data.issues ?? []).find((issue) =>
+        ["githubToken", "githubRepository", "githubRef", "githubWorkflow", "automation"].includes(issue.field),
+      );
+
+      if (blockingConnectionIssue) {
+        applyValidation(data, false);
+        throw new Error(blockingConnectionIssue.message);
+      }
+
+      applyValidation(data, false);
+      persistGithubConfig();
+      setGithubTokenSaved(true);
+      setGithubToken("");
+      toast({
+        title: "GitHub connection saved",
+        description: `${githubRepository.trim()} · ${githubRef.trim()} · ${githubWorkflow.trim()}`,
+      });
+    } catch (error) {
+      toast({
+        title: "Could not save GitHub connection",
+        description: error instanceof Error ? error.message : "VIBA could not validate and save these GitHub credentials.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingAction(null);
+    }
   }
 
   async function validate() {
@@ -285,16 +375,32 @@ export default function AppPublisherPage() {
               </div>
 
               <div className="rounded-2xl border bg-muted/20 p-4 sm:p-5">
-                <div className="mb-4 flex items-center gap-2"><Github className="h-5 w-5" /><h3 className="font-semibold">GitHub build connection</h3></div>
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2"><Github className="h-5 w-5" /><h3 className="font-semibold">GitHub build connection</h3></div>
+                  {githubTokenSaved && (
+                    <Badge variant="outline" className="border-emerald-500/30 text-emerald-600">
+                      <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Saved
+                    </Badge>
+                  )}
+                </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2 sm:col-span-2">
                     <label htmlFor="publisher-github-token" className="text-sm font-medium">GitHub personal access token</label>
                     <div className="relative"><KeyRound className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><Input id="publisher-github-token" type="password" autoCapitalize="none" autoCorrect="off" autoComplete="new-password" className="pl-9" value={githubToken} onChange={(event) => { setGithubToken(event.target.value); setGithubTokenSaved(false); }} placeholder={githubTokenSaved ? "PAT saved securely — enter a new PAT to replace it" : "github_pat_... or ghp_..."} /></div>
                     <p className="text-xs text-muted-foreground">The PAT must access this repository and allow GitHub Actions workflow dispatch. It is encrypted server-side.</p>
                   </div>
-                  <div className="space-y-2"><label htmlFor="publisher-github-repo" className="text-sm font-medium">Repository</label><Input id="publisher-github-repo" autoCapitalize="none" autoCorrect="off" value={githubRepository} onChange={(event) => setGithubRepository(event.target.value.trim())} placeholder="owner/repo" /></div>
-                  <div className="space-y-2"><label htmlFor="publisher-github-ref" className="text-sm font-medium">Branch or tag</label><Input id="publisher-github-ref" autoCapitalize="none" autoCorrect="off" value={githubRef} onChange={(event) => setGithubRef(event.target.value.trim())} placeholder="main" /></div>
-                  <div className="space-y-2 sm:col-span-2"><label htmlFor="publisher-github-workflow" className="text-sm font-medium">Workflow filename</label><Input id="publisher-github-workflow" autoCapitalize="none" autoCorrect="off" value={githubWorkflow} onChange={(event) => setGithubWorkflow(event.target.value.trim())} placeholder="mobile-store-build.yml" /></div>
+                  <div className="space-y-2"><label htmlFor="publisher-github-repo" className="text-sm font-medium">Repository</label><Input id="publisher-github-repo" autoCapitalize="none" autoCorrect="off" value={githubRepository} onChange={(event) => { setGithubRepository(event.target.value.trim()); setGithubTokenSaved(false); }} placeholder="owner/repo" /></div>
+                  <div className="space-y-2"><label htmlFor="publisher-github-ref" className="text-sm font-medium">Branch or tag</label><Input id="publisher-github-ref" autoCapitalize="none" autoCorrect="off" value={githubRef} onChange={(event) => { setGithubRef(event.target.value.trim()); setGithubTokenSaved(false); }} placeholder="main" /></div>
+                  <div className="space-y-2 sm:col-span-2"><label htmlFor="publisher-github-workflow" className="text-sm font-medium">Workflow filename</label><Input id="publisher-github-workflow" autoCapitalize="none" autoCorrect="off" value={githubWorkflow} onChange={(event) => { setGithubWorkflow(event.target.value.trim()); setGithubTokenSaved(false); }} placeholder="mobile-store-build.yml" /></div>
+                </div>
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs text-muted-foreground">
+                    {savedGithubConfig ? `Last saved ${new Date(savedGithubConfig.savedAt).toLocaleString()}` : "Not saved yet"}
+                  </p>
+                  <Button type="button" variant="outline" onClick={saveGithubConnection} disabled={loading || !githubFieldsValid || (!githubTokenSaved && githubToken.trim().length < 20)}>
+                    {loadingAction === "save" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                    Save GitHub connection
+                  </Button>
                 </div>
               </div>
             </div>
@@ -306,7 +412,7 @@ export default function AppPublisherPage() {
               {issues.length === 0 ? (
                 <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-600"><CheckCircle2 className="mr-2 inline h-4 w-4" />The GitHub connection and publishing infrastructure are verified.</div>
               ) : (
-                <div className="space-y-2">{issues.map((issue, index) => <div key={`${issue.field}-${index}`} role={issue.severity === "error" ? "alert" : undefined} className={`rounded-xl border p-4 text-sm ${issue.severity === "error" ? "border-red-500/30 bg-red-500/10" : "border-amber-500/30 bg-amber-500/10"}`}><strong className="capitalize">{issue.field}:</strong> {issue.message}</div>)}</div>
+                <div className="space-y-2">{issues.map((issue, index) => <div key={`${issue.field}-${index}`} role={issue.severity === "error" ? "alert" : undefined} className={`min-w-0 break-words [overflow-wrap:anywhere] rounded-xl border p-4 text-sm ${issue.severity === "error" ? "border-red-500/30 bg-red-500/10" : "border-amber-500/30 bg-amber-500/10"}`}><strong className="capitalize">{issue.field}:</strong> {issue.message}</div>)}</div>
               )}
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><div className="rounded-xl border p-4"><Store className="mb-2 h-5 w-5 text-primary" /><div className="font-medium">Stores</div><div className="text-sm text-muted-foreground">{platforms.map((platform) => platform === "android" ? "Google Play" : "Apple").join(" + ")}</div></div><div className="rounded-xl border p-4"><Smartphone className="mb-2 h-5 w-5 text-primary" /><div className="font-medium">App</div><div className="break-words text-sm text-muted-foreground">{appName} · {version} ({buildNumber})</div></div><div className="rounded-xl border p-4"><Globe2 className="mb-2 h-5 w-5 text-primary" /><div className="font-medium">Website</div><div className="break-all text-sm text-muted-foreground">{websiteUrl}</div></div><div className="rounded-xl border p-4"><Github className="mb-2 h-5 w-5 text-primary" /><div className="font-medium">GitHub</div><div className="break-all text-sm text-muted-foreground">{githubRepository} · {githubRef}<br />{githubWorkflow}</div></div></div>
               <p className="text-xs text-muted-foreground">Automation status: {infrastructureVerified ? "verified" : hasWarnings ? "partially verified" : "not verified"}.</p>
