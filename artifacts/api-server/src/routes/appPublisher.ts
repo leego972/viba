@@ -1,6 +1,7 @@
 import { isIP } from "node:net";
 import { Router, type IRouter } from "express";
 import { createUserRateLimiter } from "../middlewares/rateLimiter";
+import { resolveVibaCredential } from "../lib/vibaVault";
 
 const router: IRouter = Router();
 
@@ -57,6 +58,25 @@ const APPLE_SECRET_NAMES = [
   "VIBA_APP_STORE_CONNECT_ISSUER_ID",
   "VIBA_APP_STORE_CONNECT_PRIVATE_KEY",
 ] as const;
+
+function requestUserId(req: { session?: { userId?: number } }): number | null {
+  return typeof req.session?.userId === "number" ? req.session.userId : null;
+}
+
+async function resolveGithubToken(userId: number | null): Promise<string | null> {
+  const mobileToken = process.env.VIBA_MOBILE_GITHUB_TOKEN?.trim();
+  if (mobileToken) return mobileToken;
+
+  const resolved = await resolveVibaCredential({
+    userId,
+    provider: "github",
+    kind: "token",
+    envNames: ["GITHUB_TOKEN"],
+    label: "default",
+  });
+
+  return resolved.value?.trim() || null;
+}
 
 function privateIpv4(hostname: string): boolean {
   const parts = hostname.split(".").map(Number);
@@ -120,32 +140,15 @@ export function validatePublisherInput(body: Record<string, unknown>): {
   const buildNumber = Number.isSafeInteger(parsedBuildNumber) ? parsedBuildNumber : 0;
   const issues: PublisherIssue[] = [];
 
-  if (!publicHttpsUrl(websiteUrl)) {
-    issues.push({ field: "websiteUrl", message: "Enter a public HTTPS website URL.", severity: "error" });
-  }
-  if (appName.length < 2 || appName.length > 50) {
-    issues.push({ field: "appName", message: "App name must contain 2 to 50 characters.", severity: "error" });
-  }
-  if (!validBundleId(bundleId)) {
-    issues.push({ field: "bundleId", message: "Use a lowercase bundle ID such as com.company.app.", severity: "error" });
-  }
-  if (platforms.length === 0) {
-    issues.push({ field: "platforms", message: "Select Google Play, Apple App Store, or both.", severity: "error" });
-  }
-  if (invalidPlatforms.length > 0) {
-    issues.push({ field: "platforms", message: "An unsupported app store was supplied.", severity: "error" });
-  }
-  if (!validVersion(version)) {
-    issues.push({ field: "version", message: "Version must use three numbers, for example 1.0.0.", severity: "error" });
-  }
-  if (buildNumber < 1 || buildNumber > 2_100_000_000) {
-    issues.push({ field: "buildNumber", message: "Build number must be a positive whole number.", severity: "error" });
-  }
+  if (!publicHttpsUrl(websiteUrl)) issues.push({ field: "websiteUrl", message: "Enter a public HTTPS website URL.", severity: "error" });
+  if (appName.length < 2 || appName.length > 50) issues.push({ field: "appName", message: "App name must contain 2 to 50 characters.", severity: "error" });
+  if (!validBundleId(bundleId)) issues.push({ field: "bundleId", message: "Use a lowercase bundle ID such as com.company.app.", severity: "error" });
+  if (platforms.length === 0) issues.push({ field: "platforms", message: "Select Google Play, Apple App Store, or both.", severity: "error" });
+  if (invalidPlatforms.length > 0) issues.push({ field: "platforms", message: "An unsupported app store was supplied.", severity: "error" });
+  if (!validVersion(version)) issues.push({ field: "version", message: "Version must use three numbers, for example 1.0.0.", severity: "error" });
+  if (buildNumber < 1 || buildNumber > 2_100_000_000) issues.push({ field: "buildNumber", message: "Build number must be a positive whole number.", severity: "error" });
 
-  return {
-    input: { platforms, websiteUrl, appName, bundleId, version, buildNumber },
-    issues,
-  };
+  return { input: { platforms, websiteUrl, appName, bundleId, version, buildNumber }, issues };
 }
 
 export function buildWorkflowInputs(input: PublisherInput): Record<string, string> {
@@ -180,15 +183,15 @@ async function githubRequest(path: string, token: string, init: RequestInit = {}
   }
 }
 
-async function inspectInfrastructure(platforms: PublisherPlatform[]): Promise<{
+async function inspectInfrastructure(platforms: PublisherPlatform[], userId: number | null): Promise<{
   issues: PublisherIssue[];
   verified: boolean;
 }> {
-  const token = process.env.VIBA_MOBILE_GITHUB_TOKEN?.trim();
+  const token = await resolveGithubToken(userId);
   if (!token) {
     return {
       verified: false,
-      issues: [{ field: "automation", message: "GitHub build automation is not connected on the VIBA server.", severity: "error" }],
+      issues: [{ field: "automation", message: "Connect GitHub in VIBA Credentials, then run this readiness check again.", severity: "error" }],
     };
   }
 
@@ -235,24 +238,20 @@ async function inspectInfrastructure(platforms: PublisherPlatform[]): Promise<{
       });
     }
 
-    return { issues, verified: workflowResponse.ok };
+    return { issues, verified: workflowResponse.ok && missing.length === 0 };
   } catch {
     return {
       verified: false,
-      issues: [{
-        field: "automation",
-        message: "VIBA could not verify GitHub build automation. Try the readiness check again.",
-        severity: "warning",
-      }],
+      issues: [{ field: "automation", message: "VIBA could not verify GitHub build automation. Try the readiness check again.", severity: "warning" }],
     };
   }
 }
 
-async function validateRequest(body: Record<string, unknown>): Promise<PublisherValidation> {
+async function validateRequest(body: Record<string, unknown>, userId: number | null): Promise<PublisherValidation> {
   const local = validatePublisherInput(body);
   const infrastructure = local.issues.some((issue) => issue.severity === "error")
     ? { issues: [] as PublisherIssue[], verified: false }
-    : await inspectInfrastructure(local.input.platforms);
+    : await inspectInfrastructure(local.input.platforms, userId);
   const issues = [...local.issues, ...infrastructure.issues];
   const errors = issues.filter((issue) => issue.severity === "error").length;
   const warnings = issues.filter((issue) => issue.severity === "warning").length;
@@ -266,12 +265,13 @@ async function validateRequest(body: Record<string, unknown>): Promise<Publisher
 }
 
 router.post("/app-publisher/validate", async (req, res): Promise<void> => {
-  const validation = await validateRequest(req.body as Record<string, unknown>);
+  const validation = await validateRequest(req.body as Record<string, unknown>, requestUserId(req));
   res.status(validation.ok ? 200 : 400).json(validation);
 });
 
 router.post("/app-publisher/publish", publishLimiter, async (req, res): Promise<void> => {
-  const validation = await validateRequest(req.body as Record<string, unknown>);
+  const userId = requestUserId(req);
+  const validation = await validateRequest(req.body as Record<string, unknown>, userId);
   if (!validation.ok) {
     res.status(400).json({
       error: "publisher_validation_failed",
@@ -281,9 +281,9 @@ router.post("/app-publisher/publish", publishLimiter, async (req, res): Promise<
     return;
   }
 
-  const token = process.env.VIBA_MOBILE_GITHUB_TOKEN?.trim();
+  const token = await resolveGithubToken(userId);
   if (!token) {
-    res.status(503).json({ error: "publisher_not_connected", message: "Publishing automation is not configured on the VIBA server." });
+    res.status(503).json({ error: "publisher_not_connected", message: "Connect GitHub in VIBA Credentials before publishing." });
     return;
   }
 
