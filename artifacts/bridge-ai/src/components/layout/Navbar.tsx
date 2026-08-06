@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useAuth, useLogout } from "@/hooks/useAuth";
 import {
   Activity, AlertTriangle, BarChart3, BookOpen, BrainCircuit, Building2,
   ChevronDown, CreditCard, FileText, FlaskConical, FolderInput, Globe,
-  History, LayoutDashboard, Megaphone, Menu, Moon, PenTool, Plug, Radio,
+  History, LayoutDashboard, LogOut, Megaphone, Menu, Moon, PenTool, Plug, Radio,
   Rocket, Search, Server, Settings, ShieldAlert, ShieldCheck, Smartphone,
   Sun, Terminal, TrendingDown, Wallet, Wrench, X, Bot, ClipboardCheck,
 } from "lucide-react";
@@ -130,6 +131,8 @@ function DropMenu({ group, location }: { group: NavGroup; location: string }) {
 export function Navbar() {
   const [location] = useLocation();
   const { theme, toggleTheme } = useTheme();
+  const { isAuthenticated } = useAuth();
+  const logout = useLogout();
   const [isAdmin, setIsAdmin] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -198,6 +201,19 @@ export function Navbar() {
         >
           {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>
+
+        {isAuthenticated && (
+          <button
+            type="button"
+            onClick={() => void logout()}
+            aria-label="Log out"
+            title="Log out"
+            className="hidden h-9 shrink-0 items-center gap-1.5 rounded-lg border border-border/50 px-3 text-sm font-medium text-foreground/60 hover:bg-white/[0.06] xl:flex"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            Log out
+          </button>
+        )}
       </div>
 
       {mobileOpen && (
@@ -224,6 +240,11 @@ export function Navbar() {
             <Link href="/billing"><button type="button" className="flex h-9 items-center gap-2 rounded-lg border border-border/50 px-3 text-sm text-foreground/70"><CreditCard className="h-4 w-4" />Billing</button></Link>
             <Link href="/settings"><button type="button" className="flex h-9 items-center gap-2 rounded-lg border border-border/50 px-3 text-sm text-foreground/70"><Settings className="h-4 w-4" />Settings</button></Link>
             {isAdmin && <Link href="/admin"><button type="button" className="flex h-9 items-center gap-2 rounded-lg border border-red-500/25 bg-red-500/10 px-3 text-sm text-red-300"><ShieldCheck className="h-4 w-4" />Admin</button></Link>}
+            {isAuthenticated && (
+              <button type="button" onClick={() => void logout()} className="flex h-9 items-center gap-2 rounded-lg border border-border/50 px-3 text-sm text-foreground/70">
+                <LogOut className="h-4 w-4" />Log out
+              </button>
+            )}
           </div>
         </nav>
       )}
