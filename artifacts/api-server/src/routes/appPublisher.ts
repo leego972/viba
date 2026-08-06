@@ -21,12 +21,7 @@ const publishLimiter = createUserRateLimiter({
 });
 
 export type PublisherPlatform = "android" | "apple";
-export type PublisherIssue = {
-  field: string;
-  message: string;
-  severity: "error" | "warning";
-};
-
+export type PublisherIssue = { field: string; message: string; severity: "error" | "warning" };
 export type PublisherInput = {
   platforms: PublisherPlatform[];
   websiteUrl: string;
@@ -38,7 +33,6 @@ export type PublisherInput = {
   githubRef: string;
   githubWorkflow: string;
 };
-
 export type PublisherValidation = {
   ok: boolean;
   score: number;
@@ -68,7 +62,6 @@ function requestUserId(req: { session?: { userId?: number } }): number | null {
 async function resolveGithubToken(userId: number | null): Promise<string | null> {
   const mobileToken = process.env.VIBA_MOBILE_GITHUB_TOKEN?.trim();
   if (mobileToken) return mobileToken;
-
   const resolved = await resolveVibaCredential({
     userId,
     provider: "github",
@@ -76,34 +69,19 @@ async function resolveGithubToken(userId: number | null): Promise<string | null>
     envNames: ["GITHUB_TOKEN"],
     label: "default",
   });
-
   return resolved.value?.trim() || null;
 }
 
 async function persistGithubToken(userId: number | null, token: string): Promise<void> {
-  await saveVibaCredential({
-    userId,
-    provider: "github",
-    kind: "token",
-    value: token,
-    label: "default",
-  });
+  await saveVibaCredential({ userId, provider: "github", kind: "token", value: token, label: "default" });
 }
 
 function privateIpv4(hostname: string): boolean {
   const parts = hostname.split(".").map(Number);
   if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return true;
   const [a, b] = parts;
-  return (
-    a === 0 ||
-    a === 10 ||
-    a === 127 ||
-    (a === 100 && b >= 64 && b <= 127) ||
-    (a === 169 && b === 254) ||
-    (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168) ||
-    a >= 224
-  );
+  return a === 0 || a === 10 || a === 127 || (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || a >= 224;
 }
 
 function publicHttpsUrl(value: string): boolean {
@@ -116,7 +94,8 @@ function publicHttpsUrl(value: string): boolean {
     if (ipVersion === 4) return !privateIpv4(hostname);
     if (ipVersion === 6) {
       const compact = hostname.replace(/^\[|\]$/g, "").toLowerCase();
-      return compact !== "::1" && !compact.startsWith("fc") && !compact.startsWith("fd") && !compact.startsWith("fe8") && !compact.startsWith("fe9") && !compact.startsWith("fea") && !compact.startsWith("feb");
+      return compact !== "::1" && !compact.startsWith("fc") && !compact.startsWith("fd") &&
+        !compact.startsWith("fe8") && !compact.startsWith("fe9") && !compact.startsWith("fea") && !compact.startsWith("feb");
     }
     return hostname.includes(".");
   } catch {
@@ -127,20 +106,16 @@ function publicHttpsUrl(value: string): boolean {
 function validBundleId(value: string): boolean {
   return value.length <= 200 && /^[a-z][a-z0-9]*(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?){1,5}$/.test(value);
 }
-
 function validVersion(value: string): boolean {
-  if (!/^\d+\.\d+\.\d+$/.test(value)) return false;
-  return value.split(".").every((part) => Number(part) <= 9999);
+  return /^\d+\.\d+\.\d+$/.test(value) && value.split(".").every((part) => Number(part) <= 9999);
 }
-
 function validRepository(value: string): boolean {
   return /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value);
 }
-
 function validGithubRef(value: string): boolean {
-  return value.length > 0 && value.length <= 255 && /^[A-Za-z0-9._/-]+$/.test(value) && !value.includes("..") && !value.startsWith("/") && !value.endsWith("/");
+  return value.length > 0 && value.length <= 255 && /^[A-Za-z0-9._/-]+$/.test(value) &&
+    !value.includes("..") && !value.startsWith("/") && !value.endsWith("/");
 }
-
 function validWorkflow(value: string): boolean {
   return /^[A-Za-z0-9_.-]+\.(?:yml|yaml)$/.test(value);
 }
@@ -158,18 +133,11 @@ export function validatePublisherInput(body: Record<string, unknown>): {
   const bundleId = typeof body.bundleId === "string" ? body.bundleId.trim().toLowerCase() : "";
   const version = typeof body.version === "string" ? body.version.trim() : "";
   const githubToken = typeof body.githubToken === "string" ? body.githubToken.trim() : "";
-  const githubRepository = typeof body.githubRepository === "string" && body.githubRepository.trim()
-    ? body.githubRepository.trim()
-    : DEFAULT_REPOSITORY;
+  const githubRepository = typeof body.githubRepository === "string" && body.githubRepository.trim() ? body.githubRepository.trim() : DEFAULT_REPOSITORY;
   const githubRef = typeof body.githubRef === "string" && body.githubRef.trim() ? body.githubRef.trim() : DEFAULT_REF;
-  const githubWorkflow = typeof body.githubWorkflow === "string" && body.githubWorkflow.trim()
-    ? body.githubWorkflow.trim()
-    : DEFAULT_WORKFLOW;
-  const parsedBuildNumber = typeof body.buildNumber === "number"
-    ? body.buildNumber
-    : typeof body.buildNumber === "string" && /^\d+$/.test(body.buildNumber.trim())
-      ? Number(body.buildNumber)
-      : Number.NaN;
+  const githubWorkflow = typeof body.githubWorkflow === "string" && body.githubWorkflow.trim() ? body.githubWorkflow.trim() : DEFAULT_WORKFLOW;
+  const parsedBuildNumber = typeof body.buildNumber === "number" ? body.buildNumber :
+    typeof body.buildNumber === "string" && /^\d+$/.test(body.buildNumber.trim()) ? Number(body.buildNumber) : Number.NaN;
   const buildNumber = Number.isSafeInteger(parsedBuildNumber) ? parsedBuildNumber : 0;
   const issues: PublisherIssue[] = [];
 
@@ -225,33 +193,31 @@ async function githubRequest(path: string, token: string, init: RequestInit = {}
   }
 }
 
-async function inspectInfrastructure(
-  input: PublisherInput,
-  userId: number | null,
-  suppliedToken: string,
-): Promise<{ issues: PublisherIssue[]; verified: boolean }> {
+async function inspectInfrastructure(input: PublisherInput, userId: number | null, suppliedToken: string): Promise<{ issues: PublisherIssue[]; verified: boolean }> {
   const token = suppliedToken || await resolveGithubToken(userId);
   if (!token) {
-    return {
-      verified: false,
-      issues: [{ field: "githubToken", message: "Enter your GitHub personal access token, then run this readiness check again.", severity: "error" }],
-    };
+    return { verified: false, issues: [{ field: "githubToken", message: "Enter your GitHub personal access token, then run this readiness check again.", severity: "error" }] };
   }
 
   const [owner, repo] = input.githubRepository.split("/");
   try {
-    const userResponse = await githubRequest("/user", token);
-    if (!userResponse.ok) {
-      return {
-        verified: false,
-        issues: [{ field: "githubToken", message: "GitHub rejected this PAT. Check the token and its repository permissions.", severity: "error" }],
-      };
+    const repoPath = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+    const repoResponse = await githubRequest(repoPath, token);
+    if (!repoResponse.ok) {
+      const message = repoResponse.status === 401
+        ? "GitHub rejected this PAT. It may be expired, revoked or copied incorrectly."
+        : repoResponse.status === 403
+          ? `The PAT is valid but lacks access to ${input.githubRepository}. Grant this repository to the token.`
+          : repoResponse.status === 404
+            ? `The PAT cannot access ${input.githubRepository}. Check the owner/repo value and token repository selection.`
+            : `GitHub could not verify access to ${input.githubRepository} (HTTP ${repoResponse.status}).`;
+      return { verified: false, issues: [{ field: "githubToken", message, severity: "error" }] };
     }
 
     if (suppliedToken) await persistGithubToken(userId, suppliedToken);
 
-    const workflowPath = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/workflows/${encodeURIComponent(input.githubWorkflow)}`;
-    const secretsPath = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/secrets?per_page=100`;
+    const workflowPath = `${repoPath}/actions/workflows/${encodeURIComponent(input.githubWorkflow)}`;
+    const secretsPath = `${repoPath}/actions/secrets?per_page=100`;
     const [workflowResponse, secretsResponse] = await Promise.all([
       githubRequest(workflowPath, token),
       githubRequest(secretsPath, token),
@@ -262,8 +228,8 @@ async function inspectInfrastructure(
       issues.push({
         field: "automation",
         message: workflowResponse.status === 404
-          ? `The workflow ${input.githubWorkflow} was not found in ${input.githubRepository}.`
-          : "The GitHub PAT cannot access the selected mobile build workflow.",
+          ? `The workflow ${input.githubWorkflow} was not found in ${input.githubRepository}, or the PAT lacks Actions read access.`
+          : `The GitHub PAT cannot access the selected mobile build workflow (HTTP ${workflowResponse.status}).`,
         severity: "error",
       });
     }
@@ -271,7 +237,7 @@ async function inspectInfrastructure(
     if (!secretsResponse.ok) {
       issues.push({
         field: "signing",
-        message: "VIBA could not verify repository Actions secrets. Grant the PAT repository Actions read access.",
+        message: `VIBA could not verify repository Actions secrets (HTTP ${secretsResponse.status}). Grant the PAT Actions read access.`,
         severity: "warning",
       });
       return { issues, verified: false };
@@ -283,7 +249,6 @@ async function inspectInfrastructure(
     if (input.platforms.includes("android")) ANDROID_SECRET_NAMES.forEach((name) => required.add(name));
     if (input.platforms.includes("apple")) APPLE_SECRET_NAMES.forEach((name) => required.add(name));
     const missing = [...required].filter((name) => !configured.has(name));
-
     if (missing.length > 0) {
       issues.push({
         field: "signing",
@@ -294,10 +259,7 @@ async function inspectInfrastructure(
 
     return { issues, verified: workflowResponse.ok && missing.length === 0 };
   } catch {
-    return {
-      verified: false,
-      issues: [{ field: "automation", message: "VIBA could not verify GitHub build automation. Try the readiness check again.", severity: "warning" }],
-    };
+    return { verified: false, issues: [{ field: "automation", message: "VIBA could not verify GitHub build automation. Try the readiness check again.", severity: "warning" }] };
   }
 }
 
@@ -327,11 +289,7 @@ router.post("/app-publisher/publish", publishLimiter, async (req, res): Promise<
   const userId = requestUserId(req);
   const validation = await validateRequest(req.body as Record<string, unknown>, userId);
   if (!validation.ok) {
-    res.status(400).json({
-      error: "publisher_validation_failed",
-      message: "The app cannot be queued until the readiness errors are resolved.",
-      ...validation,
-    });
+    res.status(400).json({ error: "publisher_validation_failed", message: "The app cannot be queued until the readiness errors are resolved.", ...validation });
     return;
   }
 
